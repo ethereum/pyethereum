@@ -22,7 +22,7 @@ def mine(root,difficulty,extranonce):
                 ind = from_binary(h) % nodes(L-1)
                 p.append(layers[L-1][ind])
             layers[L].append(bin_sha256(''.join(p)))
-        print "Computed level ",L
+        print ("Computed level ",L)
     prefix = root + to_binary(extranonce)
     for i in range(2**26):
         p = []
