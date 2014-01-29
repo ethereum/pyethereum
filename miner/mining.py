@@ -1,10 +1,12 @@
-import hashlib
+import sys
+sys.path.insert(0,'/usr/local/lib')
+import sha3, time
 
-def bin_sha256(x): return hashlib.sha256(x).digest()
+def bin_sha256(x): return sha3.sha3_256(x).digest()
 
 def spread(L): return 16 if L == 9 else 3
 
-def nodes(L): return 2**25 if L == 9 else 8**L
+def nodes(L): return 2**26 if L == 10 else 2**25 if L == 9 else 8**L
 
 def to_binary(x): return '' if x == 0 else to_binary(int(x / 256)) + chr(x % 256)
 
@@ -13,26 +15,26 @@ def from_binary(x): return 0 if x == '' else 256 * from_binary(x[:-1]) + ord(x[-
 def mine(root,difficulty,extranonce):
     layers = [[] for x in range(9)]
     layers[0] = [root]
-    for L in range(1,10):
+    x = time.time()
+    for L in range(1,11):
         prefix = root + to_binary(extranonce) + to_binary(L)
         for i in range(nodes(L)):
             p = []
+            h = 0
+            slots = len(to_binary(nodes(L) ** spread(L)))
+            while slots >= 32:
+                h = h * 2**256 + from_binary(bin_sha256(prefix + to_binary(i)))
+                slots -= 32
             for k in range(spread(L)):
-                h = bin_sha256(prefix + to_binary(i) + to_binary(k))
-                ind = from_binary(h) % nodes(L-1)
+                ind = h % nodes(L-1)
+                h = h / nodes(L-1)
                 p.append(layers[L-1][ind])
-            layers[L].append(bin_sha256(''.join(p)))
-        print "Computed level ",L
-    prefix = root + to_binary(extranonce)
-    for i in range(2**26):
-        p = []
-        for k in range(4):
-            h = bin_sha256(prefix + to_binary(i) + to_binary(k))
-            ind = from_binary(h) % nodes(9)
-            p.append(layers[9][ind])
-        h = from_binary(bin_sha256(''.join(p)))
-        if h * difficulty <= 2**256:
-            return i
+            output = bin_sha256(to_binary(i)+''.join(p))
+            if L < 10:
+                layers[L].append(output)
+            else:
+                if from_binary(output) < 2**256 / difficulty: return i
+        print "Computed level ",L,"time",time.time()-x
     return None
 
 def verify(root,difficulty,extranonce,nonce):
