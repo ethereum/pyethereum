@@ -1,0 +1,29 @@
+================
+x = 3 + 5
+================
+x = array()
+x[0] = 4
+x[1] = 6
+x[2] = 8
+================
+x = tx.datan
+y = tx.data[0]
+z = tx.sender
+mktx(z,10^18,0,0)
+================
+if tx.value <= 25 * 10^18:
+    stop
+elif contract.storage[tx.data[0]] or tx.data[0] < 1000:
+    stop
+contract.storage[tx.data[0]] = tx.data[1]
+================
+while i < 997:
+    i = i + 1
+================
+i = 0
+a = 1
+while i < 997:
+    a = (a * 3) % 997
+    i = i + 1
+contract.storage[-1] = a
+================
