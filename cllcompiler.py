@@ -108,6 +108,7 @@ def toktype(token):
     if token is None: return None
     elif token in ['(','[']: return 'lparen'
     elif token in [')',']']: return 'rparen'
+    elif token == ',': return 'comma'
     elif token in functions: return 'fun'
     elif token in ['!']: return 'monop' 
     elif token in precedence: return 'op'
@@ -152,10 +153,15 @@ def shunting_yard(tokens):
             while len(stack) and toktype(stack[-1]) == 'op' and precedence[stack[-1]] < prec:
                 popstack(stack,oq)
             stack.append(tok)
+        elif typ == 'comma':
+            while len(stack) and stack[-1] != 'lparen': popstack(stack,oq)
         #print 'iq',iq,'stack',stack,'oq',oq
     while len(stack):
         popstack(stack,oq)
-    return oq[0]
+    if len(oq) == 1:
+        return oq[0]
+    else:
+        return [ 'multi' ] + oq
                 
 
 def parse_line(ln):
@@ -169,7 +175,15 @@ def parse_line(ln):
         return [ 'else' ]
     else:
         eqplace = tokens.index('=')
-        return [ 'set', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]
+        pre = []
+        for i in range(0,eqplace,2):
+            if tokens[i+1] != ',' and i+1 != eqplace:
+                raise Exception("Expected comma: "+ln)
+            pre.append(tokens[i])
+        if len(pre) == 1:
+            return [ 'set', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]
+        else:
+            return [ 'mset', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]
 
 optable = { 
     '+': 'ADD',
@@ -180,9 +194,16 @@ optable = {
     '%': 'MOD',
     '#/': 'SDIV',
     '#%': 'SMOD',
+    'BALANCE': 'BALANCE',
+    'CONTRACT_STORAGE': 'CONTRACT_STORAGE',
     'SHA256': 'SHA256',
     'SHA3': 'SHA3',
-    'RIPEMD160': 'RIPEMD160'
+    'RIPEMD160': 'RIPEMD160',
+    'ECSIGN': 'ECSIGN',
+    'ECVERIFY': 'ECVERIFY',
+    'ECVALID': 'ECVALID',
+    'ECADD': 'ECADD',
+    'ECMUL': 'ECMUL'
 }
 
 def compile_left_expr(expr,varhash):
@@ -194,8 +215,30 @@ def compile_left_expr(expr,varhash):
         else:
             varhash[expr] = len(varhash)
             return [varhash[expr]]
+    elif expr[0] == 'storage':
+        return compile_expr(expr[1])
+    elif expr[0] == 'access':
+        return compile_left_expr(expr[1]) + compile_expr(expr[2]) + ['ADD']
     else:
         raise Exception("invalid op: "+expr[0])
+
+pseudotable = {
+    'tx.datan': 'TXDATAN',
+    'tx.sender': 'TXSENDER',
+    'tx.value': 'TXVALUE',
+    'block.timestamp': 'BLK_TIMESTAMP',
+    'block.number': 'BLK_NUMBER',
+    'block.basefee': 'BASEFEE',
+    'block.difficulty': 'BLK_DIFFICULTY',
+    'block.coinbase': 'BLK_COINBASE',
+    'block.parenthash': 'BLK_PREVHASH'
+}
+
+pseudoarrays = {
+    'tx.data': 'TXDATA',
+    'contract.storage': 'SLOAD',
+    'block.address_balance': 'BALANCE',
+}
 
 def compile_expr(expr,varhash):
     if isinstance(expr,str):
@@ -203,6 +246,8 @@ def compile_expr(expr,varhash):
             return ['PUSH',int(expr)]
         elif expr in varhash:
             return [varhash[expr],'MLOAD']
+        elif expr in pseudotable:
+            return pseudotable[expr]
         else:
             varhash[expr] = len(varhash)
             return [varhash[expr],'MLOAD']
@@ -210,16 +255,33 @@ def compile_expr(expr,varhash):
         f = compile_expr(expr[1],varhash)
         g = compile_expr(expr[2],varhash)
         return f + g + [optable[expr[0]]]
+    elif expr[0] == 'access':
+        if expr[1][0] == 'block.contract_storage':
+            return compile_expr(expr[2]) + compile_expr(expr[1][1]) + ['EXTRO']
+        else:
+            return compile_left_expr(expr[1]) + compile_expr(expr[2]) + ['ADD','MLOAD']
+    elif expr[0] == 'array':
+        return [ 'PUSH', 0, 'PUSH', 1, 'SUB', 'DUP', 'MLOAD', 'PUSH',
+                         2, 'PUSH', 160, 'EXP', 'ADD', 'SWAP', 'MSTORE' ]
     elif expr[0] == '!':
         f = compile_expr(expr[1],varhash)
         return f + ['NOT']
+    elif expr[0] in pseudoarrays:
+        return compile_expr(expr[1],varhash) + pseudoarrays[expr[0]]
     elif expr[0] in ['or', '||']:
         return compile_expr(['!', [ '*', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
     elif expr[0] in ['and', '&&']: 
         return compile_expr(['!', [ '+', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
+    elif expr[0] == 'multi':
+        return sum([compile_expr(e,varhash) for e in expr],[])
+    elif expr == 'tx.datan':
+        return ['DATAN']
     else:
         raise Exception("invalid op: "+expr[0])
 
+def get_left_expr_type(expr):
+    if isinstance(expr,str): return 'variable'
+    elif expr[0] == 'storage': return 'storage'
 
 def compile_stmt(stmt,varhash={},lc=[0]):
     if stmt[0] == 'if':
@@ -241,10 +303,24 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         lexp = compile_left_expr(stmt[1],varhash)
         rexp = compile_expr(stmt[2],varhash)
         return rexp + lexp + ['MSTORE']
+    elif stmt[0] == 'mset':
+        rexp = compile_expr(stmt[2],varhash)
+        exprstates = [get_left_expr_type(e) for e in stmt[1][1:]]
+        o = rexp
+        for e in stmt[1][1:]:
+            o += compile_left_expr(stmt[1])
+            o += [ 'MSTORE' if get_left_expr_type(e) == 'variable' else 'SSTORE' ]
+        return o
     elif stmt[0] == 'seq':
         o = []
         for s in stmt[1:]: o.extend(compile_stmt(s,varhash,lc))
         return o
+    elif stmt[0] == 'mktx':
+        to = compile_expr(stmt[1],varhash)
+        value = compile_expr(stmt[2],varhash)
+        datan = compile_expr(stmt[3],varhash)
+        datastart = compile_expr(stmt[4],varhash)
+        return datastart + datan + value + to + [ 'MKTX' ]
 
 def assemble(c):
     iq = [x for x in c]
