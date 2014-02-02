@@ -197,12 +197,12 @@ def assemble(c):
 def compile(source):
     lines = source.split('\n')
     p = parse_lines(lines)
-    print p
+    print (p)
     return assemble(compile_stmt(p))
 
 if len(sys.argv) >= 2:
     try:
         open(sys.argv[1]).read()
-        print ' '.join([str(k) for k in compile(open(sys.argv[1]).read())])
+        print (' '.join([str(k) for k in compile(open(sys.argv[1]).read())]))
     except:
-        print ' '.join([str(k) for k in compile(sys.argv[1])])
+        print (' '.join([str(k) for k in compile(sys.argv[1])]))
