@@ -147,14 +147,15 @@ def shunting_yard(tokens):
             oq.append([ tok, a ])
         elif typ == 'rparen':
             args = []
-            while toktype(oq[-1]) != 'lparen': args.insert(0,oq.pop())
+            while toktype(oq[-1]) != 'lparen':
+                args.insert(0,oq.pop())
             oq.pop()
             if tok == ']':
                 oq.append(['access'] + args)
             elif tok == ')' and len(args) and args[0] != 'id':
                 oq.append(['fun'] + args)
             else:
-                oq.append(args[1])
+                oq.append(args[0])
     # The main loop
     while len(iq) > 0:
         prev = tok
