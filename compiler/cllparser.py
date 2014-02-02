@@ -27,7 +27,7 @@ def parse_lines(lns):
             if sp == 0: break
             spacesmin = min(sp,spacesmin)
             i += 1
-        child_block = map(lambda x:x[spacesmin:],lns[start_child_block:i])
+        child_block = list(map(lambda x:x[spacesmin:],lns[start_child_block:i]))
         # Calls parse_line to parse the individual line
         out = parse_line(main)
         # Include the child block into the parsed expression
