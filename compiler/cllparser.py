@@ -206,7 +206,8 @@ def parse_line(ln):
     elif tokens[0] in ['mktx','suicide','stop']:
         return shunting_yard(tokens)
     else:
-        eqplace = tokens.index('=')
+        try: eqplace = tokens.index('=')
+        except: print("Statement has no operator! (%d)" % i)
         pre = 0
         i = 0
         while i < eqplace:
