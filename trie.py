@@ -42,11 +42,11 @@ class Trie():
         self.db = databases[dbfile]
         
     def __get_state(self,node,key):
-        if self.debug: print 'nk',node.encode('hex'),key
+        if self.debug: print ('nk',node.encode('hex'),key)
         if len(key) == 0 or not node:
             return node
         curnode = self.lookup(node)
-        if self.debug: print 'cn', curnode
+        if self.debug: print ('cn', curnode)
         if not curnode:
             raise Exception("node not found in database")
         elif len(curnode) == 2:
@@ -79,7 +79,7 @@ class Trie():
         else: return self.__delete_state(node,key)
 
     def __insert_state(self,node,key,value):
-        if self.debug: print 'ins', node.encode('hex'), key
+        if self.debug: print ('ins', node.encode('hex'), key)
         if len(key) == 0:
             return value
         else:
@@ -87,7 +87,7 @@ class Trie():
                 newnode = [ hexarraykey_to_bin(key), value ]
                 return self.__put(newnode)
             curnode = self.lookup(node)
-            if self.debug: print 'icn', curnode
+            if self.debug: print ('icn', curnode)
             if not curnode:
                 raise Exception("node not found in database")
             if len(curnode) == 2:
@@ -119,14 +119,14 @@ class Trie():
                 return self.__put(newnode)
     
     def __delete_state(self,node,key):
-        if self.debug: print 'dnk', node.encode('hex'), key
+        if self.debug: print ('dnk', node.encode('hex'), key)
         if len(key) == 0 or not node:
             return ''
         else:
             curnode = self.lookup(node)
             if not curnode:
                 raise Exception("node not found in database")
-            if self.debug: print 'dcn', curnode
+            if self.debug: print ('dcn', curnode)
             if len(curnode) == 2:
                 (k2, v2) = curnode
                 k2 = bin_to_hexarraykey(k2)

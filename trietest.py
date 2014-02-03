@@ -12,14 +12,14 @@ def trie_test():
     o = {}
     for i in range(60):
         key, value = genkey(), genkey()
-        if value: print "setting key: '"+key+"', value: '"+value+"'"
-        else: print "deleting key: '"+key+"'"
+        if value: print ("setting key: '"+key+"', value: '"+value+"'")
+        else: print ("deleting key: '"+key+"'")
         o[key] = value
         t.update(key,value)
     for k in o.keys():
         v1 = o[k]
         v2 = t.get(k)
-        print v1,v2
+        print (v1,v2)
         if v1 != v2: raise Exception("incorrect!")
     
 trie_test()    

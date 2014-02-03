@@ -4,80 +4,76 @@ import time
 import sys
 import rlp
 import math
+import sha3
 
 scriptcode_map = {
-    0x00: 'STOP',   
-    0x01: 'ADD',
-    0x02: 'SUB',
-    0x03: 'MUL',
-    0x04: 'DIV',
-    0x05: 'SDIV',
-    0x06: 'MOD',
-    0x07: 'SMOD',
-    0x08: 'EXP',
-    0x09: 'NEG',
-    0x0a: 'LT',
-    0x0b: 'LE',
-    0x0c: 'GT',
-    0x0d: 'GE',
-    0x0e: 'EQ',
-    0x0f: 'NOT',
-    0x10: 'MYADDRESS',
-    0x11: 'TXSENDER',
-    0x12: 'TXVALUE',
-    0x13: 'TXFEE',
-    0x14: 'TXDATAN',
-    0x15: 'TXDATA',
-    0x16: 'BLK_PREVHASH',
-    0x17: 'BLK_COINBASE',
-    0x18: 'BLK_TIMESTAMP',
-    0x19: 'BLK_NUMBER',
-    0x1a: 'BLK_DIFFICULTY',
-    0x20: 'SHA256',
-    0x21: 'RIPEMD160',
-    0x22: 'ECMUL',
-    0x23: 'ECADD',
-    0x24: 'ECSIGN',
-    0x25: 'ECRECOVER',
-    0x26: 'ECVALID',
-    0x30: 'PUSH',
-    0x31: 'POP',
-    0x32: 'DUP',
-    0x33: 'DUPN',
-    0x34: 'SWAP',
-    0x35: 'SWAPN',
-    0x36: 'LOAD',
-    0x37: 'STORE',
-    0x40: 'JMP',
-    0x41: 'JMPI',
-    0x42: 'IND',
-    0x50: 'EXTRO',
-    0x51: 'BALANCE',
-    0x60: 'MKTX',
-    0xff: 'SUICIDE'
+    0: 'STOP',   
+    1: 'ADD',
+    2: 'SUB',
+    3: 'MUL',
+    4: 'DIV',
+    5: 'SDIV',
+    6: 'MOD',
+    7: 'SMOD',
+    8: 'EXP',
+    9: 'NEG',
+    10: 'LT',
+    11: 'LE',
+    12: 'GT',
+    13: 'GE',
+    14: 'EQ',
+    15: 'NOT',
+    16: 'MYADDRESS',
+    17: 'TXSENDER',
+    18: 'TXVALUE',
+    19: 'TXDATAN',
+    20: 'TXDATA',
+    21: 'BLK_PREVHASH',
+    22: 'BLK_COINBASE',
+    23: 'BLK_TIMESTAMP',
+    24: 'BLK_NUMBER',
+    25: 'BLK_DIFFICULTY',
+    26: 'BASEFEE',
+    32: 'SHA256',
+    33: 'RIPEMD160',
+    34: 'ECMUL',
+    35: 'ECADD',
+    36: 'ECSIGN',
+    37: 'ECRECOVER',
+    38: 'ECVALID',
+    39: 'SHA3',
+    48: 'PUSH',
+    49: 'POP',
+    50: 'DUP',
+    51: 'SWAP',
+    52: 'MLOAD',
+    53: 'MSTORE',
+    54: 'SLOAD',
+    55: 'SSTORE',
+    56: 'JMP',
+    57: 'JMPI',
+    58: 'IND',
+    59: 'EXTRO',
+    60: 'BALANCE',
+    61: 'MKTX',
+    63: 'SUICIDE'
 }
 
 params = {
     'stepfee': 1,
     'txfee': 100,
     'newcontractfee': 100,
-    'memoryfee': 20,
-    'datafee': 4,
-    'cryptofee': 10,
-    'extrofee': 10,
+    'storagefee': 0,
+    'datafee': 20,
+    'cryptofee': 20,
+    'extrofee': 40,
     'blocktime': 60,
-    'period_1_reward': 10**18 * 800,
-    'period_1_duration': 57600,
-    'period_2_reward': 10**18 * 400,
-    'period_2_duration': 57600,
-    'period_3_reward': 10**18 * 100,
-    'period_3_duration': 57600,
-    'period_4_reward': 10**18 * 50
+    'reward': 10 * 10**18
 }
 
 def getfee(block,t):
-    if t in ['stepfee','txfee','newcontractfee','memoryfee','datafee','cryptofee','extrofee']:
-        return int(10**24 / int(block.difficulty ** 0.5)) * params[t]
+    if t in ['stepfee','txfee','newcontractfee','storagefee','datafee','cryptofee','extrofee']:
+        return int(10**21 / int(block.difficulty ** 0.5)) * params[t]
 
 def process_transactions(block,transactions):
     while len(transactions) > 0:
@@ -89,7 +85,7 @@ def process_transactions(block,transactions):
         tdata = rlp.decode(block.state.get(tx.to)) or [0,0,0]
         # Calculate fee
         if tx.to == '\x00'*20:
-            fee = getfee('newcontractfee') + len(tx.data) * getfee('memoryfee')
+            fee = getfee('newcontractfee')
         else:
             fee = getfee('txfee')
         # Insufficient fee, do nothing
@@ -123,7 +119,7 @@ def process_transactions(block,transactions):
             for i in range(len(tx.data)):
                 contract.update(encode(i,256,32),tx.data[i])
             block.update_contract(addr)
-        print sdata, tdata
+        print (sdata, tdata)
         block.state.update(tx.sender,rlp.encode(sdata))
         block.state.update(tx.to,rlp.encode(tdata))
         # Evaluate contract if applicable
@@ -138,16 +134,8 @@ def eval(block,transactions,timestamp,coinbase):
     # Pay miner fee
     miner_state = rlp.decode(block.state.get(block.coinbase)) or [0,0,0]
     block.number += 1
-    reward = 0
-    if block.number < params['period_1_duration']:
-        reward = params['period_1_reward']
-    elif block.number < params['period_2_duration']:
-        reward = params['period_2_reward']
-    elif block.number < params['period_3_duration']:
-        reward = params['period_3_reward']
-    else:
-        reward = params['period_4_reward']
-    miner_state[1] += reward + block.reward
+    reward = params['reward']
+    miner_state[1] += reward
     for uncle in block.uncles:
         sib_miner_state = rlp_decode(block.state.get(uncle[3]))
         sib_miner_state[1] += reward*7/8
@@ -284,8 +272,6 @@ def eval_contract(block,transaction_list,tx):
             stack.append(decode(tx.sender,256))
         elif code == 'TXVALUE':
             stack.append(tx.value)
-        elif code == 'TXFEE':
-            stack.append(tx.fee)
         elif code == 'TXDATAN':
             stack.append(len(tx.data))
         elif code == 'TXDATA':
@@ -343,6 +329,11 @@ def eval_contract(block,transaction_list,tx):
             h,v,r,s = stack_pop(4)
             x,y = ecdsa_raw_recover((v,r,s),h)
             stack.extend([x,y])
+        elif code == 'SHA3':
+            L = stack_pop(1)
+            hdataitems = stack_pop(math.ceil(L / 32.0))
+            hdata = ''.join([encode(x,256,32) for x in hdataitems])[:L]
+            stack.append(decode(sha3.sha3_256(hdata).digest(),256))
         elif code == 'PUSH':
             stack.append(contract.get(encode(index + 1,256,32)))
             index += 1
@@ -351,23 +342,12 @@ def eval_contract(block,transaction_list,tx):
         elif code == 'DUP':
             x, = stack_pop(1)
             stack.extend([x,x])
-        elif code == 'DUPN':
-            arr = stack_pop(contract.get(encode(index + 1,256,32)))
-            arr.append(arr[0])
-            stack.extend(arr)
-            index += 1
         elif code == 'SWAP':
             x,y = stack_pop(2)
             stack.extend([y,x])
-        elif code == 'SWAPN':
-            arr = stack_pop(contract.get(encode(index + 1,256,32)))
-            arr.append(arr[0])
-            arr.pop(0)
-            stack.extend(arr)
-            index += 1
-        elif code == 'LOAD':
+        elif code == 'SLOAD':
             stack.append(contract.get(encode(stack_pop(1)[0],256,32)))
-        elif code == 'STORE':
+        elif code == 'SSTORE':
             x,y = stack_pop(2)
             if exit: break
             contract.update(encode(x,256,32),y)

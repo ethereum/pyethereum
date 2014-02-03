@@ -34,7 +34,7 @@ def mine(root,difficulty,extranonce):
                 layers[L].append(output)
             else:
                 if from_binary(output) < 2**256 / difficulty: return i
-        print "Computed level ",L,"time",time.time()-x
+        print ("Computed level ",L,"time",time.time()-x)
     return None
 
 def verify(root,difficulty,extranonce,nonce):
