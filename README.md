@@ -4,7 +4,7 @@ Ethereum Python Client
 
 Install 
 =========
-pip install -r requirements.txt
+python setup.py install
 
 To Do
 =========
