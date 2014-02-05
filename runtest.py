@@ -23,17 +23,21 @@ for x,y in hexencodedata:
 
 triedata = json.loads(open(os.path.join(testdir,'trietest.txt')).read())
 
-for x,y in triedata:
+
+for td in triedata:
+    x = td["inputs"]
+    y = td["expectation"]
     t0 = trie.Trie('/tmp/trietest-'+str(random.randrange(1000000000000)))
-    for k in x:
-        t0.update(k,x[k])
-    if t0.root.encode('hex') != y:
-        print ("Mismatch with adds only")
+    for k, v in x.items():
+        t0.update(k,v)
+    er = t0.root.encode('hex')
+    if er != y:
+        print ("Mismatch with adds only (%s)" % er)
         continue
     t = trie.Trie('/tmp/trietest-'+str(random.randrange(1000000000000)))
     dummies, reals = [], []
-    for k in x:
-        reals.append([k,x[k]])
+    for k, v in x.items():
+        reals.append([k, v])
         dummies.append(k[:random.randrange(len(k)-1)])
         dummies.append(k+random.choice(dummies))
         dummies.append(k[:random.randrange(len(k)-1)]+random.choice(dummies))
