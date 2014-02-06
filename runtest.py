@@ -32,7 +32,7 @@ for td in triedata:
         t0.update(k,v)
     er = t0.root.encode('hex')
     if er != y:
-        print ("Mismatch with adds only ('%s' -> '%s')" % (x, er))
+        print ("Mismatch with adds only (\"%s\" -> \"%s\")" % (x, er))
         continue
     t = trie.Trie('/tmp/trietest-'+str(random.randrange(1000000000000)))
     dummies, reals = [], []
