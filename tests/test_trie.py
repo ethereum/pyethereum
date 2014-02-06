@@ -31,3 +31,21 @@ class TestTrie:
             actual = t0.root.encode('hex')
             assert expected == actual, (
                 "\ninputs = '%s',\nhash = '%s'" % (inputs, actual))
+
+
+class TestHexArray:
+    def test_encoding(self):
+        tdata = utils.load_test_data("hexencodetest.txt")
+        for sample, expected in tdata:
+            actual = trie.hexarraykey_to_bin(sample).encode('hex')
+            assert expected == actual, (
+                "HexEncode mismatch for sample '%s'; expected='%s' - "
+                "actual='%s'" % (sample, expected, actual))
+
+    def test_decoding(self):
+        tdata = utils.load_test_data("hexencodetest.txt")
+        for expected, sample in tdata:
+            actual = trie.bin_to_hexarraykey(sample.decode('hex'))
+            assert expected == actual, (
+                "HexDecode mismatch for sample '%s'; expected='%s' - "
+                "actual='%s'" % (sample, expected, actual))

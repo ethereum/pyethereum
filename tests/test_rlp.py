@@ -13,7 +13,7 @@ import utils
 
 
 class TestRLP:
-    def test_encodings(self):
+    def test_encoding(self):
         tdata = utils.load_test_data("rlptest.txt")
         for sample, expected in tdata:
             actual = rlp.encode(sample).encode('hex')
