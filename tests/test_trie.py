@@ -5,7 +5,7 @@
 # under the terms of the The MIT License
 
 
-"""Tests related to the trie.Trie class."""
+"""Tests related to the radix/merkle trees."""
 
 
 import random
@@ -30,7 +30,8 @@ class TestTrie:
             # The actual test
             actual = t0.root.encode('hex')
             assert expected == actual, (
-                "\ninputs = '%s',\nhash = '%s'" % (inputs, actual))
+                "inputs='%s', expected='%s', actual='%s'" %
+                (inputs, expected, actual))
 
 
 class TestHexArray:
