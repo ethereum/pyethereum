@@ -50,7 +50,12 @@ for td in triedata:
         t.update(k,v)
         if v == '' and k in mp: del mp[k]
         else: mp[k] = v
-        ops.append([k,v,t.root.encode('hex')])
+        try: ops.append([k,v,t.root.encode('hex')])
+        except AttributeError:
+            if isinstance(t.root, list):
+                ops.append([k,v,str(t.root).encode('hex')])
+            else:
+                raise
         tn = trie.Trie('/tmp/trietest-'+str(random.randrange(1000000000000)))
         for k in mp:
             tn.update(k,mp[k])
