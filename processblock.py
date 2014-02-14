@@ -73,7 +73,7 @@ params = {
 
 def getfee(block,t):
     if t in ['stepfee','txfee','newcontractfee','storagefee','datafee','cryptofee','extrofee']:
-        return int(10**21 / int(block.difficulty ** 0.5)) * params[t]
+        return block.get_base_fee() * params[t]
 
 def process_transactions(block,transactions):
     while len(transactions) > 0:
