@@ -19,5 +19,5 @@ for i in range(30):
 
     calc(2**22 + random.randrange(2**22))
 
-    print tc[0]
+    print (tc[0])
     

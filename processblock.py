@@ -119,7 +119,7 @@ def process_transactions(block,transactions):
             for i in range(len(tx.data)):
                 contract.update(encode(i,256,32),tx.data[i])
             block.update_contract(addr)
-        print sdata, tdata
+        print (sdata, tdata)
         block.state.update(tx.sender,rlp.encode(sdata))
         block.state.update(tx.to,rlp.encode(tdata))
         # Evaluate contract if applicable
