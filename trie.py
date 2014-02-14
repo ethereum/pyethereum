@@ -1,6 +1,9 @@
+#!/usr/bin/python
+
 import leveldb
 import rlp
 from sha3 import sha3_256
+import sys
 
 def sha3(x): return sha3_256(x).digest()
 
@@ -31,6 +34,10 @@ def bin_to_hexarraykey(bindata):
     else: o = o[2:]
     return o
 
+def encode_node(nd):
+    if isinstance(nd,str): return nd.encode('hex')
+    else: return rlp.encode(nd).encode('hex')
+
 databases = {}
 
 class Trie():
@@ -42,7 +49,7 @@ class Trie():
         self.db = databases[dbfile]
         
     def __get_state(self,node,key):
-        if self.debug: print 'nk',node.encode('hex'),key
+        if self.debug: print 'nk',encode_node(node),key
         if len(key) == 0 or not node:
             return node
         curnode = self.lookup(node)
@@ -79,7 +86,7 @@ class Trie():
         else: return self.__delete_state(node,key)
 
     def __insert_state(self,node,key,value):
-        if self.debug: print 'ins', node.encode('hex'), key
+        if self.debug: print 'ins', encode_node(node), key
         if len(key) == 0:
             return value
         else:
@@ -119,7 +126,7 @@ class Trie():
                 return self.__put(newnode)
     
     def __delete_state(self,node,key):
-        if self.debug: print 'dnk', node.encode('hex'), key
+        if self.debug: print 'dnk', encode_node(node), key
         if len(key) == 0 or not node:
             return ''
         else:
@@ -231,3 +238,12 @@ class Trie():
             raise Exception("Key and value must be strings")
         key2 = ['0123456789abcdef'.find(x) for x in str(key).encode('hex')] + [16]
         self.root = self.__update_state(self.root,key2,str(value))
+
+if len(sys.argv) >= 2:
+    if sys.argv[1] == 'insert':
+        t = Trie(sys.argv[2],sys.argv[3].decode('hex'))
+        t.update(sys.argv[4],sys.argv[5])
+        print encode_node(t.root)
+    elif sys.argv[1] == 'get':
+        t = Trie(sys.argv[2],sys.argv[3].decode('hex'))
+        print t.get(sys.argv[4])
