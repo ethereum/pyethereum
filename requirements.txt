@@ -1,4 +1,4 @@
-leveldb
 ez_setup
+leveldb
 pybitcointools
 pysha3
