@@ -1,4 +1,0 @@
-leveldb
-ez_setup
-pybitcointools
-pysha3
