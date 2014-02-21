@@ -2,7 +2,11 @@ import json, sys, os
 import rlp, trie
 import random
 
-testdir = sys.argv[1] if len(sys.argv) >= 2 else '../tests'
+try:
+    rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
+except:
+    print 'You need to clone the "tests" which can be found here: https://github.com/ethereum/tests'
+    sys.exit()
 
 rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
 for x,y in rlpdata:
