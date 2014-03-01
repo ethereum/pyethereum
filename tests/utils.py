@@ -11,9 +11,9 @@
 import json
 import os
 
-
 __TESTDATADIR = "../tests"
-
+assert os.path.exists(__TESTDATADIR), ('Expecting test data at', __TESTDATADIR, \
+	'You need to clone the test data repository which can be found here: https://github.com/ethereum/tests')
 
 def load_test_data(fname):
     return json.loads(open(os.path.join(__TESTDATADIR, fname)).read())
