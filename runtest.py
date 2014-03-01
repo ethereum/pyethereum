@@ -2,11 +2,13 @@ import json, sys, os
 import rlp, trie
 import random
 
-try:
-    rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
-except:
+testdir = os.path.join('..','tests')
+
+if not os.path.exists(testdir):
+    print 'Expecting tests at', testdir
     print 'You need to clone the "tests" which can be found here: https://github.com/ethereum/tests'
     sys.exit()
+
 
 rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
 for x,y in rlpdata:
