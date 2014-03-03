@@ -53,7 +53,7 @@ def __decode(s,pos=0):
             o.append(obj)
         return (o,pos)
     else:
-        raise Exception("byte not supported: "+fchar)
+        raise RuntimeError("byte not supported: " + str(fchar))
 
 def decode(s): return __decode(s)[0]
 
