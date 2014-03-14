@@ -9,7 +9,7 @@ def sha3(x):
     return sha3_256(x).digest()
 
 
-class DB():
+class DB(object):
 
     def __init__(self, dbfile):
         self.db = leveldb.LevelDB(dbfile)
@@ -63,7 +63,7 @@ def encode_node(nd):
 databases = {}
 
 
-class Trie():
+class Trie(object):
 
     def __init__(self, dbfile, root='', debug=False):
         self.root = root
