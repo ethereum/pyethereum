@@ -3,7 +3,6 @@
 import leveldb
 import rlp
 from sha3 import sha3_256
-import sys
 
 
 def sha3(x):
@@ -293,11 +292,13 @@ class Trie():
                 for x in str(key).encode('hex')] + [16]
         self.root = self.__update_state(self.root, key2, str(value))
 
-if len(sys.argv) >= 2:
-    if sys.argv[1] == 'insert':
-        t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
-        t.update(sys.argv[4], sys.argv[5])
-        print encode_node(t.root)
-    elif sys.argv[1] == 'get':
-        t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
-        print t.get(sys.argv[4])
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) >= 2:
+        if sys.argv[1] == 'insert':
+            t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
+            t.update(sys.argv[4], sys.argv[5])
+            print encode_node(t.root)
+        elif sys.argv[1] == 'get':
+            t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
+            print t.get(sys.argv[4])
