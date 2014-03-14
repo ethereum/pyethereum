@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import leveldb
 import rlp
 from sha3 import sha3_256
@@ -93,6 +94,7 @@ class Trie(object):
     def __init__(self, dbfile, root='', debug=False):
         self.root = root
         self.debug = debug
+        dbfile = os.path.abspath(dbfile)
         if dbfile not in databases:
             databases[dbfile] = DB(dbfile)
         self.db = databases[dbfile]
