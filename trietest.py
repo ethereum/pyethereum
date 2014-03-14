@@ -1,4 +1,4 @@
-from trie import Trie
+from pyethereum.trie import Trie
 import random
 
 def genkey():
@@ -21,5 +21,5 @@ def trie_test():
         v2 = t.get(k)
         print (v1,v2)
         if v1 != v2: raise Exception("incorrect!")
-    
-trie_test()    
+
+trie_test()
