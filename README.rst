@@ -6,7 +6,12 @@ Install
 =========
 Python2.7 is required.
 
-pip install -r requirements.txt
+This uses http://buildout.org for reliable building and dependency management.
+
+After cloning the repository run `python bootstrap.py`, to set up buildout. This
+needs only to be done once.
+
+In order to install dependencies and console_scripts, call `bin/buildout`.
 
 To Do
 =========

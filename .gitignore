@@ -8,3 +8,8 @@ __pycache__/
 .~
 .venv
 .DS_Store
+bin/
+pyethereum.egg-info/
+develop-eggs/
+parts/
+.installed.cfg
