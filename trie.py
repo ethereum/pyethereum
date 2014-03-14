@@ -18,7 +18,7 @@ class DB():
     def get(self, key):
         try:
             return self.db.Get(key)
-        except:
+        except KeyError:
             return ''
 
     def put(self, key, value):
