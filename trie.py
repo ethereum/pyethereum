@@ -29,11 +29,15 @@ class DB(object):
 
 
 def hexarraykey_to_bin(key):
-    term = 0 if not key or key[-1] != 16 else 1
-    if term:
+    """convert key given as list of nibbles to binary"""
+    if key[-1:] == [16]:
+        flags = 2
         key = key[:-1]
+    else:
+        flags = 0
+
     oddlen = len(key) % 2
-    flags = 2 * term + oddlen
+    flags |= oddlen   # set lowest bit if odd number of nibbles
     if oddlen:
         key = [flags] + key
     else:
@@ -71,9 +75,10 @@ def bin_to_nibble_list_with_terminator(s):
 
 def bin_to_hexarraykey(bindata):
     o = bin_to_nibble_list(bindata)
-    if o[0] >= 2:
+    flags = o[0]
+    if flags & 2:
         o.append(16)
-    if o[0] % 2 == 1:
+    if flags & 1 == 1:
         o = o[1:]
     else:
         o = o[2:]
