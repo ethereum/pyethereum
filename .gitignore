@@ -6,4 +6,5 @@ __pycache__/
 .*.swo
 .*.swn
 .~
+.venv
 .DS_Store
