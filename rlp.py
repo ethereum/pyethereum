@@ -55,7 +55,8 @@ def __decode(s, pos=0):
 
 
 def decode(s):
-    return __decode(s)[0]
+    if s:
+        return __decode(s)[0]
 
 
 def encode_length(L, offset):
