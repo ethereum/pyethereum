@@ -8,6 +8,8 @@
 """Tests related to the trie.Trie class."""
 
 
+import py
+import pytest
 import rlp
 import utils
 
@@ -28,3 +30,13 @@ class TestRLP:
             assert expected == actual, (
                 "RLPDecode mismatch for sample '%s'; expected='%s' - "
                 "actual='%s'" % (sample, expected, actual))
+
+    def test_byte_not_supported_exception(self):
+        sample = "c6827a77c10401"
+        try:
+            rlp.decode(sample.decode('hex'))
+        except:
+            excinfo = py.code.ExceptionInfo()
+            assert "RuntimeError: byte not supported: 198" == excinfo.exconly()
+        else:
+            pytest.fail("RuntimeError not raised")

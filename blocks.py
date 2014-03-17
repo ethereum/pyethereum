@@ -38,6 +38,9 @@ class Block():
             raise Exception("Uncle root hash does not match!")
         # TODO: check POW
             
+    def get_base_fee():
+        return int(10**21 / int(self.difficulty ** 0.5))
+
     def pay_fee(self,address,fee,tominer=True):
         # Subtract fee from sender
         sender_state = rlp.decode(self.state.get(address))

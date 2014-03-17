@@ -1,0 +1,10 @@
+*.py[co]
+__pycache__/
+*~
+[#]*[#]
+.*.swp
+.*.swo
+.*.swn
+.~
+.venv
+.DS_Store

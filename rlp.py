@@ -21,66 +21,48 @@ def __decode(s,pos=0):
         return (None, 0)
     else:
         fchar = ord(s[pos])
-    if fchar < 24:
+    if fchar < 128:
         return (ord(s[pos]), pos+1)
-    elif fchar < 56:
-        b = ord(s[pos]) - 23
-        return (from_binary(s[pos+1:pos+1+b]), pos+1+b)
-    elif fchar < 64:
-        b = ord(s[pos]) - 55
-        b2 = from_binary(s[pos+1:pos+1+b])
-        return (from_binary(s[pos+1+b:pos+1+b+b2]), pos+1+b+b2)
-    elif fchar < 120:
-        b = ord(s[pos]) - 64
-        return (s[pos+1:pos+1+b], pos+1+b)
-    elif fchar < 128:
-        b = ord(s[pos]) - 119
-        b2 = from_binary(s[pos+1:pos+1+b])
-        return (s[pos+1+b:pos+1+b+b2], pos+1+b+b2)
     elif fchar < 184:
         b = ord(s[pos]) - 128
+        return (s[pos+1:pos+1+b], pos+1+b)
+    elif fchar < 192:
+        b = ord(s[pos]) - 183
+        b2 = from_binary(s[pos+1:pos+1+b])
+        return (s[pos+1+b:pos+1+b+b2], pos+1+b+b2)
+    elif fchar < 248:
+        b = ord(s[pos]) - 192
         o, pos = [], pos+1
         for i in range(b):
             obj, pos = __decode(s,pos)
             o.append(obj)
         return (o,pos)
-    elif fchar < 192:
-        b = ord(s[pos]) - 183
+    else:
+        b = ord(s[pos]) - 247
         b2 = from_binary(s[pos+1:pos+1+b])
         o, pos = [], pos+1+b
         for i in range(b):
             obj, pos = __decode(s,pos)
             o.append(obj)
         return (o,pos)
-    else:
-        raise Exception("byte not supported: "+fchar)
 
 def decode(s): return __decode(s)[0]
 
-def encode(s):
-    if isinstance(s,(int,long)):
-        if s < 0:
-            raise Exception("can't handle negative ints")
-        elif s >= 0 and s < 24:
-            return chr(s)
-        elif s < 2**256:
-            b = to_binary(s)
-            return chr(len(b) + 23) + b
-        else:
-            b = to_binary(s)
-            b2 = to_binary(len(b))
-            return chr(len(b2) + 55) + b2 + b
-    elif isinstance(s,(str,unicode)):
-        if len(s) < 56:
-            return chr(len(s) + 64) + str(s)
-        else:
-            b2 = to_binary(len(s))
-            return chr(len(b2) + 119) + b2 + str(s)
-    elif isinstance(s,list):
-        if len(s) < 56:
-            return chr(len(s) + 128) + ''.join([encode(x) for x in s])
-        else:
-            b2 = to_binary(len(s))
-            return chr(len(b2) + 183) + b2 + ''.join([encode(x) for x in s])
+def encode_length(L,offset):
+    if L < 56:
+         return chr(L + offset)
+    elif L < 256**8:
+         BL = to_binary(L)
+         return chr(len(BL) + offset + 55) + BL
     else:
-        raise Exception("Encoding for "+s+" not yet implemented")
+         raise Exception("input too long")
+
+def encode(s):
+    if isinstance(s,(str,unicode)):
+        s = str(s)
+        if len(s) == 1 and ord(s) < 128: return s
+        else: return encode_length(len(s),128) + s
+    elif isinstance(s,list):
+        output = ''
+        for item in s: output += encode(item)
+        return encode_length(len(output),192) + output

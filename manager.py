@@ -25,7 +25,16 @@ genesis = [ genesis_header, [], [] ]
 
 mainblk = Block(rlp.encode(genesis))
 
-db = leveldb.LevelDB("objects")
+print 1
+try: 
+    db = leveldb.LevelDB("objects")
+except:
+    os.popen('cp -r objects pbjects').read()
+    leveldb.DestroyDB("objects")
+    os.popen('rm -r objects').read()
+    os.popen('mv pbjects objects').read()
+    leveldb.LevelDB("objects")
+print 2
 
 def genaddr(seed):
     priv = bin_sha256(seed)
