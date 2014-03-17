@@ -8,9 +8,24 @@ def step_impl(context):
     dsts = [rlp.encode(src) for src in context.srcs]
     context.pairs = zip(context.srcs, dsts)
 
+@then(u'decode the encoded data will get the original data')
+def step_impl(context):
+    import rlp
+    def assert_item_equal(src, dst):
+        if isinstance(src, str):
+            assert src == dst
+            return
+        assert isinstance(src, list)
+        for src_item, dst_item in zip(src, dst):
+            assert_item_equal(src_item, dst_item)
+
+    for src, dst in context.pairs:
+        assert_item_equal(src, rlp.decode(dst))
+
 @given(u'the byte is in [0x00, 0x7f] range')
 def step_impl(context):
     context.srcs = [chr(0x00), chr(0x71), chr(0x7f)]
+
 
 @then(u'the byte is its own RLP encoding')
 def step_impl(context):
