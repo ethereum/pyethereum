@@ -1,13 +1,4 @@
-def binary_length(n):
-    if n == 0:
-        return 0
-    else:
-        return 1 + binary_length(n / 256)
-
-
-def to_binary_array(n, L=None):
-    if L is None:
-        L = binary_length(n)
+def to_binary_array(n):
     if n == 0:
         return []
     else:
@@ -16,8 +7,8 @@ def to_binary_array(n, L=None):
         return x
 
 
-def to_binary(n, L=None):
-    return ''.join([chr(x) for x in to_binary_array(n, L)])
+def to_binary(n):
+    return ''.join([chr(x) for x in to_binary_array(n)])
 
 
 def from_binary(b):
