@@ -1,4 +1,5 @@
-import re, sys
+#!/usr/bin/python
+import re, sys, os
 from cllparser import *
 
 optable = { 
@@ -22,7 +23,7 @@ funtable = {
     'sha3': ['SHA3', 3],
     'ripemd160': ['RIPEMD160', 3],
     'ecsign': ['ECSIGN', 2],
-    'ecrecover': ['ECRECOVER', 3],
+    'ecrecover': ['ECRECOVER', 4],
     'ecvalid': ['ECVALID', 2],
     'ecadd': ['ECADD', 4],
     'ecmul': ['ECMUL', 3],
@@ -69,10 +70,10 @@ def compile_left_expr(expr,varhash):
             varhash[expr] = len(varhash)
             return ['PUSH',varhash[expr]]
     elif typ == 'storage':
-        return compile_expr(expr[1],varhash)
+        return compile_expr(expr[2],varhash)
     elif typ == 'access':
         if get_left_expr_type(expr[1]) == 'storage':
-            return compile_left_expr(expr[1],varhash) + 'SLOAD' + compile_expr(expr[2],varhash)
+            return compile_left_expr(expr[1],varhash) + ['SLOAD'] + compile_expr(expr[2],varhash)
         else:
             return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['ADD']
     else:
@@ -97,15 +98,15 @@ def compile_expr(expr,varhash):
         g = compile_expr(expr[2],varhash)
         return f + g + [optable[expr[0]]]
     elif expr[0] == 'fun' and expr[1] in funtable:
-        if len(expr) != funtable[expr[0]][1] + 1:
+        if len(expr) != funtable[expr[1]][1] + 2:
             raise Exception("Wrong number of arguments: "+str(expr)) 
         f = sum([compile_expr(e,varhash) for e in expr[2:]],[])
         return f + [funtable[expr[1]][0]]
     elif expr[0] == 'access':
         if expr[1][0] == 'block.contract_storage':
             return compile_expr(expr[2],varhash) + compile_expr(expr[1][1],varhash) + ['EXTRO']
-        elif expr[1] == 'contract.storage':
-            return compile_expr(expr[2],varhash) + ['SLOAD']
+        elif expr[1] in pseudoarrays:
+            return compile_exor(expr[2],varhash) + pseudoarrays[expr[1]]
         else:
             return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['ADD','MLOAD']
     elif expr[0] == 'fun' and expr[1] == 'array':
@@ -122,7 +123,7 @@ def compile_expr(expr,varhash):
     elif expr[0] in ['and', '&&']: 
         return compile_expr(['!', [ '+', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
     elif expr[0] == 'multi':
-        return sum([compile_expr(e,varhash) for e in expr],[])
+        return sum([compile_expr(e,varhash) for e in expr[1:]],[])
     elif expr == 'tx.datan':
         return ['DATAN']
     else:
@@ -136,15 +137,15 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         h = compile_stmt(stmt[3],varhash,lc) if len(stmt) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        if h: return f + [ 'NOT', ref, 'JMPI' ] + g + [ ref, 'JMP' ] + h + [ label ]
-        else: return f + [ 'NOT', ref, 'JMPI' ] + g + [ label ]
+        if h: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ ref, 'JMP' ] + h + [ label ]
+        else: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash)
         g = compile_stmt(stmt[2],varhash,lc)
         beglab, begref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         endlab, endref = 'LABEL_'+str(lc[0]+1), 'REF_'+str(lc[0]+1)
         lc[0] += 2
-        return [ beglab ] + f + [ 'NOT', endref, 'JMPI' ] + g + [ begref, 'JMP', endlab ]
+        return [ beglab ] + f + [ 'NOT', endref, 'SWAP', 'JMPI' ] + g + [ begref, 'JMP', endlab ]
     elif stmt[0] == 'set':
         lexp = compile_left_expr(stmt[1],varhash)
         rexp = compile_expr(stmt[2],varhash)
@@ -155,7 +156,7 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         exprstates = [get_left_expr_type(e) for e in stmt[1][1:]]
         o = rexp
         for e in stmt[1][1:]:
-            o += compile_left_expr(stmt[1])
+            o += compile_left_expr(e,varhash)
             o += [ 'SSTORE' if get_left_expr_type(e) == 'storage' else 'MSTORE' ]
         return o
     elif stmt[0] == 'seq':
@@ -179,13 +180,15 @@ def compile_stmt(stmt,varhash={},lc=[0]):
 def assemble(c):
     iq = [x for x in c]
     mq = []
+    pos = 0
     labelmap = {}
     while len(iq):
         front = iq.pop(0)
         if isinstance(front,str) and front[:6] == 'LABEL_':
-            labelmap[front[6:]] = len(mq)
+            labelmap[front[6:]] = pos
         else:
             mq.append(front)
+            pos += 2 if isinstance(front,str) and front[:4] == 'REF_' else 1
     oq = []
     for m in mq:
         if isinstance(m,str) and m[:4] == 'REF_':
@@ -197,12 +200,12 @@ def assemble(c):
 def compile(source):
     lines = source.split('\n')
     p = parse_lines(lines)
-    print (p)
+    #print p
     return assemble(compile_stmt(p))
 
 if len(sys.argv) >= 2:
-    try:
+    if os.path.exists(sys.argv[1]):
         open(sys.argv[1]).read()
-        print (' '.join([str(k) for k in compile(open(sys.argv[1]).read())]))
-    except:
-        print (' '.join([str(k) for k in compile(sys.argv[1])]))
+        print ' '.join([str(k) for k in compile(open(sys.argv[1]).read())])
+    else:
+        print ' '.join([str(k) for k in compile(sys.argv[1])])
