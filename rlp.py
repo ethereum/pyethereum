@@ -32,11 +32,14 @@ def __decode(s, pos=0):
         b2 = from_binary(s[pos + 1:pos + 1 + b])
         return (s[pos + 1 + b:pos + 1 + b + b2], pos + 1 + b + b2)
     elif fchar < 248:
-        b = fchar - 192
-        o, pos = [], pos + 1
-        for i in range(b):
+        o = []
+        pos += 1
+        pos_end = pos + fchar - 192
+
+        while pos < pos_end:
             obj, pos = __decode(s, pos)
             o.append(obj)
+        assert pos == pos_end, "read beyond list boundary in __decode"
         return (o, pos)
     else:
         b = fchar - 247
