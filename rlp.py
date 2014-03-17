@@ -19,10 +19,9 @@ def from_binary(b):
 
 
 def __decode(s, pos=0):
-    if not s:
-        return (None, 0)
-    else:
-        fchar = ord(s[pos])
+    assert pos < len(s), "read beyond end of string in __decode"
+
+    fchar = ord(s[pos])
     if fchar < 128:
         return (s[pos], pos + 1)
     elif fchar < 184:
