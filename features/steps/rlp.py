@@ -1,5 +1,5 @@
 from behave import *
-from utils import to_big_endian_binary
+from pyethereum.utils import to_big_endian_binary
 
 
 @when(u'encoded in RLP')
