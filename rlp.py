@@ -22,7 +22,7 @@ def __decode(s,pos=0):
     else:
         fchar = ord(s[pos])
     if fchar < 128:
-        return (ord(s[pos]), pos+1)
+        return (s[pos], pos+1)
     elif fchar < 184:
         b = ord(s[pos]) - 128
         return (s[pos+1:pos+1+b], pos+1+b)
