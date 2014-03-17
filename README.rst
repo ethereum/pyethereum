@@ -2,10 +2,10 @@ Next generation cryptocurrency network
 =======================================
 Ethereum Python Client
 
-We are targeting at Python3.3 or above for python3 as well as python2.7.
-
 Install
 =========
+Python2.7 is required.
+
 pip install -r requirements.txt
 
 To Do
@@ -13,7 +13,8 @@ To Do
 
 For Developer
 =============
-This project use `behave <http://pythonhosted.org/behave/index.html>`_ for testing
+#.  This project use `behave <http://pythonhosted.org/behave/index.html>`_ for testing
+#.  Should write codes compatible with Python3
 
 
 Licence
