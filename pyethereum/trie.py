@@ -292,7 +292,8 @@ class Trie(object):
                 for x in str(key).encode('hex')] + [16]
         self.root = self.__update_state(self.root, key2, str(value))
 
-if __name__ == "__main__":
+
+def main():
     import sys
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
@@ -302,3 +303,7 @@ if __name__ == "__main__":
         elif sys.argv[1] == 'get':
             t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
             print t.get(sys.argv[4])
+
+
+if __name__ == "__main__":
+    main()
