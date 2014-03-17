@@ -25,21 +25,21 @@ def __decode(s, pos=0):
     if fchar < 128:
         return (s[pos], pos + 1)
     elif fchar < 184:
-        b = ord(s[pos]) - 128
+        b = fchar - 128
         return (s[pos + 1:pos + 1 + b], pos + 1 + b)
     elif fchar < 192:
-        b = ord(s[pos]) - 183
+        b = fchar - 183
         b2 = from_binary(s[pos + 1:pos + 1 + b])
         return (s[pos + 1 + b:pos + 1 + b + b2], pos + 1 + b + b2)
     elif fchar < 248:
-        b = ord(s[pos]) - 192
+        b = fchar - 192
         o, pos = [], pos + 1
         for i in range(b):
             obj, pos = __decode(s, pos)
             o.append(obj)
         return (o, pos)
     else:
-        b = ord(s[pos]) - 247
+        b = fchar - 247
         b2 = from_binary(s[pos + 1:pos + 1 + b])
         o, pos = [], pos + 1 + b
         for i in range(b):
