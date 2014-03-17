@@ -1,5 +1,5 @@
 import json, sys, os
-import rlp, trie
+from pyethereum import rlp, trie
 import random
 
 try:
