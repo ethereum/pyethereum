@@ -106,7 +106,7 @@ def compile_expr(expr,varhash):
         if expr[1][0] == 'block.contract_storage':
             return compile_expr(expr[2],varhash) + compile_expr(expr[1][1],varhash) + ['EXTRO']
         elif expr[1] in pseudoarrays:
-            return compile_exor(expr[2],varhash) + pseudoarrays[expr[1]]
+            return compile_expr(expr[2],varhash) + pseudoarrays[expr[1]]
         else:
             return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['ADD','MLOAD']
     elif expr[0] == 'fun' and expr[1] == 'array':
