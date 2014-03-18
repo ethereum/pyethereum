@@ -58,7 +58,6 @@ def step_impl(context):
 @then(u'the remain bits will be same of the original hex sequence')
 def step_impl(context):
     for src, dst in context.pairs:
-        print src, len(dst), ord(dst[0])
         assert len(src) == len(dst)*2 - context.prefex_hex_count
 
         dst_hexes = []
