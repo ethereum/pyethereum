@@ -37,7 +37,6 @@ Feature: RLP encoding and decoding
     And following bytes are concatenation of the RLP encodings of the items
     And decode the RLP encoded data will get the original data
 
-
   Scenario: payload is a list with total length [56-]
     Given a list with length of [56-]
     When encoded in RLP
@@ -45,3 +44,7 @@ Feature: RLP encoding and decoding
     And following bytes are the payload list length
     And following bytes are the payload list itself
     And decode the RLP encoded data will get the original data
+
+  Scenario: payload is of wrong type
+    Given a payload containing elements of unsupported type
+    Then raise TypeError
