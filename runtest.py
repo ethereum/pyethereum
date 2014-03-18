@@ -2,6 +2,7 @@ import json, sys, os
 import trie
 import random
 
+testdir = 'tests'
 hexencodedata = json.loads(open(os.path.join(testdir,'hexencodetest.txt')).read())
 
 for x,y in hexencodedata:
