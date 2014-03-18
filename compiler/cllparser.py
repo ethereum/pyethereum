@@ -112,6 +112,7 @@ precedence = {
     '&&': 6,
     'or': 7,
     '||': 7,
+    '!=': 8,
 }
 
 def toktype(token):
