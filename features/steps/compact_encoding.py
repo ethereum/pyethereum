@@ -20,7 +20,7 @@ def step_impl(context):
 
 @when(u'compactly encoded')
 def step_impl(context):
-    import trie
+    from pyethereum import trie
     context.pairs = [
         (src, trie.hexarraykey_to_bin(src))
         for src in context.srcs
@@ -70,7 +70,7 @@ def step_impl(context):
 
 @then(u'decode the compactly encoded hex sequence will get the original one')
 def step_impl(context):
-    import trie
+    from pyethereum import trie
     for src, dst in context.pairs:
         decoded_hexes = trie.bin_to_hexarraykey(dst)
         for src_hex, dst_hex in zip(src, decoded_hexes):

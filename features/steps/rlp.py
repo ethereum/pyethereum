@@ -1,17 +1,16 @@
-from utils import int_to_big_endian
+from pyethereum.utils import int_to_big_endian
 
 
 @when(u'encoded in RLP')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     dsts = [rlp.encode(src) for src in context.srcs]
     context.pairs = zip(context.srcs, dsts)
 
 
 @then(u'decode the RLP encoded data will get the original data')
 def step_impl(context):
-    import rlp
-
+    from pyethereum import rlp
     def assert_item_equal(src, dst):
         if isinstance(src, str):
             assert src == dst
@@ -33,7 +32,7 @@ def step_impl(context):
 
 @then(u'the byte is its own RLP encoding')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         assert dst == src
 
@@ -115,7 +114,7 @@ def step_impl(context):
 
 @then(u'the first byte is 0xc0 plus the length of the list')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         total_payload_length = sum(len(rlp.encode(x)) for x in src)
         assert dst[0] == chr(0xc0 + total_payload_length)
@@ -123,7 +122,7 @@ def step_impl(context):
 
 @then(u'following bytes are concatenation of the RLP encodings of the items')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         assert dst[1:] == ''.join(rlp.encode(x) for x in src)
 
@@ -139,7 +138,7 @@ def step_impl(context):
 
 @then(u'the first byte is 0xf7 plus the length of the length of the list')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         total_payload_length = sum(len(rlp.encode(x)) for x in src)
         length_bin = int_to_big_endian(total_payload_length)
@@ -148,7 +147,7 @@ def step_impl(context):
 
 @then(u'following bytes are the payload list length')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         total_payload_length = sum(len(rlp.encode(x)) for x in src)
         length_bin = int_to_big_endian(total_payload_length)
@@ -157,7 +156,7 @@ def step_impl(context):
 
 @then(u'following bytes are the payload list itself')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src, dst in context.pairs:
         encodeds = [rlp.encode(x) for x in src]
         total_payload_length = sum(len(x) for x in encodeds)
