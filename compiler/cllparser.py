@@ -27,7 +27,7 @@ def parse_lines(lns):
             if sp == 0: break
             spacesmin = min(sp,spacesmin)
             i += 1
-        child_block = list(map(lambda x:x[spacesmin:],lns[start_child_block:i]))
+        child_block = map(lambda x:x[spacesmin:],lns[start_child_block:i])
         # Calls parse_line to parse the individual line
         out = parse_line(main)
         # Include the child block into the parsed expression
@@ -147,15 +147,14 @@ def shunting_yard(tokens):
             oq.append([ tok, a ])
         elif typ == 'rparen':
             args = []
-            while toktype(oq[-1]) != 'lparen':
-                args.insert(0,oq.pop())
+            while toktype(oq[-1]) != 'lparen': args.insert(0,oq.pop())
             oq.pop()
             if tok == ']':
                 oq.append(['access'] + args)
             elif tok == ')' and len(args) and args[0] != 'id':
                 oq.append(['fun'] + args)
             else:
-                oq.append(args[0])
+                oq.append(args[1])
     # The main loop
     while len(iq) > 0:
         prev = tok
@@ -194,7 +193,7 @@ def shunting_yard(tokens):
         return [ 'multi' ] + oq
 
 def parse_line(ln):
-    tokens = tokenize(ln)
+    tokens = tokenize(ln.strip())
     if tokens[0] == 'if' or tokens[0] == 'while':
         return [ tokens[0], shunting_yard(tokens[1:]) ]
     elif len(tokens) >= 2 and tokens[0] == 'else' and tokens[1] == 'if':
