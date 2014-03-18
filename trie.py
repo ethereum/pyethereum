@@ -28,7 +28,7 @@ class DB(object):
 
 
 def hexarraykey_to_bin(key):
-    term = 1 if key[-1] == 16 else 0
+    term = 0 if not key or key[-1] != 16 else 1
     if term:
         key = key[:-1]
     oddlen = len(key) % 2
