@@ -1,20 +1,6 @@
 import json, sys, os
-import rlp, trie
+import trie
 import random
-
-try:
-    rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
-except:
-    print 'You need to clone the "tests" which can be found here: https://github.com/ethereum/tests'
-    sys.exit()
-
-rlpdata = json.loads(open(os.path.join(testdir,'rlptest.txt')).read())
-for x,y in rlpdata:
-    yprime = rlp.encode(x).encode('hex')
-    if yprime != y: print ("RLPEncode Mismatch: ",x,y,yprime)
-    xprime = rlp.decode(y.decode('hex'))
-    jx, jxprime = json.dumps(x), json.dumps(xprime)
-    if jx != jxprime: print ("RLPDecode Mismatch: ",jx,jxprime,y)
 
 hexencodedata = json.loads(open(os.path.join(testdir,'hexencodetest.txt')).read())
 
