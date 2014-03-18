@@ -9,7 +9,7 @@
 
 
 import random
-import trie
+from pyethereum import trie
 import utils
 
 
