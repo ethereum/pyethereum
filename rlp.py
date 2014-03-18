@@ -81,3 +81,4 @@ def encode(s):
         for item in s:
             output += encode(item)
         return encode_length(len(output), 192) + output
+    raise TypeError("Encoding of %s not supported" % type(s))
