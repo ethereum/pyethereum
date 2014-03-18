@@ -4,7 +4,7 @@ Feature: RLP encoding and decoding
     Given the byte is in [0x00, 0x7f] range
     When encoded in RLP
     Then the byte is its own RLP encoding
-    And decode the encoded data will get the original data
+    And decode the RLP encoded data will get the original data
 
 
   Scenario Outline: payload is a [0-55] long string
@@ -12,7 +12,7 @@ Feature: RLP encoding and decoding
     When encoded in RLP
     Then the first byte is 0x80 plus the length of the string
     And followed by the string
-    And decode the encoded data will get the original data
+    And decode the RLP encoded data will get the original data
 
     Examples: 0-55 string
       | src                                        |
@@ -27,7 +27,7 @@ Feature: RLP encoding and decoding
     Then the first byte is 0xb7 plus the length of the length of the string
     And following bytes are the payload string length
     And following bytes are the payload string itself
-    And decode the encoded data will get the original data
+    And decode the RLP encoded data will get the original data
 
 
   Scenario: payload is a list with total length [0-55]
@@ -35,7 +35,7 @@ Feature: RLP encoding and decoding
     When encoded in RLP
     Then the first byte is 0xc0 plus the length of the list
     And following bytes are concatenation of the RLP encodings of the items
-    And decode the encoded data will get the original data
+    And decode the RLP encoded data will get the original data
 
 
   Scenario: payload is a list with total length [56-]
@@ -44,4 +44,4 @@ Feature: RLP encoding and decoding
     Then the first byte is 0xf7 plus the length of the length of the list
     And following bytes are the payload list length
     And following bytes are the payload list itself
-    And decode the encoded data will get the original data
+    And decode the RLP encoded data will get the original data

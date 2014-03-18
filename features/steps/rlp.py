@@ -1,4 +1,3 @@
-from behave import *
 from utils import int_to_big_endian
 
 
@@ -8,7 +7,7 @@ def step_impl(context):
     dsts = [rlp.encode(src) for src in context.srcs]
     context.pairs = zip(context.srcs, dsts)
 
-@then(u'decode the encoded data will get the original data')
+@then(u'decode the RLP encoded data will get the original data')
 def step_impl(context):
     import rlp
     def assert_item_equal(src, dst):
