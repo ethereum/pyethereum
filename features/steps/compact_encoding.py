@@ -1,24 +1,34 @@
-@given(u'an Even length hex string')
+@given(u'an Even length hex sequence')
 def step_impl(context):
-    assert False
+    context.srcs = [
+        []
+        [0x0, 0x1]
+        [0x1, 0x2, 0x3, 0x4]
+    ]
 
 @when(u'compactly encoded')
 def step_impl(context):
-    assert False
+    import trie
+    context.pairs = [
+        (src, trie.hexarraykey_to_bin(src))
+        for src in context.srcs
+    ]
 
 @then(u'the first byte should be 0x00')
 def step_impl(context):
-    assert False
+    for src, dst in context.pairs:
+        assert dst[0] == 0
+    context.prefex_hex_count = 2
 
-@then(u'the remain bits with be same of the original hex string')
+@then(u'the remain bits with be same of the original hex sequence')
 def step_impl(context):
     assert False
 
-@then(u'decode the compactly encoded hex string will get the original hex string')
+@then(u'decode the compactly encoded hex sequence will get the original one')
 def step_impl(context):
     assert False
 
-@given(u'an odd length hex string')
+@given(u'an odd length hex sequence')
 def step_impl(context):
     assert False
 
