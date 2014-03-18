@@ -10,3 +10,4 @@ __pycache__/
 .DS_Store
 /dist/
 /*.egg-info/
+/.tox/
