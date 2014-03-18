@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import leveldb
 import rlp
 from sha3 import sha3_256
@@ -28,11 +29,15 @@ class DB(object):
 
 
 def hexarraykey_to_bin(key):
-    term = 0 if not key or key[-1] != 16 else 1
-    if term:
+    """convert key given as list of nibbles to binary"""
+    if key[-1:] == [16]:
+        flags = 2
         key = key[:-1]
+    else:
+        flags = 0
+
     oddlen = len(key) % 2
-    flags = 2 * term + oddlen
+    flags |= oddlen   # set lowest bit if odd number of nibbles
     if oddlen:
         key = [flags] + key
     else:
@@ -43,11 +48,37 @@ def hexarraykey_to_bin(key):
     return o
 
 
+def bin_to_nibble_list(s):
+    """convert string s to a list of nibbles (half-bytes)
+
+    >>> bin_to_nibble_list("")
+    []
+    >>> bin_to_nibble_list("h")
+    [6, 8]
+    >>> bin_to_nibble_list("he")
+    [6, 8, 6, 5]
+    >>> bin_to_nibble_list("hello")
+    [6, 8, 6, 5, 6, 12, 6, 12, 6, 15]
+    """
+    res = []
+    for x in s:
+        res += divmod(ord(x), 16)
+    return res
+
+
+def bin_to_nibble_list_with_terminator(s):
+    """same as bin_to_nibble_list, but adds a terminator value at the end"""
+    res = bin_to_nibble_list(s)
+    res.append(16)
+    return res
+
+
 def bin_to_hexarraykey(bindata):
-    o = ['0123456789abcdef'.find(x) for x in bindata.encode('hex')]
-    if o[0] >= 2:
+    o = bin_to_nibble_list(bindata)
+    flags = o[0]
+    if flags & 2:
         o.append(16)
-    if o[0] % 2 == 1:
+    if flags & 1 == 1:
         o = o[1:]
     else:
         o = o[2:]
@@ -68,6 +99,7 @@ class Trie(object):
     def __init__(self, dbfile, root='', debug=False):
         self.root = root
         self.debug = debug
+        dbfile = os.path.abspath(dbfile)
         if dbfile not in databases:
             databases[dbfile] = DB(dbfile)
         self.db = databases[dbfile]
@@ -278,9 +310,7 @@ class Trie(object):
         return o
 
     def get(self, key):
-        key2 = ['0123456789abcdef'.find(x)
-                for x in str(key).encode('hex')] + [16]
-        return self.__get_state(self.root, key2)
+        return self.__get_state(self.root, bin_to_nibble_list_with_terminator(str(key)))
 
     def get_size(self):
         return self.__get_size(self.root)
@@ -288,9 +318,7 @@ class Trie(object):
     def update(self, key, value):
         if not isinstance(key, (str, unicode)) or not isinstance(value, (str, unicode)):
             raise Exception("Key and value must be strings")
-        key2 = ['0123456789abcdef'.find(x)
-                for x in str(key).encode('hex')] + [16]
-        self.root = self.__update_state(self.root, key2, str(value))
+        self.root = self.__update_state(self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
 
 if __name__ == "__main__":
     import sys
