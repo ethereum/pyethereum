@@ -1,5 +1,5 @@
 from behave import *
-from utils import to_big_endian_binary
+from utils import int_to_big_endian
 
 
 @when(u'encoded in RLP')
@@ -74,19 +74,19 @@ def step_impl(context):
 @then(u'the first byte is 0xb7 plus the length of the length of the string')
 def step_impl(context):
     for src, dst in context.pairs:
-        length_bin = to_big_endian_binary(len(src))
+        length_bin = int_to_big_endian(len(src))
         assert dst[0] == chr(0xb7 + len(length_bin))
 
 @then(u'following bytes are the payload string length')
 def step_impl(context):
     for src, dst in context.pairs:
-        length_bin = to_big_endian_binary(len(src))
+        length_bin = int_to_big_endian(len(src))
         assert dst[1:1+len(length_bin)] == length_bin
 
 @then(u'following bytes are the payload string itself')
 def step_impl(context):
     for src, dst in context.pairs:
-        length_bin = to_big_endian_binary(len(src))
+        length_bin = int_to_big_endian(len(src))
         assert dst[1+len(length_bin):] == src
 
 @given(u'a list with length of [0-55]')
@@ -122,7 +122,7 @@ def step_impl(context):
     import rlp
     for src, dst in context.pairs:
         total_payload_length = sum(len(rlp.encode(x)) for x in src)
-        length_bin = to_big_endian_binary(total_payload_length)
+        length_bin = int_to_big_endian(total_payload_length)
         assert dst[0] == chr(0xf7 + len(length_bin))
 
 @then(u'following bytes are the payload list length')
@@ -130,7 +130,7 @@ def step_impl(context):
     import rlp
     for src, dst in context.pairs:
         total_payload_length = sum(len(rlp.encode(x)) for x in src)
-        length_bin = to_big_endian_binary(total_payload_length)
+        length_bin = int_to_big_endian(total_payload_length)
         assert dst[1:1+len(length_bin)] == length_bin
 
 @then(u'following bytes are the payload list itself')
@@ -139,5 +139,5 @@ def step_impl(context):
     for src, dst in context.pairs:
         encodeds = [rlp.encode(x) for x in src]
         total_payload_length = sum(len(x) for x in encodeds)
-        length_bin = to_big_endian_binary(total_payload_length)
+        length_bin = int_to_big_endian(total_payload_length)
         assert dst[1+len(length_bin):] == ''.join(encodeds)
