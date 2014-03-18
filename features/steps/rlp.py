@@ -15,6 +15,7 @@ def step_impl(context):
             assert src == dst
             return
         assert isinstance(src, list)
+        assert len(src) == len(dst), "lists differ: src=%s != dst=%s" % (src, dst)
         for src_item, dst_item in zip(src, dst):
             assert_item_equal(src_item, dst_item)
 
@@ -92,6 +93,7 @@ def step_impl(context):
 def step_impl(context):
     context.srcs = [
         [],
+        ['foo', 'bar'],
         ['a', 'b', 'c'],
         ['a'] * 55,
     ]
@@ -112,6 +114,7 @@ def step_impl(context):
 @given(u'a list with length of [56-]')
 def step_impl(context):
     context.srcs = [
+        [str(x) for x in range(100)],
         ['a'] * 56,
         ['a'] * 1024,
     ]
