@@ -1,0 +1,5 @@
+include tests/*.txt
+include requirements.txt
+include dev_requirements.txt
+include features/*.feature
+include features/steps/*.py
