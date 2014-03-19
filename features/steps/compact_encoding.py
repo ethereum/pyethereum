@@ -31,31 +31,31 @@ def step_impl(context):
     for src in context.srcs:
         del src[-1]
 
-@then(u'the prefix hex sequence should be 0x0, 0x0')
+@then(u'the leading nibbles should be 0x0, 0x0')
 def step_impl(context):
     for src, dst in context.pairs:
         assert ord(dst[0]) == 0
     context.prefex_hex_count = 2
 
-@then(u'the prefix hex sequence should be 0x1')
+@then(u'the leading nibbles should be 0x1')
 def step_impl(context):
     for src, dst in context.pairs:
         assert ord(dst[0]) & 0xF0 == 0x10
     context.prefex_hex_count = 1
 
-@then(u'the prefix hex sequence should be 0x2, 0x0')
+@then(u'the leading nibbles should be 0x2, 0x0')
 def step_impl(context):
     for src, dst in context.pairs:
         assert ord(dst[0]) & 0xF0 == 0x20
     context.prefex_hex_count = 2
 
-@then(u'the prefix hex sequence should be 0x3')
+@then(u'the leading nibbles should be 0x3')
 def step_impl(context):
     for src, dst in context.pairs:
         assert ord(dst[0]) & 0xF0 == 0x30
     context.prefex_hex_count = 1
 
-@then(u'hex sequence after the prefix should equal to the original hex sequence')
+@then(u'nibbles after should equal to the original hex sequence')
 def step_impl(context):
     for src, dst in context.pairs:
         assert len(src) == len(dst)*2 - context.prefex_hex_count
