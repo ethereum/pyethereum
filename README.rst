@@ -11,6 +11,31 @@ Python2.7 is required.
 
 pip install -r requirements.txt
 
+
+Buildout
+==========
+You can have dependencies managed by `buildout <http://buildout.org>`_ -- 
+a ``buildout.cfg`` is already included in the project. 
+
+Bootstrap:
+-----------
+In order to do so, you'll need to bootstrap the project (needs only be
+done once). On systems that provide ``curl`` you can use the following handy
+one-liner:
+
+``curl http://downloads.buildout.org/2/bootstrap.py | python``
+
+Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
+into the project folder and call ``python bootstrap.py``.
+
+Building:
+----------
+Build the project via ``bin/buildout``.
+
+This will install dependencies in a virtualenv, provide you with a scoped ``python``
+interpreter (``bin/python``) and make all console_scripts available in the
+``bin`` directory (e.g. ``bin/behave`` in order to run tests).
+
 To Do
 =========
 
@@ -20,7 +45,7 @@ For Developer
     Tips for writing test code for behave
 
         1. write test scenario in *xxx.feature*
-        2. run `behave`, then behave will report the newly written scenario are
+        2. run ``behave``, then behave will report the newly written scenario are
            not implemented, and code skeleton for the corresponding steps will
            also be generated.
         3. copy & copy the generated code skeleton in a file in the *steps*
