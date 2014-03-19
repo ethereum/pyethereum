@@ -106,7 +106,7 @@ class Trie(object):
 
     def __get_state(self, node, key):
         if self.debug:
-            print 'nk', encode_node(node), key
+            print('nk', encode_node(node), key)
         if len(key) == 0 or not node:
             return node
         curnode = self.lookup(node)
@@ -310,15 +310,18 @@ class Trie(object):
         return o
 
     def get(self, key):
-        return self.__get_state(self.root, bin_to_nibble_list_with_terminator(str(key)))
+        return self.__get_state(
+            self.root, bin_to_nibble_list_with_terminator(str(key)))
 
     def get_size(self):
         return self.__get_size(self.root)
 
     def update(self, key, value):
-        if not isinstance(key, (str, unicode)) or not isinstance(value, (str, unicode)):
+        if not isinstance(key, (str, unicode)) or\
+                not isinstance(value, (str, unicode)):
             raise Exception("Key and value must be strings")
-        self.root = self.__update_state(self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
+        self.root = self.__update_state(
+            self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
 
 if __name__ == "__main__":
     import sys
