@@ -152,99 +152,112 @@ class Trie(object):
     def __insert_state(self, node, key, value):
         if self.debug:
             print 'ins', encode_node(node), key
+
         if len(key) == 0:
             return value
+
+        # create a new node if node not exists
+        if not node:
+            newnode = [hexarraykey_to_bin(key), value]
+            return self.__put(newnode)
+
+        curnode = self.lookup(node)
+        if self.debug:
+            print ('icn', curnode)
+        if not curnode:
+            raise Exception("node not found in database")
+
+        # node is a 17 items sequence
+        if len(curnode) == 17:
+            newnode = [curnode[i] for i in range(17)]
+            newnode[key[0]] = self.__insert_state(
+                curnode[key[0]], key[1:], value)
+            return self.__put(newnode)
+
+        # node is a (key, value) pair
+        (k2, v2) = curnode
+        k2 = bin_to_hexarraykey(k2)
+
+        # key already exists
+        if key == k2:
+            newnode = [hexarraykey_to_bin(key), value]
+            return self.__put(newnode)
+
+        # find max long common prefix
+        i = 0
+        while key[:i + 1] == k2[:i + 1] and i < len(k2):
+            i += 1
+
+        if i == len(k2):
+            newhash3 = self.__insert_state(v2, key[i:], value)
         else:
-            if not node:
-                newnode = [hexarraykey_to_bin(key), value]
-                return self.__put(newnode)
-            curnode = self.lookup(node)
-            if self.debug:
-                print ('icn', curnode)
-            if not curnode:
-                raise Exception("node not found in database")
-            if len(curnode) == 2:
-                (k2, v2) = curnode
-                k2 = bin_to_hexarraykey(k2)
-                if key == k2:
-                    newnode = [hexarraykey_to_bin(key), value]
-                    return self.__put(newnode)
-                else:
-                    i = 0
-                    while key[:i + 1] == k2[:i + 1] and i < len(k2):
-                        i += 1
-                    if i == len(k2):
-                        newhash3 = self.__insert_state(v2, key[i:], value)
-                    else:
-                        newnode1 = self.__insert_state('', key[i + 1:], value)
-                        newnode2 = self.__insert_state('', k2[i + 1:], v2)
-                        newnode3 = [''] * 17
-                        newnode3[key[i]] = newnode1
-                        newnode3[k2[i]] = newnode2
-                        newhash3 = self.__put(newnode3)
-                    if i == 0:
-                        return newhash3
-                    else:
-                        newnode4 = [hexarraykey_to_bin(key[:i]), newhash3]
-                        return self.__put(newnode4)
-            else:
-                newnode = [curnode[i] for i in range(17)]
-                newnode[key[0]] = self.__insert_state(
-                    curnode[key[0]], key[1:], value)
-                return self.__put(newnode)
+            newnode1 = self.__insert_state('', key[i + 1:], value)
+            newnode2 = self.__insert_state('', k2[i + 1:], v2)
+            newnode3 = [''] * 17
+            newnode3[key[i]] = newnode1
+            newnode3[k2[i]] = newnode2
+            newhash3 = self.__put(newnode3)
+
+        if i == 0:
+            return newhash3
+        else:
+            newnode4 = [hexarraykey_to_bin(key[:i]), newhash3]
+            return self.__put(newnode4)
+
 
     def __delete_state(self, node, key):
         if self.debug:
             print 'dnk', encode_node(node), key
         if len(key) == 0 or not node:
             return ''
-        else:
-            curnode = self.lookup(node)
-            if not curnode:
-                raise Exception("node not found in database")
-            if self.debug:
-                print ('dcn', curnode)
-            if len(curnode) == 2:
-                (k2, v2) = curnode
-                k2 = bin_to_hexarraykey(k2)
-                if key == k2:
-                    return ''
-                elif key[:len(k2)] == k2:
-                    newhash = self.__delete_state(v2, key[len(k2):])
-                    childnode = self.lookup(newhash)
-                    if len(childnode) == 2:
-                        newkey = k2 + bin_to_hexarraykey(childnode[0])
-                        newnode = [hexarraykey_to_bin(newkey), childnode[1]]
-                    else:
-                        newnode = [curnode[0], newhash]
-                    return self.__put(newnode)
+
+        curnode = self.lookup(node)
+        if not curnode:
+            raise Exception("node not found in database")
+        if self.debug:
+            print ('dcn', curnode)
+
+        if len(curnode) == 2:
+            (k2, v2) = curnode
+            k2 = bin_to_hexarraykey(k2)
+            if key == k2:
+                return ''
+            elif key[:len(k2)] == k2:
+                newhash = self.__delete_state(v2, key[len(k2):])
+                childnode = self.lookup(newhash)
+                if len(childnode) == 2:
+                    newkey = k2 + bin_to_hexarraykey(childnode[0])
+                    newnode = [hexarraykey_to_bin(newkey), childnode[1]]
                 else:
-                    return node
+                    newnode = [curnode[0], newhash]
+                return self.__put(newnode)
             else:
-                newnode = [curnode[i] for i in range(17)]
-                newnode[key[0]] = self.__delete_state(newnode[key[0]], key[1:])
-                onlynode = -1
-                for i in range(17):
-                    if newnode[i]:
-                        if onlynode == -1:
-                            onlynode = i
-                        else:
-                            onlynode = -2
-                if onlynode == 16:
-                    newnode2 = [hexarraykey_to_bin([16]), newnode[onlynode]]
-                elif onlynode >= 0:
-                    childnode = self.lookup(newnode[onlynode])
-                    if not childnode:
-                        raise Exception("?????")
-                    if len(childnode) == 17:
-                        newnode2 = [
-                            hexarraykey_to_bin([onlynode]), newnode[onlynode]]
-                    elif len(childnode) == 2:
-                        newkey = [onlynode] + bin_to_hexarraykey(childnode[0])
-                        newnode2 = [hexarraykey_to_bin(newkey), childnode[1]]
+                return node
+
+        newnode = [curnode[i] for i in range(17)]
+        newnode[key[0]] = self.__delete_state(newnode[key[0]], key[1:])
+        onlynode = -1
+        for i in range(17):
+            if newnode[i]:
+                if onlynode == -1:
+                    onlynode = i
                 else:
-                    newnode2 = newnode
-                return self.__put(newnode2)
+                    onlynode = -2
+        if onlynode == 16:
+            newnode2 = [hexarraykey_to_bin([16]), newnode[onlynode]]
+        elif onlynode >= 0:
+            childnode = self.lookup(newnode[onlynode])
+            if not childnode:
+                raise Exception("?????")
+            if len(childnode) == 17:
+                newnode2 = [
+                    hexarraykey_to_bin([onlynode]), newnode[onlynode]]
+            elif len(childnode) == 2:
+                newkey = [onlynode] + bin_to_hexarraykey(childnode[0])
+                newnode2 = [hexarraykey_to_bin(newkey), childnode[1]]
+        else:
+            newnode2 = newnode
+        return self.__put(newnode2)
 
     def __get_size(self, node):
         if not node:
