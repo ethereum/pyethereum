@@ -178,7 +178,7 @@ def step_impl(context):
 
 @then(u'raise TypeError')
 def step_impl(context):
-    import rlp
+    from pyethereum import rlp
     for src in context.srcs:
         caught = False
         try:
