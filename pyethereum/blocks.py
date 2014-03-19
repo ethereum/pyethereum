@@ -1,9 +1,9 @@
-from pybitcointools import *
+from pybitcointools import bin_sha256
 import rlp
 import re
 from transactions import Transaction
 from trie import Trie
-import sys
+
 
 class Block():
     def __init__(self,data=None):
