@@ -1,6 +1,8 @@
 Next generation cryptocurrency network
 =======================================
 Ethereum Python Client
+.. image:: https://travis-ci.org/brainbot-com/pyethereum.png?branch=master
+:target: https://travis-ci.org/brainbot-com/pyethereum
 
 Install
 =========
