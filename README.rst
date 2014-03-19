@@ -12,10 +12,10 @@ Python2.7 is required.
 pip install -r requirements.txt
 
 
-Buildout
-==========
-You can have dependencies managed by `buildout <http://buildout.org>`_ -- 
-a ``buildout.cfg`` is already included in the project. 
+Buildout(optional)
+==================
+You can have dependencies managed by `buildout <http://buildout.org>`_ --
+a ``buildout.cfg`` is already included in the project.
 
 Bootstrap:
 -----------
