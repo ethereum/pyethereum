@@ -6,8 +6,8 @@ __pycache__/
 .*.swo
 .*.swn
 .~
-.venv
 .DS_Store
+/.venv/
 /dist/
 /*.egg-info/
 /.tox/
