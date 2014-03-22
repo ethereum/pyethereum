@@ -95,44 +95,45 @@ def encode_node(nd):
 class Trie(object):
     databases = {}
 
-    def __init__(self, dbfile, root='', debug=False):
+    def __init__(self, dbfile, root=''):
         self.root = root
-        self.debug = debug
         dbfile = os.path.abspath(dbfile)
-        if dbfile not in databases:
-            databases[dbfile] = DB(dbfile)
-        self.db = databases[dbfile]
+        if dbfile not in self.databases:
+            self.databases[dbfile] = DB(dbfile)
+        self.db = self.databases[dbfile]
 
-    def __get_state(self, node, key):
-        if self.debug:
-            print('nk', encode_node(node), key)
+    def __get(self, node, key):
+        """ get value inside a node
+        """
+
+        # leaf node, note the two cases
         if len(key) == 0 or not node:
             return node
-        curnode = self.lookup(node)
-        if self.debug:
-            print ('cn', curnode)
-        if not curnode:
+
+        curr_node = self.__rlp_decode(node)
+        if not curr_node:
             raise Exception("node not found in database")
-        elif len(curnode) == 2:
-            (k2, v2) = curnode
-            k2 = bin_to_hexarraykey(k2)
-            if len(key) >= len(k2) and k2 == key[:len(k2)]:
-                return self.__get_state(v2, key[len(k2):])
+
+        if len(curr_node) == 2:
+            (curr_key, curr_val) = curr_node
+            curr_key = bin_to_hexarraykey(curr_key)
+            if len(key) >= len(curr_key) and curr_key == key[:len(curr_key)]:
+                return self.__get(curr_val, key[len(curr_key):])
             else:
                 return ''
-        elif len(curnode) == 17:
-            return self.__get_state(curnode[key[0]], key[1:])
+        elif len(curr_node) == 17:
+            return self.__get(curr_node[key[0]], key[1:])
 
-    def __put(self, node, root=False):
+    def __rlp_encode(self, node, root=False):
         rlpnode = rlp.encode(node)
         if len(rlpnode) >= 32:
-            h = sha3(rlpnode)
+            res = sha3(rlpnode)
             self.db.put(h, rlpnode)
         else:
-            h = rlpnode if root else node
-        return h
+            res = rlpnode if root else node
+        return res
 
-    def lookup(self, node):
+    def __rlp_decode(self, node):
         if not isinstance(node, (str, unicode)):
             return node
         elif len(node) == 0:
@@ -142,100 +143,116 @@ class Trie(object):
         else:
             return rlp.decode(self.db.get(node))
 
-    def __update_state(self, node, key, value):
+    def __update_or_delete(self, node, key, value):
+        """ update item inside a node
+        """
         if value != '':
-            return self.__insert_state(node, key, value)
+            return self.__update(node, key, value)
         else:
-            return self.__delete_state(node, key)
+            return self.__delete(node, key)
 
-    def __insert_state(self, node, key, value):
-        if self.debug:
-            print 'ins', encode_node(node), key
+    def __update(self, node, key, value):
+        """ update item inside a node
 
-        if len(key) == 0:
-            return value
+        return the updated node with rlp encoded
+        """
 
-        # create a new node if node not exists
+        assert(len(key))
+
+        # leaf node
         if not node:
             newnode = [hexarraykey_to_bin(key), value]
-            return self.__put(newnode)
+            return self.__rlp_encode(newnode)
 
-        # find the node
-        curnode = self.lookup(node)
-        if self.debug:
-            print ('icn', curnode)
-        if not curnode:
+        # decode the node
+        curr_node = self.__rlp_decode(node)
+        if not curr_node:
             raise Exception("node not found in database")
 
         # node is a 17 items sequence
-        if len(curnode) == 17:
-            newnode = [curnode[i] for i in range(17)]
-            newnode[key[0]] = self.__insert_state(
-                curnode[key[0]], key[1:], value)
-            return self.__put(newnode)
+        if len(curr_node) == 17:
+            items = [curr_node[i] for i in range(17)]
+            items[key[0]] = self.__update(
+                curr_node[key[0]], key[1:], value)
+            return self.__rlp_encode(items)
 
+        return self.__update_kv_node(curr_node, key, value)
+
+    def __update_kv_node(self, kv_node, key, value):
+        '''when the current node is a (key, value) node
+
+        kv_node is an already rlp decoded (key, value) tupple
+        '''
         # node is a (key, value) pair
-        (k2, v2) = curnode
-        k2 = bin_to_hexarraykey(k2)
+        (curr_key, curr_val) = kv_node
+        curr_key = bin_to_hexarraykey(curr_key)
 
-        # key already exists
-        if key == k2:
-            newnode = [hexarraykey_to_bin(key), value]
-            return self.__put(newnode)
+        # already leaf node
+        if key == curr_key:
+            return self.__rlp_encode(
+                [hexarraykey_to_bin(key), value])
 
-        # find max long common prefix
-        i = 0
-        while key[:i + 1] == k2[:i + 1] and i < len(k2):
-            i += 1
+        # find common prefix
+        next_key_index = len(curr_key)
+        for i in range(len(curr_key)):
+            if key[i] != curr_key[i]:
+                next_key_index = i
+                break
 
-        if i == len(k2):
-            newhash3 = self.__insert_state(v2, key[i:], value)
+        # key starts with curr_key
+        if next_key_index == len(curr_key):
+            curr_value = self.__rlp_encode(
+                self.__update(curr_val, key[len(curr_key):], value))
+            return self.__rlp_encode(
+                [hexarraykey_to_bin(curr_key), curr_val])
+
+        # convert the node to a 17 items one
+        curr_node = [''] * 17
+        key_derived_value = self.__update('', key[next_key_index + 1:], value)
+        curr_key_derived_value = self.__update('', curr_key[next_key_index + 1:],
+                                               curr_val)
+        curr_node[key[next_key_index]] = key_derived_value
+        curr_node[curr_key[next_key_index]] = curr_key_derived_value
+        curr_node_encoded = self.__rlp_encode(curr_node)
+
+        if next_key_index == 0:
+            # no common prefix
+            return curr_node_encoded
         else:
-            newnode1 = self.__insert_state('', key[i + 1:], value)
-            newnode2 = self.__insert_state('', k2[i + 1:], v2)
-            newnode3 = [''] * 17
-            newnode3[key[i]] = newnode1
-            newnode3[k2[i]] = newnode2
-            newhash3 = self.__put(newnode3)
+            # create a new node with common prefix as key
+            new_node = [hexarraykey_to_bin(key[:next_key_index]),
+                        curr_node_encoded]
+            return self.__rlp_encode(new_node)
 
-        if i == 0:
-            return newhash3
-        else:
-            newnode4 = [hexarraykey_to_bin(key[:i]), newhash3]
-            return self.__put(newnode4)
-
-
-    def __delete_state(self, node, key):
-        if self.debug:
-            print 'dnk', encode_node(node), key
+    def __delete(self, node, key):
+        """ delete item inside a node
+        """
         if len(key) == 0 or not node:
             return ''
 
-        curnode = self.lookup(node)
-        if not curnode:
+        curr_node = self.__rlp_decode(node)
+        if not curr_node:
             raise Exception("node not found in database")
-        if self.debug:
-            print ('dcn', curnode)
 
-        if len(curnode) == 2:
-            (k2, v2) = curnode
-            k2 = bin_to_hexarraykey(k2)
-            if key == k2:
+        if len(curr_node) == 2:
+            (curr_key, curr_val) = curr_node
+            curr_key = bin_to_hexarraykey(curr_key)
+            if key == curr_key:
                 return ''
-            elif key[:len(k2)] == k2:
-                newhash = self.__delete_state(v2, key[len(k2):])
-                childnode = self.lookup(newhash)
+            elif key[:len(curr_key)] == curr_key:
+                newhash = self.__delete(curr_val, key[len(curr_key):])
+                childnode = self.__rlp_decode(newhash)
                 if len(childnode) == 2:
-                    newkey = k2 + bin_to_hexarraykey(childnode[0])
+                    newkey = curr_key + bin_to_hexarraykey(childnode[0])
                     newnode = [hexarraykey_to_bin(newkey), childnode[1]]
                 else:
-                    newnode = [curnode[0], newhash]
-                return self.__put(newnode)
+                    newnode = [curr_node[0], newhash]
+                return self.__rlp_encode(newnode)
             else:
                 return node
 
-        newnode = [curnode[i] for i in range(17)]
-        newnode[key[0]] = self.__delete_state(newnode[key[0]], key[1:])
+        newnode = [curr_node[i] for i in range(17)]
+        newnode[key[0]] = self.__delete(newnode[key[0]], key[1:])
         onlynode = -1
         for i in range(17):
             if newnode[i]:
@@ -246,7 +263,7 @@ class Trie(object):
         if onlynode == 16:
             newnode2 = [hexarraykey_to_bin([16]), newnode[onlynode]]
         elif onlynode >= 0:
-            childnode = self.lookup(newnode[onlynode])
+            childnode = self.__rlp_decode(newnode[onlynode])
             if not childnode:
                 raise Exception("?????")
             if len(childnode) == 17:
@@ -257,27 +274,27 @@ class Trie(object):
                 newnode2 = [hexarraykey_to_bin(newkey), childnode[1]]
         else:
             newnode2 = newnode
-        return self.__put(newnode2)
+        return self.__rlp_encode(newnode2)
 
     def __get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
         '''
         if not node:
             return 0
-        curnode = self.lookup(node)
-        if not curnode:
+        curr_node = self.__rlp_decode(node)
+        if not curr_node:
             raise Exception("node not found in database")
-        if len(curnode) == 2:
-            key = hexarraykey_to_bin(curnode[0])
+        if len(curr_node) == 2:
+            key = hexarraykey_to_bin(curr_node[0])
             if key[-1] == 16:
                 return 1
             else:
-                return self.__get_size(curnode[1])
-        elif len(curnode) == 17:
+                return self.__get_size(curr_node[1])
+        elif len(curr_node) == 17:
             total = 0
             for i in range(16):
-                total += self.__get_size(curnode[i])
-            if curnode[16]:
+                total += self.__get_size(curr_node[i])
+            if curr_node[16]:
                 total += 1
             return total
 
@@ -289,48 +306,48 @@ class Trie(object):
         '''
         if not node:
             return {}
-        curnode = self.lookup(node)
-        if not curnode:
+        curr_node = self.__rlp_decode(node)
+        if not curr_node:
             raise Exception("node not found in database")
-        if len(curnode) == 2:
-            lkey = bin_to_hexarraykey(curnode[0])
+        if len(curr_node) == 2:
+            lkey = bin_to_hexarraykey(curr_node[0])
             o = {}
             if lkey[-1] == 16:
-                o[curnode[0]] = curnode[1]
+                o[curr_node[0]] = curr_node[1]
             else:
-                d = self.__to_dict(curnode[1])
+                d = self.__to_dict(curr_node[1])
                 for v in d:
                     subkey = bin_to_hexarraykey(v)
                     totalkey = hexarraykey_to_bin(lkey + subkey)
                     o[totalkey] = d[v]
             return o
-        elif len(curnode) == 17:
+        elif len(curr_node) == 17:
             o = {}
             for i in range(16):
-                d = self.__to_dict(curnode[i])
+                d = self.__to_dict(curr_node[i])
                 for v in d:
                     subkey = bin_to_hexarraykey(v)
                     totalkey = hexarraykey_to_bin([i] + subkey)
                     o[totalkey] = d[v]
-            if curnode[16]:
-                o[chr(16)] = curnode[16]
+            if curr_node[16]:
+                o[chr(16)] = curr_node[16]
             return o
         else:
-            raise Exception("bad curnode! " + curnode)
+            raise Exception("bad curr_node! " + curr_node)
 
     def to_dict(self, as_hex=False):
         d = self.__to_dict(self.root)
         o = {}
         for v in d:
-            v2 = ''.join(['0123456789abcdef'[x]
+            curr_val = ''.join(['0123456789abcdef'[x]
                          for x in bin_to_hexarraykey(v)[:-1]])
             if not as_hex:
-                v2 = v2.decode('hex')
-            o[v2] = d[v]
+                curr_val = curr_val.decode('hex')
+            o[curr_val] = d[v]
         return o
 
     def get(self, key):
-        return self.__get_state(
+        return self.__get(
             self.root, bin_to_nibble_list_with_terminator(str(key)))
 
     def get_size(self):
@@ -340,7 +357,7 @@ class Trie(object):
         if not isinstance(key, (str, unicode)) or\
                 not isinstance(value, (str, unicode)):
             raise Exception("Key and value must be strings")
-        self.root = self.__update_state(
+        self.root = self.__update_or_delete(
             self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
 
 if __name__ == "__main__":
