@@ -102,7 +102,7 @@ class Trie(object):
             self.databases[dbfile] = DB(dbfile)
         self.db = self.databases[dbfile]
 
-    def __get(self, node, key):
+    def _get(self, node, key):
         """ get value inside a node
         """
 
@@ -110,7 +110,7 @@ class Trie(object):
         if len(key) == 0 or not node:
             return node
 
-        curr_node = self.__rlp_decode(node)
+        curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
 
@@ -118,13 +118,13 @@ class Trie(object):
             (curr_key, curr_val) = curr_node
             curr_key = bin_to_hexarraykey(curr_key)
             if len(key) >= len(curr_key) and curr_key == key[:len(curr_key)]:
-                return self.__get(curr_val, key[len(curr_key):])
+                return self._get(curr_val, key[len(curr_key):])
             else:
                 return ''
         elif len(curr_node) == 17:
-            return self.__get(curr_node[key[0]], key[1:])
+            return self._get(curr_node[key[0]], key[1:])
 
-    def __rlp_encode(self, node, root=False):
+    def _rlp_encode(self, node, root=False):
         rlpnode = rlp.encode(node)
         if len(rlpnode) >= 32:
             res = sha3(rlpnode)
@@ -133,7 +133,7 @@ class Trie(object):
             res = rlpnode if root else node
         return res
 
-    def __rlp_decode(self, node):
+    def _rlp_decode(self, node):
         if not isinstance(node, (str, unicode)):
             return node
         elif len(node) == 0:
@@ -143,15 +143,15 @@ class Trie(object):
         else:
             return rlp.decode(self.db.get(node))
 
-    def __update_or_delete(self, node, key, value):
+    def _update_or_delete(self, node, key, value):
         """ update item inside a node
         """
         if value != '':
-            return self.__update(node, key, value)
+            return self._update(node, key, value)
         else:
-            return self.__delete(node, key)
+            return self._delete(node, key)
 
-    def __update(self, node, key, value):
+    def _update(self, node, key, value):
         """ update item inside a node
 
         return the updated node with rlp encoded
@@ -162,23 +162,23 @@ class Trie(object):
         # leaf node
         if not node:
             newnode = [hexarraykey_to_bin(key), value]
-            return self.__rlp_encode(newnode)
+            return self._rlp_encode(newnode)
 
         # decode the node
-        curr_node = self.__rlp_decode(node)
+        curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
 
         # node is a 17 items sequence
         if len(curr_node) == 17:
             items = [curr_node[i] for i in range(17)]
-            items[key[0]] = self.__update(
+            items[key[0]] = self._update(
                 curr_node[key[0]], key[1:], value)
-            return self.__rlp_encode(items)
+            return self._rlp_encode(items)
 
-        return self.__update_kv_node(curr_node, key, value)
+        return self._update_kv_node(curr_node, key, value)
 
-    def __update_kv_node(self, kv_node, key, value):
+    def _update_kv_node(self, kv_node, key, value):
         '''when the current node is a (key, value) node
 
         kv_node is an already rlp decoded (key, value) tupple
@@ -189,7 +189,7 @@ class Trie(object):
 
         # already leaf node
         if key == curr_key:
-            return self.__rlp_encode(
+            return self._rlp_encode(
                 [hexarraykey_to_bin(key), value])
 
         # find common prefix
@@ -201,19 +201,19 @@ class Trie(object):
 
         # key starts with curr_key
         if next_key_index == len(curr_key):
-            curr_value = self.__rlp_encode(
-                self.__update(curr_val, key[len(curr_key):], value))
-            return self.__rlp_encode(
+            curr_value = self._rlp_encode(
+                self._update(curr_val, key[len(curr_key):], value))
+            return self._rlp_encode(
                 [hexarraykey_to_bin(curr_key), curr_val])
 
         # convert the node to a 17 items one
         curr_node = [''] * 17
-        key_derived_value = self.__update('', key[next_key_index + 1:], value)
-        curr_key_derived_value = self.__update('', curr_key[next_key_index + 1:],
+        key_derived_value = self._update('', key[next_key_index + 1:], value)
+        curr_key_derived_value = self._update('', curr_key[next_key_index + 1:],
                                                curr_val)
         curr_node[key[next_key_index]] = key_derived_value
         curr_node[curr_key[next_key_index]] = curr_key_derived_value
-        curr_node_encoded = self.__rlp_encode(curr_node)
+        curr_node_encoded = self._rlp_encode(curr_node)
 
         if next_key_index == 0:
             # no common prefix
@@ -222,15 +222,15 @@ class Trie(object):
             # create a new node with common prefix as key
             new_node = [hexarraykey_to_bin(key[:next_key_index]),
                         curr_node_encoded]
-            return self.__rlp_encode(new_node)
+            return self._rlp_encode(new_node)
 
-    def __delete(self, node, key):
+    def _delete(self, node, key):
         """ delete item inside a node
         """
         if len(key) == 0 or not node:
             return ''
 
-        curr_node = self.__rlp_decode(node)
+        curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
 
@@ -240,19 +240,19 @@ class Trie(object):
             if key == curr_key:
                 return ''
             elif key[:len(curr_key)] == curr_key:
-                newhash = self.__delete(curr_val, key[len(curr_key):])
-                childnode = self.__rlp_decode(newhash)
+                newhash = self._delete(curr_val, key[len(curr_key):])
+                childnode = self._rlp_decode(newhash)
                 if len(childnode) == 2:
                     newkey = curr_key + bin_to_hexarraykey(childnode[0])
                     newnode = [hexarraykey_to_bin(newkey), childnode[1]]
                 else:
                     newnode = [curr_node[0], newhash]
-                return self.__rlp_encode(newnode)
+                return self._rlp_encode(newnode)
             else:
                 return node
 
         newnode = [curr_node[i] for i in range(17)]
-        newnode[key[0]] = self.__delete(newnode[key[0]], key[1:])
+        newnode[key[0]] = self._delete(newnode[key[0]], key[1:])
         onlynode = -1
         for i in range(17):
             if newnode[i]:
@@ -263,7 +263,7 @@ class Trie(object):
         if onlynode == 16:
             newnode2 = [hexarraykey_to_bin([16]), newnode[onlynode]]
         elif onlynode >= 0:
-            childnode = self.__rlp_decode(newnode[onlynode])
+            childnode = self._rlp_decode(newnode[onlynode])
             if not childnode:
                 raise Exception("?????")
             if len(childnode) == 17:
@@ -274,14 +274,14 @@ class Trie(object):
                 newnode2 = [hexarraykey_to_bin(newkey), childnode[1]]
         else:
             newnode2 = newnode
-        return self.__rlp_encode(newnode2)
+        return self._rlp_encode(newnode2)
 
-    def __get_size(self, node):
+    def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
         '''
         if not node:
             return 0
-        curr_node = self.__rlp_decode(node)
+        curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
         if len(curr_node) == 2:
@@ -289,16 +289,16 @@ class Trie(object):
             if key[-1] == 16:
                 return 1
             else:
-                return self.__get_size(curr_node[1])
+                return self._get_size(curr_node[1])
         elif len(curr_node) == 17:
             total = 0
             for i in range(16):
-                total += self.__get_size(curr_node[i])
+                total += self._get_size(curr_node[i])
             if curr_node[16]:
                 total += 1
             return total
 
-    def __to_dict(self, node):
+    def _to_dict(self, node):
         '''convert (key, value) stored in this and the descendant nodes
         to dict items.
 
@@ -306,7 +306,7 @@ class Trie(object):
         '''
         if not node:
             return {}
-        curr_node = self.__rlp_decode(node)
+        curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
         if len(curr_node) == 2:
@@ -315,7 +315,7 @@ class Trie(object):
             if lkey[-1] == 16:
                 o[curr_node[0]] = curr_node[1]
             else:
-                d = self.__to_dict(curr_node[1])
+                d = self._to_dict(curr_node[1])
                 for v in d:
                     subkey = bin_to_hexarraykey(v)
                     totalkey = hexarraykey_to_bin(lkey + subkey)
@@ -324,7 +324,7 @@ class Trie(object):
         elif len(curr_node) == 17:
             o = {}
             for i in range(16):
-                d = self.__to_dict(curr_node[i])
+                d = self._to_dict(curr_node[i])
                 for v in d:
                     subkey = bin_to_hexarraykey(v)
                     totalkey = hexarraykey_to_bin([i] + subkey)
@@ -336,7 +336,7 @@ class Trie(object):
             raise Exception("bad curr_node! " + curr_node)
 
     def to_dict(self, as_hex=False):
-        d = self.__to_dict(self.root)
+        d = self._to_dict(self.root)
         o = {}
         for v in d:
             curr_val = ''.join(['0123456789abcdef'[x]
@@ -347,17 +347,17 @@ class Trie(object):
         return o
 
     def get(self, key):
-        return self.__get(
+        return self._get(
             self.root, bin_to_nibble_list_with_terminator(str(key)))
 
     def get_size(self):
-        return self.__get_size(self.root)
+        return self._get_size(self.root)
 
     def update(self, key, value):
         if not isinstance(key, (str, unicode)) or\
                 not isinstance(value, (str, unicode)):
             raise Exception("Key and value must be strings")
-        self.root = self.__update_or_delete(
+        self.root = self._update_or_delete(
             self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
 
 if __name__ == "__main__":
