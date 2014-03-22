@@ -91,10 +91,9 @@ def encode_node(nd):
     else:
         return rlp.encode(nd).encode('hex')
 
-databases = {}
-
 
 class Trie(object):
+    databases = {}
 
     def __init__(self, dbfile, root='', debug=False):
         self.root = root
@@ -161,6 +160,7 @@ class Trie(object):
             newnode = [hexarraykey_to_bin(key), value]
             return self.__put(newnode)
 
+        # find the node
         curnode = self.lookup(node)
         if self.debug:
             print ('icn', curnode)
@@ -260,6 +260,8 @@ class Trie(object):
         return self.__put(newnode2)
 
     def __get_size(self, node):
+        '''Get counts of (key, value) stored in this and the descendant nodes
+        '''
         if not node:
             return 0
         curnode = self.lookup(node)
@@ -280,6 +282,11 @@ class Trie(object):
             return total
 
     def __to_dict(self, node):
+        '''convert (key, value) stored in this and the descendant nodes
+        to dict items.
+
+        Here key is in full form, rather than key of the individual node
+        '''
         if not node:
             return {}
         curnode = self.lookup(node)
