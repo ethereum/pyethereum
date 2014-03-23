@@ -13,7 +13,7 @@ from wire import WireProtocol, dump_packet
 
 
 def plog(*args):
-    ts = time.strftime("[%d/%m/%Y-%H:%M:%S]")        
+    ts = time.strftime("[%d/%m/%Y-%H:%M:%S]")
     sys.stderr.write(ts + " " + " ".join(imap(str, args)) + "\n")
     sys.stderr.flush()
 
@@ -23,16 +23,17 @@ class Peer(threading.Thread):
     def __init__(self, peer_manager, connection, address):
         threading.Thread.__init__(self)
         self.peer_manager = peer_manager
-        self.protocol = WireProtocol(self.peer_manager, self.peer_manager.config)
+        self.protocol = WireProtocol(
+            self.peer_manager,
+            self.peer_manager.config)
         self._stopped = False
         self.lock = threading.Lock()
         self._connection = connection
-        self.address = address[0] + ":%d"%address[1]
+        self.address = address[0] + ":%d" % address[1]
         self.response_queue = Queue.Queue()
         self.hello_received = False
         self.hello_sent = False
         self.last_seen = time.time()
-
 
     def connection(self):
         if self.stopped():
@@ -47,11 +48,9 @@ class Peer(threading.Thread):
             self._stopped = True
         self.shutdown()
 
-
     def stopped(self):
         with self.lock:
             return self._stopped
-
 
     def shutdown(self):
         try:
@@ -71,7 +70,6 @@ class Peer(threading.Thread):
         except:
             return ''
 
-
     def run(self):
         while not self.stopped():
 
@@ -84,47 +82,47 @@ class Peer(threading.Thread):
                 plog(self, 'send packet', dump_packet(spacket))
                 n = self.connection().send(spacket)
                 spacket = spacket[n:]
-            
+
             # receive packet
-            rpacket = self.receive()        
+            rpacket = self.receive()
             if rpacket:
                 plog(self, 'received packet', dump_packet(rpacket))
-                self.protocol.rcv_packet(self, rpacket)                
-        
+                self.protocol.rcv_packet(self, rpacket)
+
             # pause
             if not (rpacket or spacket):
                 time.sleep(0.1)
 
 
-
 class PeerManager(threading.Thread):
-    
+
     def __init__(self, config):
         threading.Thread.__init__(self)
         self.config = config
-        self._peers = set()
+        self._connected_peers = set()
+        self._seen_peers = set()
         self._stopped = False
         self.lock = threading.Lock()
-        
+
     def stop(self):
         with self.lock:
             if not self._stopped:
-                for peer in self._peers:
+                for peer in self._connected_peers:
                     peer.stop()
             self._stopped = True
-    
+
     def stopped(self):
         with self.lock:
-            return self._stopped    
+            return self._stopped
 
     def add_peer(self, peer):
         with self.lock:
-            self._peers.add(peer)
+            self._connected_peers.add(peer)
 
     def remove_peer(self, peer):
         peer.stop()
         with self.lock:
-            self._peers.add(peer)
+            self._connected_peers.remove(peer)
 
     def connect_peer(self, host, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -133,7 +131,7 @@ class PeerManager(threading.Thread):
         plog(self, 'connecting', host, port)
         try:
             sock.connect((host, port))
-        except Exception, e:
+        except Exception as e:
             plog(self, 'failed', e)
             return False
         sock.settimeout(.1)
@@ -141,7 +139,7 @@ class PeerManager(threading.Thread):
         peer = Peer(self, sock, (host, port))
         self.add_peer(peer)
         peer.start()
-    
+
         # Send Hello
         peer.protocol.send_Hello(peer)
 
@@ -161,9 +159,9 @@ class TcpServer(threading.Thread):
         self.host = host
         self.port = port
         self.lock = threading.Lock()
-        
+
     def run(self):
-        plog(self, "TCP server started on port %d"%self.port)
+        plog(self, "TCP server started on port %d" % self.port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((self.host, self.port))
@@ -184,12 +182,10 @@ class TcpServer(threading.Thread):
                 self.peer_manager.add_peer(peer)
                 peer.start()
                 plog(self, "new TCP connection", connection, address)
-            except BaseException, e:
+            except BaseException as e:
                 plog(self, "cannot start TCP session", str(e), address)
                 connection.close()
                 time.sleep(0.1)
-
-
 
 
 def create_config():
@@ -204,7 +200,7 @@ def create_config():
     config.read([os.path.join(p, '.pyetherum.conf') for p in ('~/', '')])
 
     if len(sys.argv) > 1:
-        config.read(sys.argv[1]) # read optional
+        config.read(sys.argv[1])  # read optional
         plog('reading config %s' % sys.argv[1])
 
     return config
@@ -212,37 +208,36 @@ def create_config():
 
 def main():
     config = create_config()
-    
 
     peer_manager = PeerManager(config=config)
-    peer_manager.start()    
+    peer_manager.start()
 
     # handle termination signals
-    def signal_handler(signum = None, frame = None):
+    def signal_handler(signum=None, frame=None):
         plog('Signal handler called with signal', signum)
         peer_manager.stop()
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT, signal.SIGINT]:
         signal.signal(sig, signal_handler)
 
     # start tcp server
-    tcp_server = TcpServer( peer_manager, 
-                            config.get('server', 'host'), 
-                            config.getint('server', 'port'))
+    tcp_server = TcpServer(peer_manager,
+                           config.get('server', 'host'),
+                           config.getint('server', 'port'))
     tcp_server.start()
 
     # connect peer
     if config.get('connect', 'host'):
         peer_manager.connect_peer(
-                        config.get('connect', 'host'), 
-                        config.getint('connect', 'port')) 
+            config.get('connect', 'host'),
+            config.getint('connect', 'port'))
 
     # loop
     while not peer_manager.stopped():
         time.sleep(0.1)
 
     plog('extiting')
-    #tcp_server.join() # does not work!
-    peer_manager.join()    
+    # tcp_server.join() # does not work!
+    peer_manager.join()
 
 if __name__ == '__main__':
     main()
