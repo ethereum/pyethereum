@@ -9,6 +9,7 @@ import socket
 import threading
 import traceback
 from itertools import imap
+from wire import WireProtocol
 
 
 def plog(*args):
@@ -22,13 +23,15 @@ class Peer(threading.Thread):
     def __init__(self, peer_manager, connection, address):
         threading.Thread.__init__(self)
         self.peer_manager = peer_manager
+        self.protocol = WireProtocol(self.peer_manager, self.peer_manager.config)
         self._stopped = False
         self.lock = threading.Lock()
         self._connection = connection
         self.address = address[0] + ":%d"%address[1]
         self.response_queue = Queue.Queue()
-        self._hello_received = False
-        self._hello_sent = False
+        self.hello_received = False
+        self.hello_sent = False
+        self.last_seen = time.time()
 
 
     def connection(self):
@@ -59,40 +62,8 @@ class Peer(threading.Thread):
             pass
         self._connection.close()
 
-    def send(self, response):
+    def send_packet(self, response):
         self.response_queue.put(response)
-
-    def send_hello(self):
-        self.response_queue.put('magic:hello:v1')
-        self._hello_sent = True
-
-
-    def run(self):
-        while not self.stopped():
-            #plog(self, 'in run')
-            # send response
-            try:
-                smessage = self.response_queue.get(timeout=.1)
-            except Queue.Empty:
-                smessage = None
-            
-            while smessage:
-                plog(self, 'send message', smessage)
-                n = self.connection().send(smessage)
-                smessage = smessage[n:]
-            
-            # receive incoming
-            #plog(self, 'receive')
-            rmessage = self.receive()
-        
-            if rmessage:
-                plog(self, 'received message', rmessage)
-                self.parse_message(rmessage)
-        
-            if not rmessage or smessage:
-                time.sleep(0.1)
-
-
 
     def receive(self):
         try:
@@ -100,40 +71,37 @@ class Peer(threading.Thread):
         except:
             return ''
 
-    def parse_message(self, message):
 
-        if not message.startswith('magic'):
-            self.response_queue.put('magic:error:wrong header')
-            return
-        try:
-            magic, cmd, data = message.split(':',2)
-        except ValueError:
-            self.response_queue.put('magic:error:unknown cmd')
-            return
+    def run(self):
+        while not self.stopped():
 
-        plog(self, 'parsed message', magic, cmd, data)
-
-        if cmd == 'hello':
-            self._hello_received = True
-            if not self._hello_sent:
-                self.send_hello()
-
-        elif cmd == 'ping':
-            self.response_queue.put('magic:pong:%d' %0)
+            # send packet
+            try:
+                spacket = self.response_queue.get(timeout=.1)
+            except Queue.Empty:
+                spacket = None
+            while spacket:
+                plog(self, 'send packet', spacket)
+                n = self.connection().send(spacket)
+                spacket = spacket[n:]
+            
+            # receive packet
+            rpacket = self.receive()        
+            if rpacket:
+                plog(self, 'received packet', rpacket)
+                self.protocol.rcv_packet(self, rpacket)                
         
-        elif cmd == 'pong':
-            self.response_queue.put('magic:pong:%d' %(int(data)+1))
-        
-        elif cmd == 'error':
-            pass
-        else:
-            self.response_queue.put('magic:error:unknown cmd')
+            # pause
+            if not (rpacket or spacket):
+                time.sleep(0.1)
+
 
 
 class PeerManager(threading.Thread):
     
-    def __init__(self):
+    def __init__(self, config):
         threading.Thread.__init__(self)
+        self.config = config
         self._peers = set()
         self._stopped = False
         self.lock = threading.Lock()
@@ -172,7 +140,9 @@ class PeerManager(threading.Thread):
         plog(self, 'connected', host, port)
         peer = Peer(self, sock, (host, port))
         self.add_peer(peer)
-        peer.send_hello()
+        
+        # FIXME Send Hello
+
         #peer.response_queue.put('magic:pong:1')
         peer.start()
         return True
@@ -215,8 +185,7 @@ class TcpServer(threading.Thread):
                 peer.start()
                 plog(self, "new TCP connection", connection, address)
             except BaseException, e:
-                error = str(e)
-                plog(self, "cannot start TCP session", error, address)
+                plog(self, "cannot start TCP session", str(e), address)
                 connection.close()
                 time.sleep(0.1)
 
