@@ -1,16 +1,10 @@
 import struct
 import rlp
 from utils import big_endian_to_int as idec
-from utils import int_to_big_endian as _ienc
+from utils import int_to_big_endian as ienc
 
-def ienc(x):
-    "Ethereum(++) requires \x00 encoded as empty string"
-    if x != 0: 
-        return _ienc(x)
-    else: 
-        return ''
+ienc4 = lambda x: struct.pack('>i', x)  # 4 bytes big endian integer
 
-ienc4 = lambda x:struct.pack('>i', x) # 4 bytes big endian integer
 
 def list_ienc(lst):
     "recursively big endian encode all integers in a list inplace"
@@ -26,11 +20,11 @@ def dump_packet(packet):
     try:
         header = idec(packet[:4])
         payload_len = idec(packet[4:8])
-        data = rlp.decode(packet[8:8+payload_len]) 
+        data = rlp.decode(packet[8:8 + payload_len])
         cmd = WireProtocol.cmd_map.get(idec(data.pop(0)), 'unknown')
         return [header, payload_len, cmd] + data
     except:
-        return ['DUMP Failed', packet]
+        return ['DUMP failed', packet]
 
 
 class WireProtocol():
@@ -68,13 +62,14 @@ class WireProtocol():
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x08 # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
-    CAPABILITIES = 0x01 + 0x02 + 0x04 # node discovery + transaction relaying
+    CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
     NODE_ID = None
-    
-    # NEED NODE_ID in order to work with Ethereum(++)/ 
+
+    # NEED NODE_ID in order to work with Ethereum(++)/
     NODE_ID = 'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9'
 
     def __init__(self, peermgr, config):
@@ -129,7 +124,7 @@ class WireProtocol():
         an N-byte RLP-serialised data structure
         """
         payload = rlp.encode(list_ienc(data))
-        packet = ienc4(self.SYNCHRONIZATION_TOKEN) 
+        packet = ienc4(self.SYNCHRONIZATION_TOKEN)
         packet += ienc4(len(payload))
         packet += payload
         peer.send_packet(packet)
@@ -141,7 +136,7 @@ class WireProtocol():
                    self.NETWORK_ID,
                    self.CLIENT_ID,
                    self.config.getint('server', 'port'),
-                   self.CAPABILITIES]                   
+                   self.CAPABILITIES]
         if self.NODE_ID:
             payload.append(self.NODE_ID)
         self.send_packet(peer, payload)
@@ -163,13 +158,13 @@ class WireProtocol():
                     (e.g. "Ethereum(++)/1.0.0").
         CAPABILITIES specifies the capabilities of the client as a set of flags;
                     presently three bits are used:
-                    0x01 for peers discovery, 0x02 for transaction relaying, 0x04 for block-chain querying.        
+                    0x01 for peers discovery, 0x02 for transaction relaying, 0x04 for block-chain querying.
         LISTEN_PORT specifies the port that the client is listening on
                     (on the interface that the present connection traverses).
                     If 0 it indicates the client is not listening.
         NODE_ID is optional and specifies a 512-bit hash, (potentially to be used as public key)
                     that identifies this node.
-        
+
         [574621841, 116, 'Hello', '\x08', '', 'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_', "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|\x86\xa6ZV!Q6\x82\xebQ$4+"]
         [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb', '\x07']
         """
@@ -187,7 +182,6 @@ class WireProtocol():
         spec has CAPABILITIES after PORT, CPP client the other way round. emulating the latter
         https://github.com/ethereum/cpp-ethereum/blob/master/libethereum/PeerNetwork.cpp#L144
         """
-
 
         # TODO add to known peers list
         peer.hello_received = True
