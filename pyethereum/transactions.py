@@ -6,6 +6,19 @@ from pybitcointools import ecdsa_raw_sign, ecdsa_raw_recover
 
 class Transaction(object):
 
+    """
+    A transaction is stored as:
+    [ nonce, receiving_address, value, [ data item 0, data item 1 ... data item n ], v, r, s ]
+    nonce is the number of transactions already sent by that account,
+    encoded in binary form (eg. 0 -> '', 7 -> '\x07', 1000 -> '\x03\xd8').
+    (v,r,s) is the raw Electrum-style signature of the transaction without the signature
+    made with the private key corresponding to the sending account, with 0 <= v <= 3.
+    From an Electrum-style signature (65 bytes) it is possible to extract the public key,
+    and thereby the address, directly. A valid transaction is one where
+    (i) the signature is well-formed (ie. 0 <= v <= 3, 0 <= r < P, 0 <= s < N, 0 <= r < P - N if v >= 2), and
+    (ii) the sending account has enough funds to pay the fee and the value.
+    """
+
     def __init__(*args):
         self = args[0]
         if len(args) == 2:
