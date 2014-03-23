@@ -12,7 +12,7 @@ import json
 import os
 
 
-__TESTDATADIR = "./tests"
+__TESTDATADIR = "../tests"
 
 
 def load_test_data(fname):
