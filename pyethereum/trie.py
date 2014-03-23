@@ -102,6 +102,9 @@ class Trie(object):
             self.databases[dbfile] = DB(dbfile)
         self.db = self.databases[dbfile]
 
+    def clear(self):
+        self.root = ''
+
     def _get(self, node, key):
         """ get value inside a node
         """
@@ -128,7 +131,7 @@ class Trie(object):
         rlpnode = rlp.encode(node)
         if len(rlpnode) >= 32:
             res = sha3(rlpnode)
-            self.db.put(h, rlpnode)
+            self.db.put(res, rlpnode)
         else:
             res = rlpnode if root else node
         return res
@@ -157,7 +160,8 @@ class Trie(object):
         return the updated node with rlp encoded
         """
 
-        assert(len(key))
+        if len(key) == 0:
+            return value
 
         # leaf node
         if not node:
@@ -360,6 +364,8 @@ class Trie(object):
         if not isinstance(key, (str, unicode)) or\
                 not isinstance(value, (str, unicode)):
             raise Exception("Key and value must be strings")
+        if not key:
+            raise Exception("Key should not be blank")
         self.root = self._update_or_delete(
             self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
 
