@@ -149,7 +149,7 @@ class Trie(object):
         if value != '':
             return self._update(node, key, value)
         else:
-            return self._delete(node, key)
+            return self.delete(node, key)
 
     def _update(self, node, key, value):
         """ update item inside a node
@@ -176,6 +176,7 @@ class Trie(object):
                 curr_node[key[0]], key[1:], value)
             return self._rlp_encode(items)
 
+        # node is (key, value)
         return self._update_kv_node(curr_node, key, value)
 
     def _update_kv_node(self, kv_node, key, value):
@@ -224,8 +225,10 @@ class Trie(object):
                         curr_node_encoded]
             return self._rlp_encode(new_node)
 
-    def _delete(self, node, key):
+    def delete(self, node, key):
         """ delete item inside a node
+
+        todo: delete corresponding value from database
         """
         if len(key) == 0 or not node:
             return ''
@@ -240,7 +243,7 @@ class Trie(object):
             if key == curr_key:
                 return ''
             elif key[:len(curr_key)] == curr_key:
-                newhash = self._delete(curr_val, key[len(curr_key):])
+                newhash = self.delete(curr_val, key[len(curr_key):])
                 childnode = self._rlp_decode(newhash)
                 if len(childnode) == 2:
                     newkey = curr_key + bin_to_hexarraykey(childnode[0])
@@ -252,7 +255,7 @@ class Trie(object):
                 return node
 
         newnode = [curr_node[i] for i in range(17)]
-        newnode[key[0]] = self._delete(newnode[key[0]], key[1:])
+        newnode[key[0]] = self.delete(newnode[key[0]], key[1:])
         onlynode = -1
         for i in range(17):
             if newnode[i]:
