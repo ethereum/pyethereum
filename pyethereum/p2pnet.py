@@ -9,7 +9,7 @@ import socket
 import threading
 import traceback
 from itertools import imap
-from wire import WireProtocol
+from wire import WireProtocol, dump_packet
 
 
 def plog(*args):
@@ -81,14 +81,14 @@ class Peer(threading.Thread):
             except Queue.Empty:
                 spacket = None
             while spacket:
-                plog(self, 'send packet', spacket)
+                plog(self, 'send packet', dump_packet(spacket))
                 n = self.connection().send(spacket)
                 spacket = spacket[n:]
             
             # receive packet
             rpacket = self.receive()        
             if rpacket:
-                plog(self, 'received packet', rpacket)
+                plog(self, 'received packet', dump_packet(rpacket))
                 self.protocol.rcv_packet(self, rpacket)                
         
             # pause
@@ -140,11 +140,11 @@ class PeerManager(threading.Thread):
         plog(self, 'connected', host, port)
         peer = Peer(self, sock, (host, port))
         self.add_peer(peer)
-        
-        # FIXME Send Hello
-
-        #peer.response_queue.put('magic:pong:1')
         peer.start()
+    
+        # Send Hello
+        peer.protocol.send_Hello(peer)
+
         return True
 
     def run(self):
@@ -214,7 +214,7 @@ def main():
     config = create_config()
     
 
-    peer_manager = PeerManager()
+    peer_manager = PeerManager(config=config)
     peer_manager.start()    
 
     # handle termination signals
