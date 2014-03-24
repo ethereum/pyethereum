@@ -16,16 +16,22 @@ def list_ienc(lst):
             lst[i] = ienc(e)
     return lst
 
+def lrlp_decode(data):
+    "always return a list"
+    d = rlp.decode(data)
+    if isinstance(d, str):
+        d = [d]
+    return d
 
 def dump_packet(packet):
     try:
         header = idec(packet[:4])
         payload_len = idec(packet[4:8])
-        data = rlp.decode(packet[8:8 + payload_len])
+        data = lrlp_decode(packet[8:8 + payload_len])
         cmd = WireProtocol.cmd_map.get(idec(data.pop(0)), 'unknown')
         return [header, payload_len, cmd] + data
-    except:
-        return ['DUMP failed', packet]
+    except Exception as e:
+        return ['DUMP failed', packet, e]
 
 
 class WireProtocol(object):
@@ -96,7 +102,7 @@ class WireProtocol(object):
         # unpack message
         payload_len = idec(packet[4:8])
         # assert 8 + payload_len <= len(packet) # this get's sometimes raised!?
-        data = rlp.decode(packet[8:8 + payload_len])
+        data = lrlp_decode(packet[8:8 + payload_len])
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
