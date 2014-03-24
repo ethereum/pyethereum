@@ -108,15 +108,6 @@ def starts_with(full, part):
         return False
     return full[:len(part)] == part
 
-def check_node_type(node):
-    '''
-    :param node: rlp encoded node
-    '''
-    node = self._rlp_decode(node)
-    if isinstance(node, str):
-        return VALUE
-    return KEY_VALUE_NODE if len(node) == 2 else DIVERGE_NODE
-
 class Trie(object):
     databases = {}
 
@@ -130,6 +121,15 @@ class Trie(object):
     def clear(self):
         self.root = ''
 
+    def _check_node_type(self, node):
+        '''
+        :param node: rlp encoded node
+        '''
+        node = self._rlp_decode(node)
+        if isinstance(node, str):
+            return VALUE
+        return KEY_VALUE_NODE if len(node) == 2 else DIVERGE_NODE
+
     def _get(self, node, key):
         """ get value inside a node
 
@@ -142,7 +142,7 @@ class Trie(object):
         if not curr_node:
             raise Exception("node not found in database")
 
-        node_type = check_node_type(curr_node)
+        node_type = self._check_node_type(curr_node)
         assert node_type != VALUE
 
         if node_type == DIVERGE_NODE:
@@ -200,10 +200,7 @@ class Trie(object):
         """
         # decode the node
         curr_node = self._rlp_decode(node)
-        if not curr_node:
-            raise Exception("node not found in database")
-
-        node_type = check_node_type(curr_node)
+        node_type = self._check_node_type(curr_node)
 
         if node_type == DIVERGE_NODE:
             return self._update_diverge_node(curr_node, key, value)
@@ -227,10 +224,10 @@ class Trie(object):
         return self._rlp_encode(new_node)
 
 
-    def _update_diverge_node(self, diverge_node, key, value):
+    def _update_diverge_node(self, node, key, value):
         '''when the current node is a 17 items diverge node
 
-        :param diverge_node: an already rlp decoded (key, value) tuple
+        :param node: an already rlp decoded 17 items diverge node
         :param key: nibble list without terminator
         :return: the updated node with rlp encoded
         '''
@@ -240,22 +237,23 @@ class Trie(object):
             return self._rlp_encode(curr_node)
 
         # need to substitue the slot
-        slot = self._rlp_decode(curr_node[key[0]])
-        slot_type = check_node_type(slot)
+        slot = self._rlp_decode(node[key[0]])
+        slot_type = self._check_node_type(slot)
         if slot_type == VALUE:
-            curr_node[key[0]] = self._rlp_encode(value)
+            node[key[0]] = self._rlp_encode(value)
         else:
-            curr_node[key[0]] = self._update(curr_node[key[0]], key[1:], value)
-        return self._rlp_encode(curr_node)
+            node[key[0]] = self._update(
+                node[key[0]], key[1:], value)
+        return self._rlp_encode(node)
 
-    def _update_kv_node(self, kv_node, key, value):
+    def _update_kv_node(self, node, key, value):
         '''when the current node is a (key, value) node
 
-        :param kv_node: an already rlp decoded (key, value) tuple
+        :param node: an already rlp decoded (key, value) tuple
         :param key: nibble list without terminator
         :return: the updated node with rlp encoded
         '''
-        (curr_key_bin, curr_val) = kv_node
+        (curr_key_bin, curr_val) = node
         curr_key = unpack_to_nibbles(curr_key_bin)
 
         # already reach the expected node
@@ -264,7 +262,8 @@ class Trie(object):
                 [curr_key_bin, self._rlp_encode(value)])
 
         # rearrange (curr_key, curr_val) and (key, val)
-        curr_key.remove(NIBBLE_TERMINATOR)
+        if curr_key[-1] == NIBBLE_TERMINATOR:
+            curr_key = curr_key[:-1]
         curr_val = self._rlp_decode(curr_val)
 
         # find diverge index
@@ -277,13 +276,15 @@ class Trie(object):
         diverge_node = [''] * 17
         diverge_node[key[diverge_index]] = self._update(
             '', key[diverge_index + 1:], value)
-        diverge_node[cur_key[diverge_index]] = self._update(
+        diverge_node[curr_key[diverge_index]] = self._update(
             '', key[diverge_index + 1:], curr_val)
 
         if diverge_index:
             kv_node = [pack_nibbles(key[:diverge_index]),
                        self._rlp_encode(diverge_node)]
-            return self._rlp_encode(new_node)
+            return self._rlp_encode(kv_node)
+        else:
+            return self._rlp_encode(diverge_node)
 
     def delete(self, node, key):
         """ delete item inside a node
@@ -421,6 +422,8 @@ class Trie(object):
             raise Exception("Key and value must be strings")
         if not key:
             raise Exception("Key should not be blank")
+
+        key, value = bin_to_nibbles(str(key)), str(value)
 
         if value != '':
             self.root = self._update(self.root, key, value)

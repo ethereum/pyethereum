@@ -12,7 +12,7 @@ Feature: trie tree manipulate
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
-"""
+
   Scenario: insert result a new child (key, value) node
     Given a pair with key "AB"
     And a pair with key "ABCD"
@@ -30,5 +30,4 @@ Feature: trie tree manipulate
   @load_data
   Scenario: insert in a more sophisticated case
     Then for each pair, get with key will return the correct value
-"""
 
