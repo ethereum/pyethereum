@@ -267,22 +267,6 @@ class Trie(object):
         curr_key.remove(NIBBLE_TERMINATOR)
         curr_val = self._rlp_decode(curr_val)
 
-        if starts_with(cur_key, key):
-            parent_key, parent_val = curr_key, curr_val
-            child_key, child_val = key, value
-            kv_diverge = True
-        elif starts_with(key, cur_key):
-            parent_key, parent_val = key, val
-            child_key, child_val = curr_key, curr_val
-            kv_diverge = True
-        # the first level is KEY_VALUE_NODE, the second level is KEY_VALUE_NODE
-        if kv_diverge:
-
-
-
-
-        curr_key = cur_key[:-1]
-
         # find diverge index
         diverge_index = len(curr_key) - 1
         for i in range(len(curr_key)):
@@ -290,29 +274,15 @@ class Trie(object):
                 diverge_index = i
                 break
 
-        # key starts with curr_key, note the latest different one for key is T
-        if diverge_index == len(curr_key):
-            curr_value = self._rlp_encode(
-                self._update(curr_val, key[len(curr_key):], value))
-            return self._rlp_encode(
-                [pack_nibbles(curr_key), curr_val])
+        diverge_node = [''] * 17
+        diverge_node[key[diverge_index]] = self._update(
+            '', key[diverge_index + 1:], value)
+        diverge_node[cur_key[diverge_index]] = self._update(
+            '', key[diverge_index + 1:], curr_val)
 
-        # convert the node to a 17 items one
-        curr_node = [''] * 17
-        key_derived_value = self._update('', key[diverge_index + 1:], value)
-        curr_key_derived_value = self._update('', curr_key[diverge_index + 1:],
-                                               curr_val)
-        curr_node[key[diverge_index]] = key_derived_value
-        curr_node[curr_key[diverge_index]] = curr_key_derived_value
-        curr_node_encoded = self._rlp_encode(curr_node)
-
-        if diverge_index == 0:
-            # no common prefix
-            return curr_node_encoded
-        else:
-            # create a new node with common prefix as key
-            new_node = [pack_nibbles(key[:diverge_index]),
-                        curr_node_encoded]
+        if diverge_index:
+            kv_node = [pack_nibbles(key[:diverge_index]),
+                       self._rlp_encode(diverge_node)]
             return self._rlp_encode(new_node)
 
     def delete(self, node, key):
@@ -453,9 +423,9 @@ class Trie(object):
             raise Exception("Key should not be blank")
 
         if value != '':
-            self.root = self._update(node, key, value)
+            self.root = self._update(self.root, key, value)
         else:
-            self.root = self.delete(node, key)
+            self.root = self.delete(self.root, key)
 
         return self.root
 
