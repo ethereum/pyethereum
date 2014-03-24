@@ -20,7 +20,7 @@ def plog(*args):
 
 class Peer(threading.Thread):
 
-    def __init__(self, peer_manager, connection, address):
+    def __init__(self, peer_manager, connection, ip, port):
         threading.Thread.__init__(self)
         self.peer_manager = peer_manager
         self.protocol = WireProtocol(
@@ -29,15 +29,19 @@ class Peer(threading.Thread):
         self._stopped = False
         self.lock = threading.Lock()
         self._connection = connection
-        self.address = address[0] + ":%d" % address[1]
+        assert ip.count('.') == 3
+        self.ip = ip
+        self.port = port
+        self.node_id = ''
         self.response_queue = Queue.Queue()
         self.hello_received = False
         self.hello_sent = False
         self.last_seen = time.time()
+        self.last_pinged = 0
 
     def connection(self):
         if self.stopped():
-            raise Exception("Connection was stopped")
+            raise IOError("Connection was stopped")
         else:
             return self._connection
 
@@ -55,10 +59,8 @@ class Peer(threading.Thread):
     def shutdown(self):
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
-        except:
-            plog(self, "problem shutting down", self.address)
-            traceback.print_exc(file=sys.stdout)
-            pass
+        except IOError as e:
+            plog(self, "problem shutting down", self.ip, self.port, e)
         self._connection.close()
 
     def send_packet(self, response):
@@ -67,7 +69,7 @@ class Peer(threading.Thread):
     def receive(self):
         try:
             return self.connection().recv(2048)
-        except:
+        except IOError:
             return ''
 
     def run(self):
@@ -80,14 +82,20 @@ class Peer(threading.Thread):
                 spacket = None
             while spacket:
                 plog(self, 'send packet', dump_packet(spacket))
-                n = self.connection().send(spacket)
-                spacket = spacket[n:]
+                try:
+                    n = self.connection().send(spacket)
+                    spacket = spacket[n:]
+                except IOError as e:
+                    plog(self, 'failed', e)
+                    self.stop()
+                    break
 
             # receive packet
             rpacket = self.receive()
             if rpacket:
                 plog(self, 'received packet', dump_packet(rpacket))
                 self.protocol.rcv_packet(self, rpacket)
+                self.last_seen = time.time()
 
             # pause
             if not (rpacket or spacket):
@@ -96,13 +104,28 @@ class Peer(threading.Thread):
 
 class PeerManager(threading.Thread):
 
+    ping_delay = 5  # how long before pinging a peer
+
     def __init__(self, config):
         threading.Thread.__init__(self)
         self.config = config
         self._connected_peers = set()
-        self._seen_peers = set()
+        self._seen_peers = set()  # (host, port, node_id)
         self._stopped = False
         self.lock = threading.Lock()
+
+    def add_peer_address(self, ip, port, node_id):
+        ipn = (ip, port, node_id)
+        with self.lock:
+            if not ipn in self._seen_peers:
+                self._seen_peers.add(ipn)
+
+    def get_known_peer_addresses(self):
+        # fixme add self
+        return set(self._seen_peers).union(self.get_connected_peer_addresses())
+
+    def get_connected_peer_addresses(self):
+        return set((p.ip, p.port, p.node_id) for p in self._connected_peers)
 
     def stop(self):
         with self.lock:
@@ -135,18 +158,53 @@ class PeerManager(threading.Thread):
             plog(self, 'failed', e)
             return False
         sock.settimeout(.1)
-        plog(self, 'connected', host, port)
-        peer = Peer(self, sock, (host, port))
+        ip, port = sock.getpeername()
+        plog(self, 'connected', ip, port)
+        peer = Peer(self, sock, ip, port)
         self.add_peer(peer)
         peer.start()
 
         # Send Hello
         peer.protocol.send_Hello(peer)
-
         return True
+
+    def manage_connections(self):
+        if len(self._connected_peers) < self.config.getint('peers', 'num'):
+            plog(self, 'not enough peers', len(self._connected_peers))
+            candidates = self.get_known_peer_addresses().difference(
+                self.get_connected_peer_addresses())
+            plog(self, 'num candidates:', len(candidates))
+
+            if len(candidates):
+                ip, port, node_id = candidates.pop()
+                self.connect_peer(ip, port)
+
+        now = time.time()
+        for peer in list(self._connected_peers):
+            if peer.stopped():
+                self.remove_peer(peer)
+                continue
+
+            dt_ping = now - peer.last_pinged
+            dt_seen = now - peer.last_seen
+            if dt_ping < 1 and dt_ping > .5:
+                # did not respond to ping
+                plog(self, peer, 'did not respond to ping, disconnecting')
+                self.remove_peer(peer)
+            elif min(dt_seen, dt_ping) > self.ping_delay:
+                plog(self, peer, 'pinging silent peer')
+                with peer.lock:
+                    peer.protocol.send_Ping(peer)
+                    peer.last_pinged = now
+
+        # report every n seconds
+        if False:
+            plog(self, 'num peers', len(self._connected_peers))
+            plog(self, 'seen peers', len(self._seen_peers))
 
     def run(self):
         while not self.stopped():
+            self.manage_connections()
             time.sleep(0.1)
 
 
@@ -170,6 +228,7 @@ class TcpServer(threading.Thread):
         while not self.peer_manager.stopped():
             plog(self, 'in run loop')
             try:
+
                 connection, address = sock.accept()
             except:
                 traceback.print_exc(file=sys.stdout)
@@ -194,6 +253,8 @@ def create_config():
     config.add_section('server')
     config.set('server', 'host', 'localhost')
     config.set('server', 'port', '30303')
+    config.add_section('peers')
+    config.set('peers', 'num', '5')
     config.add_section('connect')
     config.set('connect', 'host', '')
     config.set('connect', 'port', '30303')
