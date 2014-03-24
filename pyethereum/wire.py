@@ -4,7 +4,7 @@ import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 
-ienc4 = lambda x: struct.pack('>i', x)  # 4 bytes big endian integer
+ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 
 
 def list_ienc(lst):
@@ -62,6 +62,7 @@ class WireProtocol(object):
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
     SYNCHRONIZATION_TOKEN = 0x22400891
+
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
@@ -87,9 +88,10 @@ class WireProtocol(object):
         """
 
         # check header
-        if not packet.startswith(ienc(self.SYNCHRONIZATION_TOKEN)):
-            print(self, 'check header failed')
-            return self.send_Disconnect(peer, reason='Bad protocol')
+        if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
+            print(
+                self, 'check header failed, skipping message, sync token was', idec(packet[:4]))
+            return
 
         # unpack message
         payload_len = idec(packet[4:8])
@@ -100,6 +102,9 @@ class WireProtocol(object):
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
             print(self, 'check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
+
+        # good peer
+        peer.last_valid_packet_received = time.time()
 
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]

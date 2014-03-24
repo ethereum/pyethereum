@@ -36,7 +36,7 @@ class Peer(threading.Thread):
         self.response_queue = Queue.Queue()
         self.hello_received = False
         self.hello_sent = False
-        self.last_seen = time.time()
+        self.last_valid_packet_received = time.time()
         self.last_pinged = 0
 
     def connection(self):
@@ -95,7 +95,6 @@ class Peer(threading.Thread):
             if rpacket:
                 plog(self, 'received packet', dump_packet(rpacket))
                 self.protocol.rcv_packet(self, rpacket)
-                self.last_seen = time.time()
 
             # pause
             if not (rpacket or spacket):
@@ -178,6 +177,8 @@ class PeerManager(threading.Thread):
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
+                # don't use this node again in case of connect error > remove
+                self._seen_peers.remove((ip, port, node_id))
 
         now = time.time()
         for peer in list(self._connected_peers):
@@ -186,7 +187,7 @@ class PeerManager(threading.Thread):
                 continue
 
             dt_ping = now - peer.last_pinged
-            dt_seen = now - peer.last_seen
+            dt_seen = now - peer.last_valid_packet_received
             if dt_ping < 1 and dt_ping > .5:
                 # did not respond to ping
                 plog(self, peer, 'did not respond to ping, disconnecting')
@@ -256,7 +257,8 @@ def create_config():
     config.add_section('peers')
     config.set('peers', 'num', '5')
     config.add_section('connect')
-    config.set('connect', 'host', '')
+    config.set('connect', 'host', '127.0.0.1')
+    #config.set('connect', 'host', '54.201.28.117')
     config.set('connect', 'port', '30303')
     config.read([os.path.join(p, '.pyetherum.conf') for p in ('~/', '')])
 
