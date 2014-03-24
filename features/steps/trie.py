@@ -1,3 +1,5 @@
+import random
+
 @when(u'clear trie tree')
 def step_impl(context):
     context.trie.clear()
@@ -6,40 +8,21 @@ def step_impl(context):
 def step_impl(context):
     assert context.trie.root == ''
 
-@given(u'pair1 with key "AB"')
+@given(u'a pair with key "{key}"')
+def step_impl(context, key):
+    if 'pairs' not in context:
+        context.pairs = []
+    value =range(random.randint(0, 128))
+    random.shuffle(value)
+    value = ''.join(str(x) for x in value)
+    context.pairs.append((key, value))
+
+@when(u'insert pairs')
 def step_impl(context):
-    context.pair1 = ("AB", str(list(range(1024))))
+    for (key, value) in context.pairs:
+        context.trie.update(key, value)
 
-@given(u'pair2 with key "AC"')
+@then(u'for each pair, get with key will return the correct value')
 def step_impl(context):
-    context.pair2 = ("AC", str(list(range(31))))
-
-@given(u'pair3 with key "ABCD"')
-def step_impl(context):
-    context.pair3 = ("ABCD", str(list(range(32))))
-
-@given(u'pair4 with key "ACD"')
-def step_impl(context):
-    context.pair4 = ("ACD", str(list(range(24))))
-
-@given(u'pair5 with key "A"')
-def step_impl(context):
-    context.pair5 = ("A", str(list(range(50))))
-
-@given(u'pair6 with key "B"')
-def step_impl(context):
-    context.pair6 = ("B", str(list(range(124))))
-
-@given(u'pair7 with key "BCD"')
-def step_impl(context):
-    context.pair7 = ("BCD", str(list(range(104))))
-
-@when(u'insert {pair}')
-def step_impl(context, pair):
-    key, value = getattr(context, pair)
-    context.trie.update(key, value)
-
-@then(u'get with key of {pair} will return the correct value')
-def step_impl(context, pair):
-    key, value = getattr(context, pair)
-    context.trie.get(key) == str(value)
+    for (key, value) in context.pairs:
+        assert context.trie.get(key) == str(value)

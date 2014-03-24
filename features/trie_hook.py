@@ -31,4 +31,27 @@ class TrieFeatureHooker(object):
     def __load_fixture(self):
         pass
 
+class TrieScenarioHooker(object):
+
+    def before(self, context, scenario):
+
+        if 'load_data' in scenario.tags:
+            context.execute_steps(u'''
+                Given a pair with key "AB"
+                And a pair with key "AC"
+                And a pair with key "ABCD"
+                And a pair with key "ACD"
+                And a pair with key "A"
+                And a pair with key "B"
+                And a pair with key "CD"
+                And a pair with key "BCD"
+                When clear trie tree
+                And insert pairs
+            ''')
+
+    def after(self, context, scenario):
+        pass
+
+
 trie_feature_hooker = TrieFeatureHooker()
+trie_scenario_hooker = TrieScenarioHooker()

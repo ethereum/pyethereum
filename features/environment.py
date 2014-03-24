@@ -1,4 +1,4 @@
-from trie_hook import trie_feature_hooker
+from trie_hook import trie_feature_hooker, trie_scenario_hooker
 
 # USE: BEHAVE_DEBUG_ON_ERROR=yes     (to enable debug-on-error)
 from distutils.util import strtobool as _bool
@@ -15,9 +15,13 @@ def after_step(context, step):
 
 
 def before_feature(context, feature):
-    if feature.name == 'trie tree manipulate':
+    if 'trie' in feature.tags:
         trie_feature_hooker.before(context, feature)
 
 def after_feature(context, feature):
-    if feature.name == 'trie tree manipulate':
+    if 'trie' in feature.tags:
         trie_feature_hooker.after(context, feature)
+
+def before_scenario(context, scenario):
+    if 'trie' in scenario.feature.tags:
+        trie_scenario_hooker.before(context, scenario)
