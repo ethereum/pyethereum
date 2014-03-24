@@ -25,4 +25,5 @@ def step_impl(context):
 @then(u'for each pair, get with key will return the correct value')
 def step_impl(context):
     for (key, value) in context.pairs:
+        print 'got value:', len(context.trie.get(key))
         assert context.trie.get(key) == str(value)

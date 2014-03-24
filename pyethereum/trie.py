@@ -28,28 +28,8 @@ class DB(object):
         return self.db.Delete(key)
 
 
-def hexarraykey_to_bin(key):
-    """convert key given as list of nibbles to binary"""
-    if key[-1:] == [16]:
-        flags = 2
-        key = key[:-1]
-    else:
-        flags = 0
-
-    oddlen = len(key) % 2
-    flags |= oddlen   # set lowest bit if odd number of nibbles
-    if oddlen:
-        key = [flags] + key
-    else:
-        key = [flags, 0] + key
-    o = ''
-    for i in range(0, len(key), 2):
-        o += chr(16 * key[i] + key[i + 1])
-    return o
-
-
-def bin_to_nibble_list(s):
-    """convert string s to a list of nibbles (half-bytes)
+def bin_to_nibbles(s):
+    """convert string s to nibbles (half-bytes)
 
     >>> bin_to_nibble_list("")
     []
@@ -66,18 +46,47 @@ def bin_to_nibble_list(s):
     return res
 
 
-def bin_to_nibble_list_with_terminator(s):
-    """same as bin_to_nibble_list, but adds a terminator value at the end"""
-    res = bin_to_nibble_list(s)
-    res.append(16)
-    return res
+NIBBLE_TERMINATOR = 16
 
 
-def bin_to_hexarraykey(bindata):
-    o = bin_to_nibble_list(bindata)
+def append_terminator(nibbles):
+    nibbles.append(NIBBLE_TERMINATOR)
+
+
+def pack_nibbles(nibbles):
+    """pack nibbles to binary
+
+    :param nibbles: a nibbles sequence. may have a terminator
+    """
+
+    if nibbles[-1:] == [NIBBLE_TERMINATOR]:
+        flags = 2
+        nibbles = nibbles[:-1]
+    else:
+        flags = 0
+
+    oddlen = len(nibbles) % 2
+    flags |= oddlen   # set lowest bit if odd number of nibbles
+    if oddlen:
+        nibbles = [flags] + nibbles
+    else:
+        nibbles = [flags, 0] + nibbles
+    o = ''
+    for i in range(0, len(nibbles), 2):
+        o += chr(16 * nibbles[i] + nibbles[i + 1])
+    return o
+
+
+def unpack_to_nibbles(bindata):
+    """unpack packed binary data to nibbles
+
+    :param bindata: binary packed from nibbles
+    :return: nibbles sequence, may have a terminator
+    """
+    o = bin_to_nibbles(bindata)
     flags = o[0]
     if flags & 2:
-        o.append(16)
+        o.append(NIBBLE_TERMINATOR)
     if flags & 1 == 1:
         o = o[1:]
     else:
@@ -85,12 +94,28 @@ def bin_to_hexarraykey(bindata):
     return o
 
 
-def encode_node(nd):
-    if isinstance(nd, str):
-        return nd.encode('hex')
-    else:
-        return rlp.encode(nd).encode('hex')
+(
+    KEY_VALUE_NODE,
+    DIVERGE_NODE,
+    VALUE
+) = tuple(range(3))
 
+def starts_with(full, part):
+    ''' test whether the items in the part is
+    the leading items of the full
+    '''
+    if len(full) < len(part):
+        return False
+    return full[:len(part)] == part
+
+def check_node_type(node):
+    '''
+    :param node: rlp encoded node
+    '''
+    node = self._rlp_decode(node)
+    if isinstance(node, str):
+        return VALUE
+    return KEY_VALUE_NODE if len(node) == 2 else DIVERGE_NODE
 
 class Trie(object):
     databases = {}
@@ -107,25 +132,45 @@ class Trie(object):
 
     def _get(self, node, key):
         """ get value inside a node
-        """
 
-        # leaf node, note the two cases
-        if len(key) == 0 or not node:
-            return node
+        :param key: nibble list without terminator
+        """
+        if not node:
+            return None
 
         curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
 
-        if len(curr_node) == 2:
+        node_type = check_node_type(curr_node)
+        assert node_type != VALUE
+
+        if node_type == DIVERGE_NODE:
+            # already reach the expected node
+            if not key:
+                return self._rlp_decode(curr_node[-1])
+            return self._get(curr_node[key[0]], key[1:])
+
+        elif node_type == KEY_VALUE_NODE:
+            if not key:
+                return None
+
             (curr_key, curr_val) = curr_node
-            curr_key = bin_to_hexarraykey(curr_key)
-            if len(key) >= len(curr_key) and curr_key == key[:len(curr_key)]:
+            curr_key = unpack_to_nibbles(curr_key)
+
+            # already reach the expected node
+            if curr_key[-1] == NIBBLE_TERMINATOR:
+                # found
+                if key == curr_key[:-1]:
+                    return self._rlp_decode(curr_val)
+                else:
+                    return None
+
+            # traverse child nodes
+            if starts_with(key, curr_key):
                 return self._get(curr_val, key[len(curr_key):])
             else:
-                return ''
-        elif len(curr_node) == 17:
-            return self._get(curr_node[key[0]], key[1:])
+                return None
 
     def _rlp_encode(self, node, root=False):
         rlpnode = rlp.encode(node)
@@ -146,86 +191,127 @@ class Trie(object):
         else:
             return rlp.decode(self.db.get(node))
 
-    def _update_or_delete(self, node, key, value):
-        """ update item inside a node
-        """
-        if value != '':
-            return self._update(node, key, value)
-        else:
-            return self.delete(node, key)
-
     def _update(self, node, key, value):
         """ update item inside a node
 
-        return the updated node with rlp encoded
+        :param node: is a rlp encoded binary array
+        :param key: nibble list without terminator
+        :return: the updated node with rlp encoded
         """
-
-        if len(key) == 0:
-            return value
-
-        # leaf node
-        if not node:
-            newnode = [hexarraykey_to_bin(key), value]
-            return self._rlp_encode(newnode)
-
         # decode the node
         curr_node = self._rlp_decode(node)
         if not curr_node:
             raise Exception("node not found in database")
 
-        # node is a 17 items sequence
-        if len(curr_node) == 17:
-            items = [curr_node[i] for i in range(17)]
-            items[key[0]] = self._update(
-                curr_node[key[0]], key[1:], value)
-            return self._rlp_encode(items)
+        node_type = check_node_type(curr_node)
 
-        # node is (key, value)
-        return self._update_kv_node(curr_node, key, value)
+        if node_type == DIVERGE_NODE:
+            return self._update_diverge_node(curr_node, key, value)
+        elif node_type == KEY_VALUE_NODE:
+            return self._update_kv_node(curr_node, key, value)
+
+        # value node
+
+        if not key:
+            return self._rlp_encode(value)
+
+        if not node:
+            # a new key value node
+            append_terminator(key)
+            new_node = [pack_nibbles(key), self._rlp_encode(value)]
+        else:
+            # a new diverge node
+            new_node = [''] * 17
+            new_node[-1] = node
+            new_node[key[0]] = self._rlp_encode(value)
+        return self._rlp_encode(new_node)
+
+
+    def _update_diverge_node(self, diverge_node, key, value):
+        '''when the current node is a 17 items diverge node
+
+        :param diverge_node: an already rlp decoded (key, value) tuple
+        :param key: nibble list without terminator
+        :return: the updated node with rlp encoded
+        '''
+        # already the expected node
+        if len(key) == 0:
+            curr_node[-1] = self._rlp_encode(value)
+            return self._rlp_encode(curr_node)
+
+        # need to substitue the slot
+        slot = self._rlp_decode(curr_node[key[0]])
+        slot_type = check_node_type(slot)
+        if slot_type == VALUE:
+            curr_node[key[0]] = self._rlp_encode(value)
+        else:
+            curr_node[key[0]] = self._update(curr_node[key[0]], key[1:], value)
+        return self._rlp_encode(curr_node)
 
     def _update_kv_node(self, kv_node, key, value):
         '''when the current node is a (key, value) node
 
-        kv_node is an already rlp decoded (key, value) tupple
+        :param kv_node: an already rlp decoded (key, value) tuple
+        :param key: nibble list without terminator
+        :return: the updated node with rlp encoded
         '''
-        # node is a (key, value) pair
-        (curr_key, curr_val) = kv_node
-        curr_key = bin_to_hexarraykey(curr_key)
+        (curr_key_bin, curr_val) = kv_node
+        curr_key = unpack_to_nibbles(curr_key_bin)
 
-        # already leaf node
-        if key == curr_key:
+        # already reach the expected node
+        if curr_key[-1] == NIBBLE_TERMINATOR and key == curr_key[:-1]:
             return self._rlp_encode(
-                [hexarraykey_to_bin(key), value])
+                [curr_key_bin, self._rlp_encode(value)])
 
-        # find common prefix
-        next_key_index = len(curr_key)
+        # rearrange (curr_key, curr_val) and (key, val)
+        curr_key.remove(NIBBLE_TERMINATOR)
+        curr_val = self._rlp_decode(curr_val)
+
+        if starts_with(cur_key, key):
+            parent_key, parent_val = curr_key, curr_val
+            child_key, child_val = key, value
+            kv_diverge = True
+        elif starts_with(key, cur_key):
+            parent_key, parent_val = key, val
+            child_key, child_val = curr_key, curr_val
+            kv_diverge = True
+        # the first level is KEY_VALUE_NODE, the second level is KEY_VALUE_NODE
+        if kv_diverge:
+
+
+
+
+        curr_key = cur_key[:-1]
+
+        # find diverge index
+        diverge_index = len(curr_key) - 1
         for i in range(len(curr_key)):
             if key[i] != curr_key[i]:
-                next_key_index = i
+                diverge_index = i
                 break
 
-        # key starts with curr_key
-        if next_key_index == len(curr_key):
+        # key starts with curr_key, note the latest different one for key is T
+        if diverge_index == len(curr_key):
             curr_value = self._rlp_encode(
                 self._update(curr_val, key[len(curr_key):], value))
             return self._rlp_encode(
-                [hexarraykey_to_bin(curr_key), curr_val])
+                [pack_nibbles(curr_key), curr_val])
 
         # convert the node to a 17 items one
         curr_node = [''] * 17
-        key_derived_value = self._update('', key[next_key_index + 1:], value)
-        curr_key_derived_value = self._update('', curr_key[next_key_index + 1:],
+        key_derived_value = self._update('', key[diverge_index + 1:], value)
+        curr_key_derived_value = self._update('', curr_key[diverge_index + 1:],
                                                curr_val)
-        curr_node[key[next_key_index]] = key_derived_value
-        curr_node[curr_key[next_key_index]] = curr_key_derived_value
+        curr_node[key[diverge_index]] = key_derived_value
+        curr_node[curr_key[diverge_index]] = curr_key_derived_value
         curr_node_encoded = self._rlp_encode(curr_node)
 
-        if next_key_index == 0:
+        if diverge_index == 0:
             # no common prefix
             return curr_node_encoded
         else:
             # create a new node with common prefix as key
-            new_node = [hexarraykey_to_bin(key[:next_key_index]),
+            new_node = [pack_nibbles(key[:diverge_index]),
                         curr_node_encoded]
             return self._rlp_encode(new_node)
 
@@ -243,15 +329,15 @@ class Trie(object):
 
         if len(curr_node) == 2:
             (curr_key, curr_val) = curr_node
-            curr_key = bin_to_hexarraykey(curr_key)
+            curr_key = unpack_to_nibbles(curr_key)
             if key == curr_key:
                 return ''
             elif key[:len(curr_key)] == curr_key:
                 newhash = self.delete(curr_val, key[len(curr_key):])
                 childnode = self._rlp_decode(newhash)
                 if len(childnode) == 2:
-                    newkey = curr_key + bin_to_hexarraykey(childnode[0])
-                    newnode = [hexarraykey_to_bin(newkey), childnode[1]]
+                    newkey = curr_key + unpack_to_nibbles(childnode[0])
+                    newnode = [pack_nibbles(newkey), childnode[1]]
                 else:
                     newnode = [curr_node[0], newhash]
                 return self._rlp_encode(newnode)
@@ -267,18 +353,18 @@ class Trie(object):
                     onlynode = i
                 else:
                     onlynode = -2
-        if onlynode == 16:
-            newnode2 = [hexarraykey_to_bin([16]), newnode[onlynode]]
+        if onlynode == NIBBLE_TERMINATOR:
+            newnode2 = [pack_nibbles([NIBBLE_TERMINATOR]), newnode[onlynode]]
         elif onlynode >= 0:
             childnode = self._rlp_decode(newnode[onlynode])
             if not childnode:
                 raise Exception("?????")
             if len(childnode) == 17:
                 newnode2 = [
-                    hexarraykey_to_bin([onlynode]), newnode[onlynode]]
+                    pack_nibbles([onlynode]), newnode[onlynode]]
             elif len(childnode) == 2:
-                newkey = [onlynode] + bin_to_hexarraykey(childnode[0])
-                newnode2 = [hexarraykey_to_bin(newkey), childnode[1]]
+                newkey = [onlynode] + unpack_to_nibbles(childnode[0])
+                newnode2 = [pack_nibbles(newkey), childnode[1]]
         else:
             newnode2 = newnode
         return self._rlp_encode(newnode2)
@@ -292,8 +378,8 @@ class Trie(object):
         if not curr_node:
             raise Exception("node not found in database")
         if len(curr_node) == 2:
-            key = hexarraykey_to_bin(curr_node[0])
-            if key[-1] == 16:
+            key = pack_nibbles(curr_node[0])
+            if key[-1] == NIBBLE_TERMINATOR:
                 return 1
             else:
                 return self._get_size(curr_node[1])
@@ -317,15 +403,15 @@ class Trie(object):
         if not curr_node:
             raise Exception("node not found in database")
         if len(curr_node) == 2:
-            lkey = bin_to_hexarraykey(curr_node[0])
+            lkey = unpack_to_nibbles(curr_node[0])
             o = {}
-            if lkey[-1] == 16:
+            if lkey[-1] == NIBBLE_TERMINATOR:
                 o[curr_node[0]] = curr_node[1]
             else:
                 d = self._to_dict(curr_node[1])
                 for v in d:
-                    subkey = bin_to_hexarraykey(v)
-                    totalkey = hexarraykey_to_bin(lkey + subkey)
+                    subkey = unpack_to_nibbles(v)
+                    totalkey = pack_nibbles(lkey + subkey)
                     o[totalkey] = d[v]
             return o
         elif len(curr_node) == 17:
@@ -333,11 +419,11 @@ class Trie(object):
             for i in range(16):
                 d = self._to_dict(curr_node[i])
                 for v in d:
-                    subkey = bin_to_hexarraykey(v)
-                    totalkey = hexarraykey_to_bin([i] + subkey)
+                    subkey = unpack_to_nibbles(v)
+                    totalkey = pack_nibbles([i] + subkey)
                     o[totalkey] = d[v]
             if curr_node[16]:
-                o[chr(16)] = curr_node[16]
+                o[chr(NIBBLE_TERMINATOR)] = curr_node[16]
             return o
         else:
             raise Exception("bad curr_node! " + curr_node)
@@ -347,15 +433,14 @@ class Trie(object):
         o = {}
         for v in d:
             curr_val = ''.join(['0123456789abcdef'[x]
-                         for x in bin_to_hexarraykey(v)[:-1]])
+                         for x in unpack_to_nibbles(v)[:-1]])
             if not as_hex:
                 curr_val = curr_val.decode('hex')
             o[curr_val] = d[v]
         return o
 
     def get(self, key):
-        return self._get(
-            self.root, bin_to_nibble_list_with_terminator(str(key)))
+        return self._get(self.root, bin_to_nibbles(str(key)))
 
     def get_size(self):
         return self._get_size(self.root)
@@ -366,11 +451,23 @@ class Trie(object):
             raise Exception("Key and value must be strings")
         if not key:
             raise Exception("Key should not be blank")
-        self.root = self._update_or_delete(
-            self.root, bin_to_nibble_list_with_terminator(str(key)), str(value))
+
+        if value != '':
+            self.root = self._update(node, key, value)
+        else:
+            self.root = self.delete(node, key)
+
+        return self.root
 
 if __name__ == "__main__":
     import sys
+
+    def encode_node(nd):
+        if isinstance(nd, str):
+            return nd.encode('hex')
+        else:
+            return rlp.encode(nd).encode('hex')
+
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
             t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
