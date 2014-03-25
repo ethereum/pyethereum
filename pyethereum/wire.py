@@ -280,7 +280,7 @@ class WireProtocol(object):
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
-            logger.debug('received peers: {0}:{1}'.format(ip, port))
+            #logger.debug('received peers: {0}:{1}'.format(ip, port))
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):

@@ -36,6 +36,7 @@ class Peer(threading.Thread):
         self.hello_received = False
         self.hello_sent = False
         self.last_valid_packet_received = time.time()
+        self.last_asked_for_peers = 0
         self.last_pinged = 0
 
     def connection(self):
@@ -111,6 +112,8 @@ class PeerManager(threading.Thread):
 
     max_silence = 5  # how long before pinging a peer
     max_ping_wait = 1.  # how long to wait before disconenctiong after ping
+    max_ask_for_peers_elapsed = 30 # how long before asking for peers
+
 
     def __init__(self, config):
         threading.Thread.__init__(self)
@@ -209,15 +212,16 @@ class PeerManager(threading.Thread):
                 logger.debug('pinging silent peer {0}'.format(peer))
                 logger.debug('# connected peers: {0}/{1}'.format(len(self._connected_peers), num_peers))
                 logger.debug('# candidates: {0}'.format(len(self.get_known_peer_addresses())))
-
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
                     peer.last_pinged = now
 
-        # report every n seconds
-        if False:
-            logger.debug('num peers: {0}'.format(len(self._connected_peers)))
-            logger.debug('seen peers: {0}'.format(len(self._seen_peers)))
+            # ask for peers
+            if now - peer.last_asked_for_peers > self.max_ask_for_peers_elapsed:
+                with peer.lock:
+                    peer.protocol.send_GetPeers(peer)
+                    peer.last_asked_for_peers = now
+
 
     def run(self):
         while not self.stopped():
