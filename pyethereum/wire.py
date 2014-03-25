@@ -1,9 +1,10 @@
 import struct
+import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 
-ienc4 = lambda x: struct.pack('>i', x)  # 4 bytes big endian integer
+ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 
 
 def list_ienc(lst):
@@ -27,18 +28,17 @@ def dump_packet(packet):
         return ['DUMP failed', packet]
 
 
-class WireProtocol():
+class WireProtocol(object):
 
     """
     Translates between the network and the local data
-
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
     """
 
     cmd_map = dict(((0x00, 'Hello'),
                    (0x01, 'Disconnect'),
                    (0x02, 'Ping'),
-                   (0x02, 'Pong'),
+                   (0x03, 'Pong'),
                    (0x10, 'GetPeers'),
                    (0x11, 'Peers'),
                    (0x12, 'Transactions'),
@@ -62,6 +62,7 @@ class WireProtocol():
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
     SYNCHRONIZATION_TOKEN = 0x22400891
+
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
@@ -69,7 +70,7 @@ class WireProtocol():
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
     NODE_ID = None
 
-    # NEED NODE_ID in order to work with Ethereum(++)/
+    # NEED NODE_ID in order to work with Ethereum(++)/ FIXME: replace by pubkey
     NODE_ID = 'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9'
 
     def __init__(self, peermgr, config):
@@ -87,19 +88,23 @@ class WireProtocol():
         """
 
         # check header
-        if not packet.startswith(ienc(self.SYNCHRONIZATION_TOKEN)):
-            print(self, 'check header failed')
-            return self.send_Disconnect(peer, reason='Bad protocol')
+        if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
+            print(
+                self, 'check header failed, skipping message, sync token was', idec(packet[:4]))
+            return
 
         # unpack message
         payload_len = idec(packet[4:8])
-        assert 8 + payload_len <= len(packet)
+        # assert 8 + payload_len <= len(packet) # this get's sometimes raised!?
         data = rlp.decode(packet[8:8 + payload_len])
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
             print(self, 'check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
+
+        # good peer
+        peer.last_valid_packet_received = time.time()
 
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]
@@ -185,10 +190,15 @@ class WireProtocol():
 
         # TODO add to known peers list
         peer.hello_received = True
+        if len(data) == 6:
+            peer.node_id = data[5]
 
         # reply with hello if not send
         if not peer.hello_sent:
             self.send_Hello(peer)
+
+        # ask for peers
+        self.send_GetPeers(peer)
 
     def send_Ping(self, peer):
         """
@@ -225,8 +235,54 @@ class WireProtocol():
         if reason:
             payload.append(self.disconnect_reasons_map[reason])
         self.send_packet(peer, payload)
+        # end connection
+        time.sleep(2)
+        self.peermgr.remove_peer(peer)
 
     def rcv_Disconnect(self, peer, data):
         if len(data):
             reason = self.disconnect_reasons_map_by_id[idec(data[0])]
         self.peermgr.remove_peer(peer)
+
+    def rcv_GetPeers(self, peer, data):
+        """
+        [0x10]
+        Request the peer to enumerate some known peers for us to connect to.
+        This should include the peer itself.
+        """
+        self.send_Peers(peer)
+
+    def send_GetPeers(self, peer):
+        self.send_packet(peer, [0x10])
+
+    def rcv_Peers(self, peer, data):
+        """
+        [0x11, [IP1, Port1, Id1], [IP2, Port2, Id2], ... ]
+        Specifies a number of known peers. IP is a 4-byte array 'ABCD' that
+        should be interpreted as the IP address A.B.C.D. Port is a 2-byte array
+        that should be interpreted as a 16-bit big-endian integer.
+        Id is the 512-bit hash that acts as the unique identifier of the node.
+        """
+        for ip, port, pid in data:
+            ip = '.'.join(str(ord(b)) for b in ip)
+            port = idec(port)
+            print(self, 'received peers', ip, port, pid)
+            self.peermgr.add_peer_address(ip, port, pid)
+
+    def send_Peers(self, peer):
+        data = ['0x11']
+        for ip, port, pid in self.peermgr.get_known_peer_addresses():
+            ip = ''.join(chr(int(x)) for x in ip.split('.'))
+            port = ienc(port)
+            data.append([ip, port, pid])
+        self.send_packet(peer, data)
+
+    def rcv_Blocks(self, peer, data):
+        """
+        [0x13, [block_header, transaction_list, uncle_list], ... ]
+        Specify (a) block(s) that the peer should know about. The items in the list
+        (following the first item, 0x13) are blocks in the format described in the
+        main Ethereum specification.
+        """
+        for e in data:
+            header, transaction_list, uncle_list = e
