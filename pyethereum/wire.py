@@ -3,8 +3,10 @@ import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
+import logging
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
+logger = logging.getLogger(__name__)
 
 
 def list_ienc(lst):
@@ -17,15 +19,24 @@ def list_ienc(lst):
     return lst
 
 
+def lrlp_decode(data):
+    "always return a list"
+    d = rlp.decode(data)
+    if isinstance(d, str):
+        d = [d]
+    return d
+
+
 def dump_packet(packet):
     try:
         header = idec(packet[:4])
         payload_len = idec(packet[4:8])
-        data = rlp.decode(packet[8:8 + payload_len])
-        cmd = WireProtocol.cmd_map.get(idec(data.pop(0)), 'unknown')
-        return [header, payload_len, cmd] + data
-    except:
-        return ['DUMP failed', packet]
+        data = lrlp_decode(packet[8:8 + payload_len])
+        cmd = WireProtocol.cmd_map.get(
+            idec(data[0]), 'unknown %s' % idec(data[0]))
+        return [header, payload_len, cmd] + data[1:]
+    except Exception as e:
+        return ['DUMP failed', packet, e]
 
 
 class WireProtocol(object):
@@ -89,18 +100,18 @@ class WireProtocol(object):
 
         # check header
         if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            print(
-                self, 'check header failed, skipping message, sync token was', idec(packet[:4]))
+            logger.debug('check header failed, skipping message, sync token was {0}'
+                         .format(idec(packet[:4])))
             return
 
         # unpack message
         payload_len = idec(packet[4:8])
         # assert 8 + payload_len <= len(packet) # this get's sometimes raised!?
-        data = rlp.decode(packet[8:8 + payload_len])
+        data = lrlp_decode(packet[8:8 + payload_len])
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
-            print(self, 'check cmd failed')
+            logger.debug('check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
 
         # good peer
@@ -109,7 +120,7 @@ class WireProtocol(object):
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]
         if not hasattr(self, func_name):
-            print(self, 'unknown cmd', func_name)
+            logger.debug('unknown cmd \'{0}\''.format(func_name))
             return
             """
             return self.send_Disconnect(
@@ -140,7 +151,7 @@ class WireProtocol(object):
                    self.PROTOCOL_VERSION,
                    self.NETWORK_ID,
                    self.CLIENT_ID,
-                   self.config.getint('server', 'port'),
+                   self.config.getint('network', 'listen_port'),
                    self.CAPABILITIES]
         if self.NODE_ID:
             payload.append(self.NODE_ID)
@@ -229,7 +240,7 @@ class WireProtocol(object):
         (read: wait 2 seconds) to disconnect to before disconnecting themselves.
         REASON is an optional integer specifying one of a number of reasons
         """
-        print(self, 'sending disconnect because', reason)
+        logger.debug('sending disconnect because {0}'.format(reason))
         assert not reason or reason in self.disconnect_reasons_map
         payload = [0x01]
         if reason:
@@ -262,20 +273,23 @@ class WireProtocol(object):
         should be interpreted as the IP address A.B.C.D. Port is a 2-byte array
         that should be interpreted as a 16-bit big-endian integer.
         Id is the 512-bit hash that acts as the unique identifier of the node.
+        
+        IPs look like this: ['6', '\xcc', '\n', ')']
         """
         for ip, port, pid in data:
-            ip = '.'.join(str(ord(b)) for b in ip)
+            assert isinstance(ip, list)
+            ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
-            print(self, 'received peers', ip, port, pid)
+            #logger.debug('received peers: {0}:{1}'.format(ip, port))
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
-        data = ['0x11']
+        data = [0x11]
         for ip, port, pid in self.peermgr.get_known_peer_addresses():
-            ip = ''.join(chr(int(x)) for x in ip.split('.'))
-            port = ienc(port)
+            ip = list((chr(int(x)) for x in ip.split('.')))
             data.append([ip, port, pid])
-        self.send_packet(peer, data)
+        if len(data) > 1:
+            self.send_packet(peer, data)  # FIXME
 
     def rcv_Blocks(self, peer, data):
         """
