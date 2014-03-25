@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import os
 import time
 import signal
 import Queue
@@ -9,14 +8,11 @@ from optparse import OptionParser
 import socket
 import threading
 import traceback
-from itertools import imap
 from wire import WireProtocol, dump_packet
+import logging
 
 
-def plog(*args):
-    ts = time.strftime("[%d/%m/%Y-%H:%M:%S]")
-    sys.stderr.write(ts + " " + " ".join(imap(str, args)) + "\n")
-    sys.stderr.flush()
+logger = logging.getLogger(__name__)
 
 
 class Peer(threading.Thread):
@@ -63,7 +59,7 @@ class Peer(threading.Thread):
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
         except IOError as e:
-            plog(self, "problem shutting down", self.ip, self.port, e)
+            logger.error("problem shutting down {0}:{1} \"{2}\"".format(self.ip, self.port, str(e)))
         self._connection.close()
 
     def send_packet(self, response):
@@ -90,19 +86,20 @@ class Peer(threading.Thread):
             except Queue.Empty:
                 spacket = None
             while spacket:
-                plog(self, 'send packet', str(dump_packet(spacket))[:60], )
+
+                logger.debug('send packet {0}'.format(str(dump_packet(spacket))[:60]))
                 try:
                     n = self.connection().send(spacket)
                     spacket = spacket[n:]
                 except IOError as e:
-                    plog(self, 'failed', e)
+                    logger.error('failed \"{0}\"'.format(str(e)))
                     self.stop()
                     break
 
             # receive packet
             rpacket = self.receive()
             if rpacket:
-                plog(self, 'received packet', str(dump_packet(rpacket))[:60], '...')
+                logger.debug('received packet {0}'.format(str(dump_packet(rpacket))[:60]))
                 self.protocol.rcv_packet(self, rpacket)
 
             # pause
@@ -162,15 +159,15 @@ class PeerManager(threading.Thread):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(1)
-        plog(self, 'connecting', host, port)
+        logger.debug('connecting {0}:{1}'.format(host, port))
         try:
             sock.connect((host, port))
         except Exception as e:
-            plog(self, 'failed', e)
+            logger.error('failed \"{0}\"'.format(str(e)))
             return False
         sock.settimeout(.1)
         ip, port = sock.getpeername()
-        plog(self, 'connected', ip, port)
+        logger.debug('connected {0}:{1}'.format(ip, port))
         peer = Peer(self, sock, ip, port)
         self.add_peer(peer)
         peer.start()
@@ -182,15 +179,13 @@ class PeerManager(threading.Thread):
     def manage_connections(self):
         num_peers = self.config.getint('network', 'num_peers')
         if len(self._connected_peers) < num_peers:
+            logger.debug('not enough peers: {0}'.format(len(self._connected_peers)))
             candidates = self.get_known_peer_addresses().difference(
                 self.get_connected_peer_addresses())
-            #plog(self, 'not enough peers', len(self._connected_peers))
-            #plog(self, 'num candidates:', len(candidates))
-            #plog([ipn[:2] for ipn in candidates])
-            # filter local port from candidates
             candidates = [
                 ipn for ipn in candidates if not ipn[:2] == self.local_address]
-            #plog( self.local_address, [ipn[:2] for ipn in candidates])
+            logger.debug('num candidates: {0}'.format(len(candidates)))
+
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
@@ -205,19 +200,15 @@ class PeerManager(threading.Thread):
             now = time.time()
             dt_ping = now - peer.last_pinged
             dt_seen = now - peer.last_valid_packet_received
-
             # if ping was sent and not returned within last second
             if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
-                plog(self, peer, 'last ping:', dt_ping, "last seen", dt_seen)
-                plog(
-                    self, peer, 'did not respond to ping, disconnecting', peer.ip, peer.port)
+                logger.debug('{0} last ping: {1} last seen: {2}'.format(peer, dt_ping, dt_seen))
+                logger.debug('{0} did not respond to ping, disconnecting {1}:{2}'.format(peer, peer.ip, peer.port))
                 self.remove_peer(peer)
             elif min(dt_seen, dt_ping) > self.max_silence:
-                plog(self, peer, 'pinging silent peer')
-
-
-                plog(self, '# connected peers %d/%d' % (len(self._connected_peers), num_peers))
-                plog(self, '# candidates:', len(self.get_known_peer_addresses()))
+                logger.debug('pinging silent peer {0}'.format(peer))
+                logger.debug('# connected peers: {0}/{1}'.format(len(self._connected_peers), num_peers))
+                logger.debug('# candidates: {0}'.format(len(self.get_known_peer_addresses())))
 
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
@@ -225,8 +216,8 @@ class PeerManager(threading.Thread):
 
         # report every n seconds
         if False:
-            plog(self, 'num peers', len(self._connected_peers))
-            plog(self, 'seen peers', len(self._seen_peers))
+            logger.debug('num peers: {0}'.format(len(self._connected_peers)))
+            logger.debug('seen peers: {0}'.format(len(self._seen_peers)))
 
     def run(self):
         while not self.stopped():
@@ -251,11 +242,11 @@ class TcpServer(threading.Thread):
         sock.listen(5)
         self.sock = sock
         self.ip, self.port = sock.getsockname()
-        plog(self, "TCP server started", self.ip, self.port)
+        logger.debug("TCP server started {0}:{1}".format(self.ip, self.port))
 
     def run(self):
         while not self.peer_manager.stopped():
-            plog(self, 'in run loop')
+            logger.debug('in run loop')
             try:
 
                 connection, (host, port) = self.sock.accept()
@@ -269,9 +260,9 @@ class TcpServer(threading.Thread):
                 peer = Peer(self.peer_manager, connection, host, None)
                 self.peer_manager.add_peer(peer)
                 peer.start()
-                plog(self, "new TCP connection", connection, host, port)
+                logger.debug("new TCP connection {0} {1}:{2}".format(connection, host, port))
             except BaseException as e:
-                plog(self, "cannot start TCP session", str(e), host, port)
+                logger.debug("cannot start TCP session \"{0}\" {1}:{2} ".format(str(e), host, port))
                 traceback.print_exc(file=sys.stdout)
                 connection.close()
                 time.sleep(0.1)
@@ -343,6 +334,13 @@ def create_config():
 def main():
     config = create_config()
 
+    # Setup logging according to config:
+    if config.getint('misc', 'verbosity') > 1:
+        print "verbosity set!!!"
+        logging.basicConfig(format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s: %(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(message)s', level=logging.INFO)
+
     # peer manager
     peer_manager = PeerManager(config=config)
 
@@ -352,7 +350,7 @@ def main():
                                config.get('network', 'listen_host'),
                                config.getint('network', 'listen_port'))
     except IOError as e:
-        plog("Could not start TCP server", e)
+        logger.error("Could not start TCP server: \"{0}\"", str(e))
         sys.exit(1)
 
     peer_manager.local_address = (tcp_server.ip, tcp_server.port)
@@ -361,7 +359,7 @@ def main():
 
     # handle termination signals
     def signal_handler(signum=None, frame=None):
-        plog('Signal handler called with signal', signum)
+        logger.debug('Signal handler called with signal {0}'.format(signum))
         peer_manager.stop()
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT, signal.SIGINT]:
         signal.signal(sig, signal_handler)
@@ -376,7 +374,7 @@ def main():
     while not peer_manager.stopped():
         time.sleep(0.1)
 
-    plog('extiting')
+    logger.info('extiting')
     # tcp_server.join() # does not work!
     peer_manager.join()
 

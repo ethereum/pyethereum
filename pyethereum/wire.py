@@ -3,8 +3,10 @@ import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
+import logging
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
+logger = logging.getLogger(__name__)
 
 
 def list_ienc(lst):
@@ -98,8 +100,8 @@ class WireProtocol(object):
 
         # check header
         if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            print(
-                self, 'check header failed, skipping message, sync token was', idec(packet[:4]))
+            logger.debug('check header failed, skipping message, sync token was {0}'
+                         .format(idec(packet[:4])))
             return
 
         # unpack message
@@ -109,7 +111,7 @@ class WireProtocol(object):
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
-            print(self, 'check cmd failed')
+            logger.debug('check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
 
         # good peer
@@ -118,7 +120,7 @@ class WireProtocol(object):
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]
         if not hasattr(self, func_name):
-            print(self, 'unknown cmd', func_name)
+            logger.debug('unknown cmd \'{0}\''.format(func_name))
             return
             """
             return self.send_Disconnect(
@@ -238,7 +240,7 @@ class WireProtocol(object):
         (read: wait 2 seconds) to disconnect to before disconnecting themselves.
         REASON is an optional integer specifying one of a number of reasons
         """
-        print(self, 'sending disconnect because', reason)
+        logger.debug('sending disconnect because {0}'.format(reason))
         assert not reason or reason in self.disconnect_reasons_map
         payload = [0x01]
         if reason:
@@ -278,6 +280,7 @@ class WireProtocol(object):
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
+            logger.debug('received peers: {0}:{1}'.format(ip, port))
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
