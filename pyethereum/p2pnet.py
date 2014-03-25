@@ -5,6 +5,7 @@ import time
 import signal
 import Queue
 import ConfigParser
+from optparse import OptionParser
 import socket
 import threading
 import traceback
@@ -179,7 +180,7 @@ class PeerManager(threading.Thread):
         return True
 
     def manage_connections(self):
-        if len(self._connected_peers) < self.config.getint('peers', 'num'):
+        if len(self._connected_peers) < self.config.getint('network', 'num_peers'):
             candidates = self.get_known_peer_addresses().difference(
                 self.get_connected_peer_addresses())
             #plog(self, 'not enough peers', len(self._connected_peers))
@@ -256,7 +257,7 @@ class TcpServer(threading.Thread):
             try:
 
                 connection, (host, port) = self.sock.accept()
-            except:
+            except IOError as e:
                 traceback.print_exc(file=sys.stdout)
                 time.sleep(0.1)
                 continue
@@ -275,22 +276,64 @@ class TcpServer(threading.Thread):
 
 
 def create_config():
-    config = ConfigParser.ConfigParser()
-    # set some defaults, which will be overwritten by the config file
-    config.add_section('server')
-    config.set('server', 'host', 'localhost')
-    config.set('server', 'port', '30303')
-    config.add_section('peers')
-    config.set('peers', 'num', '5')
-    config.add_section('connect')
-    config.set('connect', 'host', '127.0.0.1')
-    #config.set('connect', 'host', '54.201.28.117')
-    config.set('connect', 'port', '30303')
-    config.read([os.path.join(p, '.pyetherum.conf') for p in ('~/', '')])
 
-    if len(sys.argv) > 1:
-        config.read(sys.argv[1])  # read optional
-        plog('reading config %s' % sys.argv[1])
+    config = ConfigParser.ConfigParser()
+    # set some defaults, which may be overwritten
+    config.add_section('network')
+    config.set('network', 'listen_host', 'localhost')
+    config.set('network', 'listen_port', '30303')
+    config.set('network', 'num_peers', '5')
+    config.set('network', 'remote_port', '30303')
+    config.set('network', 'remote_host', '')
+
+    config.add_section('misc')
+    config.set('misc', 'verbosity', '1')
+    config.set('misc', 'config_file', None)
+
+    usage = "usage: %prog [options]"
+    parser = OptionParser(usage=usage,  version="%prog 0.1a")
+    parser.add_option("-l", "--listen",
+                      dest="listen_port",
+                      default=config.get('network', 'listen_port'),
+                      help="<port>  Listen on the given port for incoming connected (default: 30303)."
+                      )
+    parser.add_option("-r", "--remote",
+                      dest="remote_host",
+                      help="<host> Connect to remote host"
+                      )
+    parser.add_option("-p", "--port",
+                      dest="remote_port",
+                      default=config.get('network', 'remote_port'),
+                      help="<port> Connect to remote port (default: 30303)"
+                      )
+    parser.add_option("-v", "--verbose",
+                      dest="verbosity",
+                      default=config.get('misc', 'verbosity'),
+                      help="<0 - 9>  Set the log verbosity from 0 to 9 (default: 1)")
+    parser.add_option("-x", "--peers",
+                      dest="num_peers",
+                      default=config.get('network', 'num_peers'),
+                      help="<number>  Attempt to connect to given number of peers (default: 5)")
+    parser.add_option("-C", "--config",
+                      dest="config_file",
+                      help="read coniguration")
+
+    (options, args) = parser.parse_args()
+    # set network options
+    for attr in ('listen_port', 'remote_host', 'remote_port', 'num_peers'):
+        config.set('network', attr, getattr(
+            options, attr) or config.get('network', attr))
+    # set misc options
+    for attr in ('verbosity', 'config_file'):
+        config.set(
+            'misc', attr, getattr(options, attr) or config.get('misc', attr))
+
+    if len(args) != 0:
+        parser.error("wrong number of arguments")
+        sys.exit(1)
+
+    if config.get('misc', 'config_file'):
+        config.read(config.get('misc', 'config_file'))
 
     return config
 
@@ -304,8 +347,8 @@ def main():
     # start tcp server
     try:
         tcp_server = TcpServer(peer_manager,
-                               config.get('server', 'host'),
-                               config.getint('server', 'port'))
+                               config.get('network', 'listen_host'),
+                               config.getint('network', 'listen_port'))
     except IOError as e:
         plog("Could not start TCP server", e)
         sys.exit(1)
@@ -322,10 +365,10 @@ def main():
         signal.signal(sig, signal_handler)
 
     # connect peer
-    if config.get('connect', 'host'):
+    if config.get('network', 'remote_host'):
         peer_manager.connect_peer(
-            config.get('connect', 'host'),
-            config.getint('connect', 'port'))
+            config.get('network', 'remote_host'),
+            config.getint('network', 'remote_port'))
 
     # loop
     while not peer_manager.stopped():

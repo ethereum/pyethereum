@@ -149,7 +149,7 @@ class WireProtocol(object):
                    self.PROTOCOL_VERSION,
                    self.NETWORK_ID,
                    self.CLIENT_ID,
-                   self.config.getint('server', 'port'),
+                   self.config.getint('network', 'listen_port'),
                    self.CAPABILITIES]
         if self.NODE_ID:
             payload.append(self.NODE_ID)
