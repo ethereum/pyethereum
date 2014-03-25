@@ -270,10 +270,11 @@ class WireProtocol(object):
         Id is the 512-bit hash that acts as the unique identifier of the node.
         """
         for ip, port, pid in data:
-            ip = '.'.join(str(ord(b)) for b in ip)
-            port = idec(port)
-            print(self, 'received peers', ip, port, pid)
-            self.peermgr.add_peer_address(ip, port, pid)
+            if len(ip) == 4: 
+                ip = '.'.join(str(ord(b)) for b in ip)
+                port = idec(port)
+                print(self, 'received peer', ip, port, pid)
+                self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
         data = ['0x11']
