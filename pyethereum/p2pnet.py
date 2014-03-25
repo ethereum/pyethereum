@@ -39,6 +39,9 @@ class Peer(threading.Thread):
         self.last_asked_for_peers = 0
         self.last_pinged = 0
 
+    def __repr__(self):
+        return "<Peer(%s:%d)>" % (self.ip, self.port)
+
     def connection(self):
         if self.stopped():
             raise IOError("Connection was stopped")
@@ -46,6 +49,7 @@ class Peer(threading.Thread):
             return self._connection
 
     def stop(self):
+        logger.info('disconnected: {0}'.format(repr(self)))
         with self.lock:
             if self._stopped:
                 return
@@ -60,7 +64,8 @@ class Peer(threading.Thread):
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
         except IOError as e:
-            logger.error("problem shutting down {0}:{1} \"{2}\"".format(self.ip, self.port, str(e)))
+            logger.debug(
+                "shutting down failed {0} \"{1}\"".format(repr(self), str(e)))
         self._connection.close()
 
     def send_packet(self, response):
@@ -88,19 +93,22 @@ class Peer(threading.Thread):
                 spacket = None
             while spacket:
 
-                logger.debug('send packet {0}'.format(str(dump_packet(spacket))[:60]))
+                logger.debug('{0}: send packet {1}'.format(
+                    repr(self), str(dump_packet(spacket))[:60]))
                 try:
                     n = self.connection().send(spacket)
                     spacket = spacket[n:]
                 except IOError as e:
-                    logger.error('failed \"{0}\"'.format(str(e)))
+                    logger.debug(
+                        '{0}: send packet failed, {1}'.format(repr(self), str(e)))
                     self.stop()
                     break
 
             # receive packet
             rpacket = self.receive()
             if rpacket:
-                logger.debug('received packet {0}'.format(str(dump_packet(rpacket))[:60]))
+                logger.debug('{0}: received packet {1}'.format(
+                    repr(self), str(dump_packet(rpacket))[:60]))
                 self.protocol.rcv_packet(self, rpacket)
 
             # pause
@@ -112,8 +120,7 @@ class PeerManager(threading.Thread):
 
     max_silence = 5  # how long before pinging a peer
     max_ping_wait = 1.  # how long to wait before disconenctiong after ping
-    max_ask_for_peers_elapsed = 30 # how long before asking for peers
-
+    max_ask_for_peers_elapsed = 30  # how long before asking for peers
 
     def __init__(self, config):
         threading.Thread.__init__(self)
@@ -166,11 +173,12 @@ class PeerManager(threading.Thread):
         try:
             sock.connect((host, port))
         except Exception as e:
-            logger.error('failed \"{0}\"'.format(str(e)))
+            logger.debug(
+                'Conencting {0}:{1} failed, {2}'.format(host, port, str(e)))
             return False
         sock.settimeout(.1)
         ip, port = sock.getpeername()
-        logger.debug('connected {0}:{1}'.format(ip, port))
+        logger.info('connected {0}:{1}'.format(ip, port))
         peer = Peer(self, sock, ip, port)
         self.add_peer(peer)
         peer.start()
@@ -182,7 +190,8 @@ class PeerManager(threading.Thread):
     def manage_connections(self):
         num_peers = self.config.getint('network', 'num_peers')
         if len(self._connected_peers) < num_peers:
-            logger.debug('not enough peers: {0}'.format(len(self._connected_peers)))
+            logger.debug(
+                'not enough peers: {0}'.format(len(self._connected_peers)))
             candidates = self.get_known_peer_addresses().difference(
                 self.get_connected_peer_addresses())
             candidates = [
@@ -205,13 +214,17 @@ class PeerManager(threading.Thread):
             dt_seen = now - peer.last_valid_packet_received
             # if ping was sent and not returned within last second
             if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
-                logger.debug('{0} last ping: {1} last seen: {2}'.format(peer, dt_ping, dt_seen))
-                logger.debug('{0} did not respond to ping, disconnecting {1}:{2}'.format(peer, peer.ip, peer.port))
+                logger.debug(
+                    '{0} last ping: {1} last seen: {2}'.format(peer, dt_ping, dt_seen))
+                logger.debug('{0} did not respond to ping, disconnecting {1}:{2}'.format(
+                    peer, peer.ip, peer.port))
                 self.remove_peer(peer)
             elif min(dt_seen, dt_ping) > self.max_silence:
                 logger.debug('pinging silent peer {0}'.format(peer))
-                logger.debug('# connected peers: {0}/{1}'.format(len(self._connected_peers), num_peers))
-                logger.debug('# candidates: {0}'.format(len(self.get_known_peer_addresses())))
+                logger.debug(
+                    '# connected peers: {0}/{1}'.format(len(self._connected_peers), num_peers))
+                logger.debug(
+                    '# candidates: {0}'.format(len(self.get_known_peer_addresses())))
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
                     peer.last_pinged = now
@@ -221,7 +234,6 @@ class PeerManager(threading.Thread):
                 with peer.lock:
                     peer.protocol.send_GetPeers(peer)
                     peer.last_asked_for_peers = now
-
 
     def run(self):
         while not self.stopped():
@@ -246,7 +258,7 @@ class TcpServer(threading.Thread):
         sock.listen(5)
         self.sock = sock
         self.ip, self.port = sock.getsockname()
-        logger.debug("TCP server started {0}:{1}".format(self.ip, self.port))
+        logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
 
     def run(self):
         while not self.peer_manager.stopped():
@@ -264,9 +276,11 @@ class TcpServer(threading.Thread):
                 peer = Peer(self.peer_manager, connection, host, None)
                 self.peer_manager.add_peer(peer)
                 peer.start()
-                logger.debug("new TCP connection {0} {1}:{2}".format(connection, host, port))
+                logger.debug(
+                    "new TCP connection {0} {1}:{2}".format(connection, host, port))
             except BaseException as e:
-                logger.debug("cannot start TCP session \"{0}\" {1}:{2} ".format(str(e), host, port))
+                logger.error(
+                    "cannot start TCP session \"{0}\" {1}:{2} ".format(str(e), host, port))
                 traceback.print_exc(file=sys.stdout)
                 connection.close()
                 time.sleep(0.1)
@@ -339,9 +353,12 @@ def main():
     config = create_config()
 
     # Setup logging according to config:
-    if config.getint('misc', 'verbosity') > 1:
-        print "verbosity set!!!"
-        logging.basicConfig(format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s: %(message)s', level=logging.DEBUG)
+    log_level = config.getint('misc', 'verbosity')
+    if log_level == 2:
+        logging.basicConfig(format='%(message)s', level=logging.WARN)
+    elif log_level > 2:
+        logging.basicConfig(
+            format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s: %(message)s', level=logging.DEBUG)
     else:
         logging.basicConfig(format='%(message)s', level=logging.INFO)
 
@@ -363,7 +380,7 @@ def main():
 
     # handle termination signals
     def signal_handler(signum=None, frame=None):
-        logger.debug('Signal handler called with signal {0}'.format(signum))
+        logger.info('Signal handler called with signal {0}'.format(signum))
         peer_manager.stop()
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT, signal.SIGINT]:
         signal.signal(sig, signal_handler)

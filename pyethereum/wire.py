@@ -100,8 +100,8 @@ class WireProtocol(object):
 
         # check header
         if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            logger.debug('check header failed, skipping message, sync token was {0}'
-                         .format(idec(packet[:4])))
+            logger.warn('check header failed, skipping message, sync token was {0}'
+                        .format(idec(packet[:4])))
             return
 
         # unpack message
@@ -111,7 +111,7 @@ class WireProtocol(object):
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
-            logger.debug('check cmd failed')
+            logger.warn('check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
 
         # good peer
@@ -120,7 +120,7 @@ class WireProtocol(object):
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]
         if not hasattr(self, func_name):
-            logger.debug('unknown cmd \'{0}\''.format(func_name))
+            logger.warn('unknown cmd \'{0}\''.format(func_name))
             return
             """
             return self.send_Disconnect(
@@ -237,7 +237,8 @@ class WireProtocol(object):
         (read: wait 2 seconds) to disconnect to before disconnecting themselves.
         REASON is an optional integer specifying one of a number of reasons
         """
-        logger.debug('sending disconnect because {0}'.format(reason))
+        logger.info(
+            'sending {0} disconnect because {1}'.format(repr(peer), reason))
         assert not reason or reason in self.disconnect_reasons_map
         payload = [0x01]
         if reason:
@@ -250,6 +251,7 @@ class WireProtocol(object):
     def rcv_Disconnect(self, peer, data):
         if len(data):
             reason = self.disconnect_reasons_map_by_id[idec(data[0])]
+            logger.info('{0} sent disconnect, {1} '.format(repr(peer), reason))
         self.peermgr.remove_peer(peer)
 
     def rcv_GetPeers(self, peer, data):
@@ -270,14 +272,14 @@ class WireProtocol(object):
         should be interpreted as the IP address A.B.C.D. Port is a 2-byte array
         that should be interpreted as a 16-bit big-endian integer.
         Id is the 512-bit hash that acts as the unique identifier of the node.
-        
+
         IPs look like this: ['6', '\xcc', '\n', ')']
         """
         for ip, port, pid in data:
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
-            #logger.debug('received peers: {0}:{1}'.format(ip, port))
+            logger.debug('received peer address: {0}:{1}'.format(ip, port))
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
@@ -297,3 +299,4 @@ class WireProtocol(object):
         """
         for e in data:
             header, transaction_list, uncle_list = e
+            logger.info('received block:  parent:{0}'.format(header[0].encode('hex')))
