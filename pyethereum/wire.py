@@ -271,17 +271,19 @@ class WireProtocol(object):
         should be interpreted as the IP address A.B.C.D. Port is a 2-byte array
         that should be interpreted as a 16-bit big-endian integer.
         Id is the 512-bit hash that acts as the unique identifier of the node.
+        
+        IPs look like this: ['6', '\xcc', '\n', ')']
         """
-        print(self, 'rec peers', data)
         for ip, port, pid in data:
-            ip = '.'.join(str(ord(b)) for b in ip)
+            assert isinstance(ip, list)
+            ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
         data = [0x11]
         for ip, port, pid in self.peermgr.get_known_peer_addresses():
-            ip = ''.join(chr(int(x)) for x in ip.split('.'))
+            ip = list((chr(int(x)) for x in ip.split('.')))
             data.append([ip, port, pid])
         if len(data) > 1:
             self.send_packet(peer, data)  # FIXME

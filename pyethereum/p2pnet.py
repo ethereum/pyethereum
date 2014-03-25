@@ -90,7 +90,7 @@ class Peer(threading.Thread):
             except Queue.Empty:
                 spacket = None
             while spacket:
-                plog(self, 'send packet', dump_packet(spacket))
+                plog(self, 'send packet', str(dump_packet(spacket))[:60], )
                 try:
                     n = self.connection().send(spacket)
                     spacket = spacket[n:]
@@ -102,7 +102,7 @@ class Peer(threading.Thread):
             # receive packet
             rpacket = self.receive()
             if rpacket:
-                plog(self, 'received packet', dump_packet(rpacket))
+                plog(self, 'received packet', str(dump_packet(rpacket))[:60], '...')
                 self.protocol.rcv_packet(self, rpacket)
 
             # pause
@@ -180,7 +180,8 @@ class PeerManager(threading.Thread):
         return True
 
     def manage_connections(self):
-        if len(self._connected_peers) < self.config.getint('network', 'num_peers'):
+        num_peers = self.config.getint('network', 'num_peers')
+        if len(self._connected_peers) < num_peers:
             candidates = self.get_known_peer_addresses().difference(
                 self.get_connected_peer_addresses())
             #plog(self, 'not enough peers', len(self._connected_peers))
@@ -213,9 +214,10 @@ class PeerManager(threading.Thread):
                 self.remove_peer(peer)
             elif min(dt_seen, dt_ping) > self.max_silence:
                 plog(self, peer, 'pinging silent peer')
-                plog(self, '# connected peers', len(self._connected_peers))
-                plog(
-                    self, '# candidates:', len(self.get_known_peer_addresses()))
+
+
+                plog(self, '# connected peers %d/%d' % (len(self._connected_peers), num_peers))
+                plog(self, '# candidates:', len(self.get_known_peer_addresses()))
 
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
