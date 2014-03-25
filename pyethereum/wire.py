@@ -208,9 +208,6 @@ class WireProtocol(object):
         if not peer.hello_sent:
             self.send_Hello(peer)
 
-        # ask for peers
-        self.send_GetPeers(peer)
-
     def send_Ping(self, peer):
         """
         [0x02]
