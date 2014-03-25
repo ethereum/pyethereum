@@ -14,3 +14,4 @@ __pycache__/
 /bin/
 /develop-eggs/
 .installed.cfg
+logging.conf
