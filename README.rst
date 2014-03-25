@@ -58,41 +58,15 @@ Logging:
 ---------
 Please use the ``logging`` module for logging.
 
-**pyethereum** defaults to a verbose stdout-logging configuration. To change that, create a file,
-``logging.conf``, at the repository-root, e.g.::
+For basic, verbose logging functionality, the following is sufficient (adjust level to your needs)::
 
-    [loggers]
-    keys=root,trie
+    import logging
+    
+    logging.basicConfig(format='[%(asctime)s] %(name)s %(levelname)s %(message)s', level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
-    [handlers]
-    keys=consoleHandler,nullHandler
-
-    [formatters]
-    keys=default
-
-    [logger_root]
-    level=WARNING
-    handlers=nullHandler
-
-    [logger_trie]
-    level=DEBUG
-    handlers=consoleHandler
-    qualname=pyethereum.trie
-
-    [formatter_default]
-    format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
-
-    [handler_consoleHandler]
-    class=StreamHandler
-    level=DEBUG
-    formatter=default
-    args=(sys.stdout,)
-
-    [handler_nullHandler]
-    class=NullHandler
-    args=()
-
-and adjust levels and handlers according to your needs.
+If you need a more advanced setup, have a look at the
+`python docs <http://docs.python.org/2/library/logging.html>`_
 
 Licence
 ========
