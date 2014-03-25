@@ -8,14 +8,15 @@ import ConfigParser
 import socket
 import threading
 import traceback
-from itertools import imap
 from wire import WireProtocol, dump_packet
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def plog(*args):
-    ts = time.strftime("[%d/%m/%Y-%H:%M:%S]")
-    sys.stderr.write(ts + " " + " ".join(imap(str, args)) + "\n")
-    sys.stderr.flush()
+    logger.debug(' '.join([str(_) for _ in args]))
 
 
 class Peer(threading.Thread):
