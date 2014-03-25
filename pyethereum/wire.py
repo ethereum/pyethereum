@@ -16,6 +16,7 @@ def list_ienc(lst):
             lst[i] = ienc(e)
     return lst
 
+
 def lrlp_decode(data):
     "always return a list"
     d = rlp.decode(data)
@@ -23,13 +24,15 @@ def lrlp_decode(data):
         d = [d]
     return d
 
+
 def dump_packet(packet):
     try:
         header = idec(packet[:4])
         payload_len = idec(packet[4:8])
         data = lrlp_decode(packet[8:8 + payload_len])
-        cmd = WireProtocol.cmd_map.get(idec(data.pop(0)), 'unknown')
-        return [header, payload_len, cmd] + data
+        cmd = WireProtocol.cmd_map.get(
+            idec(data[0]), 'unknown %s' % idec(data[0]))
+        return [header, payload_len, cmd] + data[1:]
     except Exception as e:
         return ['DUMP failed', packet, e]
 
@@ -269,20 +272,19 @@ class WireProtocol(object):
         that should be interpreted as a 16-bit big-endian integer.
         Id is the 512-bit hash that acts as the unique identifier of the node.
         """
+        print(self, 'rec peers', data)
         for ip, port, pid in data:
-            if len(ip) == 4: 
-                ip = '.'.join(str(ord(b)) for b in ip)
-                port = idec(port)
-                print(self, 'received peer', ip, port, pid)
-                self.peermgr.add_peer_address(ip, port, pid)
+            ip = '.'.join(str(ord(b)) for b in ip)
+            port = idec(port)
+            self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
-        data = ['0x11']
+        data = [0x11]
         for ip, port, pid in self.peermgr.get_known_peer_addresses():
             ip = ''.join(chr(int(x)) for x in ip.split('.'))
-            port = ienc(port)
             data.append([ip, port, pid])
-        self.send_packet(peer, data)
+        if len(data) > 1:
+            self.send_packet(peer, data)  # FIXME
 
     def rcv_Blocks(self, peer, data):
         """
