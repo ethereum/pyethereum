@@ -7,6 +7,7 @@ from optparse import OptionParser
 import logging
 from p2pnet import TcpServer
 from p2pnet import PeerManager
+from manager import ChainManager
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,9 @@ def main():
     # peer manager
     peer_manager = PeerManager(config=config)
 
+    # chain manager 
+    chain_manager = ChainManager(config=config)
+
     # start tcp server
     try:
         tcp_server = TcpServer(peer_manager,
@@ -108,11 +112,14 @@ def main():
     peer_manager.local_address = (tcp_server.ip, tcp_server.port)
     tcp_server.start()
     peer_manager.start()
+    chain_manager.start()
 
     # handle termination signals
     def signal_handler(signum=None, frame=None):
         logger.info('Signal handler called with signal {0}'.format(signum))
         peer_manager.stop()
+        chain_manager.stop()
+        # tcp_server checks for peer_manager.stopped()
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT, signal.SIGINT]:
         signal.signal(sig, signal_handler)
 

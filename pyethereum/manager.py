@@ -1,98 +1,139 @@
 import rlp
-import leveldb
 from blocks import Block
 from transactions import Transaction
-import processblock
-import hashlib
-from pybitcointools import *
+import threading
+import Queue
+import logging
 
-txpool = {}
 
-genesis_header = [
-    0,
-    '',
-    bin_sha256(rlp.encode([])),
-    '',
-    '',
-    bin_sha256(rlp.encode([])),
-    2**36,
-    0,
-    0,
-    ''
-]
+logger = logging.getLogger(__name__)
 
-genesis = [ genesis_header, [], [] ]
 
-mainblk = Block(rlp.encode(genesis))
+class ChainProxy():
+    """ 
+    abstract external access to the blockchain
+    stateless, queues are shared between all instances
+    """
 
-print 1
-try: 
-    db = leveldb.LevelDB("objects")
-except:
-    os.popen('cp -r objects pbjects').read()
-    leveldb.DestroyDB("objects")
-    os.popen('rm -r objects').read()
-    os.popen('mv pbjects objects').read()
-    leveldb.LevelDB("objects")
-print 2
+    chain_queue = Queue.Queue()
 
-def genaddr(seed):
-    priv = bin_sha256(seed)
-    addr = bin_sha256(privtopub(priv)[1:])[-20:]
-    return priv,addr
+    def __init__(self):
+        self.network_queue = NetworkProxy.network_queue
 
-# For testing
-k1,a1 = genaddr("123")
-k2,a2 = genaddr("456")
+    def add_blocks(self, blocks):
+        self.chain_queue.put(('add_blocks', blocks))
 
-def broadcast(obj):
-    pass
+    def add_transactions(self, transactions):
+        self.chain_queue.put(('add_transactions', transactions))
+       
+    def request_blocks(self, block_hashes, peer):
+        self.chain_queue.put(('request_blocks', block_hashes, peer.id()))
 
-def receive(obj):
-    d = rlp.decode(obj)
-    # Is transaction
-    if len(d) == 8:
-        tx = Transaction(obj)
-        if mainblk.get_balance(tx.sender) < tx.value + tx.fee: return
-        if mainblk.get_nonce(tx.sender) != tx.nonce: return
-        txpool[bin_sha256(blk)] = blk
-        broadcast(blk)
-    # Is message
-    elif len(d) == 2:
-        if d[0] == 'getobj':
-            try: return db.Get(d[1][0])
-            except:
-                try: return mainblk.state.db.get(d[1][0])
-                except: return None
-        elif d[0] == 'getbalance':
-            try: return mainblk.state.get_balance(d[1][0])
-            except: return None
-        elif d[0] == 'getcontractroot':
-            try: return mainblk.state.get_contract(d[1][0]).root
-            except: return None
-        elif d[0] == 'getcontractsize':
-            try: return mainblk.state.get_contract(d[1][0]).get_size()
-            except: return None
-        elif d[0] == 'getcontractstate':
-            try: return mainblk.state.get_contract(d[1][0]).get(d[1][1])
-            except: return None
-    # Is block
-    elif len(d) == 3:
-        blk = Block(obj)
-        p = block.prevhash
+    def request_transactions(self, peer):
+        self.chain_queue.put(('request_transactions', peer.id()))
+
+    def pingpong(self, reply=False):
+        self.chain_queue.put(('pingpong', reply))
+
+    def pop_message(self):
         try:
-            parent = Block(db.Get(p))
-        except:
-            return
-        uncles = block.uncles
-        for s in uncles:
-            try:
-                sib = db.Get(s)
-            except:
+            return self.network_queue.get(timeout=.1)
+        except Queue.Empty:
+            return None
+
+
+
+class NetworkProxy():
+    """
+    abstracts access to the network
+    stateless, queues are shared between all instances
+    """
+    network_queue = Queue.Queue()
+
+    def __init__(self):
+        self.chain_queue = ChainProxy.chain_queue
+
+    def send_blocks(self, blks, peer_id=False):
+        "broadcast if no peer specified"
+
+    def send_transactions(self, transactions, peer_id=False):
+        "broadcast if no peer specified"
+        self.network_queue.put('send_transactions', transactions, peer_id)
+
+    def send_not_in_chain(self, hash, peer_id):
+        "broadcast if no peer specified"
+        pass
+
+
+    def pingpong(self, reply=False):
+        self.network_queue.put(('pingpong', reply))
+
+    def pop_message(self):
+        try:
+            return self.chain_queue.get(timeout=.1)
+        except Queue.Empty:
+            return None
+
+
+class ChainManager(threading.Thread):
+    """
+    Manages the chain and requests to it.
+    """
+    def __init__(self, config):
+        threading.Thread.__init__(self)
+        self._stopped = False
+        self.lock = threading.Lock()
+        self.network = NetworkProxy()
+        #self.blockchain = blockchain
+        self.transactions = set()
+
+    def stop(self):
+        with self.lock:
+            if self._stopped:
                 return
-        processblock.eval(parent,blk.transactions,blk.timestamp,blk.coinbase)
-        if parent.state.root != blk.state.root: return
-        if parent.difficulty != blk.difficulty: return
-        if parent.number != blk.number: return
-        db.Put(blk.hash(),blk.serialize())
-    
+            self._stopped = True
+
+    def stopped(self):
+        with self.lock:
+            return self._stopped
+
+    def run(self):
+        while not self.stopped():
+            self.process_queue()
+            self.mine()
+
+    def mine(self):
+        "in the meanwhile mine a bit, not efficient though"
+        pass
+
+    def process_queue(self):
+        msg = self.network.pop_message()
+        if not msg:
+            return
+        cmd, data = msg[0], msg[1:]
+
+        logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
+        if cmd == "add_blocks":
+            self.transactions = set()            
+        elif cmd == "add_transactions":
+            tx_list = data[0]
+            for tx in tx_list:
+                self.transactions.add(tx)
+        elif cmd == "request_blocks":
+            pass
+        elif cmd == 'request_transactions':
+            peer_id = data[0]
+            self.network.send_transactions(self.transactions, peer_id)
+
+        elif cmd == 'pingpong':
+            reply = data
+            logger.debug('%r received pingpong(reply=%r)' % (self, reply))
+            if reply:
+                self.network.pingpong()
+        else:
+            raise Exception('unknown commad')
+
+        
+
+
+
