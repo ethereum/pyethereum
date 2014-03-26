@@ -16,10 +16,7 @@ class DB(object):
         self.db = leveldb.LevelDB(dbfile)
 
     def get(self, key):
-        try:
-            return self.db.Get(key)
-        except KeyError:
-            return ''
+        return self.db.Get(key)
 
     def put(self, key, value):
         return self.db.Put(key, value)
