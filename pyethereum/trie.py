@@ -470,9 +470,6 @@ class Trie(object):
 
         key = bin_to_nibbles(str(key))
 
-        if value is None:
-            self.root = self.delete(self.root, key)
-
         self.root = self._update(self.root, key, self._rlp_encode(str(value)))
         return self.root
 
