@@ -10,13 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 def list_ienc(lst):
-    "recursively big endian encode all integers in a list inplace"
+    "recursively big endian encode all integers in a list"
+    nlst = []
     for i, e in enumerate(lst):
         if isinstance(e, list):
-            lst[i] = list_ienc(e)
+            nlst.append(list_ienc(e))
         elif isinstance(e, int):
-            lst[i] = ienc(e)
-    return lst
+            nlst.append(ienc(e))
+        else:
+            nlst.append(e)
+    return nlst
 
 
 def lrlp_decode(data):
