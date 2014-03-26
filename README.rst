@@ -42,14 +42,23 @@ To Do
 For Developer
 =============
 #.  `behave <http://pythonhosted.org/behave/index.html>`_ is used for testing.
+
     Tips for writing test code for behave
 
-        1. write test scenario in *xxx.feature*
-        2. run ``behave``, then behave will report the newly written scenario are
-           not implemented, and code skeleton for the corresponding steps will
-           also be generated.
-        3. copy & copy the generated code skeleton in a file in the *steps*
-           directory and then write your own codes basing on it.
+    1.  write test scenario in *xxx.feature*
+    2.  run ``behave``, then behave will report the newly written scenario are
+        not implemented, and code skeleton for the corresponding steps will
+        also be generated.
+    3.  copy & copy the generated code skeleton in a file in the *steps*
+        directory and then write your own codes basing on it.
+
+    Tips for debug
+
+    1. for test specific scenario while ignoring all other ones, just add `@wip`
+       in the uppper line of the scenario.
+    2. for debug, run::
+
+        $ BEHAVE_DEBUG_ON_ERROR=yes behave -w
 
 #.  Should write codes compatible with Python3
 #.  codes should pass PEP8 check.
@@ -61,7 +70,7 @@ Please use the ``logging`` module for logging.
 For basic, verbose logging functionality, the following is sufficient (adjust level to your needs)::
 
     import logging
-    
+
     logging.basicConfig(format='[%(asctime)s] %(name)s %(levelname)s %(message)s', level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
