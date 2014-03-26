@@ -7,50 +7,84 @@ Feature: trie tree manipulate
     When clear trie tree
     Then root will be blank
 
-  Scenario: insert single node
+  Scenario: insert to a blank tree
     Given a pair with key "AB"
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
 
-  Scenario: insert to a key value node, result a key value node and a new diverge node with value in the latest index
+  # ---- start: insert to a key value node---------
+  Scenario: insert to a key value node, with the later key contains the former key
     Given a pair with key "AB"
     And a pair with key "ABCD"
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
 
-  Scenario: insert to a key value node, result a key value node and a new diverge node without value in the latest index
+  Scenario: insert to a key value node, with the former key contains the later key
+    Given a pair with key "ABCD"
+    And a pair with key "AB"
+    When clear trie tree
+    And insert pairs
+    Then for each pair, get with key will return the correct value
+
+  Scenario: insert to a key value node, keys has common prefix and different postfix
     Given a pair with key "AB"
     And a pair with key "AC"
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
 
-  Scenario: insert to a key value node, result a new diverge node without value in the latest index
+  Scenario: insert to a key value node, keys has no common prefix
     Given a pair with key "A"
+    """
+    nibbles is [4, 1]
+    """
     And a pair with key "Z"
+    """
+    nibbles is [5, 10]
+    """
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
+  # ---- end: insert to a key value node---------
 
-  Scenario: insert to same slot in a diverge node
+  # ---- start: insert to a diverge node---------
+  Scenario: insert to a diverge node, with same slot
     Given a pair with key "A"
+    """
+    nibbles is [4, 1]
+    """
     And a pair with key "Z"
+    """
+    nibbles is [5, 10]
+    """
     Given a pair with key "B"
+    """
+    nibbles is [4, 2]
+    """
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
 
-  Scenario: insert to same slot in a diverge node
-    Given a pair with key "AB"
-    And a pair with key "AC"
-    And a pair with key "ABCD"
+  Scenario: insert to a diverge node, with different slot
+    Given a pair with key "A"
+    """
+    nibbles is [4, 1]
+    """
+    And a pair with key "Z"
+    """
+    nibbles is [5, 10]
+    """
+    Given a pair with key "0"
+    """
+    nibbles is [3, 0]
+    """
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
+  # ---- end: insert to a diverge node---------
 
   @load_data
   Scenario: insert in a more sophisticated case
     Then for each pair, get with key will return the correct value
-
