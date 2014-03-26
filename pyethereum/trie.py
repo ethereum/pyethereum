@@ -224,9 +224,10 @@ class Trie(object):
                 return value
             else:
                 # a new key value node
-                append_terminator(key)
-                return self._rlp_encode(
-                    [pack_nibbles(key), value])
+                value_node_type, _ = self._inspect_node(value)
+                if value_node_type == NODE_TYPE_VALUE:
+                    append_terminator(key)
+                return self._rlp_encode([pack_nibbles(key), value])
 
         elif node_type == NODE_TYPE_VALUE:
             if not key:
@@ -238,58 +239,28 @@ class Trie(object):
                 return self._update(self._rlp_encode(new_node), key, value)
 
         elif node_type == NODE_TYPE_DIVERGE:
-            return self._update_diverge_node(node, key, value)
+            # already the expected node
+            if not key:
+                node[-1] = value
+                return self._rlp_encode(node)
+
+            slot_type, slot = self._inspect_node(node[key[0]])
+            node[key[0]] = self._update(node[key[0]], key[1:], value)
+            return self._update(BLANK_NODE, None, self._rlp_encode(node))
+
         elif node_type == NODE_TYPE_KEY_VALUE:
             return self._update_kv_node(node, key, value)
-
-
-    def _update_diverge_node(self, node, key, value):
-        '''when the current node is a 17 items diverge node
-
-        :param node: an already rlp decoded 17 items diverge node
-        :param key: nibble list without terminator
-        :param value: nlp encoded value
-        :return: the updated node with rlp encoded
-        '''
-        # already the expected node
-        if len(key) == 0:
-            node[-1] = value
-            return self._rlp_encode(node)
-
-        # need to substitue the slot
-        slot_type, slot = self._inspect_node(node[key[0]])
-        node[key[0]] = self._update(node[key[0]], key[1:], value)
-        return self._rlp_encode(node)
 
     def _update_kv_node(self, node, key, value):
         '''when the current node is a (key, value) node
 
         :param node: an already rlp decoded (key, value) tuple
-        :param key: nibble list without terminator
+        :param key: nibble list without terminator, must not be blank
         :param value: nlp encoded value
         :return: the updated node with rlp encoded
         '''
         (curr_key_bin, curr_val) = node
         curr_key = unpack_to_nibbles(curr_key_bin)
-
-        # blank key will never reach a key value node
-        assert key
-
-        # already reach the expected node
-        if curr_key[-1] == NIBBLE_TERMINATOR and key == curr_key[:-1]:
-            return self._rlp_encode(
-                [curr_key_bin, value])
-
-        if starts_with(key, curr_key):
-            return self._rlp_encode([
-                pack_nibbles(curr_key),
-                self._update(curr_val, key[len(curr_key):], value)])
-        elif starts_with(curr_key, key):
-            return self._rlp_encode([
-                pack_nibbles(key),
-                self._update(value, curr_key[len(key):], curr_val)])
-
-        # create nodes from ground, rather than modify existing ones
 
         # remove the terminator
         if curr_key[-1] == NIBBLE_TERMINATOR:
@@ -302,30 +273,27 @@ class Trie(object):
                 break
             prefix_length = i + 1
 
-        # create diverge node
-        diverge_node = [''] * 17
-
-        if prefix_length == len(curr_key):
-            diverge_node[-1] = curr_val
-        else:
-            diverge_node[curr_key[prefix_length]] = self._update(
-                BLANK_NODE, curr_key[prefix_length + 1:], curr_val)
-
-        if prefix_length == len(key):
-            diverge_node[-1] = value
-        else:
-            diverge_node[key[prefix_length]] = self._update(
-                BLANK_NODE, key[prefix_length + 1:], value)
-
-        # no common prefix
+        # merge
         if not prefix_length:
-            return self._rlp_encode(diverge_node)
+            # a new diverge node
+            rlp_diverge_node = self._rlp_encode([''] * 17)
+            rlp_diverge_node = self._update(
+                rlp_diverge_node, curr_key, curr_val)
+            rlp_diverge_node = self._update(
+                rlp_diverge_node, key, value)
+            return rlp_diverge_node
 
-        # create a parent key value node with the common prefix as key
-        kv_node = [pack_nibbles(key[:prefix_length]),
-                   self._rlp_encode(diverge_node)]
+        # create node for key postfix
+        post_curr_key_node = self._update(
+            BLANK_NODE, curr_key[prefix_length:], curr_val)
+        post_curr_key_node = self._update(
+            post_curr_key_node, key[prefix_length:], value)
 
-        return self._rlp_encode(kv_node)
+        # create node for key prefix
+        pre_curr_key_node = self._update(
+            BLANK_NODE, curr_key[:prefix_length], post_curr_key_node)
+
+        return pre_curr_key_node
 
     def delete(self, node, key):
         """ delete item inside a node
