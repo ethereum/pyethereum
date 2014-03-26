@@ -22,7 +22,7 @@ def step_impl(context):
 def step_impl(context):
     from pyethereum import trie
     context.pairs = [
-        (src, trie.hexarraykey_to_bin(src))
+        (src, trie.pack_nibbles(src))
         for src in context.srcs
     ]
 
@@ -72,6 +72,6 @@ def step_impl(context):
 def step_impl(context):
     from pyethereum import trie
     for src, dst in context.pairs:
-        decoded_hexes = trie.bin_to_hexarraykey(dst)
+        decoded_hexes = trie.unpack_to_nibbles(dst)
         for src_hex, dst_hex in zip(src, decoded_hexes):
             assert src_hex == dst_hex

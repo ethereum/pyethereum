@@ -12,7 +12,7 @@ def step_impl(context):
 def step_impl(context, key):
     if 'pairs' not in context:
         context.pairs = []
-    value =range(random.randint(0, 128))
+    value =range(random.randint(5, 40))
     random.shuffle(value)
     value = ''.join(str(x) for x in value)
     context.pairs.append((key, value))

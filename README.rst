@@ -42,14 +42,23 @@ To Do
 For Developer
 =============
 #.  `behave <http://pythonhosted.org/behave/index.html>`_ is used for testing.
+
     Tips for writing test code for behave
 
-        1. write test scenario in *xxx.feature*
-        2. run ``behave``, then behave will report the newly written scenario are
-           not implemented, and code skeleton for the corresponding steps will
-           also be generated.
-        3. copy & copy the generated code skeleton in a file in the *steps*
-           directory and then write your own codes basing on it.
+    1.  write test scenario in *xxx.feature*
+    2.  run ``behave``, then behave will report the newly written scenario are
+        not implemented, and code skeleton for the corresponding steps will
+        also be generated.
+    3.  copy & copy the generated code skeleton in a file in the *steps*
+        directory and then write your own codes basing on it.
+
+    Tips for debug
+
+    1. for test specific scenario while ignoring all other ones, just add `@wip`
+       in the uppper line of the scenario.
+    2. for debug, run::
+
+        $ BEHAVE_DEBUG_ON_ERROR=yes behave -w
 
 #.  Should write codes compatible with Python3
 #.  codes should pass PEP8 check.
@@ -58,41 +67,15 @@ Logging:
 ---------
 Please use the ``logging`` module for logging.
 
-**pyethereum** defaults to a verbose stdout-logging configuration. To change that, create a file,
-``logging.conf``, at the repository-root, e.g.::
+For basic, verbose logging functionality, the following is sufficient (adjust level to your needs)::
 
-    [loggers]
-    keys=root,trie
+    import logging
 
-    [handlers]
-    keys=consoleHandler,nullHandler
+    logging.basicConfig(format='[%(asctime)s] %(name)s %(levelname)s %(message)s', level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
-    [formatters]
-    keys=default
-
-    [logger_root]
-    level=WARNING
-    handlers=nullHandler
-
-    [logger_trie]
-    level=DEBUG
-    handlers=consoleHandler
-    qualname=pyethereum.trie
-
-    [formatter_default]
-    format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
-
-    [handler_consoleHandler]
-    class=StreamHandler
-    level=DEBUG
-    formatter=default
-    args=(sys.stdout,)
-
-    [handler_nullHandler]
-    class=NullHandler
-    args=()
-
-and adjust levels and handlers according to your needs.
+If you need a more advanced setup, have a look at the
+`python docs <http://docs.python.org/2/library/logging.html>`_
 
 Licence
 ========
