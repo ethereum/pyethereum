@@ -465,6 +465,9 @@ class Trie(object):
         if not key:
             raise Exception("Key should not be blank")
 
+        if len(key)>64:
+            raise Exception("Max key length is 64")
+
         key = bin_to_nibbles(str(key))
 
         self.root = self._update(self.root, key, self._rlp_encode(str(value)))
