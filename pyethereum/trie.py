@@ -465,8 +465,8 @@ class Trie(object):
         if not key:
             raise Exception("Key should not be blank")
 
-        if len(key)>64:
-            raise Exception("Max key length is 64")
+        if len(key)>32:
+            raise Exception("Max key length is 32")
 
         key = bin_to_nibbles(str(key))
 
