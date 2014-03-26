@@ -75,21 +75,16 @@ class WireProtocol(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    SYNCHRONIZATION_TOKEN = 0x22400891
-
-    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    SYNCHRONIZATION_TOKEN = 0x22400891 # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
-    NODE_ID = None
-
-    # NEED NODE_ID in order to work with Ethereum(++)/ FIXME: replace by pubkey
-    NODE_ID = 'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9'
 
     def __init__(self, peermgr, config):
         self.peermgr = peermgr
         self.config = config
+        self.CLIENT_ID = self.config.get('network', 'client_id') or self.CLIENT_ID 
 
     def rcv_packet(self, peer, packet):
         """
@@ -155,9 +150,9 @@ class WireProtocol(object):
                    self.NETWORK_ID,
                    self.CLIENT_ID,
                    self.config.getint('network', 'listen_port'),
-                   self.CAPABILITIES]
-        if self.NODE_ID:
-            payload.append(self.NODE_ID)
+                   self.CAPABILITIES,
+                   self.config.get('wallet', 'pub_key')
+                   ]
         self.send_packet(peer, payload)
 
         peer.hello_sent = True
