@@ -4,19 +4,23 @@ import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 import logging
+from manager import ChainProxy
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 logger = logging.getLogger(__name__)
 
 
 def list_ienc(lst):
-    "recursively big endian encode all integers in a list inplace"
+    "recursively big endian encode all integers in a list"
+    nlst = []
     for i, e in enumerate(lst):
         if isinstance(e, list):
-            lst[i] = list_ienc(e)
+            nlst.append(list_ienc(e))
         elif isinstance(e, int):
-            lst[i] = ienc(e)
-    return lst
+            nlst.append(ienc(e))
+        else:
+            nlst.append(e)
+    return nlst
 
 
 def lrlp_decode(data):
@@ -44,6 +48,8 @@ class WireProtocol(object):
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
+
+    stateless!
     """
 
     cmd_map = dict(((0x00, 'Hello'),
@@ -72,21 +78,17 @@ class WireProtocol(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    SYNCHRONIZATION_TOKEN = 0x22400891
-
-    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    SYNCHRONIZATION_TOKEN = 0x22400891 # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
-    NODE_ID = None
-
-    # NEED NODE_ID in order to work with Ethereum(++)/ FIXME: replace by pubkey
-    NODE_ID = 'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9'
 
     def __init__(self, peermgr, config):
         self.peermgr = peermgr
         self.config = config
+        self.chainmgr = ChainProxy()
+        self.CLIENT_ID = self.config.get('network', 'client_id') or self.CLIENT_ID 
 
     def rcv_packet(self, peer, packet):
         """
@@ -100,8 +102,8 @@ class WireProtocol(object):
 
         # check header
         if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            logger.debug('check header failed, skipping message, sync token was {0}'
-                         .format(idec(packet[:4])))
+            logger.warn('check header failed, skipping message, sync token was {0}'
+                        .format(idec(packet[:4])))
             return
 
         # unpack message
@@ -111,7 +113,7 @@ class WireProtocol(object):
 
         # check cmd
         if (not len(data)) or (idec(data[0]) not in self.cmd_map):
-            logger.debug('check cmd failed')
+            logger.warn('check cmd failed')
             return self.send_Disconnect(peer, reason='Bad protocol')
 
         # good peer
@@ -120,7 +122,7 @@ class WireProtocol(object):
         cmd_id = idec(data.pop(0))
         func_name = "rcv_%s" % self.cmd_map[cmd_id]
         if not hasattr(self, func_name):
-            logger.debug('unknown cmd \'{0}\''.format(func_name))
+            logger.warn('unknown cmd \'{0}\''.format(func_name))
             return
             """
             return self.send_Disconnect(
@@ -152,9 +154,9 @@ class WireProtocol(object):
                    self.NETWORK_ID,
                    self.CLIENT_ID,
                    self.config.getint('network', 'listen_port'),
-                   self.CAPABILITIES]
-        if self.NODE_ID:
-            payload.append(self.NODE_ID)
+                   self.CAPABILITIES,
+                   self.config.get('wallet', 'pub_key')
+                   ]
         self.send_packet(peer, payload)
 
         peer.hello_sent = True
@@ -208,9 +210,6 @@ class WireProtocol(object):
         if not peer.hello_sent:
             self.send_Hello(peer)
 
-        # ask for peers
-        self.send_GetPeers(peer)
-
     def send_Ping(self, peer):
         """
         [0x02]
@@ -226,10 +225,11 @@ class WireProtocol(object):
         [0x03]
         Reply to peer's Ping packet.
         """
-        self.send_packet(peer, [0x03])
+        #self.send_packet(peer, [0x03])
+        #self.chainmgr.pingpong(True)
 
     def rcv_Pong(self, peer, data):
-        pass
+        self.send_GetTransactions(peer) # FIXME
 
     def send_Disconnect(self, peer, reason=None):
         """
@@ -240,7 +240,8 @@ class WireProtocol(object):
         (read: wait 2 seconds) to disconnect to before disconnecting themselves.
         REASON is an optional integer specifying one of a number of reasons
         """
-        logger.debug('sending disconnect because {0}'.format(reason))
+        logger.info(
+            'sending {0} disconnect because {1}'.format(repr(peer), reason))
         assert not reason or reason in self.disconnect_reasons_map
         payload = [0x01]
         if reason:
@@ -253,6 +254,7 @@ class WireProtocol(object):
     def rcv_Disconnect(self, peer, data):
         if len(data):
             reason = self.disconnect_reasons_map_by_id[idec(data[0])]
+            logger.info('{0} sent disconnect, {1} '.format(repr(peer), reason))
         self.peermgr.remove_peer(peer)
 
     def rcv_GetPeers(self, peer, data):
@@ -273,14 +275,14 @@ class WireProtocol(object):
         should be interpreted as the IP address A.B.C.D. Port is a 2-byte array
         that should be interpreted as a 16-bit big-endian integer.
         Id is the 512-bit hash that acts as the unique identifier of the node.
-        
+
         IPs look like this: ['6', '\xcc', '\n', ')']
         """
         for ip, port, pid in data:
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
-            #logger.debug('received peers: {0}:{1}'.format(ip, port))
+            logger.debug('received peer address: {0}:{1}'.format(ip, port))
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
@@ -289,7 +291,7 @@ class WireProtocol(object):
             ip = list((chr(int(x)) for x in ip.split('.')))
             data.append([ip, port, pid])
         if len(data) > 1:
-            self.send_packet(peer, data)  # FIXME
+            self.send_packet(peer, data)  # FIXME, what?
 
     def rcv_Blocks(self, peer, data):
         """
@@ -298,5 +300,66 @@ class WireProtocol(object):
         (following the first item, 0x13) are blocks in the format described in the
         main Ethereum specification.
         """
+        
+        # FIXME, currently just dumps data
         for e in data:
             header, transaction_list, uncle_list = e
+            logger.debug('received block:  parent:{0}'.format(header[0].encode('hex')))
+
+
+    def rcv_Transactions(self, peer, data):
+        """
+        [0x12, [nonce, receiving_address, value, ... ], ... ]
+        Specify (a) transaction(s) that the peer should make sure is included on 
+        its transaction queue. The items in the list (following the first item 0x12) 
+        are transactions in the format described in the main Ethereum specification.
+        """
+        logger.info('received transactions', len(data), peer)
+        self.chainmgr.addTransactions(data)
+
+
+    def send_Transactions(self, peer, transaction_list):
+        data = [0x12] + [transaction_list]
+        self.send_packet(peer, data) 
+
+    def rcv_GetTransactions(self, peer):
+        """
+        [0x16]
+        Request the peer to send all transactions currently in the queue. 
+        See Transactions.
+        """
+        logger.debug('received get_transaction', peer)
+        self.chainmgr.request_transactions(peer.id())
+
+    def send_GetTransactions(self, peer):
+        logger.info('asking for transactions')
+        self.send_packet(peer, [0x16]) 
+
+    def _broadcast(self, method, data):
+        for peer in self.peermgr.connected_peers:
+            method(peer, data)
+
+    def process_chainmanager_queue(self):
+
+        while True:
+            msg = self.chainmgr.pop_message()
+            if not msg:
+                return
+            cmd, data = msg[0], msg[1:]
+            logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
+            
+            if cmd == "send_transactions":
+                transaction_list = data[0]
+                peer = self.peermgr.get_peer_by_id(data[1])
+                if peer:
+                    self.send_Transactions(peer, transaction_list)
+                else: # broadcast
+                    self._broadcast(self.send_Transactions, transaction_list)
+            
+            elif cmd == 'pingpong':
+                reply = data[0]
+                logger.debug('%r received pingpong(reply=%r)' % (self, reply))
+                if reply:
+                    self.chainmgr.pingpong()
+            else:
+                raise Exception('unknown commad')
