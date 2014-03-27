@@ -48,6 +48,11 @@ def after_feature(context, feature):
 
 
 def before_scenario(context, scenario):
+    for tag in scenario.feature.tags:
+        if tag in hooks:
+            if hasattr(hooks[tag], 'before_scenario'):
+                hooks[tag].before_scenario(context, scenario)
+
     for tag in scenario.tags:
         if tag in hooks:
             if hasattr(hooks[tag], 'before_scenario'):
@@ -55,6 +60,11 @@ def before_scenario(context, scenario):
 
 
 def after_scenario(context, scenario):
+    for tag in scenario.feature.tags:
+        if tag in hooks:
+            if hasattr(hooks[tag], 'after_scenario'):
+                hooks[tag].after_scenario(context, scenario)
+
     for tag in scenario.tags:
         if tag in hooks:
             if hasattr(hooks[tag], 'after_scenario'):
