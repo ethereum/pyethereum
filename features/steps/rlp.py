@@ -1,6 +1,6 @@
 from pyethereum.utils import int_to_big_endian
-from utils import register_type, AssertException
 from pyethereum import rlp
+from .utils import register_type, AssertException
 
 
 @given(u'a payload string: {src:Py}')

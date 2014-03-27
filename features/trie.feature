@@ -7,83 +7,51 @@ Feature: trie tree manipulate
     When clear trie tree
     Then root will be blank
 
-  Scenario: insert to a blank tree
-    Given a pair with key "AB"
+  Scenario Outline: insert (key, node) pairs to a trie tree
+    Given pairs with keys: <keys>
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
 
-  # ---- start: insert to a key value node---------
-  Scenario: insert to a key value node, with the later key contains the former key
-    Given a pair with key "AB"
-    And a pair with key "ABCD"
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
+    Examples: insert to a blank tree
+      |keys|
+      | ["AB"]|
 
-  Scenario: insert to a key value node, with the former key contains the later key
-    Given a pair with key "ABCD"
-    And a pair with key "AB"
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
+    # ---- start: insert to a key value node---------
+    Examples: insert to a key value node, with the later key contains the former key
+      |keys|
+      |["AB", "ABCD"]|
 
-  Scenario: insert to a key value node, keys has common prefix and different postfix
-    Given a pair with key "AB"
-    And a pair with key "AC"
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
+    Examples: insert to a key value node, with the former key contains the later key
+      |keys|
+      |["ABCD", "AB"]|
 
-  Scenario: insert to a key value node, keys has no common prefix
-    Given a pair with key "A"
-    """
-    nibbles is [4, 1]
-    """
-    And a pair with key "Z"
-    """
-    nibbles is [5, 10]
-    """
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
-  # ---- end: insert to a key value node---------
+    Examples: insert to a key value node, keys has common prefix and different postfix
+      |keys|
+      |["AB", "CD"]|
 
-  # ---- start: insert to a diverge node---------
-  Scenario: insert to a diverge node, with same slot
-    Given a pair with key "A"
-    """
-    nibbles is [4, 1]
-    """
-    And a pair with key "Z"
-    """
-    nibbles is [5, 10]
-    """
-    Given a pair with key "B"
-    """
-    nibbles is [4, 2]
-    """
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
+    Examples: insert to a key value node, keys has no common prefix
+      # nibbles of A: [4,1]
+      # nibbles of Z: [5,10]
+      |keys|
+      |["A", "Z"]|
+    # ---- end: insert to a key value node---------
 
-  Scenario: insert to a diverge node, with different slot
-    Given a pair with key "A"
-    """
-    nibbles is [4, 1]
-    """
-    And a pair with key "Z"
-    """
-    nibbles is [5, 10]
-    """
-    Given a pair with key "0"
-    """
-    nibbles is [3, 0]
-    """
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
-  # ---- end: insert to a diverge node---------
+    # ---- start: insert to a diverge node---------
+    Examples: insert to a diverge node, with same slot
+      # nibbles of A: [4,1]
+      # nibbles of Z: [5,10]
+      # nibbles of B: [4,2]
+      |keys|
+      |["A", "Z", "B"]|
+
+    Examples: insert to a diverge node, with different slot
+      # nibbles of A: [4,1]
+      # nibbles of Z: [5,10]
+      # nibbles of 0: [3,0]
+      |keys|
+      |["A", "Z", "0"]|
+    # ---- end: insert to a diverge node---------
 
   @load_data
   Scenario: insert in a more sophisticated case

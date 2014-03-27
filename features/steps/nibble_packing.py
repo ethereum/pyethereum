@@ -1,5 +1,5 @@
-from utils import register_type, AssertException
 from pyethereum import trie
+from .utils import register_type, AssertException
 
 
 @given(u'nibbles: {src_nibbles:Py}')

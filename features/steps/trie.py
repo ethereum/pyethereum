@@ -1,4 +1,5 @@
 import random
+from .utils import register_type, AssertException
 
 @when(u'clear trie tree')
 def step_impl(context):
@@ -8,14 +9,14 @@ def step_impl(context):
 def step_impl(context):
     assert context.trie.root == ''
 
-@given(u'a pair with key "{key}"')
-def step_impl(context, key):
-    if 'pairs' not in context:
-        context.pairs = []
-    value =range(random.randint(5, 40))
-    random.shuffle(value)
-    value = ''.join(str(x) for x in value)
-    context.pairs.append((key, value))
+@given(u'pairs with keys: {keys:Py}')
+def step_impl(context, keys):
+    context.pairs = []
+    for key in keys:
+        value =range(random.randint(5, 40))
+        random.shuffle(value)
+        value = ''.join(str(x) for x in value)
+        context.pairs.append((key, value))
 
 @when(u'insert pairs')
 def step_impl(context):
