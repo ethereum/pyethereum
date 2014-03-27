@@ -15,15 +15,12 @@ def after_step(context, step):
 
 def auto_discover_hooks():
     from os import path
-    from importlib import import_module
+    import pkgutil
 
     hooks = {}
     hook_dir = path.join(path.dirname(__file__), 'hooks')
-    for f in os.listdir(hook_dir):
-        if not f.endswith('.py'):
-            continue
-        name = f[:-3]
-        module = import_module('hooks.{0}'.format(name))
+    for finder, name, ispkg in pkgutil.iter_modules(path=[hook_dir]):
+        module = finder.find_module(name).load_module(name)
         if not hasattr(module, 'hook'):
             continue
         hooks[name] = getattr(module, 'hook')
