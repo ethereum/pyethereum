@@ -41,6 +41,14 @@ To Do
 
 For Developer
 =============
+
+Coding
+------
+#.  Should write codes compatible with Python3
+#.  codes should pass PEP8 check.
+
+Testing
+-------
 #.  `behave <http://pythonhosted.org/behave/index.html>`_ is used for testing.
 
     Tips for writing test code for behave
@@ -51,6 +59,8 @@ For Developer
         also be generated.
     3.  copy & copy the generated code skeleton in a file in the *steps*
         directory and then write your own codes basing on it.
+    4.  if you need setup/teardown for feature/scenario with specific tag of
+        *mytag*, create a file called mytag.py in the *hooks* directory
 
     Tips for debug
 
@@ -59,9 +69,6 @@ For Developer
     2. for debug, run::
 
         $ BEHAVE_DEBUG_ON_ERROR=yes behave -w
-
-#.  Should write codes compatible with Python3
-#.  codes should pass PEP8 check.
 
 Logging:
 ---------
