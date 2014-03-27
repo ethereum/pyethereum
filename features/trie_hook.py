@@ -1,6 +1,7 @@
 import os
 from os import path
 
+
 class TrieFeatureHooker(object):
     db_dir = "tmp"
     db_file_name = "trie-test.db"
@@ -31,6 +32,7 @@ class TrieFeatureHooker(object):
     def __load_fixture(self):
         pass
 
+
 class TrieScenarioHooker(object):
 
     def before(self, context, scenario):
@@ -42,7 +44,7 @@ class TrieScenarioHooker(object):
                 And insert pairs
             '''.format(["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD",
                         "Z", "0", "Z0", "0Z"])
-)
+            )
 
     def after(self, context, scenario):
         pass

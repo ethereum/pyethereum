@@ -1,15 +1,14 @@
-import random
-import math
+import random  # noqa
+import math  # noqa
 from contextlib import contextmanager
 import parse
-from behave import register_type
+
 
 @parse.with_pattern(r"[\s\S]+")
 def parse_py(text):
     exec("val = {0}".format(text))
-    return val
+    return val  # noqa
 
-register_type(Py=parse_py)
 
 @contextmanager
 def AssertException(e):

@@ -100,6 +100,7 @@ def unpack_to_nibbles(bindata):
 
 BLANK_NODE = ''
 
+
 def starts_with(full, part):
     ''' test whether the items in the part is
     the leading items of the full
@@ -107,6 +108,7 @@ def starts_with(full, part):
     if len(full) < len(part):
         return False
     return full[:len(part)] == part
+
 
 class Trie(object):
     databases = {}
@@ -413,14 +415,14 @@ class Trie(object):
         o = {}
         for v in d:
             curr_val = ''.join(['0123456789abcdef'[x]
-                         for x in unpack_to_nibbles(v)[:-1]])
+                                for x in unpack_to_nibbles(v)[:-1]])
             if not as_hex:
                 curr_val = curr_val.decode('hex')
             o[curr_val] = d[v]
         return o
 
     def get(self, key):
-        rlp_value =  self._get(self.root, bin_to_nibbles(str(key)))
+        rlp_value = self._get(self.root, bin_to_nibbles(str(key)))
         return None if not rlp_value else self._rlp_decode(rlp_value)
 
     def get_size(self):
@@ -433,7 +435,7 @@ class Trie(object):
         if not key:
             raise Exception("Key should not be blank")
 
-        if len(key)>32:
+        if len(key) > 32:
             raise Exception("Max key length is 32")
 
         key = bin_to_nibbles(str(key))
