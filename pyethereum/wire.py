@@ -78,7 +78,8 @@ class WireProtocol(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    SYNCHRONIZATION_TOKEN = 0x22400891 # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    SYNCHRONIZATION_TOKEN = 0x22400891
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
@@ -88,7 +89,8 @@ class WireProtocol(object):
         self.peermgr = peermgr
         self.config = config
         self.chainmgr = ChainProxy()
-        self.CLIENT_ID = self.config.get('network', 'client_id') or self.CLIENT_ID 
+        self.CLIENT_ID = self.config.get(
+            'network', 'client_id') or self.CLIENT_ID
 
     def rcv_packet(self, peer, packet):
         """
@@ -147,19 +149,9 @@ class WireProtocol(object):
         packet += payload
         peer.send_packet(packet)
 
-    def send_Hello(self, peer):
-        # assert we did not sent hello yet
-        payload = [0x00,
-                   self.PROTOCOL_VERSION,
-                   self.NETWORK_ID,
-                   self.CLIENT_ID,
-                   self.config.getint('network', 'listen_port'),
-                   self.CAPABILITIES,
-                   self.config.get('wallet', 'pub_key')
-                   ]
-        self.send_packet(peer, payload)
-
-        peer.hello_sent = True
+    def _broadcast(self, method, data):
+        for peer in self.peermgr.connected_peers:
+            method(peer, data)
 
     def rcv_Hello(self, peer, data):
         """
@@ -210,26 +202,19 @@ class WireProtocol(object):
         if not peer.hello_sent:
             self.send_Hello(peer)
 
-    def send_Ping(self, peer):
-        """
-        [0x02]
-        Requests an immediate reply of Pong from the peer.
-        """
-        self.send_packet(peer, [0x02])
+    def send_Hello(self, peer):
+        # assert we did not sent hello yet
+        payload = [0x00,
+                   self.PROTOCOL_VERSION,
+                   self.NETWORK_ID,
+                   self.CLIENT_ID,
+                   self.config.getint('network', 'listen_port'),
+                   self.CAPABILITIES,
+                   self.config.get('wallet', 'pub_key')
+                   ]
+        self.send_packet(peer, payload)
 
-    def rcv_Ping(self, peer, data):
-        self.send_Pong(peer)
-
-    def send_Pong(self, peer):
-        """
-        [0x03]
-        Reply to peer's Ping packet.
-        """
-        #self.send_packet(peer, [0x03])
-        #self.chainmgr.pingpong(True)
-
-    def rcv_Pong(self, peer, data):
-        self.send_GetTransactions(peer) # FIXME
+        peer.hello_sent = True
 
     def send_Disconnect(self, peer, reason=None):
         """
@@ -256,6 +241,27 @@ class WireProtocol(object):
             reason = self.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(peer), reason))
         self.peermgr.remove_peer(peer)
+
+    def send_Ping(self, peer):
+        """
+        [0x02]
+        Requests an immediate reply of Pong from the peer.
+        """
+        self.send_packet(peer, [0x02])
+
+    def rcv_Ping(self, peer, data):
+        self.send_Pong(peer)
+
+    def send_Pong(self, peer):
+        """
+        [0x03]
+        Reply to peer's Ping packet.
+        """
+        self.send_packet(peer, [0x03])
+        # self.chainmgr.pingpong(True)
+
+    def rcv_Pong(self, peer, data):
+        self.send_GetTransactions(peer)  # FIXME
 
     def rcv_GetPeers(self, peer, data):
         """
@@ -293,6 +299,20 @@ class WireProtocol(object):
         if len(data) > 1:
             self.send_packet(peer, data)  # FIXME, what?
 
+    def rcv_Transactions(self, peer, data):
+        """
+        [0x12, [nonce, receiving_address, value, ... ], ... ]
+        Specify (a) transaction(s) that the peer should make sure is included on
+        its transaction queue. The items in the list (following the first item 0x12)
+        are transactions in the format described in the main Ethereum specification.
+        """
+        logger.info('received transactions', len(data), peer)
+        self.chainmgr.addTransactions(data)
+
+    def send_Transactions(self, peer, transaction_list):
+        data = [0x12] + [transaction_list]
+        self.send_packet(peer, data)
+
     def rcv_Blocks(self, peer, data):
         """
         [0x13, [block_header, transaction_list, uncle_list], ... ]
@@ -300,32 +320,52 @@ class WireProtocol(object):
         (following the first item, 0x13) are blocks in the format described in the
         main Ethereum specification.
         """
-        
+
         # FIXME, currently just dumps data
         for e in data:
             header, transaction_list, uncle_list = e
-            logger.debug('received block:  parent:{0}'.format(header[0].encode('hex')))
+            logger.debug(
+                'received block:  parent:{0}'.format(header[0].encode('hex')))
 
-
-    def rcv_Transactions(self, peer, data):
+    def rcv_GetChain(self, peer, data):
         """
-        [0x12, [nonce, receiving_address, value, ... ], ... ]
-        Specify (a) transaction(s) that the peer should make sure is included on 
-        its transaction queue. The items in the list (following the first item 0x12) 
-        are transactions in the format described in the main Ethereum specification.
+        [0x14, Parent1, Parent2, ..., ParentN, Count]
+        Request the peer to send Count (to be interpreted as an integer) blocks
+        in the current canonical block chain that are children of Parent1
+        (to be interpreted as a SHA3 block hash). If Parent1 is not present
+        in the block chain, it should instead act as if the request were for
+        Parent2 &c. through to ParentN. If the designated parent is the present
+        block chain head, an empty reply should be sent. If none of the parents
+        are in the current canonical block chain, then NotInChain should be sent
+        along with ParentN (i.e. the last Parent in the parents list). If no
+        parents are passed, then a reply need not be made.
         """
-        logger.info('received transactions', len(data), peer)
-        self.chainmgr.addTransactions(data)
+        count = idec(data[-1])
+        parents_H = data[:-1]
 
+        # We know nothing for now FIXME
+        for ph in parents_H:
+            self.send_NotInChain(peer, ph)
 
-    def send_Transactions(self, peer, transaction_list):
-        data = [0x12] + [transaction_list]
-        self.send_packet(peer, data) 
+    def send_GetChain(self, peer, count=1, blocks_H=[]):
+        data = [0x14] + blocks_H + [count]
+        self.send_packet(peer, data)
+
+    def rcv_NotInChain(self, peer, data):
+        """
+        [0x15, Hash]
+        Tell the peer that the given hash was not found in its block chain.
+        """
+        hash = data[0]
+
+    def send_NotInChain(self, peer, hash):
+        data = [0x15, hash]
+        self.send_packet(peer, data)
 
     def rcv_GetTransactions(self, peer):
         """
         [0x16]
-        Request the peer to send all transactions currently in the queue. 
+        Request the peer to send all transactions currently in the queue.
         See Transactions.
         """
         logger.debug('received get_transaction', peer)
@@ -333,11 +373,7 @@ class WireProtocol(object):
 
     def send_GetTransactions(self, peer):
         logger.info('asking for transactions')
-        self.send_packet(peer, [0x16]) 
-
-    def _broadcast(self, method, data):
-        for peer in self.peermgr.connected_peers:
-            method(peer, data)
+        self.send_packet(peer, [0x16])
 
     def process_chainmanager_queue(self):
 
@@ -347,15 +383,19 @@ class WireProtocol(object):
                 return
             cmd, data = msg[0], msg[1:]
             logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
-            
+
             if cmd == "send_transactions":
                 transaction_list = data[0]
                 peer = self.peermgr.get_peer_by_id(data[1])
                 if peer:
                     self.send_Transactions(peer, transaction_list)
-                else: # broadcast
+                else:  # broadcast
                     self._broadcast(self.send_Transactions, transaction_list)
-            
+            elif cmd == "get_chain":
+                count = data[0]
+                parents_H = data[1]
+                if count and len(parents_H):
+                    self._broadcast(send_GetChain, count, parents_H)
             elif cmd == 'pingpong':
                 reply = data[0]
                 logger.debug('%r received pingpong(reply=%r)' % (self, reply))
