@@ -1,7 +1,8 @@
 
 from setuptools import setup, find_packages
 
-console_scripts = ['trie=pyethereum.trie:main']
+console_scripts = ['trie=pyethereum.trie:main',
+                   'eth=pyethereum.eth:main']
 
 setup(name="pyethereum",
       packages=find_packages("."),
