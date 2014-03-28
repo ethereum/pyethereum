@@ -84,6 +84,14 @@ For basic, verbose logging functionality, the following is sufficient (adjust le
 If you need a more advanced setup, have a look at the
 `python docs <http://docs.python.org/2/library/logging.html>`_
 
+
+**Easy Debugging:**
+The ``eth.py`` script, understands a command line flag for easy debugging, e.g.::
+    
+    pyethereum/eth.py -L pyethereum.wire:DEBUG,:INFO ...<other args>
+
+will set the log-level for ``wire`` to ``DEBUG`` and the root logger to ``INFO``.
+
 Licence
 ========
 See LICENCE
