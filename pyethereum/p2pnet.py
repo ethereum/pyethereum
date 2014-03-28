@@ -97,7 +97,6 @@ class Peer(threading.Thread):
             except Queue.Empty:
                 spacket = None
             while spacket:
-
                 logger.debug('{0}: send packet {1}'.format(
                     repr(self), str(dump_packet(spacket))[:60]))
                 try:
@@ -176,6 +175,8 @@ class PeerManager(threading.Thread):
         peer.stop()
         with self.lock:
             self.connected_peers.remove(peer)
+        # connect new peers if there are no candidates
+
 
     def connect_peer(self, host, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -197,25 +198,35 @@ class PeerManager(threading.Thread):
 
         # Send Hello
         peer.protocol.send_Hello(peer)
+        peer.protocol.send_GetPeers(peer)
         return True
 
+    def _peer_candidates(self):
+        candidates = self.get_known_peer_addresses().difference(
+            self.get_connected_peer_addresses())
+        candidates = [
+            ipn for ipn in candidates if not ipn[:2] == self.local_address]
+        return candidates
+
+    def _poll_more_candidates(self):
+        for peer in list(self.connected_peers):
+            with peer.lock:
+                peer.protocol.send_GetPeers(peer)
+        
     def manage_connections(self):
         num_peers = self.config.getint('network', 'num_peers')
+        candidates = self._peer_candidates()
         if len(self.connected_peers) < num_peers:
-            logger.debug(
-                'not enough peers: {0}'.format(len(self.connected_peers)))
-            candidates = self.get_known_peer_addresses().difference(
-                self.get_connected_peer_addresses())
-            candidates = [
-                ipn for ipn in candidates if not ipn[:2] == self.local_address]
+            logger.debug('not enough peers: {0}'.format(len(self.connected_peers)))            
             logger.debug('num candidates: {0}'.format(len(candidates)))
-
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
                 # don't use this node again in case of connect error > remove
                 self._seen_peers.remove((ip, port, node_id))
-
+            else:
+                self._poll_more_candidates()
+                
         for peer in list(self.connected_peers):
             if peer.stopped():
                 self.remove_peer(peer)
@@ -232,11 +243,11 @@ class PeerManager(threading.Thread):
                     peer, peer.ip, peer.port))
                 self.remove_peer(peer)
             elif min(dt_seen, dt_ping) > self.max_silence:
+                # ping silent peer
                 logger.debug('pinging silent peer {0}'.format(peer))
                 logger.debug(
                     '# connected peers: {0}/{1}'.format(len(self.connected_peers), num_peers))
-                logger.debug(
-                    '# candidates: {0}'.format(len(self.get_known_peer_addresses())))
+              
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
                     peer.last_pinged = now
