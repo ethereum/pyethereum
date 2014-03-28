@@ -4,7 +4,7 @@ import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 import logging
-from manager import ChainProxy
+from manager import ChainProxy, rlp_hash_hex
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 logger = logging.getLogger(__name__)
@@ -149,9 +149,9 @@ class WireProtocol(object):
         packet += payload
         peer.send_packet(packet)
 
-    def _broadcast(self, method, data):
+    def _broadcast(self, method, *data):
         for peer in self.peermgr.connected_peers:
-            method(peer, data)
+            method(peer, *data)
 
     def rcv_Hello(self, peer, data):
         """
@@ -261,7 +261,9 @@ class WireProtocol(object):
         # self.chainmgr.pingpong(True)
 
     def rcv_Pong(self, peer, data):
-        self.send_GetTransactions(peer)  # FIXME
+        # self.send_GetTransactions(peer)  
+        pass
+
 
     def rcv_GetPeers(self, peer, data):
         """
@@ -320,12 +322,12 @@ class WireProtocol(object):
         (following the first item, 0x13) are blocks in the format described in the
         main Ethereum specification.
         """
+        blocks = data
+        print "received blocks", [rlp_hash_hex(b) for b in blocks]
+        self.chainmgr.add_blocks(blocks)
+        
+        self.send_GetTransactions(peer)  # FIXME  (which event should trigger this?)
 
-        # FIXME, currently just dumps data
-        for e in data:
-            header, transaction_list, uncle_list = e
-            logger.debug(
-                'received block:  parent:{0}'.format(header[0].encode('hex')))
 
     def rcv_GetChain(self, peer, data):
         """
@@ -342,12 +344,14 @@ class WireProtocol(object):
         """
         count = idec(data[-1])
         parents_H = data[:-1]
+        print "in rcv get chain", peer, count, parents_H
 
         # We know nothing for now FIXME
         for ph in parents_H:
             self.send_NotInChain(peer, ph)
 
     def send_GetChain(self, peer, count=1, blocks_H=[]):
+        print "in get chain", peer, count, blocks_H
         data = [0x14] + blocks_H + [count]
         self.send_packet(peer, data)
 
@@ -372,7 +376,7 @@ class WireProtocol(object):
         self.chainmgr.request_transactions(peer.id())
 
     def send_GetTransactions(self, peer):
-        logger.info('asking for transactions')
+        logger.debug('asking for transactions')
         self.send_packet(peer, [0x16])
 
     def process_chainmanager_queue(self):
@@ -391,11 +395,12 @@ class WireProtocol(object):
                     self.send_Transactions(peer, transaction_list)
                 else:  # broadcast
                     self._broadcast(self.send_Transactions, transaction_list)
-            elif cmd == "get_chain":
+            elif cmd == "get_chain":                
                 count = data[0]
                 parents_H = data[1]
+                print "sending get chain", count, parents_H
                 if count and len(parents_H):
-                    self._broadcast(send_GetChain, count, parents_H)
+                    self._broadcast(self.send_GetChain, count, parents_H)
             elif cmd == 'pingpong':
                 reply = data[0]
                 logger.debug('%r received pingpong(reply=%r)' % (self, reply))

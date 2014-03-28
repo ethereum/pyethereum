@@ -4,10 +4,12 @@ from transactions import Transaction
 import threading
 import Queue
 import logging
-
+from sha3 import sha3_256
 
 logger = logging.getLogger(__name__)
 
+rlp_hash =  lambda data: sha3_256(rlp.encode(data)).digest()
+rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
 class ChainProxy():
     """ 
@@ -21,6 +23,7 @@ class ChainProxy():
         self.network_queue = NetworkProxy.network_queue
 
     def add_blocks(self, blocks):
+        print "chainmanager add blocks", [rlp_hash(b) for b in blocks]
         self.chain_queue.put(('add_blocks', blocks))
 
     def add_transactions(self, transactions):
@@ -64,6 +67,8 @@ class NetworkProxy():
         "broadcast if no peer specified"
         pass
 
+    def send_get_chain(self, count=1, parents_H=[]):
+        self.network_queue.put(('get_chain', count, parents_H))
 
     def pingpong(self, reply=False):
         self.network_queue.put(('pingpong', reply))
@@ -86,6 +91,12 @@ class ChainManager(threading.Thread):
         self.network = NetworkProxy()
         #self.blockchain = blockchain
         self.transactions = set()
+        self.dummy_blockchain = dict() # hash > block
+
+        root_H = 'd904b19e7a1c8e5266b3e49bf4ca261e9a1f9e4dbf529697d7e47beb8e46920e'.decode('hex')
+        root_H = '2a0b74eb86c34703778c66171ed2b6a363e8edf9f31b2919810bd1dbeecfdf58'.decode('hex')
+
+        self.network.send_get_chain(count=1, parents_H=[root_H])
 
     def stop(self):
         with self.lock:
@@ -106,6 +117,23 @@ class ChainManager(threading.Thread):
         "in the meanwhile mine a bit, not efficient though"
         pass
 
+    def rcv_blocks(self, blocks):
+
+        new_blocks_H = set()        
+        # memorize
+        for block in blocks:
+            h = rlp_hash(block) 
+            print self, "rcv_blocks:",  rlp_hash_hex(block) 
+            if not h in self.dummy_blockchain:
+                new_blocks_H.add(h)
+                self.dummy_blockchain[h] = block
+        # ask for children                
+        for h in new_blocks_H:
+            print self, "rcv_blocks: ask for child block", h.encode('hex')
+            self.network.send_get_chain(1, [h])
+
+
+
     def process_queue(self):
         msg = self.network.pop_message()
         if not msg:
@@ -114,7 +142,8 @@ class ChainManager(threading.Thread):
 
         logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
         if cmd == "add_blocks":
-            self.transactions = set()            
+            print self, "add_blocks in queue seen"
+            self.rcv_blocks(data)
         elif cmd == "add_transactions":
             tx_list = data[0]
             for tx in tx_list:

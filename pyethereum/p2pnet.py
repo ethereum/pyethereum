@@ -54,7 +54,7 @@ class Peer(threading.Thread):
             return self._connection
 
     def stop(self):
-        logger.info('disconnected: {0}'.format(repr(self)))
+        logger.debug('disconnected: {0}'.format(repr(self)))
         with self.lock:
             if self._stopped:
                 return
@@ -191,7 +191,7 @@ class PeerManager(threading.Thread):
             return False
         sock.settimeout(.1)
         ip, port = sock.getpeername()
-        logger.info('connected {0}:{1}'.format(ip, port))
+        logger.debug('connected {0}:{1}'.format(ip, port))
         peer = Peer(self, sock, ip, port)
         self.add_peer(peer)
         peer.start()
