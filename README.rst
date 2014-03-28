@@ -25,7 +25,8 @@ one-liner:
 
 ``curl http://downloads.buildout.org/2/bootstrap.py | python``
 
-Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
+If your system has ``wget`` and not ``curl`` you can also use ``wget -O -`` 
+in place of ``curl``. Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
 into the project folder and call ``python bootstrap.py``.
 
 Building:
