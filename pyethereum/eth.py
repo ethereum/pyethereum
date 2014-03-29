@@ -172,7 +172,7 @@ def main():
     while not peer_manager.stopped():
         time.sleep(0.1)
 
-    logger.info('extiting')
+    logger.info('exiting')
     # tcp_server.join() # does not work!
     peer_manager.join()
 
