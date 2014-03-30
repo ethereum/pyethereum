@@ -6,6 +6,13 @@ import random
 register_type(Py=parse_py)
 
 
+def gen_random_value():
+    value = range(random.randint(5, 40))
+    random.shuffle(value)
+    value = ''.join(str(x) for x in value)
+    return value
+
+
 @when(u'clear trie tree')  # noqa
 def step_impl(context):
     context.trie.clear()
@@ -20,10 +27,7 @@ def step_impl(context):
 def step_impl(context, keys):
     context.pairs = []
     for key in keys:
-        value = range(random.randint(5, 40))
-        random.shuffle(value)
-        value = ''.join(str(x) for x in value)
-        context.pairs.append((key, value))
+        context.pairs.append((key, gen_random_value()))
 
 
 @when(u'insert pairs')  # noqa
@@ -38,16 +42,28 @@ def step_impl(context):
         assert context.trie.get(key) == str(value)
 
 
-@given(u'a key: {key:Py}')  # noqa
+@then(u'get by the key: {key:Py} will return None')  # noqa
 def step_impl(context, key):
-    context.key = key
+    assert context.trie.get(key) is None
 
 
-@then(u'get by the key will return None')  # noqa
-def step_impl(context):
-    assert context.trie.get(context.key) is None
+@when(u'delete by the key: {key:Py}')  # noqa
+def step_impl(context, key):
+    new_pairs = []
+    for (k, v) in context.pairs:
+        if k == key:
+            context.trie.delete(k)
+        else:
+            new_pairs.append((k, v))
+    context.pairs = new_pairs
 
 
-@when(u'delete by the key')  # noqa
-def step_impl(context):
-    context.trie.delete(context.key)
+@when(u'update by the key: {key:Py}')  # noqa
+def step_impl(context, key):
+    new_pairs = []
+    for (k, v) in context.pairs:
+        if k == key:
+            v = gen_random_value()
+            context.trie.update(k, v)
+        new_pairs.append((k, v))
+    context.pairs = new_pairs

@@ -53,52 +53,59 @@ Feature: trie tree manipulate
       | ["A", "Z", "0"] |
     # ---- end: insert to a diverge node---------
 
-  @load_data
+
   Scenario: insert in a more sophisticated case
+    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
+    When clear trie tree
+    And insert pairs
     Then for each pair, get with key will return the correct value
 
 
-  @load_data
   Scenario Outline: update existing node
-    # keys already in loaded data
-    Given pairs with keys: <keys>
-    When insert pairs
+    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
+    When clear trie tree
+    And insert pairs
+    And update by the key: <key>
     Then for each pair, get with key will return the correct value
 
     Examples:
-      | keys     |
-      | ["AB"]   |
-      | ["AC"]   |
-      | ["ABCD"] |
-      | ["ACD"]  |
-      | ["A"]    |
-      | ["B"]    |
-      | ["CD"]   |
-      | ["BCD"]  |
-      | ["Z"]    |
-      | ["0"]    |
-      | ["Z0"]   |
-      | ["0Z"]   |
+      | key     |
+      | "AB"   |
+      | "AC"   |
+      | "ABCD" |
+      | "ACD"  |
+      | "A"    |
+      | "B"    |
+      | "CD"   |
+      | "BCD"  |
+      | "Z"    |
+      | "0"    |
+      | "Z0"   |
+      | "0Z"   |
 
-  @load_data
+
   Scenario Outline: reading with a key not existing
-    # a key not existing in loaded data
-    Given a key: <key>
-    Then get by the key will return None
+    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
+    When clear trie tree
+    And insert pairs
+    Then for each pair, get with key will return the correct value
+    And get by the key: <key> will return None
 
-    Examples:
+    Examples: key not existing
       | key    |
       | "ABDCD" |
       | "X"     |
 
-  @load_data
-  Scenario Outline: delete existing node by key
-    # keys already in loaded data
-    Given a key: <key>
-    When delete by the key
-    Then get by the key will return None
 
-    Examples:
+  Scenario Outline: delete node
+    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
+    When clear trie tree
+    And insert pairs
+    And delete by the key: <key>
+    Then for each pair, get with key will return the correct value
+    And get by the key: <key> will return None
+
+    Examples: existing key
       | key    |
       | "AB"   |
       | "AC"   |
@@ -113,14 +120,7 @@ Feature: trie tree manipulate
       | "Z0"   |
       | "0Z"   |
 
-  @load_data
-  Scenario Outline: delete node by a key not existing
-    # a key not existing in loaded data
-    Given a key: <key>
-    When delete by the key
-    Then get by the key will return None
-
-    Examples:
+    Examples: key not existing
       | key     |
       | "ABDCD" |
       | "X"     |
