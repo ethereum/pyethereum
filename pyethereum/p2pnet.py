@@ -41,7 +41,7 @@ class Peer(threading.Thread):
         self.last_pinged = 0
 
     def __repr__(self):
-        return "<Peer(%s:%d)>" % (self.ip, self.port)
+        return "<Peer(%s:%r)>" % (self.ip, self.port)
 
 
     def id(self):
