@@ -93,8 +93,7 @@ class ChainManager(threading.Thread):
         self.transactions = set()
         self.dummy_blockchain = dict() # hash > block
 
-        root_H = 'd904b19e7a1c8e5266b3e49bf4ca261e9a1f9e4dbf529697d7e47beb8e46920e'.decode('hex')
-        root_H = '2a0b74eb86c34703778c66171ed2b6a363e8edf9f31b2919810bd1dbeecfdf58'.decode('hex')
+        root_H = '\xabk\x9aV\x13\x97\x0f\xaaw\x1b\x12\xd4I\xb2\xe9\xbb\x92Z\xb7\xa3i\xf0\xa4\xb8k(n\x9dT\x00\x99\xcf'
 
         self.network.send_get_chain(count=1, parents_H=[root_H])
 
