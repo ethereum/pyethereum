@@ -56,3 +56,71 @@ Feature: trie tree manipulate
   @load_data
   Scenario: insert in a more sophisticated case
     Then for each pair, get with key will return the correct value
+
+
+  @load_data
+  Scenario Outline: update existing node
+    # keys already in loaded data
+    Given pairs with keys: <keys>
+    When insert pairs
+    Then for each pair, get with key will return the correct value
+
+    Examples:
+      | keys     |
+      | ["AB"]   |
+      | ["AC"]   |
+      | ["ABCD"] |
+      | ["ACD"]  |
+      | ["A"]    |
+      | ["B"]    |
+      | ["CD"]   |
+      | ["BCD"]  |
+      | ["Z"]    |
+      | ["0"]    |
+      | ["Z0"]   |
+      | ["0Z"]   |
+
+  @load_data
+  Scenario Outline: reading with a key not existing
+    # a key not existing in loaded data
+    Given a key: <key>
+    Then get by the key will return None
+
+    Examples:
+      | key    |
+      | "ABDCD" |
+      | "X"     |
+
+  @load_data
+  Scenario Outline: delete existing node by key
+    # keys already in loaded data
+    Given a key: <key>
+    When delete by the key
+    Then get by the key will return None
+
+    Examples:
+      | key    |
+      | "AB"   |
+      | "AC"   |
+      | "ABCD" |
+      | "ACD"  |
+      | "A"    |
+      | "B"    |
+      | "CD"   |
+      | "BCD"  |
+      | "Z"    |
+      | "0"    |
+      | "Z0"   |
+      | "0Z"   |
+
+  @load_data
+  Scenario Outline: delete node by a key not existing
+    # a key not existing in loaded data
+    Given a key: <key>
+    When delete by the key
+    Then get by the key will return None
+
+    Examples:
+      | key     |
+      | "ABDCD" |
+      | "X"     |

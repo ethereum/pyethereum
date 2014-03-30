@@ -36,3 +36,18 @@ def step_impl(context):
 def step_impl(context):
     for (key, value) in context.pairs:
         assert context.trie.get(key) == str(value)
+
+
+@given(u'a key: {key:Py}')  # noqa
+def step_impl(context, key):
+    context.key = key
+
+
+@then(u'get by the key will return None')  # noqa
+def step_impl(context):
+    assert context.trie.get(context.key) is None
+
+
+@when(u'delete by the key')  # noqa
+def step_impl(context):
+    context.trie.delete(context.key)

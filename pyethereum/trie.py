@@ -297,59 +297,83 @@ class Trie(object):
 
         return pre_curr_key_node
 
-    def delete(self, node, key):
+    def delete(self, key):
+        return self._delete(self.root, key)
+
+    def _delete(self, node, key):
         """ delete item inside a node
+
+        :param node: is a rlp encoded binary array
+        :param key: nibble list without terminator
+        :return: rlp encoded node
 
         todo: delete corresponding value from database
         """
-        if len(key) == 0 or not node:
-            return ''
+        node_type, node = self._inspect_node(node)
 
-        curr_node = self._rlp_decode(node)
-        if not curr_node:
-            raise Exception("node not found in database")
+        if node_type == NODE_TYPE_BLANK:
+            return BLANK_NODE
 
-        if len(curr_node) == 2:
-            (curr_key, curr_val) = curr_node
-            curr_key = unpack_to_nibbles(curr_key)
-            if key == curr_key:
-                return ''
-            elif key[:len(curr_key)] == curr_key:
-                newhash = self.delete(curr_val, key[len(curr_key):])
-                childnode = self._rlp_decode(newhash)
-                if len(childnode) == 2:
-                    newkey = curr_key + unpack_to_nibbles(childnode[0])
-                    newnode = [pack_nibbles(newkey), childnode[1]]
-                else:
-                    newnode = [curr_node[0], newhash]
-                return self._rlp_encode(newnode)
+        if node_type == NODE_TYPE_VALUE:
+            return node if key else BLANK_NODE
+
+        if node_type == NODE_TYPE_DIVERGE:
+
+            # already reach the expected node
+            if not key:
+                return node[-1]
+            return self._get(node[key[0]], key[1:])
+
+            newnode = [curr_node[i] for i in range(17)]
+            newnode[key[0]] = self._delete(newnode[key[0]], key[1:])
+            onlynode = -1
+            for i in range(17):
+                if newnode[i]:
+                    if onlynode == -1:
+                        onlynode = i
+                    else:
+                        onlynode = -2
+            if onlynode == NIBBLE_TERMINATOR:
+                newnode2 = [pack_nibbles([NIBBLE_TERMINATOR]), newnode[onlynode]]
+            elif onlynode >= 0:
+                childnode = self._rlp_decode(newnode[onlynode])
+                if not childnode:
+                    raise Exception("?????")
+                if len(childnode) == 17:
+                    newnode2 = [
+                        pack_nibbles([onlynode]), newnode[onlynode]]
+                elif len(childnode) == 2:
+                    newkey = [onlynode] + unpack_to_nibbles(childnode[0])
+                    newnode2 = [pack_nibbles(newkey), childnode[1]]
             else:
-                return node
+                newnode2 = newnode
+            return self._rlp_encode(newnode2)
 
-        newnode = [curr_node[i] for i in range(17)]
-        newnode[key[0]] = self.delete(newnode[key[0]], key[1:])
-        onlynode = -1
-        for i in range(17):
-            if newnode[i]:
-                if onlynode == -1:
-                    onlynode = i
+        elif node_type == NODE_TYPE_KEY_VALUE:
+            if len(key) == 0 or not node:
+                return BLANK_NODE
+
+            curr_node = self._rlp_decode(node)
+            if not curr_node:
+                raise Exception("node not found in database")
+
+            if len(curr_node) == 2:
+                (curr_key, curr_val) = curr_node
+                curr_key = unpack_to_nibbles(curr_key)
+                if key == curr_key:
+                    return BLANK_NODE
+                elif key[:len(curr_key)] == curr_key:
+                    newhash = self._delete(curr_val, key[len(curr_key):])
+                    childnode = self._rlp_decode(newhash)
+                    if len(childnode) == 2:
+                        newkey = curr_key + unpack_to_nibbles(childnode[0])
+                        newnode = [pack_nibbles(newkey), childnode[1]]
+                    else:
+                        newnode = [curr_node[0], newhash]
+                    return self._rlp_encode(newnode)
                 else:
-                    onlynode = -2
-        if onlynode == NIBBLE_TERMINATOR:
-            newnode2 = [pack_nibbles([NIBBLE_TERMINATOR]), newnode[onlynode]]
-        elif onlynode >= 0:
-            childnode = self._rlp_decode(newnode[onlynode])
-            if not childnode:
-                raise Exception("?????")
-            if len(childnode) == 17:
-                newnode2 = [
-                    pack_nibbles([onlynode]), newnode[onlynode]]
-            elif len(childnode) == 2:
-                newkey = [onlynode] + unpack_to_nibbles(childnode[0])
-                newnode2 = [pack_nibbles(newkey), childnode[1]]
-        else:
-            newnode2 = newnode
-        return self._rlp_encode(newnode2)
+                    return node
+
 
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
