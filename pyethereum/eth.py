@@ -42,7 +42,7 @@ def create_config():
                       )
     parser.add_option("-r", "--remote",
                       dest="remote_host",
-                      help="<host> Connect to remote host"
+                      help="<host> Connect to remote host (try: 54.201.28.117 or 54.204.10.41)"
                       )
     parser.add_option("-p", "--port",
                       dest="remote_port",
