@@ -178,7 +178,7 @@ class WireProtocol(object):
         [574621841, 116, 'Hello', '\x08', '', 'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_', "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|\x86\xa6ZV!Q6\x82\xebQ$4+"]
         [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb', '\x07']
         """
-
+        logger.debug(data[:-1] + [data[-1][20]])
         # check compatibility
         if idec(data[0]) != self.PROTOCOL_VERSION:
             return self.send_Disconnect(

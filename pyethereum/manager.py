@@ -15,6 +15,9 @@ class ChainProxy():
     """ 
     abstract external access to the blockchain
     stateless, queues are shared between all instances
+
+    Will we have an  API?
+    http://forum.ethereum.org/discussion/247/how-will-the-outside-api-be-like
     """
 
     chain_queue = Queue.Queue()
@@ -93,9 +96,14 @@ class ChainManager(threading.Thread):
         self.transactions = set()
         self.dummy_blockchain = dict() # hash > block
 
-        root_H = '\xabk\x9aV\x13\x97\x0f\xaaw\x1b\x12\xd4I\xb2\xe9\xbb\x92Z\xb7\xa3i\xf0\xa4\xb8k(n\x9dT\x00\x99\xcf'
+    def bootstrap_blockchain(self):
+        # genesis block
+        # http://etherchain.org/#/block/ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
+        if len(self.dummy_blockchain):
+            return
+        genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'.decode('hex')
+        self.network.send_get_chain(count=1, parents_H=[genesis_H])
 
-        self.network.send_get_chain(count=1, parents_H=[root_H])
 
     def stop(self):
         with self.lock:
