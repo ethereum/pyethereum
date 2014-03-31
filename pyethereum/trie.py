@@ -44,7 +44,7 @@ def bin_to_nibbles(s):
 
 
 def nibbles_to_bin(nibbles):
-    if sum(1 for x in nibbles if x > 15 or x < 0):
+    if any(x > 15 or x < 0 for x in nibbles):
         raise Exception("nibbles can only be [0,..15]")
 
     if len(nibbles) % 2:
@@ -369,6 +369,8 @@ class Trie(object):
             (key_bin, value) = node
             key = '+'.join([str(x) for x in unpack_to_nibbles(key_bin)])
             sub_dict = self._to_dict(value)
+
+            # prepend key of this node to the keys of children
             res = {}
             for sub_key, sub_value in sub_dict.iteritems():
                 full_key = '{0}+{1}'.format(key, sub_key) if sub_key else key

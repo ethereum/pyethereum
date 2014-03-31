@@ -77,4 +77,4 @@ def step_impl(context):
 @then(u'to_dict will return the correct dict')  # noqa
 def step_impl(context):
     res = context.trie.to_dict()
-    assert {key: value for (key, value) in context.pairs} == res
+    assert dict(context.pairs) == res
