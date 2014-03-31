@@ -317,24 +317,17 @@ class Trie(object):
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
         '''
-        if not node:
+        (node_type, node) = self._inspect_node(node)
+        if node_type == NODE_TYPE_BLANK:
             return 0
-        curr_node = self._rlp_decode(node)
-        if not curr_node:
-            raise Exception("node not found in database")
-        if len(curr_node) == 2:
-            key = pack_nibbles(curr_node[0])
-            if key[-1] == NIBBLE_TERMINATOR:
-                return 1
-            else:
-                return self._get_size(curr_node[1])
-        elif len(curr_node) == 17:
-            total = 0
-            for i in range(16):
-                total += self._get_size(curr_node[i])
-            if curr_node[16]:
-                total += 1
-            return total
+        elif node_type == NODE_TYPE_VALUE:
+            return 1
+        elif node_type == NODE_TYPE_KEY_VALUE:
+            (key_bin, value) = node
+            return self._get_size(value)
+        elif node_type == NODE_TYPE_DIVERGE:
+            return sum([self._get_size(node[x]) for x in range(16)]) \
+                + (1 if node[-1] else 0)
 
     def _to_dict(self, node):
         '''convert (key, value) stored in this and the descendant nodes

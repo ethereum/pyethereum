@@ -67,3 +67,8 @@ def step_impl(context, key):
             context.trie.update(k, v)
         new_pairs.append((k, v))
     context.pairs = new_pairs
+
+
+@then(u'get size will return the correct number')  # noqa
+def step_impl(context):
+    assert context.trie.get_size() == len(context.pairs)
