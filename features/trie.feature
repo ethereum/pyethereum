@@ -145,10 +145,39 @@ Feature: trie tree manipulate
       # nibbles of Z: [5,10]
       # nibbles of B: [4,2]
       | keys            |
-      | ["AB", "CD"]    |
       | ["A", "Z"]      |
       | ["A", "Z", "B"] |
       | ["A", "Z", "0"] |
+      | ["AB", "CD"]    |
+
+    Examples: sophisticated case
+      | keys                                                             |
+      | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
+
+
+  Scenario Outline: convert trie tree to dict
+    Given pairs with keys: <keys>
+    When clear trie tree
+    And insert pairs
+    Then to_dict will return the correct dict
+
+    Examples: a blank tree
+      | keys |
+      | []   |
+
+    Examples: key value node
+      | keys           |
+      | ["AB", "ABCD"] |
+
+    Examples: diverge node
+      # nibbles of A: [4,1]
+      # nibbles of Z: [5,10]
+      # nibbles of B: [4,2]
+      | keys            |
+      | ["A", "Z"]      |
+      | ["A", "Z", "B"] |
+      | ["A", "Z", "0"] |
+      | ["AB", "CD"]    |
 
     Examples: sophisticated case
       | keys                                                             |

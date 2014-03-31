@@ -43,11 +43,32 @@ def bin_to_nibbles(s):
     return res
 
 
+def nibbles_to_bin(nibbles):
+    if sum(1 for x in nibbles if x > 15 or x < 0):
+        raise Exception("nibbles can only be [0,..15]")
+
+    if len(nibbles) % 2:
+        raise Exception("nibbles must be of even numbers")
+
+    res = ''
+    for i in range(0, len(nibbles), 2):
+        res += chr(16 * nibbles[i] + nibbles[i + 1])
+    return res
+
+
 NIBBLE_TERMINATOR = 16
 
 
-def append_terminator(nibbles):
-    nibbles.append(NIBBLE_TERMINATOR)
+def with_terminator(nibbles):
+    if nibbles[-1] != NIBBLE_TERMINATOR:
+        nibbles.append(NIBBLE_TERMINATOR)
+    return nibbles
+
+
+def without_terminator(nibbles):
+    if nibbles[-1] == NIBBLE_TERMINATOR:
+        del nibbles[-1]
+    return nibbles
 
 
 def pack_nibbles(nibbles):
@@ -231,7 +252,7 @@ class Trie(object):
                 # a new key value node
                 value_node_type, _ = self._inspect_node(value)
                 if value_node_type == NODE_TYPE_VALUE:
-                    append_terminator(key)
+                    with_terminator(key)
                 return self._rlp_encode([pack_nibbles(key), value])
 
         elif node_type == NODE_TYPE_VALUE:
@@ -333,49 +354,48 @@ class Trie(object):
         '''convert (key, value) stored in this and the descendant nodes
         to dict items.
 
-        Here key is in full form, rather than key of the individual node
+        .. note:: Here key is in full form,
+        rather than key of the individual node
         '''
-        if not node:
+        (node_type, node) = self._inspect_node(node)
+
+        if node_type == NODE_TYPE_BLANK:
             return {}
-        curr_node = self._rlp_decode(node)
-        if not curr_node:
-            raise Exception("node not found in database")
-        if len(curr_node) == 2:
-            lkey = unpack_to_nibbles(curr_node[0])
-            o = {}
-            if lkey[-1] == NIBBLE_TERMINATOR:
-                o[curr_node[0]] = curr_node[1]
-            else:
-                d = self._to_dict(curr_node[1])
-                for v in d:
-                    subkey = unpack_to_nibbles(v)
-                    totalkey = pack_nibbles(lkey + subkey)
-                    o[totalkey] = d[v]
-            return o
-        elif len(curr_node) == 17:
-            o = {}
+
+        elif node_type == NODE_TYPE_VALUE:
+            return {'': self._rlp_decode(node)}
+
+        elif node_type == NODE_TYPE_KEY_VALUE:
+            (key_bin, value) = node
+            key = '+'.join([str(x) for x in unpack_to_nibbles(key_bin)])
+            sub_dict = self._to_dict(value)
+            res = {}
+            for sub_key, sub_value in sub_dict.iteritems():
+                full_key = '{0}+{1}'.format(key, sub_key) if sub_key else key
+                res[full_key] = sub_value
+            return res
+
+        elif node_type == NODE_TYPE_DIVERGE:
+            res = {}
             for i in range(16):
-                d = self._to_dict(curr_node[i])
-                for v in d:
-                    subkey = unpack_to_nibbles(v)
-                    totalkey = pack_nibbles([i] + subkey)
-                    o[totalkey] = d[v]
-            if curr_node[16]:
-                o[chr(NIBBLE_TERMINATOR)] = curr_node[16]
-            return o
-        else:
-            raise Exception("bad curr_node! " + curr_node)
+                sub_dict = self._to_dict(node[i])
+
+                for sub_key, sub_value in sub_dict.iteritems():
+                    full_key = '{0}+{1}'.format(i, sub_key) if sub_key else i
+                    res[full_key] = sub_value
+
+            if node[-1]:
+                res[str(NIBBLE_TERMINATOR)] = self._rlp_decode(node[-1])
+            return res
 
     def to_dict(self, as_hex=False):
         d = self._to_dict(self.root)
-        o = {}
-        for v in d:
-            curr_val = ''.join(['0123456789abcdef'[x]
-                                for x in unpack_to_nibbles(v)[:-1]])
-            if not as_hex:
-                curr_val = curr_val.decode('hex')
-            o[curr_val] = d[v]
-        return o
+        res = {}
+        for key_str, value in d.iteritems():
+            nibbles = [int(x) for x in key_str.split('+')]
+            key = nibbles_to_bin(without_terminator(nibbles))
+            res[key] = value
+        return res
 
     def get(self, key):
         rlp_value = self._get(self.root, bin_to_nibbles(str(key)))

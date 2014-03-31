@@ -72,3 +72,9 @@ def step_impl(context, key):
 @then(u'get size will return the correct number')  # noqa
 def step_impl(context):
     assert context.trie.get_size() == len(context.pairs)
+
+
+@then(u'to_dict will return the correct dict')  # noqa
+def step_impl(context):
+    res = context.trie.to_dict()
+    assert {key: value for (key, value) in context.pairs} == res
