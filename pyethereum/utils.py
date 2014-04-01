@@ -15,3 +15,16 @@ def big_endian_to_int(string):
     string = string or '\x00'
     s = string.encode('hex')
     return long(s, 16)
+
+
+def recurseive_int_to_big_endian(item):
+    ''' convert all int to int_to_big_endian recursively
+    '''
+    if isinstance(item, (int, long)):
+        return int_to_big_endian(item)
+    elif isinstance(item, (list, tuple)):
+        res = []
+        for item in item:
+            res.append(recurseive_int_to_big_endian(item))
+        return res
+    return item
