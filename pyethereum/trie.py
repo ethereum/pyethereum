@@ -5,25 +5,7 @@ import leveldb
 import rlp
 from sha3 import sha3_256
 
-
-def sha3(x):
-    return sha3_256(x).digest()
-
-
-class DB(object):
-
-    def __init__(self, dbfile):
-        self.db = leveldb.LevelDB(dbfile)
-
-    def get(self, key):
-        return self.db.Get(key)
-
-    def put(self, key, value):
-        return self.db.Put(key, value)
-
-    def delete(self, key):
-        return self.db.Delete(key)
-
+from utils import print_func_call
 
 def bin_to_nibbles(s):
     """convert string s to nibbles (half-bytes)
@@ -60,14 +42,22 @@ NIBBLE_TERMINATOR = 16
 
 
 def with_terminator(nibbles):
-    if nibbles[-1] != NIBBLE_TERMINATOR:
+    if not nibbles or nibbles[-1] != NIBBLE_TERMINATOR:
         nibbles.append(NIBBLE_TERMINATOR)
     return nibbles
 
 
 def without_terminator(nibbles):
-    if nibbles[-1] == NIBBLE_TERMINATOR:
+    if nibbles and nibbles[-1] == NIBBLE_TERMINATOR:
         del nibbles[-1]
+    return nibbles
+
+
+def adapt_terminator(nibbles, has_terminator):
+    if has_terminator:
+        with_terminator(nibbles)
+    else:
+        without_terminator(nibbles)
     return nibbles
 
 
@@ -112,16 +102,6 @@ def unpack_to_nibbles(bindata):
     return o
 
 
-(
-    NODE_TYPE_BLANK,
-    NODE_TYPE_VALUE,
-    NODE_TYPE_KEY_VALUE,
-    NODE_TYPE_DIVERGE
-) = tuple(range(4))
-
-BLANK_NODE = ''
-
-
 def starts_with(full, part):
     ''' test whether the items in the part is
     the leading items of the full
@@ -131,13 +111,54 @@ def starts_with(full, part):
     return full[:len(part)] == part
 
 
+def sha3(x):
+    return sha3_256(x).digest()
+
+
+class DB(object):
+
+    def __init__(self, dbfile):
+        self.db = leveldb.LevelDB(dbfile)
+
+    def get(self, key):
+        return self.db.Get(key)
+
+    def put(self, key, value):
+        return self.db.Put(key, value)
+
+    def delete(self, key):
+        return self.db.Delete(key)
+
+
+(
+    NODE_TYPE_BLANK,
+    NODE_TYPE_VALUE,
+    NODE_TYPE_LEAF_KEY_VALUE,
+    NODE_TYPE_INNER_KEY_VALUE,
+    NODE_TYPE_DIVERGE_WITH_VALUE,
+    NODE_TYPE_DIVERGE_WITHOUT_VALUE
+) = tuple(range(6))
+
+
+def is_diverge_type(node_type):
+    return node_type in [NODE_TYPE_DIVERGE_WITH_VALUE,
+                         NODE_TYPE_DIVERGE_WITHOUT_VALUE]
+
+
+def is_key_value_type(node_type):
+    return node_type in [NODE_TYPE_LEAF_KEY_VALUE,
+                         NODE_TYPE_INNER_KEY_VALUE]
+
+BLANK_NODE = ''
+
+
 class Trie(object):
     databases = {}
 
     def __init__(self, dbfile, root=BLANK_NODE):
         '''
         :param dbfile: key value database
-        :root: blank or rlp encoded trie tree
+        :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
         self.root = root
         dbfile = os.path.abspath(dbfile)
@@ -146,69 +167,70 @@ class Trie(object):
         self.db = self.databases[dbfile]
 
     def clear(self):
+        ''' clear all tree data
+
+        todo: remove saved (hash, value) from database
+        '''
         self.root = BLANK_NODE
 
     def _inspect_node(self, node):
-        ''' inspect node to get node type and content
+        ''' get node type and content
 
-        :param node: blank or rlp encoded node
-        :return: (node_type, content), for key-value and diverge node, content
-        is the 2 or 17 item tuple; for value node, content is itself
-
-        .. note:: items of the result tuple or value node itself is not decoded
+        :param node: node or hash
+        :return: (NODE_TYPE_*, content), content is the decoded node,
+        unless a key-value node, which will result a (key, value)
+        with key is nibbles without the terminator
         '''
-        assert isinstance(node, str)
+        content = self._rlp_decode(node)
 
-        if not node:
+        if not content:
             return (NODE_TYPE_BLANK, BLANK_NODE)
 
-        content = self._rlp_decode(node)
         if isinstance(content, str):
-            node_type = NODE_TYPE_VALUE
-            content = node
-        elif len(content) == 2:
-            node_type = NODE_TYPE_KEY_VALUE
-        elif len(content) == 17:
-            node_type = NODE_TYPE_DIVERGE
-        else:
-            raise Exception('node decode error')
-        return (node_type, content)
+            return (NODE_TYPE_VALUE, content)
+
+        if len(content) == 2:
+            nibbles = unpack_to_nibbles(content[0])
+            has_terminator = (nibbles and nibbles[-1] == NIBBLE_TERMINATOR)
+            content = (without_terminator(nibbles), content[1])
+            return (NODE_TYPE_LEAF_KEY_VALUE, content) if has_terminator\
+                else (NODE_TYPE_INNER_KEY_VALUE, content)
+
+        if len(content) == 17:
+            return (NODE_TYPE_DIVERGE_WITH_VALUE, content) if content[-1]\
+                else (NODE_TYPE_DIVERGE_WITHOUT_VALUE, content)
 
     def _get(self, node, key):
         """ get value inside a node
 
-        :param node: rlp encoded node
+        :param node: node or hash
         :param key: nibble list without terminator
-        :return: None if does not exist, or the rlp encoded value for the key
+        :return: None if does not exist, otherwise value or hash
         """
-        node_type, node = self._inspect_node(node)
+        node_type, content = self._inspect_node(node)
 
         if node_type == NODE_TYPE_BLANK:
             return None
 
         if node_type == NODE_TYPE_VALUE:
-            # if key still has nibbles
-            return None if key else node
+            return None
 
-        if node_type == NODE_TYPE_DIVERGE:
+        if is_diverge_type(node_type):
             # already reach the expected node
             if not key:
-                return node[-1]
-            return self._get(node[key[0]], key[1:])
+                return content[-1]
+            return self._get(content[key[0]], key[1:])
 
-        elif node_type == NODE_TYPE_KEY_VALUE:
-            (curr_key, curr_val) = node
-            curr_key = unpack_to_nibbles(curr_key)
+        # key value node
+        (curr_key, curr_val) = content
+        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+            if key == curr_key:
+                return curr_val
+            # not found
+            else:
+                return None
 
-            # already reach the expected node
-            if curr_key[-1] == NIBBLE_TERMINATOR:
-                # found
-                if key == curr_key[:-1]:
-                    return curr_val
-                # not found
-                else:
-                    return None
-
+        if node_type == NODE_TYPE_INNER_KEY_VALUE:
             # traverse child nodes
             if starts_with(key, curr_key):
                 return self._get(curr_val, key[len(curr_key):])
@@ -218,7 +240,7 @@ class Trie(object):
     def _rlp_encode(self, node):
         rlpnode = rlp.encode(node)
         if len(rlpnode) < 32:
-            return rlpnode
+            return node
 
         hashkey = sha3(rlpnode)
         self.db.put(hashkey, rlpnode)
@@ -230,30 +252,32 @@ class Trie(object):
         elif len(node) == 0:
             return node
         elif len(node) < 32:
-            return rlp.decode(node)
+            return node
         else:
             return rlp.decode(self.db.get(node))
 
-    def _update(self, node, key, value):
+    def _update(self, node, key, value, value_is_node):
         """ update item inside a node
 
-        :param node: is a rlp encoded binary array
+        :param node: node or hash
         :param key: nibble list without terminator
-        :param value: nlp encoded value
-        :return: the updated node with rlp encoded
+        :param value: node or hash
+        :param value_is_node: value is leaf or intermediate node
+        :return: the updated node or hash
         """
         # decode the node
-        (node_type, node) = self._inspect_node(node)
+        (node_type, content) = self._inspect_node(node)
 
         if node_type == NODE_TYPE_BLANK:
-            if not key:
-                return value
+            # a inner node
+            if value_is_node:
+                if not key:
+                    return value
+                else:
+                    return self._rlp_encode([pack_nibbles(key), value])
             else:
-                # a new key value node
-                value_node_type, _ = self._inspect_node(value)
-                if value_node_type == NODE_TYPE_VALUE:
-                    with_terminator(key)
-                return self._rlp_encode([pack_nibbles(key), value])
+                return self._rlp_encode([pack_nibbles(with_terminator(key)),
+                                         value])
 
         elif node_type == NODE_TYPE_VALUE:
             if not key:
@@ -262,35 +286,36 @@ class Trie(object):
                 # a new diverge node
                 new_node = [''] * 17
                 new_node[-1] = node
-                return self._update(self._rlp_encode(new_node), key, value)
+                return self._update(new_node, key, value, value_is_node)
 
-        elif node_type == NODE_TYPE_DIVERGE:
+        elif is_diverge_type(node_type):
             # already the expected node
             if not key:
-                node[-1] = value
-                return self._rlp_encode(node)
+                content[-1] = value
+                return self._rlp_encode(content)
 
-            slot_type, slot = self._inspect_node(node[key[0]])
-            node[key[0]] = self._update(node[key[0]], key[1:], value)
-            return self._update(BLANK_NODE, None, self._rlp_encode(node))
+            slot_type, slot = self._inspect_node(content[key[0]])
+            content[key[0]] = self._update(content[key[0]], key[1:],
+                                           value, value_is_node)
+            return self._update(BLANK_NODE, [],
+                                self._rlp_encode(content), value_is_node=True)
 
-        elif node_type == NODE_TYPE_KEY_VALUE:
-            return self._update_kv_node(node, key, value)
+        elif is_key_value_type(node_type):
+            return self._update_kv_node(node_type, content, key,
+                                        value, value_is_node)
 
-    def _update_kv_node(self, node, key, value):
+    def _update_kv_node(self, node_type, content, key, value, value_is_node):
         '''when the current node is a (key, value) node
 
-        :param node: an already rlp decoded (key, value) tuple
+        :param content: an  (key, value) tuple
         :param key: nibble list without terminator, must not be blank
-        :param value: nlp encoded value
-        :return: the updated node with rlp encoded
+        :param value: node or hash
+        :return: the updated node or hash
         '''
-        (curr_key_bin, curr_val) = node
-        curr_key = unpack_to_nibbles(curr_key_bin)
+        curr_key, curr_val = content
+        curr_val_is_node = node_type != NODE_TYPE_LEAF_KEY_VALUE
 
-        # remove the terminator
-        if curr_key[-1] == NIBBLE_TERMINATOR:
-            curr_key = curr_key[:-1]
+        without_terminator(curr_key)
 
         # find longest common prefix
         prefix_length = 0
@@ -302,22 +327,25 @@ class Trie(object):
         # merge
         if not prefix_length:
             # a new diverge node
-            rlp_diverge_node = self._rlp_encode([''] * 17)
-            rlp_diverge_node = self._update(
-                rlp_diverge_node, curr_key, curr_val)
-            rlp_diverge_node = self._update(
-                rlp_diverge_node, key, value)
-            return rlp_diverge_node
+            diverge_node = [''] * 17
+            diverge_node = self._update(diverge_node, curr_key, curr_val,
+                                        curr_val_is_node)
+            diverge_node = self._update(diverge_node, key, value,
+                                        value_is_node)
+            return diverge_node
 
         # create node for key postfix
         post_curr_key_node = self._update(
-            BLANK_NODE, curr_key[prefix_length:], curr_val)
+            BLANK_NODE, curr_key[prefix_length:], curr_val, curr_val_is_node)
         post_curr_key_node = self._update(
-            post_curr_key_node, key[prefix_length:], value)
+            post_curr_key_node, key[prefix_length:], value, value_is_node)
+
+        post_curr_key_node_type, _ = self._inspect_node(post_curr_key_node)
+        is_node = post_curr_key_node_type != NODE_TYPE_LEAF_KEY_VALUE
 
         # create node for key prefix
         pre_curr_key_node = self._update(
-            BLANK_NODE, curr_key[:prefix_length], post_curr_key_node)
+            BLANK_NODE, curr_key[:prefix_length], post_curr_key_node, is_node)
 
         return pre_curr_key_node
 
@@ -332,7 +360,7 @@ class Trie(object):
 
         key = bin_to_nibbles(str(key))
 
-        self.root = self._update(self.root, key, BLANK_NODE)
+        self.root = self._update(self.root, key, BLANK_NODE, True)
         return self.root
 
     def _get_size(self, node):
@@ -401,7 +429,7 @@ class Trie(object):
 
     def get(self, key):
         rlp_value = self._get(self.root, bin_to_nibbles(str(key)))
-        return None if not rlp_value else self._rlp_decode(rlp_value)
+        return self._rlp_decode(rlp_value) if rlp_value is not None else None
 
     def get_size(self):
         return self._get_size(self.root)
@@ -416,10 +444,12 @@ class Trie(object):
         if len(key) > 32:
             raise Exception("Max key length is 32")
 
-        key = bin_to_nibbles(str(key))
-
-        self.root = self._update(self.root, key, self._rlp_encode(str(value)))
-        return self.root
+        self.root = self._update(
+            self.root,
+            bin_to_nibbles(str(key)),
+            self._rlp_encode(value),
+            value_is_node=False)
+        return self._rlp_decode(self.root)
 
 if __name__ == "__main__":
     import sys

@@ -2,6 +2,8 @@ from behave import register_type
 from .utils import parse_py
 
 import random
+from pyethereum import trie
+from pyethereum import rlp
 
 register_type(Py=parse_py)
 
@@ -92,5 +94,7 @@ def step_impl(context):
 
 
 @then(u'the hash of the tree root is {root_hash:Py}')  # noqa
-def step_impl(context):
-    pass
+def step_impl(context, root_hash):
+    t = context.trie
+    rlp_root = rlp.encode(t._rlp_decode(t.root))
+    assert trie.sha3(rlp_root).encode('hex') == root_hash

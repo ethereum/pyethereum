@@ -3,9 +3,11 @@ Feature: trie tree manipulate
 
   # here (key, value) is called pair
 
+
   Scenario: clear trie tree
     When clear trie tree
     Then root will be blank
+
 
   Scenario Outline: insert (key, node) pairs to a trie tree
     Given pairs with keys: <keys>
@@ -97,91 +99,91 @@ Feature: trie tree manipulate
       | "X"     |
 
 
-  Scenario Outline: delete node
-    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
-    When clear trie tree
-    And insert pairs
-    And delete by the key: <key>
-    Then for each pair, get with key will return the correct value
-    And get by the key: <key> will return None
+  # Scenario Outline: delete node
+  #   Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
+  #   When clear trie tree
+  #   And insert pairs
+  #   And delete by the key: <key>
+  #   Then for each pair, get with key will return the correct value
+  #   And get by the key: <key> will return None
 
-    Examples: existing key
-      | key    |
-      | "AB"   |
-      | "AC"   |
-      | "ABCD" |
-      | "ACD"  |
-      | "A"    |
-      | "B"    |
-      | "CD"   |
-      | "BCD"  |
-      | "Z"    |
-      | "0"    |
-      | "Z0"   |
-      | "0Z"   |
+  #   Examples: existing key
+  #     | key    |
+  #     | "AB"   |
+  #     | "AC"   |
+  #     | "ABCD" |
+  #     | "ACD"  |
+  #     | "A"    |
+  #     | "B"    |
+  #     | "CD"   |
+  #     | "BCD"  |
+  #     | "Z"    |
+  #     | "0"    |
+  #     | "Z0"   |
+  #     | "0Z"   |
 
-    Examples: key not existing
-      | key     |
-      | "ABDCD" |
-      | "X"     |
-
-
-  Scenario Outline: get node size
-    Given pairs with keys: <keys>
-    When clear trie tree
-    And insert pairs
-    Then get size will return the correct number
-
-    Examples: a blank tree
-      | keys |
-      | []   |
-
-    Examples: key value node
-      | keys           |
-      | ["AB", "ABCD"] |
-
-    Examples: diverge node
-      # nibbles of A: [4,1]
-      # nibbles of Z: [5,10]
-      # nibbles of B: [4,2]
-      | keys            |
-      | ["A", "Z"]      |
-      | ["A", "Z", "B"] |
-      | ["A", "Z", "0"] |
-      | ["AB", "CD"]    |
-
-    Examples: sophisticated case
-      | keys                                                             |
-      | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
+  #   Examples: key not existing
+  #     | key     |
+  #     | "ABDCD" |
+  #     | "X"     |
 
 
-  Scenario Outline: convert trie tree to dict
-    Given pairs with keys: <keys>
-    When clear trie tree
-    And insert pairs
-    Then to_dict will return the correct dict
+  # Scenario Outline: get node size
+  #   Given pairs with keys: <keys>
+  #   When clear trie tree
+  #   And insert pairs
+  #   Then get size will return the correct number
 
-    Examples: a blank tree
-      | keys |
-      | []   |
+  #   Examples: a blank tree
+  #     | keys |
+  #     | []   |
 
-    Examples: key value node
-      | keys           |
-      | ["AB", "ABCD"] |
+  #   Examples: key value node
+  #     | keys           |
+  #     | ["AB", "ABCD"] |
 
-    Examples: diverge node
-      # nibbles of A: [4,1]
-      # nibbles of Z: [5,10]
-      # nibbles of B: [4,2]
-      | keys            |
-      | ["A", "Z"]      |
-      | ["A", "Z", "B"] |
-      | ["A", "Z", "0"] |
-      | ["AB", "CD"]    |
+  #   Examples: diverge node
+  #     # nibbles of A: [4,1]
+  #     # nibbles of Z: [5,10]
+  #     # nibbles of B: [4,2]
+  #     | keys            |
+  #     | ["A", "Z"]      |
+  #     | ["A", "Z", "B"] |
+  #     | ["A", "Z", "0"] |
+  #     | ["AB", "CD"]    |
 
-    Examples: sophisticated case
-      | keys                                                             |
-      | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
+  #   Examples: sophisticated case
+  #     | keys                                                             |
+  #     | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
+
+
+  # Scenario Outline: convert trie tree to dict
+  #   Given pairs with keys: <keys>
+  #   When clear trie tree
+  #   And insert pairs
+  #   Then to_dict will return the correct dict
+
+  #   Examples: a blank tree
+  #     | keys |
+  #     | []   |
+
+  #   Examples: key value node
+  #     | keys           |
+  #     | ["AB", "ABCD"] |
+
+  #   Examples: diverge node
+  #     # nibbles of A: [4,1]
+  #     # nibbles of Z: [5,10]
+  #     # nibbles of B: [4,2]
+  #     | keys            |
+  #     | ["A", "Z"]      |
+  #     | ["A", "Z", "B"] |
+  #     | ["A", "Z", "0"] |
+  #     | ["AB", "CD"]    |
+
+  #   Examples: sophisticated case
+  #     | keys                                                             |
+  #     | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
 
 
   Scenario Outline: confirm to fixture

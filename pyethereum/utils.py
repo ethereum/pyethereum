@@ -33,16 +33,28 @@ def recurseive_int_to_big_endian(item):
 call_id = 0
 
 
-def print_func_call(f):
+def print_func_call(ignore_first_arg=False):
+    '''
+    :param ignore_first_arg: whether print the first arg or not.
+    useful when ignore the `self` parameter of an object method call
+    '''
     from functools import wraps
 
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        global call_id
-        call_id = call_id + 1
-        print('[{0}]{1} args: {2} {3}'.format(
-            call_id, f.__name__, args, kwargs))
-        res = f(*args, **kwargs)
-        print('[{0}]{1} return: {2}'.format(call_id, f.__name__, res))
-        return res
-    return wrapper
+    def inner(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            global call_id
+            call_id = call_id + 1
+            tmp_args = args[1:] if ignore_first_arg and len(args) else args
+            print('[{0}]{1} args: {2}, {3}'.format(
+                call_id,
+                f.__name__,
+                ', '.join([str(x) for x in tmp_args]),
+                ', '.join(str(key) + '=' + str(value)
+                          for key, value in kwargs.iteritems())
+            ))
+            res = f(*args, **kwargs)
+            print('[{0}]{1} return: {2}'.format(call_id, f.__name__, res))
+            return res
+        return wrapper
+    return inner
