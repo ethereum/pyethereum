@@ -1,5 +1,6 @@
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
+    # 0 is a special case, treated same as ''
     if integer == 0:
         return ''
     s = '%x' % integer
@@ -10,6 +11,7 @@ def int_to_big_endian(integer):
 
 def big_endian_to_int(string):
     '''convert a big endian binary string to integer'''
-    string = string or '\x00'  # cpp client encodes \x00 as ''
+    # '' is a special case, treated same as 0
+    string = string or '\x00'
     s = string.encode('hex')
-    return int(s, 16)
+    return long(s, 16)

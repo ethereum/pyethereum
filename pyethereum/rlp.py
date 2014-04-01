@@ -1,21 +1,4 @@
-def to_binary_array(n):
-    if n == 0:
-        return []
-    else:
-        x = to_binary_array(n / 256)
-        x.append(n % 256)
-        return x
-
-
-def to_binary(n):
-    return ''.join([chr(x) for x in to_binary_array(n)])
-
-
-def from_binary(b):
-    if len(b) == 0:
-        return 0
-    else:
-        return from_binary(b[:-1]) * 256 + ord(b[-1])
+from .utils import big_endian_to_int, int_to_big_endian
 
 
 def __decode(s, pos=0):
@@ -29,7 +12,7 @@ def __decode(s, pos=0):
         return (s[pos + 1:pos + 1 + b], pos + 1 + b)
     elif fchar < 192:
         b = fchar - 183
-        b2 = from_binary(s[pos + 1:pos + 1 + b])
+        b2 = big_endian_to_int(s[pos + 1:pos + 1 + b])
         return (s[pos + 1 + b:pos + 1 + b + b2], pos + 1 + b + b2)
     elif fchar < 248:
         o = []
@@ -43,7 +26,7 @@ def __decode(s, pos=0):
         return (o, pos)
     else:
         b = fchar - 247
-        b2 = from_binary(s[pos + 1:pos + 1 + b])
+        b2 = big_endian_to_int(s[pos + 1:pos + 1 + b])
         o = []
         pos += 1 + b
         pos_end = pos + b2
@@ -63,7 +46,7 @@ def encode_length(L, offset):
     if L < 56:
         return chr(L + offset)
     elif L < 256 ** 8:
-        BL = to_binary(L)
+        BL = int_to_big_endian(L)
         return chr(len(BL) + offset + 55) + BL
     else:
         raise Exception("input too long")
