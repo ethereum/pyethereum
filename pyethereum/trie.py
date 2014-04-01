@@ -28,13 +28,13 @@ class DB(object):
 def bin_to_nibbles(s):
     """convert string s to nibbles (half-bytes)
 
-    >>> bin_to_nibble_list("")
+    >>> bin_to_nibbles("")
     []
-    >>> bin_to_nibble_list("h")
+    >>> bin_to_nibbles("h")
     [6, 8]
-    >>> bin_to_nibble_list("he")
+    >>> bin_to_nibbles("he")
     [6, 8, 6, 5]
-    >>> bin_to_nibble_list("hello")
+    >>> bin_to_nibbles("hello")
     [6, 8, 6, 5, 6, 12, 6, 12, 6, 15]
     """
     res = []
