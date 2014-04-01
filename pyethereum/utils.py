@@ -28,3 +28,21 @@ def recurseive_int_to_big_endian(item):
             res.append(recurseive_int_to_big_endian(item))
         return res
     return item
+
+
+call_id = 0
+
+
+def print_func_call(f):
+    from functools import wraps
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        global call_id
+        call_id = call_id + 1
+        print('[{0}]{1} args: {2} {3}'.format(
+            call_id, f.__name__, args, kwargs))
+        res = f(*args, **kwargs)
+        print('[{0}]{1} return: {2}'.format(call_id, f.__name__, res))
+        return res
+    return wrapper
