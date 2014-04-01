@@ -78,3 +78,19 @@ def step_impl(context):
 def step_impl(context):
     res = context.trie.to_dict()
     assert dict(context.pairs) == res
+
+
+@given(u'input dictionary: {input_dict:Py}')  # noqa
+def step_impl(context, input_dict):
+    context.input_dict = input_dict
+
+
+@when(u'build trie tree from the input')  # noqa
+def step_impl(context):
+    for key, value in context.input_dict.iteritems():
+        context.trie.update(key, value)
+
+
+@then(u'the hash of the tree root is {root_hash:Py}')  # noqa
+def step_impl(context):
+    pass

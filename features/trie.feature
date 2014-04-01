@@ -183,3 +183,34 @@ Feature: trie tree manipulate
       | keys                                                             |
       | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
 
+
+  Scenario Outline: confirm to fixture
+    Given input dictionary: <in>
+    When clear trie tree
+    And build trie tree from the input
+    Then the hash of the tree root is <root>
+
+    Examples: basic
+      | in                       | root                                                               |
+      | {u'a': u'A', u'b': u'B'} | "300eab197a9d9e437aaeb9b0d7bd77d57e8d4e3eeca0b1e6a3fe28a84e2cd70c" |
+
+    Examples: basic1
+      | in                 | root                                                               |
+      | {u'test': u'test'} | "85d106d4edff3b7a4889e91251d0a87d7c17a1dda648ebdba8c6060825be23b8" |
+
+    Examples: basic2
+      | in                                  | root                                                               |
+      | {u'test': u'test', u'te': u'testy'} | "8452568af70d8d140f58d941338542f645fcca50094b20f3c3d8c3df49337928" |
+
+    Examples: doprefix
+      | in                                                               | root                                                               |
+      | {u'dogglesworth': u'cat', u'dog': u'puppy', u'doe': u'reindeer'} | "8aad789dff2f538bca5d8ea56e8abe10f4c7ba3a5dea95fea4cd6e7c3a1168d3" |
+
+    Examples: beprefix
+      | in                                            | root                                                               |
+      | {u'be': u'e', u'dog': u'puppy', u'bed': u'd'} | "3f67c7a47520f79faa29255d2d3c084a7a6df0453116ed7232ff10277a8be68b" |
+
+    Examples: multiprefix
+      | in                                                                          | root                                                               |
+      | {u'do': u'verb', u'horse': u'stallion', u'doge': u'coin', u'dog': u'puppy'} | "5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84" |
+
