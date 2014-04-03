@@ -535,6 +535,10 @@ class Trie(object):
         return self._get_size(self.root, True)
 
     def update(self, key, value):
+        '''
+        :param key: a string with length of [0, 32]
+        :value: a string or list
+        '''
         if not isinstance(key, (str, unicode)):
             raise Exception("Key must be strings")
 
