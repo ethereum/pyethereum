@@ -31,7 +31,7 @@ def lrlp_decode(data):
     return d
 
 
-def dump_packet(packet):
+def load_packet(packet):
     try:
         header = idec(packet[:4])
         payload_len = idec(packet[4:8])
@@ -40,7 +40,7 @@ def dump_packet(packet):
             idec(data[0]), 'unknown %s' % idec(data[0]))
         return [header, payload_len, cmd] + data[1:]
     except Exception as e:
-        return ['DUMP failed', packet, e]
+        return ['load packet failed', packet, e]
 
 
 class WireProtocol(object):
@@ -78,7 +78,8 @@ class WireProtocol(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    SYNCHRONIZATION_TOKEN = 0x22400891 # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
+    SYNCHRONIZATION_TOKEN = 0x22400891
     PROTOCOL_VERSION = 0x08
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
@@ -88,22 +89,25 @@ class WireProtocol(object):
         self.peermgr = peermgr
         self.config = config
         self.chainmgr = ChainProxy()
-        self.CLIENT_ID = self.config.get('network', 'client_id') or self.CLIENT_ID 
+        self.CLIENT_ID = self.config.get('network', 'client_id') \
+            or self.CLIENT_ID
 
     def rcv_packet(self, peer, packet):
         """
-        Though TCP provides a connection-oriented medium, Ethereum nodes communicate
-        in terms of packets. These packets are formed as a 4-byte synchronisation token
-        (0x22400891), a 4-byte "payload size", to be interpreted as a big-endian integer
-        and finally an N-byte RLP-serialised data structure, where N is the aforementioned
-        "payload size". To be clear, the payload size specifies the number of bytes in the
-        packet ''following'' the first 8.
+        Though TCP provides a connection-oriented medium, Ethereum nodes
+        communicate in terms of packets. These packets are formed as a 4-byte
+        synchronisation token (0x22400891), a 4-byte "payload size", to be
+        interpreted as a big-endian integer and finally an N-byte
+        RLP-serialised data structure, where N is the aforementioned
+        "payload size". To be clear, the payload size specifies the number of
+        bytes in the packet ''following'' the first 8.
         """
 
         # check header
         if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            logger.warn('check header failed, skipping message, sync token was {0}'
-                        .format(idec(packet[:4])))
+            logger.warn(
+                'check header failed, skipping message, sync token was {0}'
+                .format(idec(packet[:4])))
             return
 
         # unpack message
@@ -163,7 +167,8 @@ class WireProtocol(object):
 
     def rcv_Hello(self, peer, data):
         """
-        [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES, LISTEN_PORT, NODE_ID]
+        [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
+        LISTEN_PORT, NODE_ID]
         First packet sent over the connection, and sent once by both sides.
         No other messages may be sent until a Hello is received.
         PROTOCOL_VERSION is one of:
@@ -172,19 +177,27 @@ class WireProtocol(object):
             0x07 for PoC-3.
             0x08 sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
         NETWORK_ID should be 0.
-        CLIENT_ID Specifies the client software identity, as a human-readable string
-                    (e.g. "Ethereum(++)/1.0.0").
-        CAPABILITIES specifies the capabilities of the client as a set of flags;
-                    presently three bits are used:
-                    0x01 for peers discovery, 0x02 for transaction relaying, 0x04 for block-chain querying.
+        CLIENT_ID Specifies the client software identity,
+            as a human-readable string (e.g. "Ethereum(++)/1.0.0").
+        CAPABILITIES specifies the capabilities of the client as a set of
+            flags; presently three bits are used:
+                0x01 for peers discovery,
+                0x02 for transaction relaying,
+                0x04 for block-chain querying.
         LISTEN_PORT specifies the port that the client is listening on
                     (on the interface that the present connection traverses).
                     If 0 it indicates the client is not listening.
-        NODE_ID is optional and specifies a 512-bit hash, (potentially to be used as public key)
-                    that identifies this node.
+        NODE_ID is optional and specifies a 512-bit hash,
+            (potentially to be used as public key) that identifies this node.
 
-        [574621841, 116, 'Hello', '\x08', '', 'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_', "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|\x86\xa6ZV!Q6\x82\xebQ$4+"]
-        [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb', '\x07']
+        [574621841, 116, 'Hello', '\x08', '',
+        'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_',
+        "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}"
+        "\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|"
+        "\x86\xa6ZV!Q6\x82\xebQ$4+"]
+
+        [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb',
+        '\x07']
         """
 
         # check compatibility
@@ -197,8 +210,9 @@ class WireProtocol(object):
             return self.send_Disconnect(peer, reason='Wrong genesis block')
 
         """
-        spec has CAPABILITIES after PORT, CPP client the other way round. emulating the latter
-        https://github.com/ethereum/cpp-ethereum/blob/master/libethereum/PeerNetwork.cpp#L144
+        spec has CAPABILITIES after PORT, CPP client the other way round.
+        emulating the latter https://github.com/ethereum/cpp-ethereum/blob
+        /master/libethereum/PeerNetwork.cpp#L144
         """
 
         # TODO add to known peers list
@@ -225,19 +239,19 @@ class WireProtocol(object):
         [0x03]
         Reply to peer's Ping packet.
         """
-        #self.send_packet(peer, [0x03])
-        #self.chainmgr.pingpong(True)
+        # self.send_packet(peer, [0x03])
+        # self.chainmgr.pingpong(True)
 
     def rcv_Pong(self, peer, data):
-        self.send_GetTransactions(peer) # FIXME
+        self.send_GetTransactions(peer)  # FIXME
 
     def send_Disconnect(self, peer, reason=None):
         """
         [0x01, REASON]
-        Inform the peer that a disconnection is imminent;
-        if received, a peer should disconnect immediately.
-        When sending, well-behaved hosts give their peers a fighting chance
-        (read: wait 2 seconds) to disconnect to before disconnecting themselves.
+        Inform the peer that a disconnection is imminent; if received, a peer
+        should disconnect immediately. When sending, well-behaved hosts give
+        their peers a fighting chance (read: wait 2 seconds) to disconnect to
+        before disconnecting themselves.
         REASON is an optional integer specifying one of a number of reasons
         """
         logger.info(
@@ -296,36 +310,36 @@ class WireProtocol(object):
     def rcv_Blocks(self, peer, data):
         """
         [0x13, [block_header, transaction_list, uncle_list], ... ]
-        Specify (a) block(s) that the peer should know about. The items in the list
-        (following the first item, 0x13) are blocks in the format described in the
-        main Ethereum specification.
+        Specify (a) block(s) that the peer should know about. The items in the
+        list (following the first item, 0x13) are blocks in the format
+        described in the main Ethereum specification.
         """
-        
+
         # FIXME, currently just dumps data
         for e in data:
             header, transaction_list, uncle_list = e
-            logger.debug('received block:  parent:{0}'.format(header[0].encode('hex')))
-
+            logger.debug('received block:  parent:{0}'
+                         .format(header[0].encode('hex')))
 
     def rcv_Transactions(self, peer, data):
         """
-        [0x12, [nonce, receiving_address, value, ... ], ... ]
-        Specify (a) transaction(s) that the peer should make sure is included on 
-        its transaction queue. The items in the list (following the first item 0x12) 
-        are transactions in the format described in the main Ethereum specification.
+        [0x12, [nonce, receiving_address, value, ... ], ... ] Specify (a)
+        transaction(s) that the peer should make sure is included on its
+        transaction queue. The items in the list (following the first item
+        0x12) are transactions in the format described in the main Ethereum
+        specification.
         """
         logger.info('received transactions', len(data), peer)
         self.chainmgr.addTransactions(data)
 
-
     def send_Transactions(self, peer, transaction_list):
         data = [0x12] + [transaction_list]
-        self.send_packet(peer, data) 
+        self.send_packet(peer, data)
 
     def rcv_GetTransactions(self, peer):
         """
         [0x16]
-        Request the peer to send all transactions currently in the queue. 
+        Request the peer to send all transactions currently in the queue.
         See Transactions.
         """
         logger.debug('received get_transaction', peer)
@@ -333,7 +347,7 @@ class WireProtocol(object):
 
     def send_GetTransactions(self, peer):
         logger.info('asking for transactions')
-        self.send_packet(peer, [0x16]) 
+        self.send_packet(peer, [0x16])
 
     def _broadcast(self, method, data):
         for peer in self.peermgr.connected_peers:
@@ -347,15 +361,15 @@ class WireProtocol(object):
                 return
             cmd, data = msg[0], msg[1:]
             logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
-            
+
             if cmd == "send_transactions":
                 transaction_list = data[0]
                 peer = self.peermgr.get_peer_by_id(data[1])
                 if peer:
                     self.send_Transactions(peer, transaction_list)
-                else: # broadcast
+                else:  # broadcast
                     self._broadcast(self.send_Transactions, transaction_list)
-            
+
             elif cmd == 'pingpong':
                 reply = data[0]
                 logger.debug('%r received pingpong(reply=%r)' % (self, reply))
