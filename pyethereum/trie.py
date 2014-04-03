@@ -322,8 +322,10 @@ class Trie(object):
         :param value: node or hash
         :return: the updated node or hash
 
-        .. note:: (key, value, value_is_node) has already normalized, content
-        itself as a valid node should already be normalized too
+        .. note::
+
+            (key, value, value_is_node) has already normalized,
+            content itself as a valid node should already be normalized too
         '''
         curr_key, curr_val = content
         curr_val_is_node = node_type != NODE_TYPE_LEAF_KEY_VALUE
@@ -452,6 +454,7 @@ class Trie(object):
 
     def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
+
         :param node: node or hash
         :is_node: true if node is not a value, other wise false
         '''
@@ -468,25 +471,32 @@ class Trie(object):
             return sum(self._get_size(content[x], True) for x in range(16)) \
                 + (1 if content[-1] else 0)
 
-    def _to_dict(self, node):
+    def _to_dict(self, node, is_node):
         '''convert (key, value) stored in this and the descendant nodes
         to dict items.
 
-        .. note:: Here key is in full form,
-        rather than key of the individual node
+        :param node: node or hash
+        :is_node: true if node is not a value, other wise false
+
+        .. note::
+
+            Here key is in full form, rather than key of the individual node
         '''
-        (node_type, node) = self._inspect_node(node)
+        if not is_node:
+            if node:
+                return {'': self._rlp_decode(node)}
+            else:
+                return {}
+
+        (node_type, content) = self._inspect_node(node)
 
         if node_type == NODE_TYPE_BLANK:
             return {}
 
-        elif node_type == NODE_TYPE_VALUE:
-            return {'': self._rlp_decode(node)}
-
-        elif node_type == NODE_TYPE_KEY_VALUE:
-            (key_bin, value) = node
-            key = '+'.join([str(x) for x in unpack_to_nibbles(key_bin)])
-            sub_dict = self._to_dict(value)
+        elif is_key_value_type(node_type):
+            key = '+'.join([str(x) for x in content[0]])
+            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
+            sub_dict = self._to_dict(content[1], value_is_node)
 
             # prepend key of this node to the keys of children
             res = {}
@@ -495,21 +505,21 @@ class Trie(object):
                 res[full_key] = sub_value
             return res
 
-        elif node_type == NODE_TYPE_DIVERGE:
+        elif is_diverge_type(node_type):
             res = {}
             for i in range(16):
-                sub_dict = self._to_dict(node[i])
+                sub_dict = self._to_dict(content[i], True)
 
                 for sub_key, sub_value in sub_dict.iteritems():
                     full_key = '{0}+{1}'.format(i, sub_key) if sub_key else i
                     res[full_key] = sub_value
 
-            if node[-1]:
-                res[str(NIBBLE_TERMINATOR)] = self._rlp_decode(node[-1])
+            if content[-1]:
+                res[str(NIBBLE_TERMINATOR)] = self._rlp_decode(content[-1])
             return res
 
     def to_dict(self, as_hex=False):
-        d = self._to_dict(self.root)
+        d = self._to_dict(self.root, True)
         res = {}
         for key_str, value in d.iteritems():
             nibbles = [int(x) for x in key_str.split('+')]
