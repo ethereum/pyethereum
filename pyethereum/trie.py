@@ -166,9 +166,8 @@ class Trie(object):
 
     def clear(self):
         ''' clear all tree data
-
-        todo: remove saved (hash, value) from database
         '''
+        # FIXME: remove saved (hash, value) from database
         self.root = BLANK_NODE
 
     def _inspect_node(self, node):
@@ -266,6 +265,7 @@ class Trie(object):
         :return: (node, is_node) where node is the updated node or hash,
         is_node denote whether the node is a node or a value
         """
+        # FIXME: delete unused data from db
         if not is_node:
             if not key:
                 return value, value_is_node
@@ -364,12 +364,10 @@ class Trie(object):
             return key, value, value_is_node
 
         (value_node_type, value_content) = self._inspect_node(value)
-        if value_node_type == NODE_TYPE_LEAF_KEY_VALUE:
+        if is_key_value_type(value_node_type):
             key.extend(value_content[0])
-            return key, value_content[1], False
-        elif value_node_type == NODE_TYPE_INNER_KEY_VALUE:
-            key.extend(value_content[0])
-            return key, value_content[1], True
+            return (key, value_content[1],
+                    value_node_type == NODE_TYPE_INNER_KEY_VALUE)
         return key, value, value_is_node
 
     def _normalize_node(self, node, is_node):
@@ -381,6 +379,8 @@ class Trie(object):
 
         (node_type, content) = self._inspect_node(node)
 
+        # for NODE_TYPE_LEAF_KEY_VALUE, no need to normalize
+
         if node_type == NODE_TYPE_INNER_KEY_VALUE:
             key, value, value_is_node = self._normalize_pair(
                 content[0], content[1], True)
@@ -389,6 +389,7 @@ class Trie(object):
             if key == content[0]:
                 return node, is_node
             return self._update(BLANK_NODE, True, key, value, value_is_node)
+
         if is_diverge_type(node_type):
             not_blank_slots_count = sum(1 for x in range(17) if content[x])
 

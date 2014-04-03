@@ -32,15 +32,7 @@ def lrlp_decode(data):
 
 
 def load_packet(packet):
-    try:
-        header = idec(packet[:4])
-        payload_len = idec(packet[4:8])
-        data = lrlp_decode(packet[8:8 + payload_len])
-        cmd = WireProtocol.cmd_map.get(
-            idec(data[0]), 'unknown %s' % idec(data[0]))
-        return [header, payload_len, cmd] + data[1:]
-    except Exception as e:
-        return ['load packet failed', packet, e]
+    return WireProtocol.load_packet(packet)
 
 
 class WireProtocol(object):
@@ -92,6 +84,29 @@ class WireProtocol(object):
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
 
+    @staticmethod
+    def load_packet(cls, packet):
+        '''
+        :return: (success, result), where result should be None when fail,
+        and (header, payload_len, cmd, data) when success
+        '''
+        header = idec(packet[:4])
+        if header != cls.SYNCHRONIZATION_TOKEN:
+            return False, 'check header failed, skipping message,'\
+                'sync token was hex: {0:x}'.format(header)
+
+        try:
+            payload_len = idec(packet[4:8])
+            payload = lrlp_decode(packet[8:8 + payload_len])
+        except Exception as e:
+            return False, str(e)
+
+        if (not len(payload)) or (idec(payload[0]) not in cls.cmd_map):
+            return False, 'check cmd failed'
+
+        cmd = WireProtocol.cmd_map.get(idec(payload[0]))
+        return True, (header, payload_len, cmd, payload[1:])
+
     def rcv_packet(self, peer, packet):
         """
         Though TCP provides a connection-oriented medium, Ethereum nodes
@@ -102,29 +117,19 @@ class WireProtocol(object):
         "payload size". To be clear, the payload size specifies the number of
         bytes in the packet ''following'' the first 8.
         """
+        success, res = self.load_packet(packet)
 
-        # check header
-        if not idec(packet[:4]) == self.SYNCHRONIZATION_TOKEN:
-            logger.warn(
-                'check header failed, skipping message, sync token was {0}'
-                .format(idec(packet[:4])))
-            return
-
-        # unpack message
-        payload_len = idec(packet[4:8])
-        # assert 8 + payload_len <= len(packet) # this get's sometimes raised!?
-        data = lrlp_decode(packet[8:8 + payload_len])
-
-        # check cmd
-        if (not len(data)) or (idec(data[0]) not in self.cmd_map):
-            logger.warn('check cmd failed')
+        if not success:
+            logger.warn(res)
             return self.send_Disconnect(peer, reason='Bad protocol')
+
+        _, _, cmd, data = res
 
         # good peer
         peer.last_valid_packet_received = time.time()
 
-        cmd_id = idec(data.pop(0))
-        func_name = "rcv_%s" % self.cmd_map[cmd_id]
+        func_name = "rcv_%s".format(cmd)
+
         if not hasattr(self, func_name):
             logger.warn('unknown cmd \'{0}\''.format(func_name))
             return
