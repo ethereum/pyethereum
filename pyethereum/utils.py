@@ -30,31 +30,44 @@ def recurseive_int_to_big_endian(item):
     return item
 
 
-call_id = 0
-
-
-def print_func_call(ignore_first_arg=False):
+def print_func_call(ignore_first_arg=False, max_call_number=100):
     '''
     :param ignore_first_arg: whether print the first arg or not.
     useful when ignore the `self` parameter of an object method call
     '''
     from functools import wraps
 
+    def display(x):
+        x = str(x)
+        try:
+            x.decode('ascii')
+        except:
+            return 'NON_PRINTABLE'
+        return x
+
+    local = {'call_number': 0}
+
     def inner(f):
+
         @wraps(f)
         def wrapper(*args, **kwargs):
-            global call_id
-            call_id = call_id + 1
+            local['call_number'] = local['call_number'] + 1
             tmp_args = args[1:] if ignore_first_arg and len(args) else args
-            print('[{0}]{1} args: {2}, {3}'.format(
-                call_id,
+            print('{0}#{1} args: {2}, {3}'.format(
                 f.__name__,
-                ', '.join([str(x) for x in tmp_args]),
-                ', '.join(str(key) + '=' + str(value)
+                local['call_number'],
+                ', '.join([display(x) for x in tmp_args]),
+                ', '.join(display(key) + '=' + str(value)
                           for key, value in kwargs.iteritems())
             ))
             res = f(*args, **kwargs)
-            print('[{0}]{1} return: {2}'.format(call_id, f.__name__, res))
+            print('{0}#{1} return: {2}'.format(
+                f.__name__,
+                local['call_number'],
+                display(res)))
+
+            if local['call_number'] > 100:
+                raise Exception("Touch max call number!")
             return res
         return wrapper
     return inner

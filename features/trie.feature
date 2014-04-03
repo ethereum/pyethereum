@@ -99,33 +99,51 @@ Feature: trie tree manipulate
       | "X"     |
 
 
-  # Scenario Outline: delete node
-  #   Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
-  #   When clear trie tree
-  #   And insert pairs
-  #   And delete by the key: <key>
-  #   Then for each pair, get with key will return the correct value
-  #   And get by the key: <key> will return None
+  @wip
+  Scenario Outline: delete node
+    Given pairs with keys: <keys>
+    When clear trie tree
+    And insert pairs
+    And delete by the key: <key>
+    Then for each pair, get with key will return the correct value
+    And get by the key: <key> will return None
 
-  #   Examples: existing key
-  #     | key    |
-  #     | "AB"   |
-  #     | "AC"   |
-  #     | "ABCD" |
-  #     | "ACD"  |
-  #     | "A"    |
-  #     | "B"    |
-  #     | "CD"   |
-  #     | "BCD"  |
-  #     | "Z"    |
-  #     | "0"    |
-  #     | "Z0"   |
-  #     | "0Z"   |
+    Examples: basic
+      | key  | keys   |
+      | "AB" | ["AB"] |
 
-  #   Examples: key not existing
-  #     | key     |
-  #     | "ABDCD" |
-  #     | "X"     |
+    Examples: diverge node
+      | key | keys       |
+      | "A" | ["A", "B"] |
+
+    Examples: key value node
+      | key  | keys        |
+      | "A"  | ["A", "AB"] |
+      | "AB" | ["A", "AB"] |
+
+    Examples:
+      | key  | keys             |
+      | "AB" | ["A", "B", "AB"] |
+
+    Examples: sophisticated case
+      | key    | keys                                                                    |
+      | "AB"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "AC"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "ABCD" | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "ACD"  | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "A"    | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "B"    | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "CD"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "BCD"  | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "Z"    | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "0"    | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "Z0"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+      | "0Z"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+
+    Examples: key not existing
+      | key     | keys |
+      | "ABDCD" | []   |
+      | "X"     | []   |
 
 
   # Scenario Outline: get node size
