@@ -450,20 +450,23 @@ class Trie(object):
     def delete(self, key):
         return self.update(key, BLANK_NODE)
 
-    def _get_size(self, node):
+    def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
+        :param node: node or hash
+        :is_node: true if node is not a value, other wise false
         '''
-        (node_type, node) = self._inspect_node(node)
+        if not is_node:
+            return 1
+
+        (node_type, content) = self._inspect_node(node)
         if node_type == NODE_TYPE_BLANK:
             return 0
-        elif node_type == NODE_TYPE_VALUE:
-            return 1
-        elif node_type == NODE_TYPE_KEY_VALUE:
-            (key_bin, value) = node
-            return self._get_size(value)
-        elif node_type == NODE_TYPE_DIVERGE:
-            return sum(self._get_size(node[x]) for x in range(16)) \
-                + (1 if node[-1] else 0)
+        elif is_key_value_type(node_type):
+            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
+            return self._get_size(content[1], value_is_node)
+        elif is_diverge_type(node_type):
+            return sum(self._get_size(content[x], True) for x in range(16)) \
+                + (1 if content[-1] else 0)
 
     def _to_dict(self, node):
         '''convert (key, value) stored in this and the descendant nodes
@@ -519,7 +522,7 @@ class Trie(object):
         return self._rlp_decode(rlp_value) if rlp_value is not None else None
 
     def get_size(self):
-        return self._get_size(self.root)
+        return self._get_size(self.root, True)
 
     def update(self, key, value):
         if not isinstance(key, (str, unicode)):
