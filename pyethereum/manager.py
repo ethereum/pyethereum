@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChainProxy():
-    """ 
+    """
     abstract external access to the blockchain
     stateless, queues are shared between all instances
     """
@@ -25,7 +25,7 @@ class ChainProxy():
 
     def add_transactions(self, transactions):
         self.chain_queue.put(('add_transactions', transactions))
-       
+
     def request_blocks(self, block_hashes, peer):
         self.chain_queue.put(('request_blocks', block_hashes, peer.id()))
 
@@ -40,7 +40,6 @@ class ChainProxy():
             return self.network_queue.get(timeout=.1)
         except Queue.Empty:
             return None
-
 
 
 class NetworkProxy():
@@ -64,7 +63,6 @@ class NetworkProxy():
         "broadcast if no peer specified"
         pass
 
-
     def pingpong(self, reply=False):
         self.network_queue.put(('pingpong', reply))
 
@@ -84,7 +82,7 @@ class ChainManager(threading.Thread):
         self._stopped = False
         self.lock = threading.Lock()
         self.network = NetworkProxy()
-        #self.blockchain = blockchain
+        # self.blockchain = blockchain
         self.transactions = set()
 
     def stop(self):
@@ -114,7 +112,7 @@ class ChainManager(threading.Thread):
 
         logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
         if cmd == "add_blocks":
-            self.transactions = set()            
+            self.transactions = set()
         elif cmd == "add_transactions":
             tx_list = data[0]
             for tx in tx_list:
@@ -132,8 +130,3 @@ class ChainManager(threading.Thread):
                 self.network.pingpong()
         else:
             raise Exception('unknown commad')
-
-        
-
-
-
