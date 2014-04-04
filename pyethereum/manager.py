@@ -12,7 +12,7 @@ rlp_hash =  lambda data: sha3_256(rlp.encode(data)).digest()
 rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
 class ChainProxy():
-    """ 
+    """
     abstract external access to the blockchain
     stateless, queues are shared between all instances
 
@@ -31,7 +31,7 @@ class ChainProxy():
 
     def add_transactions(self, transactions):
         self.chain_queue.put(('add_transactions', transactions))
-       
+
     def request_blocks(self, block_hashes, peer):
         self.chain_queue.put(('request_blocks', block_hashes, peer.id()))
 
@@ -46,7 +46,6 @@ class ChainProxy():
             return self.network_queue.get(timeout=.1)
         except Queue.Empty:
             return None
-
 
 
 class NetworkProxy():
@@ -92,7 +91,7 @@ class ChainManager(threading.Thread):
         self._stopped = False
         self.lock = threading.Lock()
         self.network = NetworkProxy()
-        #self.blockchain = blockchain
+        # self.blockchain = blockchain
         self.transactions = set()
         self.dummy_blockchain = dict() # hash > block
 
@@ -168,8 +167,3 @@ class ChainManager(threading.Thread):
                 self.network.pingpong()
         else:
             raise Exception('unknown commad')
-
-        
-
-
-

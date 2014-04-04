@@ -1,15 +1,15 @@
 from behave import register_type
 from .utils import parse_py, AssertException
 
-from pyethereum.utils import int_to_big_endian
+from pyethereum.utils import int_to_big_endian, recurseive_int_to_big_endian
 from pyethereum import rlp
 
 register_type(Py=parse_py)
 
 
-@given(u'a payload string: {src:Py}')  # noqa
+@given(u'a to be rlp encoded payload: {src:Py}')  # noqa
 def step_impl(context, src):
-    context.src = src
+    context.src = recurseive_int_to_big_endian(src)
 
 
 @when(u'encoded in RLP')  # noqa
@@ -86,3 +86,8 @@ def step_impl(context):
 def step_impl(context):
     with AssertException(TypeError):
         rlp.encode(context.src)
+
+
+@then(u'the rlp encoded result will be equal to {dst:Py}')  # noqa
+def step_impl(context, dst):
+    assert context.dst.encode('hex') == dst

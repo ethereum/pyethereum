@@ -1,15 +1,10 @@
-#!/usr/bin/env python
 import sys
 import time
-import signal
 import Queue
-import ConfigParser
-from optparse import OptionParser
 import socket
 import threading
 import traceback
-from wire import WireProtocol, dump_packet
-from manager import ChainProxy
+from wire import WireProtocol, load_packet
 import logging
 
 
@@ -42,7 +37,6 @@ class Peer(threading.Thread):
 
     def __repr__(self):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
-
 
     def id(self):
         return hash(repr(self))
@@ -98,13 +92,14 @@ class Peer(threading.Thread):
                 spacket = None
             while spacket:
                 logger.debug('{0}: send packet {1}'.format(
-                    repr(self), str(dump_packet(spacket))[:60]))
+                    repr(self), str(load_packet(spacket))[:60]))
                 try:
                     n = self.connection().send(spacket)
                     spacket = spacket[n:]
                 except IOError as e:
                     logger.debug(
-                        '{0}: send packet failed, {1}'.format(repr(self), str(e)))
+                        '{0}: send packet failed, {1}'
+                        .format(repr(self), str(e)))
                     self.stop()
                     break
 
@@ -112,7 +107,7 @@ class Peer(threading.Thread):
             rpacket = self.receive()
             if rpacket:
                 logger.debug('{0}: received packet {1}'.format(
-                    repr(self), str(dump_packet(rpacket))[:60]))
+                    repr(self), str(load_packet(rpacket))[:60]))
                 self.protocol.rcv_packet(self, rpacket)
 
             # pause
@@ -145,7 +140,7 @@ class PeerManager(threading.Thread):
     def add_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
         with self.lock:
-            if not ipn in self._seen_peers:
+            if ipn not in self._seen_peers:
                 self._seen_peers.add(ipn)
 
     def get_known_peer_addresses(self):
@@ -154,7 +149,8 @@ class PeerManager(threading.Thread):
 
     def get_connected_peer_addresses(self):
         "get peers, we connected and have a port"
-        return set((p.ip, p.port, p.node_id) for p in self.connected_peers if p.port)
+        return set((p.ip, p.port, p.node_id) for p in self.connected_peers
+                   if p.port)
 
     def stop(self):
         with self.lock:
@@ -238,26 +234,28 @@ class PeerManager(threading.Thread):
             # if ping was sent and not returned within last second
             if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
                 logger.debug(
-                    '{0} last ping: {1} last seen: {2}'.format(peer, dt_ping, dt_seen))
-                logger.debug('{0} did not respond to ping, disconnecting {1}:{2}'.format(
-                    peer, peer.ip, peer.port))
+                    '{0} last ping: {1} last seen: {2}'
+                    .format(peer, dt_ping, dt_seen))
+                logger.debug(
+                    '{0} did not respond to ping, disconnecting {1}:{2}'
+                    .format(peer, peer.ip, peer.port))
                 self.remove_peer(peer)
             elif min(dt_seen, dt_ping) > self.max_silence:
                 # ping silent peer
                 logger.debug('pinging silent peer {0}'.format(peer))
                 logger.debug(
                     '# connected peers: {0}/{1}'.format(len(self.connected_peers), num_peers))
-              
+
                 with peer.lock:
                     peer.protocol.send_Ping(peer)
                     peer.last_pinged = now
 
             # ask for peers
-            if now - peer.last_asked_for_peers > self.max_ask_for_peers_elapsed:
+            if now - peer.last_asked_for_peers >\
+                    self.max_ask_for_peers_elapsed:
                 with peer.lock:
                     peer.protocol.send_GetPeers(peer)
                     peer.last_asked_for_peers = now
-
 
     def run(self):
         while not self.stopped():
@@ -285,7 +283,6 @@ class TcpServer(threading.Thread):
         self.ip, self.port = sock.getsockname()
         logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
 
-
     def run(self):
         while not self.peer_manager.stopped():
             logger.debug('in run loop')
@@ -302,11 +299,12 @@ class TcpServer(threading.Thread):
                 self.peer_manager.add_peer(peer)
                 peer.start()
                 logger.debug(
-                    "new TCP connection {0} {1}:{2}".format(connection, host, port))
+                    "new TCP connection {0} {1}:{2}"
+                    .format(connection, host, port))
             except BaseException as e:
                 logger.error(
-                    "cannot start TCP session \"{0}\" {1}:{2} ".format(str(e), host, port))
+                    "cannot start TCP session \"{0}\" {1}:{2} "
+                    .format(str(e), host, port))
                 traceback.print_exc(file=sys.stdout)
                 connection.close()
                 time.sleep(0.1)
-

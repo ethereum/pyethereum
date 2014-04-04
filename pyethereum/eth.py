@@ -5,11 +5,13 @@ import signal
 import ConfigParser
 from optparse import OptionParser
 import logging
+import logging.config
 from p2pnet import TcpServer
 from p2pnet import PeerManager
 from manager import ChainManager
 
 logger = logging.getLogger(__name__)
+
 
 def create_config():
 
@@ -26,12 +28,12 @@ def create_config():
     config.add_section('misc')
     config.set('misc', 'verbosity', '1')
     config.set('misc', 'config_file', None)
+    config.set('misc', 'logging', None)
 
     config.add_section('wallet')
 
     # NODE_ID == pubkey, needed in order to work with Ethereum(++)
     config.set('wallet', 'pub_key', 'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9')
-
 
     usage = "usage: %prog [options]"
     parser = OptionParser(usage=usage,  version="%prog 0.1a")
@@ -52,7 +54,12 @@ def create_config():
     parser.add_option("-v", "--verbose",
                       dest="verbosity",
                       default=config.get('misc', 'verbosity'),
-                      help="<0 - 9>  Set the log verbosity from 0 to 9 (default: 1)")
+                      help="<0 - 3>  Set the log verbosity from 0 to 3 (default: 1)")
+    parser.add_option("-L", "--logging",
+                      dest="logging",
+                      default=config.get('misc', 'logging'),
+                      help="<logger1:LEVEL,logger2:LEVEL> set the console log level for logger1, logger2, etc.\
+                            Empty loggername means root-logger, e.g. 'pyethereum.wire:DEBUG,:INFO'. Overrides '-v'")
     parser.add_option("-x", "--peers",
                       dest="num_peers",
                       default=config.get('network', 'num_peers'),
@@ -62,6 +69,7 @@ def create_config():
                       help="read coniguration")
 
     (options, args) = parser.parse_args()
+
     # set network options
     for attr in ('listen_port', 'remote_host', 'remote_port', 'num_peers'):
         config.set('network', attr, getattr(
@@ -78,26 +86,57 @@ def create_config():
     if config.get('misc', 'config_file'):
         config.read(config.get('misc', 'config_file'))
 
+    #configure logging
+    loggerlevels = getattr(options, 'logging') or ''
+    configure_logging(loggerlevels, verbosity=config.getint('misc', 'verbosity'))
+
     return config
+
+
+def configure_logging(loggerlevels, verbosity=1):
+    logconfig = dict(version=1,
+                    disable_existing_loggers=False,
+                    formatters=dict(
+                        debug=dict(
+                            format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s: %(message)s'
+                        ),
+                        minimal=dict(
+                            format='%(message)s'
+                        ),
+                    ),
+                    handlers=dict(
+                        default={
+                            'level': 'INFO',
+                            'class': 'logging.StreamHandler',
+                            'formatter': 'minimal'
+                        },
+                        verbose={
+                            'level': 'DEBUG',
+                            'class': 'logging.StreamHandler',
+                            'formatter': 'debug'
+                        },
+                    ),
+                    loggers=dict()
+                    )
+
+    for loggerlevel in filter(lambda _: ':' in _, loggerlevels.split(',')):
+        name, level = loggerlevel.split(':')
+        logconfig['loggers'][name] = dict(handlers=['verbose'], level=level, propagate=False)
+
+    if len(logconfig['loggers']) == 0:
+        logconfig['loggers'][''] = dict(handlers=['default'], level={0: 'ERROR', 1: 'WARNING', 2: 'INFO', 3: 'DEBUG'}.get(verbosity), propagate=True)
+
+    logging.config.dictConfig(logconfig)
+    logging.debug("logging set up like that: {0}".format(logconfig))
 
 
 def main():
     config = create_config()
 
-    # Setup logging according to config:
-    log_level = config.getint('misc', 'verbosity')
-    if log_level == 2:
-        logging.basicConfig(format='%(message)s', level=logging.WARN)
-    elif log_level > 2:
-        logging.basicConfig(
-            format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s: %(message)s', level=logging.DEBUG)
-    else:
-        logging.basicConfig(format='%(message)s', level=logging.INFO)
-
     # peer manager
     peer_manager = PeerManager(config=config)
 
-    # chain manager 
+    # chain manager
     chain_manager = ChainManager(config=config)
 
     # start tcp server
@@ -135,7 +174,7 @@ def main():
         if len(peer_manager.get_connected_peer_addresses()) > 2:
             chain_manager.bootstrap_blockchain()
 
-    logger.info('extiting')
+    logger.info('exiting')
     # tcp_server.join() # does not work!
     peer_manager.join()
 

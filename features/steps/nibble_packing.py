@@ -42,3 +42,15 @@ def step_impl(context):
 @then(u'unpack the binary will get the original nibbles')  # noqa
 def step_impl(context):
     assert context.src_nibbles == trie.unpack_to_nibbles(context.dst_binary)
+
+
+@then(u'the packed result will be {dst:Py}')  # noqa
+def step_impl(context, dst):
+    assert context.dst_binary.encode('hex') == dst
+
+
+@given(u'to be packed nibbles: {nibbles:Py} and terminator: {term:Py}')  # noqa
+def step_impl(context, nibbles, term):
+    context.src_nibbles = nibbles
+    if term:
+        context.src_nibbles.append(trie.NIBBLE_TERMINATOR)

@@ -25,7 +25,8 @@ one-liner:
 
 ``curl http://downloads.buildout.org/2/bootstrap.py | python``
 
-Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
+If your system has ``wget`` and not ``curl`` you can also use ``wget -O -`` 
+in place of ``curl``. Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
 into the project folder and call ``python bootstrap.py``.
 
 Building:
@@ -83,6 +84,14 @@ For basic, verbose logging functionality, the following is sufficient (adjust le
 
 If you need a more advanced setup, have a look at the
 `python docs <http://docs.python.org/2/library/logging.html>`_
+
+
+**Easy Debugging:**
+The ``eth.py`` script, understands a command line flag for easy debugging, e.g.::
+    
+    pyethereum/eth.py -L pyethereum.wire:DEBUG,:INFO ...<other args>
+
+will set the log-level for ``wire`` to ``DEBUG`` and the root logger to ``INFO``.
 
 Licence
 ========

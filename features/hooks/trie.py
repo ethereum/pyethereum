@@ -33,15 +33,7 @@ class TrieHook(object):
         pass
 
     def before_scenario(self, context, scenario):
-
-        if 'load_data' in scenario.tags:
-            context.execute_steps(u'''
-                Given pairs with keys: {0}
-                When clear trie tree
-                And insert pairs
-            '''.format(["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD",
-                        "Z", "0", "Z0", "0Z"])
-            )
+        pass
 
     def after_scenario(self, context, scenario):
         pass
