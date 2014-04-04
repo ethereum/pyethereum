@@ -1,4 +1,4 @@
-from .utils import big_endian_to_int, int_to_big_endian
+from utils import big_endian_to_int, int_to_big_endian
 
 
 def __decode(s, pos=0):
