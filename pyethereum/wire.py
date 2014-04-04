@@ -32,11 +32,10 @@ def lrlp_decode(data):
 
 
 def load_packet(packet):
-    return WireProtocol.load_packet(packet)
+    return Packeter.load_packet(packet)
 
 
-class WireProtocol(object):
-
+class Packeter(object):
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
@@ -77,16 +76,22 @@ class WireProtocol(object):
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
 
-    def __init__(self, peermgr, config):
-        self.peermgr = peermgr
+    def __init__(self, config):
         self.config = config
-        self.chainmgr = ChainProxy()
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
 
     @staticmethod
     def load_packet(cls, packet):
         '''
+        Though TCP provides a connection-oriented medium, Ethereum nodes
+        communicate in terms of packets. These packets are formed as a 4-byte
+        synchronisation token (0x22400891), a 4-byte "payload size", to be
+        interpreted as a big-endian integer and finally an N-byte
+        RLP-serialised data structure, where N is the aforementioned
+        "payload size". To be clear, the payload size specifies the number of
+        bytes in the packet ''following'' the first 8.
+
         :return: (success, result), where result should be None when fail,
         and (header, payload_len, cmd, data) when success
         '''
@@ -104,31 +109,112 @@ class WireProtocol(object):
         if (not len(payload)) or (idec(payload[0]) not in cls.cmd_map):
             return False, 'check cmd failed'
 
-        cmd = WireProtocol.cmd_map.get(idec(payload[0]))
+        cmd = Packeter.cmd_map.get(idec(payload[0]))
         return True, (header, payload_len, cmd, payload[1:])
 
-    def rcv_packet(self, peer, packet):
-        """
-        Though TCP provides a connection-oriented medium, Ethereum nodes
-        communicate in terms of packets. These packets are formed as a 4-byte
-        synchronisation token (0x22400891), a 4-byte "payload size", to be
-        interpreted as a big-endian integer and finally an N-byte
-        RLP-serialised data structure, where N is the aforementioned
-        "payload size". To be clear, the payload size specifies the number of
-        bytes in the packet ''following'' the first 8.
-        """
+    def load_cmd(self, packet):
         success, res = self.load_packet(packet)
-
         if not success:
-            logger.warn(res)
-            return self.send_Disconnect(peer, reason='Bad protocol')
-
+            raise Exception(res)
         _, _, cmd, data = res
+        return cmd, data
+
+    @staticmethod
+    def dump_packet(cls, data):
+        """
+        4-byte synchronisation token, (0x22400891),
+        a 4-byte "payload size", to be interpreted as a big-endian integer
+        an N-byte RLP-serialised data structure
+        """
+        payload = rlp.encode(list_ienc(data))
+        packet = ienc4(cls.SYNCHRONIZATION_TOKEN)
+        packet += ienc4(len(payload))
+        packet += payload
+        return packet
+
+    def dump_Hello(self):
+        payload = [0x00,
+                   self.PROTOCOL_VERSION,
+                   self.NETWORK_ID,
+                   self.CLIENT_ID,
+                   self.config.getint('network', 'listen_port'),
+                   self.CAPABILITIES,
+                   self.config.get('wallet', 'pub_key')
+                   ]
+        return self.dump_packet(payload)
+
+    def dump_Ping(self):
+        """
+        [0x02]
+        Requests an immediate reply of Pong from the peer.
+        """
+        return self.dump_packet([0x02])
+
+    def dump_Pong(self):
+        """
+        [0x03]
+        Reply to peer's Ping packet.
+        """
+        return self.dump_packet([0x03])
+
+    def dump_Disconnect(self, reason=None):
+        """
+        [0x01, REASON]
+        Inform the peer that a disconnection is imminent; if received, a peer
+        should disconnect immediately. When sending, well-behaved hosts give
+        their peers a fighting chance (read: wait 2 seconds) to disconnect to
+        before disconnecting themselves.
+        REASON is an optional integer specifying one of a number of reasons
+        """
+        assert not reason or reason in self.disconnect_reasons_map
+
+        payload = [0x01]
+        if reason:
+            payload.append(self.disconnect_reasons_map[reason])
+        self.dump_packet(payload)
+
+    def dump_GetPeers(self):
+        self.dump_packet([0x10])
+
+    def dump_Peers(self, peers):
+        '''
+        :param peers: a sequence of (ip, port, pid)
+        :return: None if no peers
+        '''
+        data = [0x11]
+        for ip, port, pid in peers:
+            ip = list((chr(int(x)) for x in ip.split('.')))
+            data.append([ip, port, pid])
+        if len(data) > 1:
+            self.dump_packet(data)
+        else:
+            return None
+
+    def dump_Transactions(self, transactions):
+        data = [0x12] + [transactions]
+        self.dump_packet(data)
+
+    def dump_GetTransactions(self):
+        self.dump_packet([0x16])
+
+
+class WireProtocol(object):
+    def __init__(self, peermgr, config):
+        self.peermgr = peermgr
+        self.packeter = Packeter(config)
+        self.chainmgr = ChainProxy()
+
+    def rcv_packet(self, peer, packet):
+        try:
+            cmd, data = self.packeter.load_cmd(packet)
+        except Exception as e:
+            logger.warn(e)
+            return self.send_Disconnect(peer, reason='Bad protocol')
 
         # good peer
         peer.last_valid_packet_received = time.time()
 
-        func_name = "rcv_%s".format(cmd)
+        func_name = "_rcv_%s".format(cmd)
 
         if not hasattr(self, func_name):
             logger.warn('unknown cmd \'{0}\''.format(func_name))
@@ -144,33 +230,11 @@ class WireProtocol(object):
         # call the correspondig method
         return getattr(self, func_name)(peer, data)
 
-    def send_packet(self, peer, data):
-        """
-        4-byte synchronisation token, (0x22400891),
-        a 4-byte "payload size", to be interpreted as a big-endian integer
-        an N-byte RLP-serialised data structure
-        """
-        payload = rlp.encode(list_ienc(data))
-        packet = ienc4(self.SYNCHRONIZATION_TOKEN)
-        packet += ienc4(len(payload))
-        packet += payload
-        peer.send_packet(packet)
-
     def send_Hello(self, peer):
-        # assert we did not sent hello yet
-        payload = [0x00,
-                   self.PROTOCOL_VERSION,
-                   self.NETWORK_ID,
-                   self.CLIENT_ID,
-                   self.config.getint('network', 'listen_port'),
-                   self.CAPABILITIES,
-                   self.config.get('wallet', 'pub_key')
-                   ]
-        self.send_packet(peer, payload)
-
+        peer.send_packet(self.packeter.dump_Hello())
         peer.hello_sent = True
 
-    def rcv_Hello(self, peer, data):
+    def _rcv_Hello(self, peer, data):
         """
         [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
         LISTEN_PORT, NODE_ID]
@@ -227,56 +291,34 @@ class WireProtocol(object):
 
         # reply with hello if not send
         if not peer.hello_sent:
-            self.send_Hello(peer)
+            peer.send_packet(peer, self.packeter.dump_Hello())
+            peer.hello_sent = True
 
     def send_Ping(self, peer):
-        """
-        [0x02]
-        Requests an immediate reply of Pong from the peer.
-        """
-        self.send_packet(peer, [0x02])
+        peer.send_packet(self.packeter.dump_Ping())
 
-    def rcv_Ping(self, peer, data):
+    def _rcv_Ping(self, peer, data):
         self.send_Pong(peer)
 
     def send_Pong(self, peer):
-        """
-        [0x03]
-        Reply to peer's Ping packet.
-        """
-        # self.send_packet(peer, [0x03])
-        # self.chainmgr.pingpong(True)
+        peer.send_packet(self.packeter.dump_Pong())
 
-    def rcv_Pong(self, peer, data):
+    def _rcv_Pong(self, peer, data):
         self.send_GetTransactions(peer)  # FIXME
 
     def send_Disconnect(self, peer, reason=None):
-        """
-        [0x01, REASON]
-        Inform the peer that a disconnection is imminent; if received, a peer
-        should disconnect immediately. When sending, well-behaved hosts give
-        their peers a fighting chance (read: wait 2 seconds) to disconnect to
-        before disconnecting themselves.
-        REASON is an optional integer specifying one of a number of reasons
-        """
-        logger.info(
-            'sending {0} disconnect because {1}'.format(repr(peer), reason))
-        assert not reason or reason in self.disconnect_reasons_map
-        payload = [0x01]
-        if reason:
-            payload.append(self.disconnect_reasons_map[reason])
-        self.send_packet(peer, payload)
+        peer.send_packet(self.packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
         self.peermgr.remove_peer(peer)
 
-    def rcv_Disconnect(self, peer, data):
+    def _rcv_Disconnect(self, peer, data):
         if len(data):
-            reason = self.disconnect_reasons_map_by_id[idec(data[0])]
+            reason = self.packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(peer), reason))
         self.peermgr.remove_peer(peer)
 
-    def rcv_GetPeers(self, peer, data):
+    def _rcv_GetPeers(self, peer, data):
         """
         [0x10]
         Request the peer to enumerate some known peers for us to connect to.
@@ -285,9 +327,9 @@ class WireProtocol(object):
         self.send_Peers(peer)
 
     def send_GetPeers(self, peer):
-        self.send_packet(peer, [0x10])
+        peer.send_packet(self.packeter.dump_GetPeers())
 
-    def rcv_Peers(self, peer, data):
+    def _rcv_Peers(self, peer, data):
         """
         [0x11, [IP1, Port1, Id1], [IP2, Port2, Id2], ... ]
         Specifies a number of known peers. IP is a 4-byte array 'ABCD' that
@@ -305,14 +347,12 @@ class WireProtocol(object):
             self.peermgr.add_peer_address(ip, port, pid)
 
     def send_Peers(self, peer):
-        data = [0x11]
-        for ip, port, pid in self.peermgr.get_known_peer_addresses():
-            ip = list((chr(int(x)) for x in ip.split('.')))
-            data.append([ip, port, pid])
-        if len(data) > 1:
-            self.send_packet(peer, data)  # FIXME, what?
+        packet = self.packeter.dump_Peers(
+            self.peermgr.get_known_peer_addresses())
+        if packet:
+            peer.send_packet()
 
-    def rcv_Blocks(self, peer, data):
+    def _rcv_Blocks(self, peer, data):
         """
         [0x13, [block_header, transaction_list, uncle_list], ... ]
         Specify (a) block(s) that the peer should know about. The items in the
@@ -326,7 +366,7 @@ class WireProtocol(object):
             logger.debug('received block:  parent:{0}'
                          .format(header[0].encode('hex')))
 
-    def rcv_Transactions(self, peer, data):
+    def _rcv_Transactions(self, peer, data):
         """
         [0x12, [nonce, receiving_address, value, ... ], ... ] Specify (a)
         transaction(s) that the peer should make sure is included on its
@@ -337,11 +377,10 @@ class WireProtocol(object):
         logger.info('received transactions', len(data), peer)
         self.chainmgr.addTransactions(data)
 
-    def send_Transactions(self, peer, transaction_list):
-        data = [0x12] + [transaction_list]
-        self.send_packet(peer, data)
+    def send_Transactions(self, peer, transactions):
+        peer.send_transaction(self.packeter.dump_Transactions(transactions))
 
-    def rcv_GetTransactions(self, peer):
+    def _rcv_GetTransactions(self, peer):
         """
         [0x16]
         Request the peer to send all transactions currently in the queue.
@@ -352,7 +391,7 @@ class WireProtocol(object):
 
     def send_GetTransactions(self, peer):
         logger.info('asking for transactions')
-        self.send_packet(peer, [0x16])
+        peer.send_packet(self.packeter.dump_GetTransactions())
 
     def _broadcast(self, method, data):
         for peer in self.peermgr.connected_peers:
