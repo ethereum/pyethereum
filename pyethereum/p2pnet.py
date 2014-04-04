@@ -53,13 +53,8 @@ class Peer(threading.Thread):
             if self._stopped:
                 return
             self._stopped = True
-        self.shutdown()
 
-    def stopped(self):
-        with self.lock:
-            return self._stopped
-
-    def shutdown(self):
+        # shut down
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
         except IOError as e:
@@ -67,11 +62,44 @@ class Peer(threading.Thread):
                 "shutting down failed {0} \"{1}\"".format(repr(self), str(e)))
         self._connection.close()
 
+    def stopped(self):
+        with self.lock:
+            return self._stopped
+
     def send_packet(self, response):
         self.response_queue.put(response)
 
-    def receive(self):
-        data = ""
+    def _process_send(self):
+        '''
+        :return: size of processed data
+        '''
+        # send packet
+        try:
+            packet = self.response_queue.get(timeout=.1)
+        except Queue.Empty:
+            packet = ''
+
+        size = len(packet)
+
+        while packet:
+            logger.debug('{0}: send packet {1}'.format(
+                repr(self), str(load_packet(packet))[:60]))
+            try:
+                n = self.connection().send(packet)
+                packet = packet[n:]
+            except IOError as e:
+                logger.debug(
+                    '{0}: send packet failed, {1}'
+                    .format(repr(self), str(e)))
+                self.stop()
+                break
+        return size
+
+    def _process_recv(self):
+        '''
+        :return: size of processed data
+        '''
+        packet = ""
         while True:
             try:
                 chunk = self.connection().recv(2048)
@@ -79,40 +107,20 @@ class Peer(threading.Thread):
                 chunk = ''
             if not chunk:
                 break
-            data += chunk
-        return data
+            packet += chunk
+
+        if packet:
+            logger.debug('{0}: received packet {1}'.format(
+                repr(self), str(load_packet(packet))[:60]))
+            self.protocol.rcv_packet(self, packet)
+        return len(packet)
 
     def run(self):
         while not self.stopped():
-
-            # send packet
-            try:
-                spacket = self.response_queue.get(timeout=.1)
-            except Queue.Empty:
-                spacket = None
-            while spacket:
-
-                logger.debug('{0}: send packet {1}'.format(
-                    repr(self), str(load_packet(spacket))[:60]))
-                try:
-                    n = self.connection().send(spacket)
-                    spacket = spacket[n:]
-                except IOError as e:
-                    logger.debug(
-                        '{0}: send packet failed, {1}'
-                        .format(repr(self), str(e)))
-                    self.stop()
-                    break
-
-            # receive packet
-            rpacket = self.receive()
-            if rpacket:
-                logger.debug('{0}: received packet {1}'.format(
-                    repr(self), str(load_packet(rpacket))[:60]))
-                self.protocol.rcv_packet(self, rpacket)
-
+            send_size = self._process_send()
+            recv_size = self._process_recv()
             # pause
-            if not (rpacket or spacket):
+            if not (send_size or recv_size):
                 time.sleep(0.1)
 
 
