@@ -44,7 +44,7 @@ def create_config():
                       )
     parser.add_option("-r", "--remote",
                       dest="remote_host",
-                      help="<host> Connect to remote host"
+                      help="<host> Connect to remote host (try: 54.201.28.117 or 54.204.10.41)"
                       )
     parser.add_option("-p", "--port",
                       dest="remote_port",
@@ -171,6 +171,8 @@ def main():
     # loop
     while not peer_manager.stopped():
         time.sleep(0.1)
+        if len(peer_manager.get_connected_peer_addresses()) > 2:
+            chain_manager.bootstrap_blockchain()
 
     logger.info('exiting')
     # tcp_server.join() # does not work!

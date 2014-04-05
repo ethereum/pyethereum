@@ -4,7 +4,7 @@ import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 import logging
-from manager import ChainProxy
+from manager import ChainProxy, rlp_hash_hex
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 logger = logging.getLogger(__name__)
@@ -32,7 +32,21 @@ def lrlp_decode(data):
 
 
 def load_packet(packet):
-    return Packeter.load_packet(packet)
+    return WireProtocol.load_packet(packet)
+
+
+class Packeter(object):
+    """
+    Translates between the network and the local data
+    https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
+
+    stateless!
+    """
+
+    cmd_map = dict(((0x00, 'Hello'),
+                   (0x01, 'Disconnect'),
+                   (0x02, 'Ping'),
+                   (0x03, 'Pong'),
 
 
 class Packeter(object):
@@ -71,7 +85,7 @@ class Packeter(object):
 
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x08
+    PROTOCOL_VERSION = 0x09
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
@@ -236,8 +250,7 @@ class WireProtocol(object):
 
     def _rcv_Hello(self, peer, data):
         """
-        [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
-        LISTEN_PORT, NODE_ID]
+        [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES, LISTEN_PORT, NODE_ID]
         First packet sent over the connection, and sent once by both sides.
         No other messages may be sent until a Hello is received.
         PROTOCOL_VERSION is one of:
@@ -246,29 +259,21 @@ class WireProtocol(object):
             0x07 for PoC-3.
             0x08 sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
         NETWORK_ID should be 0.
-        CLIENT_ID Specifies the client software identity,
-            as a human-readable string (e.g. "Ethereum(++)/1.0.0").
-        CAPABILITIES specifies the capabilities of the client as a set of
-            flags; presently three bits are used:
-                0x01 for peers discovery,
-                0x02 for transaction relaying,
-                0x04 for block-chain querying.
+        CLIENT_ID Specifies the client software identity, as a human-readable string
+                    (e.g. "Ethereum(++)/1.0.0").
+        CAPABILITIES specifies the capabilities of the client as a set of flags;
+                    presently three bits are used:
+                    0x01 for peers discovery, 0x02 for transaction relaying, 0x04 for block-chain querying.
         LISTEN_PORT specifies the port that the client is listening on
                     (on the interface that the present connection traverses).
                     If 0 it indicates the client is not listening.
-        NODE_ID is optional and specifies a 512-bit hash,
-            (potentially to be used as public key) that identifies this node.
+        NODE_ID is optional and specifies a 512-bit hash, (potentially to be used as public key)
+                    that identifies this node.
 
-        [574621841, 116, 'Hello', '\x08', '',
-        'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_',
-        "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}"
-        "\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|"
-        "\x86\xa6ZV!Q6\x82\xebQ$4+"]
-
-        [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb',
-        '\x07']
+        [574621841, 116, 'Hello', '\x08', '', 'Ethereum(++)/v0.3.11/brew/Darwin/unknown', '\x07', 'v_', "\xc5\xfe\xc6\xea\xe4TKvz\x9e\xdc\xa7\x01\xf6b?\x7fB\xe7\xfc(#t\xe9}\xafh\xf3Ot'\xe5u\x07\xab\xa3\xe5\x95\x14 |P\xb0C\xa2\xe4jU\xc8z|\x86\xa6ZV!Q6\x82\xebQ$4+"]
+        [574621841, 27, 'Hello', '\x08', '\x00', 'Ethereum(py)/0.0.1', 'vb', '\x07']
         """
-
+        logger.debug(data[:-1] + [data[-1][20]])
         # check compatibility
         if idec(data[0]) != self.PROTOCOL_VERSION:
             return self.send_Disconnect(
@@ -279,9 +284,8 @@ class WireProtocol(object):
             return self.send_Disconnect(peer, reason='Wrong genesis block')
 
         """
-        spec has CAPABILITIES after PORT, CPP client the other way round.
-        emulating the latter https://github.com/ethereum/cpp-ethereum/blob
-        /master/libethereum/PeerNetwork.cpp#L144
+        spec has CAPABILITIES after PORT, CPP client the other way round. emulating the latter
+        https://github.com/ethereum/cpp-ethereum/blob/master/libethereum/PeerNetwork.cpp#L144
         """
 
         # TODO add to known peers list
@@ -355,16 +359,16 @@ class WireProtocol(object):
     def _rcv_Blocks(self, peer, data):
         """
         [0x13, [block_header, transaction_list, uncle_list], ... ]
-        Specify (a) block(s) that the peer should know about. The items in the
-        list (following the first item, 0x13) are blocks in the format
-        described in the main Ethereum specification.
+        Specify (a) block(s) that the peer should know about. The items in the list
+        (following the first item, 0x13) are blocks in the format described in the
+        main Ethereum specification.
         """
+        blocks = data
+        print "received blocks", [rlp_hash_hex(b) for b in blocks]
+        self.chainmgr.add_blocks(blocks)
 
-        # FIXME, currently just dumps data
-        for e in data:
-            header, transaction_list, uncle_list = e
-            logger.debug('received block:  parent:{0}'
-                         .format(header[0].encode('hex')))
+        self.send_GetTransactions(peer)  # FIXME  (which event should trigger this?)
+
 
     def _rcv_Transactions(self, peer, data):
         """
@@ -413,7 +417,12 @@ class WireProtocol(object):
                     self.send_Transactions(peer, transaction_list)
                 else:  # broadcast
                     self._broadcast(self.send_Transactions, transaction_list)
-
+            elif cmd == "get_chain":
+                count = data[0]
+                parents_H = data[1]
+                print "sending get chain", count, parents_H
+                if count and len(parents_H):
+                    self._broadcast(self.send_GetChain, count, parents_H)
             elif cmd == 'pingpong':
                 reply = data[0]
                 logger.debug('%r received pingpong(reply=%r)' % (self, reply))
