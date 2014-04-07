@@ -113,11 +113,14 @@ def starts_with(full, part):
 def sha3(x):
     return sha3_256(x).digest()
 
+databases = {}
 
 class DB(object):
 
     def __init__(self, dbfile):
-        self.db = leveldb.LevelDB(dbfile)
+        if dbfile not in databases:
+            databases[dbfile] = leveldb.LevelDB(dbfile)
+        self.db = databases[dbfile]
 
     def get(self, key):
         return self.db.Get(key)
@@ -151,7 +154,6 @@ BLANK_NODE = ''
 
 
 class Trie(object):
-    databases = {}
 
     def __init__(self, dbfile, root=BLANK_NODE):
         '''
@@ -160,9 +162,7 @@ class Trie(object):
         '''
         self.root = root
         dbfile = os.path.abspath(dbfile)
-        if dbfile not in self.databases:
-            self.databases[dbfile] = DB(dbfile)
-        self.db = self.databases[dbfile]
+        self.db = DB(dbfile)
 
     def clear(self):
         ''' clear all tree data

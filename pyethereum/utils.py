@@ -1,3 +1,13 @@
+from sha3 import sha3_256
+from bitcoin import privtopub
+
+def sha3(seed):
+    return sha3_256(seed).digest()
+
+def privtoaddr(x):
+    if len(x) > 32: x = x.decode('hex')
+    return sha3(privtopub(x)[1:])[12:].encode('hex')
+
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
     # 0 is a special case, treated same as ''

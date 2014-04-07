@@ -1,385 +1,358 @@
 from transactions import Transaction
 from blocks import Block
+from trie import Trie, DB
 import time
 import sys
 import rlp
 import math
-import sha3
+from opcodes import opcodes
 
-scriptcode_map = {
-    0: 'STOP',   
-    1: 'ADD',
-    2: 'SUB',
-    3: 'MUL',
-    4: 'DIV',
-    5: 'SDIV',
-    6: 'MOD',
-    7: 'SMOD',
-    8: 'EXP',
-    9: 'NEG',
-    10: 'LT',
-    11: 'LE',
-    12: 'GT',
-    13: 'GE',
-    14: 'EQ',
-    15: 'NOT',
-    16: 'MYADDRESS',
-    17: 'TXSENDER',
-    18: 'TXVALUE',
-    19: 'TXDATAN',
-    20: 'TXDATA',
-    21: 'BLK_PREVHASH',
-    22: 'BLK_COINBASE',
-    23: 'BLK_TIMESTAMP',
-    24: 'BLK_NUMBER',
-    25: 'BLK_DIFFICULTY',
-    26: 'BASEFEE',
-    32: 'SHA256',
-    33: 'RIPEMD160',
-    34: 'ECMUL',
-    35: 'ECADD',
-    36: 'ECSIGN',
-    37: 'ECRECOVER',
-    38: 'ECVALID',
-    39: 'SHA3',
-    48: 'PUSH',
-    49: 'POP',
-    50: 'DUP',
-    51: 'SWAP',
-    52: 'MLOAD',
-    53: 'MSTORE',
-    54: 'SLOAD',
-    55: 'SSTORE',
-    56: 'JMP',
-    57: 'JMPI',
-    58: 'IND',
-    59: 'EXTRO',
-    60: 'BALANCE',
-    61: 'MKTX',
-    63: 'SUICIDE'
-}
+from utils import big_endian_to_int as decode_int
+from utils import int_to_big_endian as encode_int
+from utils import sha3, privtoaddr
 
-params = {
-    'stepfee': 1,
-    'txfee': 100,
-    'newcontractfee': 100,
-    'storagefee': 0,
-    'datafee': 20,
-    'cryptofee': 20,
-    'extrofee': 40,
-    'blocktime': 60,
-    'reward': 10 * 10**18
-}
+statedb = DB('statedb')
 
-def getfee(block,t):
-    if t in ['stepfee','txfee','newcontractfee','storagefee','datafee','cryptofee','extrofee']:
-        return block.get_base_fee() * params[t]
+def encoded_plus(a,b):
+    return encode_int(decode_int(a) + decode_int(b))
 
-def process_transactions(block,transactions):
-    while len(transactions) > 0:
-        tx = transactions.pop(0)
-        enc = (tx.value, tx.fee, tx.sender.encode('hex'), tx.to.encode('hex'))
-        sys.stderr.write("Attempting to send %d plus fee %d from %s to %s\n" % enc)
-        # Grab data about sender, recipient and miner
-        sdata = rlp.decode(block.state.get(tx.sender)) or [0,0,0]
-        tdata = rlp.decode(block.state.get(tx.to)) or [0,0,0]
-        # Calculate fee
-        if tx.to == '\x00'*20:
-            fee = getfee('newcontractfee')
-        else:
-            fee = getfee('txfee')
-        # Insufficient fee, do nothing
-        if fee > tx.fee:
-            sys.stderr.write("Insufficient fee\n")
-            continue
-        # Too much data, do nothing
-        if len(tx.data) > 256:
-            sys.stderr.write("Too many data items\n")
-            continue
-        if not sdata or sdata[1] < tx.value + tx.fee:
-            sys.stderr.write("Insufficient funds to send fee\n")
-            continue
-        elif tx.nonce != sdata[2] and sdata[0] == 0:
-            sys.stderr.write("Bad nonce\n")
-            continue
-        # Try to send the tx
-        if sdata[0] == 0: sdata[2] += 1
-        sdata[1] -= (tx.value + tx.fee)
-        block.reward += tx.fee
-        if tx.to != '':
-            tdata[1] += tx.value
-        else:
-            addr = tx.hash()[-20:]
-            adata = rlp.decode(block.state.get(addr))
-            if adata[2] != '':
-                sys.stderr.write("Contract already exists\n")
-                continue
-            block.state.update(addr,rlp.encode([1,tx.value,'']))
-            contract = block.get_contract(addr)
-            for i in range(len(tx.data)):
-                contract.update(encode(i,256,32),tx.data[i])
-            block.update_contract(addr)
-        print (sdata, tdata)
-        block.state.update(tx.sender,rlp.encode(sdata))
-        block.state.update(tx.to,rlp.encode(tdata))
-        # Evaluate contract if applicable
-        if tdata[0] == 1:
-            eval_contract(block,transactions,tx)
-        sys.stderr.write("tx processed\n")
+# params
 
-def eval(block,transactions,timestamp,coinbase):
-    h = block.hash()
-    # Process all transactions
-    process_transactions(block,transactions)
-    # Pay miner fee
-    miner_state = rlp.decode(block.state.get(block.coinbase)) or [0,0,0]
-    block.number += 1
-    reward = params['reward']
-    miner_state[1] += reward
-    for uncle in block.uncles:
-        sib_miner_state = rlp_decode(block.state.get(uncle[3]))
-        sib_miner_state[1] += reward*7/8
-        block.state.update(uncle[3],sib_miner_state)
-        miner_state[1] += reward/8
-    block.state.update(block.coinbase,rlp.encode(miner_state))
-    # Check timestamp
-    if timestamp < block.timestamp or timestamp > int(time.time()) + 3600:
-        raise Exception("timestamp not in valid range!")
-    # Update difficulty
-    if timestamp >= block.timestamp + 42:
-        block.difficulty += int(block.difficulty / 1024)
+GSTEP = 1
+GSTOP = 0
+GSHA3 = 20
+GSLOAD = 20
+GSSTORE = 100
+GBALANCE = 20
+GCREATE = 100
+GCALL = 20
+GMEMORY = 1
+GTXDATA = 5
+
+NONCE_INDEX = 0
+BALANCE_INDEX = 1
+CODE_INDEX = 2
+STORAGE_INDEX = 3
+
+OUT_OF_GAS = -1
+
+def process(block,txs):
+    for tx in txs:
+        apply_tx(block,tx)
+    finalize(block)
+
+def finalize(block):
+    minerstate = block.state.get(block.coinbase) or ['','','','']
+    minerstate[BALANCE_INDEX] \
+        = encode_int(decode_int(minerstate[BALANCE_INDEX]) + block.reward)
+    block.state.update(block.coinbase,minerstate)
+
+class Message(object):
+    def __init__(self,sender,to,value,gas,data):
+        self.sender = sender
+        self.to = to
+        self.value = value
+        self.gas = gas
+        self.data = data
+
+def apply_tx(block,tx):
+    fee = tx.gasprice * tx.startgas
+    addrstate = block.state.get(tx.sender.decode('hex'))
+    if not addrstate:
+        raise Exception("Sending from a not-yet-existent account!")
+    if decode_int(addrstate[NONCE_INDEX]) != tx.nonce:
+        print decode_int(addrstate[NONCE_INDEX]), tx.nonce
+        raise Exception("Invalid nonce!")
+    if decode_int(addrstate[BALANCE_INDEX]) < fee:
+        raise Exception("Not enough in account to pay fee!")
+    addrstate[NONCE_INDEX] = encode_int(decode_int(addrstate[NONCE_INDEX])+1)
+    addrstate[BALANCE_INDEX] = encode_int(decode_int(addrstate[BALANCE_INDEX])-fee)
+    block.state.update(tx.sender.decode('hex'),addrstate)
+    block.gas_consumed += fee
+    medroot = block.state.root
+    message_gas = tx.startgas - GTXDATA * len(tx.data)
+    message = Message(tx.sender,tx.to,tx.value,message_gas,tx.data)
+    if tx.to:
+        s,g,d = apply_msg(block,tx,message)
     else:
-        block.difficulty -= int(block.difficulty / 1024)
-    block.prevhash = h
-    block.coinbase = coinbase
-    block.transactions = []
-    block.uncles = []
-    return block
+        s,g = create_contract(block,tx,message)
+    if not s:
+        block.state.root = medroot
+        minerstate = block.state.get(block.coinbase)
+        minerstate[BALANCE_INDEX] = encode_int(decode_int(minerstate[BALANCE_INDEX])+fee)
+        block.state.update(block.coinbase,minerstate)
+    else:
+        addrstate[BALANCE_INDEX] = encode_int(decode_int(addrstate[BALANCE_INDEX])+tx.gasprice * g)
+        block.state.update(tx.sender.decode('hex'),addrstate)
+        minerstate = block.state.get(block.coinbase.decode('hex')) or ['','','','']
+        minerstate[BALANCE_INDEX] = encode_int(decode_int(minerstate[BALANCE_INDEX])+(fee - g * tx.gasprice))
+        block.state.update(block.coinbase.decode('hex'),minerstate)
 
-def eval_contract(block,transaction_list,tx):
-    sys.stderr.write("evaluating contract\n")
-    address = tx.to
-    # Initialize stack
-    stack = []
-    index = 0
-    stepcounter = 0
-    contract = block.get_contract(address)
-    if not contract:
-        return
+class Compustate():
+    def __init__(self,**kwargs):
+        self.memory = []
+        self.stack = []
+        self.pc = 0
+        self.gas = 0
+        for kw in kwargs:
+            vars(self)[kw] = kwargs[kw]
+
+def apply_msg(block,tx,msg):
+    oldroot = block.state.root
+    senderstate = block.state.get(msg.sender)
+    recvstate = block.state.get(msg.to) or ['','','','']
+    codehash = recvstate[CODE_INDEX]
+    code = statedb.get(codehash)
+    compustate = Compustate(gas=msg.gas)
+    # Not enough value to send, instaquit
+    if decode_int(senderstate[BALANCE_INDEX]) < msg.value:
+        return 1, compustate.gas, []
+    # Transfer value
+    senderstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX]) - msg.value)
+    recvstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX]) + msg.value)
+    block.state.update(msg.sender,senderstate)
+    block.state.update(msg.to,recvstate)
+    # Main loop
     while 1:
-        # Convert the data item into a code piece
-        val_at_index = decode(contract.get(encode(index,256,32)),256)
-        code = [ int(val_at_index / (256**i)) % 256 for i in range(6) ]
-        code[0] = scriptcode_map.get(code[0],'INVALID')
-        sys.stderr.write("Evaluating: "+ str(code)+"\n")
-        # Invalid code instruction or STOP code stops execution sans fee
-        if val_at_index >= 256 or code[0] in ['STOP','INVALID']:
-            sys.stderr.write("stop code, exiting\n")
-            break
-        # Calculate fee
-        minerfee = 0
-        nullfee = 0
-        stepcounter += 1
-        if stepcounter > 16:
-            minerfee += getfee("stepfee")
-        c = scriptcode_map[code[0]]
-        if c in ['STORE','LOAD']:
-            minerfee += getfee("datafee")
-        if c in ['EXTRO','BALANCE']:
-            minerfee += getfee("extrofee")
-        if c in ['SHA256','RIPEMD-160','ECMUL','ECADD','ECSIGN','ECRECOVER']:
-            minerfee += getfee("cryptofee")
-        if c == 'STORE':
-            existing = block.get_contract_state(address,code[2])
-            if reg[code[1]] != 0: nullfee += getfee("memoryfee")
-            if existing: nullfee -= getfee("memoryfee")
+        o = apply_op(block,tx,msg,code,compustate,op)
+        if o is not None:
+            if o == OUT_OF_GAS:
+                block.state.root = oldroot
+                return 0, 0, []
+            else:
+                return 1, compustate.gas, o
 
-        # If we can't pay the fee, break, otherwise pay it
-        if block.get_balance(address) < minerfee + nullfee:
-            sys.stderr.write("insufficient fee, exiting\n")
-            break
-        block.set_balance(address,block.get_balance(address) - nullfee - minerfee)
-        block.reward += minerfee
-        sys.stderr.write("evaluating operation\n") 
-        exit = False
-        def stack_pop(n):
-            if len(stack) < n:
-                sys.stderr.write("Stack height insufficient, exiting")
-                exit = True
-                return [0] * n
-            o = stack[-n:]
-            stack = stack[:-n]
-            return o
-        # Evaluate operations
-        if c == 'ADD':
-            x,y = stack_pop(2)
-            stack.append((x + y) % 2**256)
-        elif c == 'MUL':
-            x,y = stack_pop(2)
-            stack.append((x * y) % 2**256)
-        elif c == 'SUB':
-            x,y = stack_pop(2)
-            stack.append((x - y) % 2**256)
-        elif c == 'DIV':
-            x,y = stack_pop(2)
-            if y == 0: break
-            stack.append(int(x / y))
-        elif c == 'SDIV':
-            x,y = stack_pop(2)
-            if y == 0: break
-            sign = (1 if x < 2**255 else -1) * (1 if y < 2**255 else -1)
-            xx = x if x < 2**255 else 2**256 - x
-            yy = y if y < 2**255 else 2**256 - y
-            z = int(xx/yy)
-            stack.append(z if sign == 1 else 2**256 - z)
-        elif code == 'MOD':
-            x,y = stack_pop(2)
-            if y == 0: break
-            stack.append(x % y)
-        elif code == 'SMOD':
-            x,y = stack_pop(2)
-            if y == 0: break
-            sign = (1 if x < 2**255 else -1) * (1 if y < 2**255 else -1)
-            xx = x if x < 2**255 else 2**256 - x
-            yy = y if y < 2**255 else 2**256 - y
-            z = xx%yy
-            stack.append(z if sign == 1 else 2**256 - z)
-        elif code == 'EXP':
-            x,y = stack_pop(2)
-            stack.append(pow(x,y,2**256))
-        elif code == 'NEG':
-            stack.append(2**256 - stack.pop(1)[0])
-        elif code == 'LT':
-            x,y = stack_pop(2)
-            stack.append(1 if x < y else 0)
-        elif code == 'LE':
-            x,y = stack_pop(2)
-            stack.append(1 if x <= y else 0)
-        elif code == 'GT':
-            x,y = stack_pop(2)
-            stack.append(1 if x > y else 0)
-        elif code == 'GE':
-            x,y = stack_pop(2)
-            stack.append(1 if x >= y else 0)
-        elif code == 'EQ':
-            x,y = stack_pop(2)
-            stack.append(1 if x == y else 0)
-        elif code == 'NOT':
-            stack.append(1 if stack.pop(1)[0] == 0 else 0)
-        elif code == 'MYADDRESS':
-            stack.append(address)
-        elif code == 'TXSENDER':
-            stack.append(decode(tx.sender,256))
-        elif code == 'TXVALUE':
-            stack.append(tx.value)
-        elif code == 'TXDATAN':
-            stack.append(len(tx.data))
-        elif code == 'TXDATA':
-            x, = stack_pop(1)
-            stack.append(0 if x >= len(tx.data) else tx.data[x])
-        elif code == 'BLK_PREVHASH':
-            stack.append(decode(block.prevhash,256))
-        elif code == 'BLK_COINBASE':
-            stack.append(decode(block.coinbase,160))
-        elif code == 'BLK_TIMESTAMP':
-            stack.append(block.timestamp)
-        elif code == 'BLK_NUMBER':
-            stack.append(block.number)
-        elif code == 'BLK_DIFFICULTY':
-            stack.append(block.difficulty)
-        elif code == 'SHA256':
-            L = stack_pop(1)
-            hdataitems = stack_pop(math.ceil(L / 32.0))
-            hdata = ''.join([encode(x,256,32) for x in hdataitems])[:L]
-            stack.append(decode(hashlib.sha256(hdata).digest(),256))
-        elif code == 'RIPEMD-160':
-            L = stack_pop(1)
-            hdataitems = stack_pop(math.ceil(L / 32.0))
-            hdata = ''.join([encode(x,256,32) for x in hdataitems])[:L]
-            stack.append(decode(hashlib.new('ripemd160',hdata).digest(),256))
-        elif code == 'ECMUL':
-            n,x,y = stack_pop(3)
-            # Point at infinity
-            if x == 0 and y == 0:
-                stack.extend([0,0])
-            # Point not on curve, coerce to infinity
-            elif x >= P or y >= P or (x ** 3 + 7 - y ** 2) % P != 0:
-                stack.extend([0,0])
-            # Legitimate point
+def create_contract(block,tx,msg):
+    oldroot = block.state.root
+    senderstate = block.state.get(msg.sender) or ['','','','']
+    recvstate = ['','',sha3(msg.data),'']
+    recvaddr = sha3(rlp.encode([msg.sender,senderstate[NONCE_INDEX]]))[12:]
+    code = msg.data
+    statedb.put(sha3(msg.data),msg.data)
+    compustate = Compustate(gas=msg.gas)
+    # Not enough vaue to send, instaquit
+    if decode_int(senderstate[BALANCE_INDEX]) < msg.value:
+        recvstate[2] = []
+        block.state.update(recvaddr,recvstate)
+        return recvaddr, compustate.gas
+    # Transfer value and update nonce
+    senderstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX])-msg.value)
+    senderstate[NONCE_INDEX] = encode_int(decode_int(senderstate[NONCE_INDEX])+1)
+    recvstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX])+msg.value)
+    block.state.update(msg.sender.decode('hex'),senderstate)
+    block.state.update(recvaddr,recvstate)
+    # Temporary pre-POC5: don't do the code/init thing
+    return recvaddr, compustate.gas
+    # Main loop
+    while 1:
+        o = apply_op(block,tx,msg,msg.data,compustate.op)
+        if o is not None:
+            if o == OUT_OF_GAS:
+                block.state.root = oldroot
+                return 0, 0
             else:
-                x2,y2 = base10_multiply((x,y),n)
-                stack.extend([x2,y2])
-        elif code == 'ECADD':
-            x1,y1,x2,y2 = stack_pop(4)
-            # Invalid point 1
-            if x1 >= P or y1 >= P or (x1 ** 3 + 7 - y1 ** 2) % P != 0:
-                stack.extend([0,0])
-            # Invalid point 2
-            elif x2 >= P or y2 >= P or (x2 ** 3 + 7 - y2 ** 2) % P != 0:
-                stack.extend([0,0])
-            # Legitimate points
-            else:
-                x3,y3 = base10_add((x1,y1),(x2,y2))
-                stack.extend([x3,y3])
-        elif code == 'ECSIGN':
-            k,h = stack_pop(2)
-            v,r,s = ecdsa_raw_sign(h,k)
-            stack.extend([v,r,s])
-        elif code == 'ECRECOVER':
-            h,v,r,s = stack_pop(4)
-            x,y = ecdsa_raw_recover((v,r,s),h)
-            stack.extend([x,y])
-        elif code == 'SHA3':
-            L = stack_pop(1)
-            hdataitems = stack_pop(math.ceil(L / 32.0))
-            hdata = ''.join([encode(x,256,32) for x in hdataitems])[:L]
-            stack.append(decode(sha3.sha3_256(hdata).digest(),256))
-        elif code == 'PUSH':
-            stack.append(contract.get(encode(index + 1,256,32)))
-            index += 1
-        elif code == 'POP':
-            stack_pop(1)
-        elif code == 'DUP':
-            x, = stack_pop(1)
-            stack.extend([x,x])
-        elif code == 'SWAP':
-            x,y = stack_pop(2)
-            stack.extend([y,x])
-        elif code == 'SLOAD':
-            stack.append(contract.get(encode(stack_pop(1)[0],256,32)))
-        elif code == 'SSTORE':
-            x,y = stack_pop(2)
-            if exit: break
-            contract.update(encode(x,256,32),y)
-        elif code == 'JMP':
-            index = stack_pop(1)[0]
-        elif code == 'JMPI':
-            newpos,c = stack_pop(2)
-            if c != 0: index = newpos
-        elif code == 'IND':
-            stack.append(index)
-        elif code == 'EXTRO':
-            ind,addr = stack_pop(2)
-            stack.push(block.get_contract(encode(addr,256,20)).get(encode(ind,256,32)))
-        elif code == 'BALANCE':
-            stack.push(block.get_balance(encode(stack_pop(1)[0],256,20)))
-        elif code == 'MKTX':
-            datan,fee,value,to = stack_pop(4)
-            if exit:
-                break
-            elif (value + fee) > block.get_balance(address):
-                break
-            else:
-                data = stack_pop(datan)
-                tx = Transaction(0,encode(to,256,20),value,fee,data)
-                tx.sender = address
-                transaction_list.insert(0,tx)
-        elif code == 'SUICIDE':
-            sz = contract.get_size()
-            negfee = -sz * getfee("memoryfee")
-            toaddress = encode(stack_pop(1)[0],256,20)
-            block.pay_fee(toaddress,negfee,False)
-            contract.root = ''
-            break
-        if exit: break
-    block.update_contract(address,contract)
+                recvstate = block.state.get(recvaddr)
+                recvstate[CODE_INDEX] = sha3(map(chr,o))
+                statedb.put(sha3(map(chr,o)),map(chr,o))
+                block.state.update(recvaddr,recvstate)
+                return recvaddr, recvstate
+    
+def get_op_data(code,index):
+    opcode = ord(code[index]) if index < len(code) else 0
+    if opcode < 96 or opcode == 255:
+        if opcode in opcodes: return opcodes[opcode]
+        else: return 'INVALID'
+    elif opcode < 128: return 'PUSH'+str(opcode-95)
+    else: return 'INVALID'
+
+def calcfee(block,tx,msg,compustate,op):
+    stk, mem = compustate.stack, compustate.memory
+    if op == 'SHA3':
+        m_extend = max(0,stk[-1] + stk[-2] - len(mem))
+        return GSHA3 + m_extend * GMEMORY
+    elif op == 'SLOAD':
+        return GSLOAD
+    elif op == 'SSTORE':
+        return GSSTORE
+    elif op == 'MLOAD':
+        m_extend = max(0,stk[-1] + 32 - len(mem))
+        return GSTEP + m_extend * GMEMORY
+    elif op == 'MSTORE':
+        m_extend = max(0,stk[-1] + 32 - len(mem))
+        return GSTEP + m_extend * GMEMORY
+    elif op == 'MSTORE8':
+        m_extend = max(0,stk[-1] + 1 - len(mem))
+        return GSTEP + m_extend * GMEMORY
+    elif op == 'CALL':
+        m_extend = max(0,stk[-3]+stk[-4]-len(mem), stk[-5]+stk[-6]-len(mem))
+        return GCALL + stk[-2] + m_extend * GMEMORY
+    elif op == 'CREATE':
+        m_extend = max(0,stk[-2]+stk[-3]-len(mem))
+        return GCREATE + stk[-2] + m_extend * GMEMORY
+    else:
+        return GSTEP
+
+# multi pop
+def multipop(stack,pops):
+    o = []
+    for i in range(pops): o.push(stack.pop())
+    return o
+
+# Does not include paying opfee
+def apply_op(block,tx,msg,code,compustate,op):
+    op_data = get_op_data(code,compustate.pc)
+    # empty stack error
+    if op_data[1] > len(compustate.stack):
+        return []
+    stackargs = []
+    for i in range(op.data[1]):
+        stackargs.push(stack.pop())
+    # out of gas error
+    fee = calcfee(block,tx,msg,compustate,op)
+    if fee > compustate.gas:
+        return OUT_OF_GAS
+    # Apply operation
+    newgas = compustate.gas - fee
+    newpc = compustate.pc + 1
+    stk = compustate.stack
+    mem = compustate.memory
+    if op == 'ADD':
+        stk.push((stackargs[0] + stackargs[1]) % 2**256)
+    elif op == 'SUB':
+        stk.push((stackargs[0] - stackargs[1]) % 2**256)
+    elif op == 'MUL':
+        stk.push((stackargs[0] * stackargs[1]) % 2**256)
+    elif op == 'DIV':
+        stk.push(stackargs[0] / stackargs[1])
+    elif op == 'MOD':
+        stk.push(stackargs[0] % stackargs[1])
+    elif op == 'SDIV':
+        if stackargs[0] >= 2**255: stackargs[0] -= 2**256
+        if stackargs[1] >= 2**255: stackargs[1] -= 2**256
+        stk.push((stackargs[0] / stackargs[1]) % 2**256)
+    elif op == 'SMOD':
+        if stackargs[0] >= 2**255: stackargs[0] -= 2**256
+        if stackargs[1] >= 2**255: stackargs[1] -= 2**256
+        stk.push((stackargs[0] % stackargs[1]) % 2**256)
+    elif op == 'EXP':
+        stk.push(pow(stackargs[0],stackargs[1],2**256))
+    elif op == 'NEG':
+        stk.push(2**256 - stackargs[0])
+    elif op == 'LT':
+        stk.push(1 if stackargs[0] < stackargs[1] else 0)
+    elif op == 'GT':
+        stk.push(1 if stackargs[0] > stackargs[1] else 0)
+    elif op == 'EQ':
+        stk.push(1 if stackargs[0] == stackargs[1] else 0)
+    elif op == 'NOT':
+        stk.push(0 if stackargs[0] else 1)
+    elif op == 'AND':
+        stk.push(stackargs[0] & stackargs[1])
+    elif op == 'OR':
+        stk.push(stackargs[0] | stackargs[1])
+    elif op == 'XOR':
+        stk.push(stackargs[0] ^ stackargs[1])
+    elif op == 'BYTE':
+        if stackargs[0] >= 32: stk.push(0)
+        else: stk.push((stackargs[1] / 256**stackargs[0]) % 256)
+    elif op == 'SHA3':
+        if len(mem) < stackargs[0] + stackargs[1]:
+            mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
+        data = ''.join(map(chr,mem[stackargs[0]:stackargs[0] + stackargs[1]]))
+        stk.push(decode(sha3(data),256))
+    elif op == 'ADDRESS':
+        stk.push(msg.to)
+    elif op == 'BALANCE':
+        stk.push(block.state.get(msg.to)[BALANCE_INDEX])
+    elif op == 'ORIGIN':
+        stk.push(tx.sender)
+    elif op == 'CALLER':
+        stk.push(msg.sender)
+    elif op == 'CALLVALUE':
+        stk.push(msg.value)
+    elif op == 'CALLDATA':
+        if stackargs[-1] >= len(msg.data): stk.push(0)
+        else:
+            dat = ''.join(map(chr,msg.data[stackargs[-1]:stackargs[-1]+32]))
+            stk.push(decode(dat+'\x00'*(32-len(dat)),256))
+    elif op == 'CALLDATASIZE':
+        stk.push(len(msg.data))
+    elif op == 'GASPRICE':
+        stk.push(tx.gasprice)
+    elif op == 'PREVHASH':
+        stk.push(block.prevhash)
+    elif op == 'COINBASE':
+        stk.push(block.coinbase)
+    elif op == 'TIMESTAMP':
+        stk.push(block.timestamp)
+    elif op == 'NUMBER':
+        stk.push(block.number)
+    elif op == 'DIFFICULTY':
+        stk.push(block.difficulty)
+    elif op == 'GASLIMIT':
+        stk.push(block.gaslimit)
+    elif op == 'POP':
+        pass
+    elif op == 'DUP':
+        stk.push(stackargs[0])
+        stk.push(stackargs[0])
+    elif op == 'SWAP':
+        stk.push(stackargs[0])
+        stk.push(stackargs[1])
+    elif op == 'MLOAD':
+        if len(mem) < stackargs[0] + 32:
+            mem.extend([0] * (stackargs[0] + 32 - len(mem)))
+        data = ''.join(map(chr,mem[stackargs[0]:stackargs[0] + 32]))
+        stk.push(decode(data,256))
+    elif op == 'MSTORE':
+        if len(mem) < stackargs[0] + 32:
+            mem.extend([0] * (stackargs[0] + 32 - len(mem)))
+        v = stackargs[1]
+        for i in range(31,-1,-1):
+            mem[stackargs[0]+i] = v % 256
+            v /= 256
+    elif op == 'MSTORE8':
+        if len(mem) < stackargs[0] + 1:
+            mem.extend([0] * (stackargs[0] + 1 - len(mem)))
+        mem[stackargs[0]] = stackargs[1] % 256
+    elif op == 'SLOAD':
+        trie = Trie(block.state.get(msg.to)[STORAGE_INDEX],'statedb')
+        stk.push(trie.get(stackargs[0]))
+    elif op == 'SSTORE':
+        mystate = block.state.get(msg.to)
+        trie = Trie(mystate[STORAGE_INDEX],'statedb')
+        trie.update(stackargs[0],stackargs[1])
+        mystate[STORAGE_INDEX] = trie.root
+        block.state.update(msg.to,mystate)
+    elif op == 'JUMP':
+        newpc = stackargs[0]
+    elif op == 'JUMPI':
+        if stackargs[1]: newpc = stackargs[0]
+    elif op == 'PC':
+        stk.push(compustate.pc)
+    elif op == 'MSIZE':
+        stk.push(len(mem))
+    elif op == 'GAS':
+        stk.push(compustate.gas)
+    elif op[:4] == 'PUSH':
+        pushnum = int(op[4:])
+        newpc = compustate.pc + 1 + pushnum
+        dat = code[compustate.pc + 1: compustate.pc + 1 + pushnum]
+        stk.push(decode(dat+'\x00'*(32-len(dat)),256))
+    elif op == 'CREATE':
+        if len(mem) < stackargs[2] + stackargs[3]:
+            mem.extend([0] * (stackargs[2] + stackargs[3] - len(mem)))
+        value = stackhash[0]
+        gas = stackhash[1]
+        data = ''.join(map(chr,mem[stackhash[2]:stackhash[2]+stackhash[3]]))
+        create_contract(block,tx,Message(msg.to,'',value,gas,data))
+    elif op == 'CALL':
+        if len(mem) < stackargs[3] + stackargs[4]:
+            mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))
+        if len(mem) < stackargs[5] + stackargs[6]:
+            mem.extend([0] * (stackargs[5] + stackargs[6] - len(mem)))
+        to = stackhash[0]
+        value = stackhash[1]
+        gas = stackhash[2]
+        data = ''.join(map(chr,mem[stackhash[3]:stackhash[3]+stackhash[4]]))
+        apply_msg(block,tx,Message(msg.to,to,value,gas,data))
