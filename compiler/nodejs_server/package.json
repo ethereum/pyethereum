@@ -1,0 +1,22 @@
+{
+    "name": "multigui",
+    "version": "0.0.1",
+    "description": "Multisignature GUI",
+    "dependencies": {
+        "underscore": "*",
+        "async": "*",
+        "crypto": "*",
+        "express": "3.1.0",
+        "jade": "*",
+        "node-sx": "https://github.com/vbuterin/node-sx/tarball/master",
+        "bitcoinjs-lib": "https://github.com/bitfloor/bitcoinjs-lib/tarball/master"
+    },
+    "main": "main.js",
+    "author": "vbuterin",
+    "keywords": ["bitcoin", "crypto", "finance"],
+    "repository" : {                                                                      
+         "type": "git",                                                                    
+         "url": "https://github.com/vbuterin/multigui.git"                                     
+    },
+    "engines": { "node": "*" }
+}
