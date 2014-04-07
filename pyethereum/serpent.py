@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import re, sys, os
 from parser import *
+from opcodes import opcodes, reverse_opcodes
 
 # All functions go here
 #
@@ -167,17 +168,17 @@ def compile_expr(ast,varhash,lc=[0]):
             return compile_expr(ast[2],varhash,lc) + [ varhash[ast[1]], 'MSTORE' ]
     # If and if/else statements
     elif ast[0] == 'if':
-        f = compile_expr(stmt[1],varhash,lc)
-        g = compile_expr(stmt[2],varhash,lc)
-        h = compile_expr(stmt[3],varhash,lc) if len(stmt) > 3 else None
+        f = compile_expr(ast[1],varhash,lc)
+        g = compile_expr(ast[2],varhash,lc)
+        h = compile_expr(ast[3],varhash,lc) if len(ast) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
         if h: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ ref, 'JUMP' ] + h + [ label ]
         else: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ label ]
     # While loops
     elif ast[0] == 'while':
-        f = compile_expr(stmt[1],varhash,lc)
-        g = compile_expr(stmt[2],varhash,lc)
+        f = compile_expr(ast[1],varhash,lc)
+        g = compile_expr(ast[2],varhash,lc)
         beglab, begref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         endlab, endref = 'LABEL_'+str(lc[0]+1), 'REF_'+str(lc[0]+1)
         lc[0] += 2
@@ -246,11 +247,21 @@ def optimize(c):
             multipop(oq,3).append(ntok)
     return oq
 
+def compile_to_assembly(source,optimize_flag=1):
+    if isinstance(source,(str,unicode)):
+        source = parse(source)
+    varhash = {}
+    c1 = rewrite(source)
+    c2 = compile_expr(c1,varhash,[0])
+    c3 = add_wrappers(c2,varhash)
+    c4 = optimize(c3) if optimize_flag else c3
+    return c4
+
 def log256(n): return 0 if n == 0 else 1 + log256(n / 256)
 def tobytearr(n,L): return [] if L == 0 else tobytearr(n / 256,L-1) + [n % 256]
         
 # Dereference labels
-def assemble(c):
+def dereference(c):
     iq = [x for x in c]
     mq = []
     pos = 0
@@ -280,21 +291,32 @@ def assemble(c):
         else: oq.append(m)
     return oq
 
-def compile_to_aevm(source,optimize_flag=1):
-    if isinstance(source,(str,unicode)):
-        source = parse(source)
-    varhash = {}
-    c1 = rewrite(source)
-    c2 = compile_expr(c1,varhash,[0])
-    c3 = add_wrappers(c2,varhash)
-    c4 = optimize(c3) if optimize_flag else c3
-    return c4
+def serialize(source):
+    def numberize(arg):
+        if isinstance(arg,(int,long)): return arg
+        elif arg in reverse_opcodes: return reverse_opcodes[arg]
+        elif arg[:4] == 'PUSH': return 95 + int(arg[4:])
+        elif re.match('^[0-9]*$',arg): return int(arg)
+        else: raise Exception("Cannot serialize: "+str(arg))
+    return ''.join(map(chr,map(numberize,source)))
 
-def compile(source): return assemble(compile_to_aevm(source))
+def assemble(asm): return serialize(dereference(asm))
+
+def compile(source): return assemble(compile_to_assembly(parse(source)))
 
 if len(sys.argv) >= 2:
-    if os.path.exists(sys.argv[1]):
-        open(sys.argv[1]).read()
-        print ' '.join([str(k) for k in compile(open(sys.argv[1]).read())])
+    input_index = 2
+    if sys.argv[1] == '-p':
+        f = lambda x: parse(x)
+    elif sys.argv[1] == '-a':
+        f = lambda x: ' '.join(map(str,compile_to_assembly(x)))
+    elif sys.argv[1] == '-a2':
+        f = lambda x: ' '.join(map(str,dereference(compile_to_assembly(x))))
     else:
-        print ' '.join([str(k) for k in compile(sys.argv[1])])
+        input_index = 1
+        f = lambda x: compile(x).encode('hex')
+    if os.path.exists(sys.argv[input_index]):
+        d = open(sys.argv[input_index]).read()
+    else:
+        d = sys.argv[1]
+    print f(d)

@@ -41,15 +41,7 @@ class Transaction(object):
     @classmethod
     def contract(*args):
         cls = args[0]
-        def numberize(arg):
-            if isinstance(arg,(int,long)): return arg
-            elif arg in reverse_opcodes: return reverse_opcodes[arg]
-            elif arg[:4] == 'PUSH': return 95 + int(arg[4:])
-            elif re.match('^[0-9]*$',arg): return int(arg)
-            else: raise Exception("Cannot serialize: "+str(arg))
-        codons = args[5] if isinstance(args[5],list) else args[5].split(' ')
-        code = ''.join(map(chr,map(numberize,codons)))
-        tx = cls(args[1],args[2],args[3],args[4],'',code)
+        tx = cls(args[1],args[2],args[3],args[4],args[5],code)
         if len(args) > 6:
             tx.v, tx.r, tx.s = args[6:9]
         else:
