@@ -1,11 +1,9 @@
-import sys
 import time
 import Queue
 import socket
 import threading
-import traceback
-from wire import WireProtocol, load_packet
 import logging
+from wire import WireProtocol, load_packet
 
 
 logger = logging.getLogger(__name__)
@@ -13,12 +11,9 @@ logger = logging.getLogger(__name__)
 
 class Peer(threading.Thread):
 
-    def __init__(self, peer_manager, connection, ip, port=None):
+    def __init__(self, wire, connection, ip, port=None):
         threading.Thread.__init__(self)
-        self.peer_manager = peer_manager
-        self.protocol = WireProtocol(
-            self.peer_manager,
-            self.peer_manager.config)
+        self.wire = wire
         self._stopped = False
         self.lock = threading.Lock()
         self._connection = connection
@@ -112,7 +107,7 @@ class Peer(threading.Thread):
         if packet:
             logger.debug('{0}: received packet {1}'.format(
                 repr(self), str(load_packet(packet))[:60]))
-            self.protocol.rcv_packet(self, packet)
+            self.wire.rcv_packet(self, packet)
         return len(packet)
 
     def run(self):
@@ -196,13 +191,13 @@ class PeerManager(threading.Thread):
         sock.settimeout(.1)
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))
-        peer = Peer(self, sock, ip, port)
+        peer = Peer(self.wire, sock, ip, port)
         self.add_peer(peer)
         peer.start()
 
         # Send Hello
-        peer.protocol.send_Hello(peer)
-        peer.protocol.send_GetPeers(peer)
+        peer.wire.send_Hello(peer)
+        peer.wire.send_GetPeers(peer)
         return True
 
     def _peer_candidates(self):
@@ -215,7 +210,7 @@ class PeerManager(threading.Thread):
     def _poll_more_candidates(self):
         for peer in list(self.connected_peers):
             with peer.lock:
-                peer.protocol.send_GetPeers(peer)
+                peer.wire.send_GetPeers(peer)
 
     def _connect_peers(self):
         num_peers = self.config.getint('network', 'num_peers')
@@ -250,7 +245,7 @@ class PeerManager(threading.Thread):
             logger.debug('pinging silent peer {0}'.format(peer))
 
             with peer.lock:
-                peer.protocol.send_Ping(peer)
+                peer.wire.send_Ping(peer)
                 peer.last_pinged = now
 
     def manage_connections(self):
@@ -269,7 +264,7 @@ class PeerManager(threading.Thread):
             if now - peer.last_asked_for_peers >\
                     self.max_ask_for_peers_elapsed:
                 with peer.lock:
-                    peer.protocol.send_GetPeers(peer)
+                    peer.wire.send_GetPeers(peer)
                     peer.last_asked_for_peers = now
 
     def run(self):
@@ -277,49 +272,3 @@ class PeerManager(threading.Thread):
             self.manage_connections()
             self.wire.process_chainmanager_queue()
             time.sleep(0.1)
-
-
-class TcpServer(threading.Thread):
-
-    def __init__(self, peer_manager, host, port):
-        self.peer_manager = peer_manager
-        threading.Thread.__init__(self)
-        self.daemon = True
-        self.host = host
-        self.port = port
-        self.lock = threading.Lock()
-
-        # start server
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
-        sock.listen(5)
-        self.sock = sock
-        self.ip, self.port = sock.getsockname()
-        logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
-
-    def run(self):
-        while not self.peer_manager.stopped():
-            logger.debug('in run loop')
-            try:
-                connection, (host, port) = self.sock.accept()
-            except IOError as e:
-                traceback.print_exc(file=sys.stdout)
-                time.sleep(0.1)
-                continue
-
-            connection.settimeout(.1)
-            try:
-                peer = Peer(self.peer_manager, connection, host, None)
-                self.peer_manager.add_peer(peer)
-                peer.start()
-                logger.debug(
-                    "new TCP connection {0} {1}:{2}"
-                    .format(connection, host, port))
-            except BaseException as e:
-                logger.error(
-                    "cannot start TCP session \"{0}\" {1}:{2} "
-                    .format(str(e), host, port))
-                traceback.print_exc(file=sys.stdout)
-                connection.close()
-                time.sleep(0.1)

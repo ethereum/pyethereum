@@ -6,8 +6,7 @@ import ConfigParser
 from optparse import OptionParser
 import logging
 import logging.config
-from p2pnet import TcpServer
-from p2pnet import PeerManager
+from p2pnet import PeerManager, TcpServer
 from manager import ChainManager
 
 logger = logging.getLogger(__name__)
@@ -133,11 +132,11 @@ def configure_logging(loggerlevels, verbosity=1):
 def main():
     config = create_config()
 
-    # peer manager
-    peer_manager = PeerManager(config=config)
-
     # chain manager
     chain_manager = ChainManager(config=config)
+
+    # peer manager
+    peer_manager = PeerManager(config=config)
 
     # start tcp server
     try:
