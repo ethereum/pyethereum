@@ -8,7 +8,7 @@ import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
-from manager import (rlp_hash_hex, Peer,
+from chainmanager import (rlp_hash_hex, Peer,
                      ChainManagerInPort, ChainManagerOutPort)
 
 

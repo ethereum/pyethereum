@@ -3,7 +3,7 @@ import Queue
 import socket
 import threading
 import logging
-from wire import WireProtocol, load_packet
+from wireprotocol import WireProtocol, load_packet
 
 
 logger = logging.getLogger(__name__)

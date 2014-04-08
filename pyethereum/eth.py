@@ -6,8 +6,8 @@ import ConfigParser
 from optparse import OptionParser
 import logging
 import logging.config
-from p2pnet import PeerManager, TcpServer
-from manager import ChainManager
+from peermanager import PeerManager, TcpServer
+from chainmanager import ChainManager
 
 logger = logging.getLogger(__name__)
 
