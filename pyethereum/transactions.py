@@ -1,14 +1,17 @@
 import re
 import rlp
-from pybitcointools import sha256, bin_sha256, encode_pubkey, privtopub
-from pybitcointools import ecdsa_raw_sign, ecdsa_raw_recover
-
+from bitcoin import encode_pubkey
+from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
+from opcodes import reverse_opcodes
+from utils import big_endian_to_int as decode_int
+from utils import int_to_big_endian as encode_int
+from utils import sha3, privtoaddr
 
 class Transaction(object):
 
     """
     A transaction is stored as:
-    [ nonce, receiving_address, value, [ data item 0, data item 1 ... data item n ], v, r, s ]
+    [ nonce, value, gasprice, startgas, to, data, v, r, s]
     nonce is the number of transactions already sent by that account,
     encoded in binary form (eg. 0 -> '', 7 -> '\x07', 1000 -> '\x03\xd8').
     (v,r,s) is the raw Electrum-style signature of the transaction without the signature
@@ -19,55 +22,73 @@ class Transaction(object):
     (ii) the sending account has enough funds to pay the fee and the value.
     """
 
+    # nonce,value,gasprice,startgas,to,data
     def __init__(*args):
         self = args[0]
         if len(args) == 2:
             self.parse(args[1])
         else:
             self.nonce = args[1]
-            self.to = args[2]
-            self.value = args[3]
-            self.fee = args[4]
-            self.data = args[5]
+            self.value = args[2]
+            self.gasprice = args[3]
+            self.startgas = args[4]
+            self.to = args[5]
+            self.data = args[6]
+            if len(args) > 7:
+                self.v, self.r, self.s = args[7:10]
+            else:
+                self.v, self.r, self.s = 0,0,0
 
-    def parse(self, data):
+    # nonce,value,gasprice,startgas,code
+    @classmethod
+    def contract(*args):
+        cls = args[0]
+        tx = cls(args[1],args[2],args[3],args[4],'',args[5])
+        if len(args) > 6:
+            tx.v, tx.r, tx.s = args[6:9]
+        else:
+            tx.v, tx.r, tx.s = 0,0,0
+        return tx
+
+    @classmethod
+    def parse(cls, data):
         if re.match('^[0-9a-fA-F]*$', data):
             data = data.decode('hex')
         o = rlp.decode(data)
-        self.nonce = o[0]
-        self.to = o[1]
-        self.value = o[2]
-        self.fee = o[3]
-        self.data = o[4]
-        self.v = o[5]
-        self.r = o[6]
-        self.s = o[7]
-        rawhash = sha256(
-            rlp.encode([self.nonce, self.to, self.value, self.fee, self.data]))
+        tx = cls(decode_int(o[0]),
+                 decode_int(o[1]),
+                 decode_int(o[2]),
+                 decode_int(o[3]),
+                 o[4].encode('hex'),
+                 o[5],
+                 decode_int(o[6]),
+                 decode_int(o[7]),
+                 decode_int(o[8]))
+        rawhash = sha3(rlp.encode(tx.serialize(False)))
         pub = encode_pubkey(
-            ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
-        self.sender = bin_sha256(pub[1:])[-20:]
-        return self
+            ecdsa_raw_recover(rawhash, (tx.v, tx.r, tx.s)), 'bin')
+        tx.sender = sha3(pub[1:])[-20:].encode('hex')
+        return tx
 
     def sign(self, key):
-        rawhash = sha256(
-            rlp.encode([self.nonce, self.to, self.value, self.fee, self.data]))
+        rawhash = sha3(rlp.encode(self.serialize(False)))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
-        self.sender = bin_sha256(privtopub(key)[1:])[-20:]
+        self.sender = privtoaddr(key)
         return self
 
-    def serialize(self):
-        return rlp.encode([self.nonce,
-                           self.to,
-                           self.value,
-                           self.fee,
+    def serialize(self,signed=True):
+        return rlp.encode([encode_int(self.nonce),
+                           encode_int(self.value),
+                           encode_int(self.gasprice),
+                           encode_int(self.startgas),
+                           self.to.decode('hex'),
                            self.data,
-                           self.v,
-                           self.r,
-                           self.s])
+                           encode_int(self.v),
+                           encode_int(self.r),
+                           encode_int(self.s)][:9 if signed else 6])
 
     def hex_serialize(self):
         return self.serialize().encode('hex')
 
     def hash(self):
-        return bin_sha256(self.serialize())
+        return sha3(self.serialize())

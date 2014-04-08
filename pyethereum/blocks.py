@@ -1,14 +1,36 @@
-from pybitcointools import bin_sha256
 import rlp
 import re
 from transactions import Transaction
-from trie import Trie
+from trie import Trie, DB
+from utils import big_endian_to_int as decode_int
+from utils import int_to_big_endian as encode_int
+from utils import sha3
 
+ACCT_RLP_LENGTH = 4
+NONCE_INDEX = 0
+BALANCE_INDEX = 1
+CODE_INDEX = 2
+STORAGE_INDEX = 3
 
 class Block(object):
     def __init__(self, data=None):
 
+        self.reward = 10**18
+        self.gas_consumed = 0
+        self.gaslimit = 1000000 # for now
+
         if not data:
+            self.number = 0
+            self.prevhash = ''
+            self.uncles_root = ''
+            self.coinbase = '0'*40
+            self.state = Trie('statedb')
+            self.transactions_root = ''
+            self.transactions = []
+            self.difficulty = 2**23
+            self.timestamp = 0
+            self.extradata = ''
+            self.nonce = 0
             return
 
         if re.match('^[0-9a-fA-F]*$', data):
@@ -23,11 +45,11 @@ class Block(object):
          self.transactions_root,
          self.difficulty,
          self.timestamp,
-         self.nonce,
-         self.extra] = header
+         self.extradata,
+         self.nonce] = header
         self.transactions = [Transaction(x) for x in transaction_list]
         self.state = Trie('statedb', state_root)
-        self.reward = 0
+
 
         # Verifications
         if self.state.root != '' and self.state.db.get(self.state.root) == '':
@@ -38,55 +60,63 @@ class Block(object):
             raise Exception("Uncle root hash does not match!")
         # TODO: check POW
 
-    def get_base_fee(self):
-        return int(10 ** 21 / int(self.difficulty ** 0.5))
+    # get_index(bin or hex, int) -> bin
+    def get_index(self,address,index):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        return decode_int(acct[index])
 
-    def pay_fee(self, address, fee, tominer=True):
-        # Subtract fee from sender
-        sender_state = rlp.decode(self.state.get(address))
-        if not sender_state or sender_state[1] < fee:
+    # set_index(bin or hex, int, bin)
+    def set_index(self,address,index,value):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        acct[index] = value
+        self.state.update(address,acct)
+
+    # delta_index(bin or hex, int, int) -> success/fail
+    def delta_index(self,address,index,value):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        if decode_int(acct[index]) < value:
             return False
-        sender_state[1] -= fee
-        self.state.update(address, sender_state)
-        # Pay fee to miner
-        if tominer:
-            miner_state = rlp.decode(self.state.get(self.coinbase)) or [0, 0, 0]
-            miner_state[1] += fee
-            self.state.update(self.coinbase, miner_state)
+        acct[index] = encode_int(decode_int(acct[index])+value)
+        self.state.update(address,acct)
         return True
 
-    def get_nonce(self, address):
-        state = rlp.decode(self.state.get(address))
-        if not state or state[0] == 0:
-            return False
-        return state[2]
+    def coerce_to_enc(n):
+        return encode_int(n) if isinstance(n,(int,long)) else n
+    def get_nonce(self,address):
+        return decode_int(self.get_index(address,NONCE_INDEX))
+    def increment_nonce(self,address):
+        return self.delta_index(address,NONCE_INDEX,1)
+    def get_balance(self,address):
+        return decode_int(self.get_index(address,BALANCE_INDEX))
+    def set_balance(self,address,value):
+        self.set_index(address,BALANCE_INDEX,encode_int(value))
+    def delta_balance(self,address,value):
+        return self.delta_index(address,BALANCE_INDEX,value)
+    def get_code(self,address):
+        return DB('statedb').get(self.get_index(address,CODE_INDEX))
+    def set_code(self,address,value):
+        DB('statedb').put(sha3(value),value)
+        self.set_index(address,CODE_INDEX,sha3(value))
+    def get_storage_data(self,address,index):
+        t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
+        return decode_int(t.get(coerce_to_enc(index)))
+    def set_storage_data(self,address,index,val):
+        t = Trie('statedb',get_index(address,STORAGE_INDEX))
+        t.update(coerce_to_enc(index))
+        self.set_index(address,STORAGE_INDEX,t.root)
+    
+    # Revert computation
+    def snapshot(self):
+        return self.state.root
 
-    def get_balance(self, address):
-        state = rlp.decode(self.state.get(address))
-        return state[1] if state else 0
+    def revert(self,root):
+        self.state.root = root
 
-    def set_balance(self, address, balance):
-        state = rlp.decode(self.state.get(address)) or [0, 0, 0]
-        state[1] = balance
-        self.state.update(address, rlp.encode(state))
-
-    # Making updates to the object obtained from this method will do nothing. You need
-    # to call update_contract to finalize the changes.
-    def get_contract(self, address):
-        state = rlp.decode(self.state.get(address))
-        if not state or state[0] == 0:
-            return False
-        return Trie('statedb', state[2])
-
-    def update_contract(self, address, contract):
-        state = rlp.decode(self.state.get(address)) or [1, 0, '']
-        if state[0] == 0:
-            return False
-        state[2] = contract.root
-        self.state.update(address, state)
-
-    # Serialization method; should act as perfect inverse function of the constructor
-    # assuming no verification failures
+    # Serialization method; should act as perfect inverse function of the
+    # constructor assuming no verification failures
     def serialize(self):
         txlist = [x.serialize() for x in self.transactions]
         header = [self.number,
@@ -97,9 +127,42 @@ class Block(object):
                   bin_sha256(rlp.encode(txlist)),
                   self.difficulty,
                   self.timestamp,
-                  self.nonce,
-                  self.extra]
+                  self.extradata,
+                  self.nonce]
         return rlp.encode([header, txlist, self.uncles])
+
+    def to_dict(self):
+        state = self.state.to_dict(True)
+        nstate = {}
+        for s in state:
+            t = Trie('statedb',state[s][STORAGE_INDEX])
+            o = [0] * ACCT_RLP_LENGTH
+            o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
+            o[BALANCE_INDEX] = decode_int(state[s][NONCE_INDEX])
+            o[CODE_INDEX] = state[s][CODE_INDEX]
+            o[STORAGE_INDEX] = t.to_dict(True)
+            nstate[s.encode('hex')] = o
+            
+        return {
+            "number": self.number,
+            "prevhash": self.prevhash,
+            "uncles_root": self.uncles_root,
+            "coinbase": self.coinbase,
+            "state": nstate,
+            "transactions_root": self.transactions_root,
+            "difficulty": self.difficulty,
+            "timestamp": self.timestamp,
+            "extradata": self.extradata,
+            "nonce": self.nonce
+        }
+
+    @classmethod
+    def genesis(cls,initial_alloc):
+        block = cls()
+        for addr in initial_alloc:
+            addr2 = addr.decode('hex') if len(addr) == 40 else addr
+            block.state.update(addr2,['',encode_int(initial_alloc[addr]),'',''])
+        return block
 
     def hash(self):
         return bin_sha256(self.serialize())
