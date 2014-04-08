@@ -8,10 +8,12 @@ from sha3 import sha3_256
 
 logger = logging.getLogger(__name__)
 
-rlp_hash =  lambda data: sha3_256(rlp.encode(data)).digest()
+rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
 rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
-class ChainProxy():
+
+class ChainProxy(object):
+
     """
     abstract external access to the blockchain
     stateless, queues are shared between all instances
@@ -48,7 +50,8 @@ class ChainProxy():
             return None
 
 
-class NetworkProxy():
+class NetworkProxy(object):
+
     """
     abstracts access to the network
     stateless, queues are shared between all instances
@@ -83,9 +86,11 @@ class NetworkProxy():
 
 
 class ChainManager(threading.Thread):
+
     """
     Manages the chain and requests to it.
     """
+
     def __init__(self, config):
         threading.Thread.__init__(self)
         self._stopped = False
@@ -93,16 +98,17 @@ class ChainManager(threading.Thread):
         self.network = NetworkProxy()
         # self.blockchain = blockchain
         self.transactions = set()
-        self.dummy_blockchain = dict() # hash > block
+        self.dummy_blockchain = dict()  # hash > block
 
     def bootstrap_blockchain(self):
         # genesis block
-        # http://etherchain.org/#/block/ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
+        # http://etherchain.org/#/block/
+        # ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
         if len(self.dummy_blockchain):
             return
-        genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'.decode('hex')
+        genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f'\
+            '0a4b86b286e9d540099cf'.decode('hex')
         self.network.send_get_chain(count=1, parents_H=[genesis_H])
-
 
     def stop(self):
         with self.lock:
@@ -125,20 +131,18 @@ class ChainManager(threading.Thread):
 
     def rcv_blocks(self, blocks):
 
-        new_blocks_H = set()        
+        new_blocks_H = set()
         # memorize
         for block in blocks:
-            h = rlp_hash(block) 
-            print self, "rcv_blocks:",  rlp_hash_hex(block) 
-            if not h in self.dummy_blockchain:
+            h = rlp_hash(block)
+            print self, "rcv_blocks:",  rlp_hash_hex(block)
+            if h not in self.dummy_blockchain:
                 new_blocks_H.add(h)
                 self.dummy_blockchain[h] = block
-        # ask for children                
+        # ask for children
         for h in new_blocks_H:
             print self, "rcv_blocks: ask for child block", h.encode('hex')
             self.network.send_get_chain(1, [h])
-
-
 
     def process_queue(self):
         msg = self.network.pop_message()

@@ -182,7 +182,6 @@ class PeerManager(threading.Thread):
             self.connected_peers.remove(peer)
         # connect new peers if there are no candidates
 
-
     def connect_peer(self, host, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -218,11 +217,12 @@ class PeerManager(threading.Thread):
             with peer.lock:
                 peer.protocol.send_GetPeers(peer)
 
-    def manage_connections(self):
+    def _connect_peers(self):
         num_peers = self.config.getint('network', 'num_peers')
         candidates = self._peer_candidates()
         if len(self.connected_peers) < num_peers:
-            logger.debug('not enough peers: {0}'.format(len(self.connected_peers)))
+            logger.debug('not enough peers: {0}'.format(
+                len(self.connected_peers)))
             logger.debug('num candidates: {0}'.format(len(candidates)))
             if len(candidates):
                 ip, port, node_id = candidates.pop()
@@ -232,32 +232,38 @@ class PeerManager(threading.Thread):
             else:
                 self._poll_more_candidates()
 
+    def _check_alive(self, peer):
+        now = time.time()
+        dt_ping = now - peer.last_pinged
+        dt_seen = now - peer.last_valid_packet_received
+        # if ping was sent and not returned within last second
+        if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
+            logger.debug(
+                '{0} last ping: {1} last seen: {2}'
+                .format(peer, dt_ping, dt_seen))
+            logger.debug(
+                '{0} did not respond to ping, disconnecting {1}:{2}'
+                .format(peer, peer.ip, peer.port))
+            self.remove_peer(peer)
+        elif min(dt_seen, dt_ping) > self.max_silence:
+            # ping silent peer
+            logger.debug('pinging silent peer {0}'.format(peer))
+
+            with peer.lock:
+                peer.protocol.send_Ping(peer)
+                peer.last_pinged = now
+
+    def manage_connections(self):
+        self._connect_peers()
+
         for peer in list(self.connected_peers):
             if peer.stopped():
                 self.remove_peer(peer)
                 continue
 
-            now = time.time()
-            dt_ping = now - peer.last_pinged
-            dt_seen = now - peer.last_valid_packet_received
-            # if ping was sent and not returned within last second
-            if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
-                logger.debug(
-                    '{0} last ping: {1} last seen: {2}'
-                    .format(peer, dt_ping, dt_seen))
-                logger.debug(
-                    '{0} did not respond to ping, disconnecting {1}:{2}'
-                    .format(peer, peer.ip, peer.port))
-                self.remove_peer(peer)
-            elif min(dt_seen, dt_ping) > self.max_silence:
-                # ping silent peer
-                logger.debug('pinging silent peer {0}'.format(peer))
-                logger.debug(
-                    '# connected peers: {0}/{1}'.format(len(self.connected_peers), num_peers))
+            self._check_alive(peer)
 
-                with peer.lock:
-                    peer.protocol.send_Ping(peer)
-                    peer.last_pinged = now
+            now = time.time()
 
             # ask for peers
             if now - peer.last_asked_for_peers >\
