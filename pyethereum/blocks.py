@@ -1,10 +1,16 @@
 import rlp
 import re
 from transactions import Transaction
-from trie import Trie
+from trie import Trie, DB
 from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
+from utils import sha3
 
+ACCT_RLP_LENGTH = 4
+NONCE_INDEX = 0
+BALANCE_INDEX = 1
+CODE_INDEX = 2
+STORAGE_INDEX = 3
 
 class Block(object):
     def __init__(self, data=None):
@@ -54,8 +60,63 @@ class Block(object):
             raise Exception("Uncle root hash does not match!")
         # TODO: check POW
 
-    # Serialization method; should act as perfect inverse function of the constructor
-    # assuming no verification failures
+    # get_index(bin or hex, int) -> bin
+    def get_index(self,address,index):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        return decode_int(acct[index])
+
+    # set_index(bin or hex, int, bin)
+    def set_index(self,address,index,value):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        acct[index] = value
+        self.state.update(address,acct)
+
+    # delta_index(bin or hex, int, int) -> success/fail
+    def delta_index(self,address,index,value):
+        if len(address) == 40: address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        if decode_int(acct[index]) < value:
+            return False
+        acct[index] = encode_int(decode_int(acct[index])+value)
+        self.state.update(address,acct)
+        return True
+
+    def coerce_to_enc(n):
+        return encode_int(n) if isinstance(n,(int,long)) else n
+    def get_nonce(self,address):
+        return decode_int(self.get_index(address,NONCE_INDEX))
+    def increment_nonce(self,address):
+        return self.delta_index(address,NONCE_INDEX,1)
+    def get_balance(self,address):
+        return decode_int(self.get_index(address,BALANCE_INDEX))
+    def set_balance(self,address,value):
+        self.set_index(address,BALANCE_INDEX,encode_int(value))
+    def delta_balance(self,address,value):
+        return self.delta_index(address,BALANCE_INDEX,value)
+    def get_code(self,address):
+        return DB('statedb').get(self.get_index(address,CODE_INDEX))
+    def set_code(self,address,value):
+        DB('statedb').put(sha3(value),value)
+        self.set_index(address,CODE_INDEX,sha3(value))
+    def get_storage_data(self,address,index):
+        t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
+        return decode_int(t.get(coerce_to_enc(index)))
+    def set_storage_data(self,address,index,val):
+        t = Trie('statedb',get_index(address,STORAGE_INDEX))
+        t.update(coerce_to_enc(index))
+        self.set_index(address,STORAGE_INDEX,t.root)
+    
+    # Revert computation
+    def snapshot(self):
+        return self.state.root
+
+    def revert(self,root):
+        self.state.root = root
+
+    # Serialization method; should act as perfect inverse function of the
+    # constructor assuming no verification failures
     def serialize(self):
         txlist = [x.serialize() for x in self.transactions]
         header = [self.number,
@@ -74,11 +135,13 @@ class Block(object):
         state = self.state.to_dict(True)
         nstate = {}
         for s in state:
-            t = Trie('statedb',state[s][3])
-            nstate[s.encode('hex')] = [ decode_int(state[s][0]),
-                                        decode_int(state[s][1]),
-                                        state[s][2],
-                                        t.to_dict(True) ]
+            t = Trie('statedb',state[s][STORAGE_INDEX])
+            o = [0] * ACCT_RLP_LENGTH
+            o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
+            o[BALANCE_INDEX] = decode_int(state[s][NONCE_INDEX])
+            o[CODE_INDEX] = state[s][CODE_INDEX]
+            o[STORAGE_INDEX] = t.to_dict(True)
+            nstate[s.encode('hex')] = o
             
         return {
             "number": self.number,

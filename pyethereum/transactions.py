@@ -22,6 +22,7 @@ class Transaction(object):
     (ii) the sending account has enough funds to pay the fee and the value.
     """
 
+    # nonce,value,gasprice,startgas,to,data
     def __init__(*args):
         self = args[0]
         if len(args) == 2:
@@ -38,10 +39,11 @@ class Transaction(object):
             else:
                 self.v, self.r, self.s = 0,0,0
 
+    # nonce,value,gasprice,startgas,code
     @classmethod
     def contract(*args):
         cls = args[0]
-        tx = cls(args[1],args[2],args[3],args[4],args[5],code)
+        tx = cls(args[1],args[2],args[3],args[4],'',args[5])
         if len(args) > 6:
             tx.v, tx.r, tx.s = args[6:9]
         else:

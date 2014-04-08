@@ -29,11 +29,6 @@ GCALL = 20
 GMEMORY = 1
 GTXDATA = 5
 
-NONCE_INDEX = 0
-BALANCE_INDEX = 1
-CODE_INDEX = 2
-STORAGE_INDEX = 3
-
 OUT_OF_GAS = -1
 
 def process(block,txs):
@@ -42,10 +37,7 @@ def process(block,txs):
     finalize(block)
 
 def finalize(block):
-    minerstate = block.state.get(block.coinbase) or ['','','','']
-    minerstate[BALANCE_INDEX] \
-        = encode_int(decode_int(minerstate[BALANCE_INDEX]) + block.reward)
-    block.state.update(block.coinbase,minerstate)
+    block.delta_balance(block.coinbase,block.reward)
 
 class Message(object):
     def __init__(self,sender,to,value,gas,data):
@@ -56,20 +48,13 @@ class Message(object):
         self.data = data
 
 def apply_tx(block,tx):
-    fee = tx.gasprice * tx.startgas
-    addrstate = block.state.get(tx.sender.decode('hex'))
-    if not addrstate:
-        raise Exception("Sending from a not-yet-existent account!")
-    if decode_int(addrstate[NONCE_INDEX]) != tx.nonce:
-        print decode_int(addrstate[NONCE_INDEX]), tx.nonce
+    if block.get_nonce(tx.sender) != tx.nonce:
         raise Exception("Invalid nonce!")
-    if decode_int(addrstate[BALANCE_INDEX]) < fee:
-        raise Exception("Not enough in account to pay fee!")
-    addrstate[NONCE_INDEX] = encode_int(decode_int(addrstate[NONCE_INDEX])+1)
-    addrstate[BALANCE_INDEX] = encode_int(decode_int(addrstate[BALANCE_INDEX])-fee)
-    block.state.update(tx.sender.decode('hex'),addrstate)
-    block.gas_consumed += fee
-    medroot = block.state.root
+    o = block.delta_balance(tx.sender,-tx.gasprice * tx.startgas)
+    if not o:
+        raise Exception("Insufficient balance to pay fee!")
+    block.increment_nonce(tx.sender)
+    snapshot = block.snapshot()
     message_gas = tx.startgas - GTXDATA * len(tx.data)
     message = Message(tx.sender,tx.to,tx.value,message_gas,tx.data)
     if tx.to:
@@ -77,16 +62,13 @@ def apply_tx(block,tx):
     else:
         s,g = create_contract(block,tx,message)
     if not s:
-        block.state.root = medroot
-        minerstate = block.state.get(block.coinbase)
-        minerstate[BALANCE_INDEX] = encode_int(decode_int(minerstate[BALANCE_INDEX])+fee)
-        block.state.update(block.coinbase,minerstate)
+        block.revert(snapshot)
+        block.gas_consumed += tx.startgas
+        block.delta_balance(block.coinbase,fee)
     else:
-        addrstate[BALANCE_INDEX] = encode_int(decode_int(addrstate[BALANCE_INDEX])+tx.gasprice * g)
-        block.state.update(tx.sender.decode('hex'),addrstate)
-        minerstate = block.state.get(block.coinbase.decode('hex')) or ['','','','']
-        minerstate[BALANCE_INDEX] = encode_int(decode_int(minerstate[BALANCE_INDEX])+(fee - g * tx.gasprice))
-        block.state.update(block.coinbase.decode('hex'),minerstate)
+        block.delta_balance(tx.sender,tx.gasprice * g)
+        block.delta_balance(block.coinbase,tx.gasprice * (tx.startgas - g))
+        block.gas_consumed += tx.startgas - g
 
 class Compustate():
     def __init__(self,**kwargs):
@@ -98,49 +80,37 @@ class Compustate():
             vars(self)[kw] = kwargs[kw]
 
 def apply_msg(block,tx,msg):
-    oldroot = block.state.root
-    senderstate = block.state.get(msg.sender)
-    recvstate = block.state.get(msg.to) or ['','','','']
-    codehash = recvstate[CODE_INDEX]
-    code = statedb.get(codehash)
+    snapshot = block.snapshot()
+    code = statedb.get(block.get_code(msg.sender))
+    # Transfer value, instaquit if not enough
+    block.delta_balance(msg.to,msg.value)
+    o = block.delta_balance(msg.sender,-msg.value)
+    if not o:
+        return 0, msg.gas, []
     compustate = Compustate(gas=msg.gas)
-    # Not enough value to send, instaquit
-    if decode_int(senderstate[BALANCE_INDEX]) < msg.value:
-        return 1, compustate.gas, []
-    # Transfer value
-    senderstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX]) - msg.value)
-    recvstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX]) + msg.value)
-    block.state.update(msg.sender,senderstate)
-    block.state.update(msg.to,recvstate)
     # Main loop
     while 1:
-        o = apply_op(block,tx,msg,code,compustate,op)
+        o = apply_op(block,tx,msg,code,compustate)
         if o is not None:
             if o == OUT_OF_GAS:
-                block.state.root = oldroot
+                block.revert(snapshot)
                 return 0, 0, []
             else:
                 return 1, compustate.gas, o
 
 def create_contract(block,tx,msg):
-    oldroot = block.state.root
-    senderstate = block.state.get(msg.sender) or ['','','','']
-    recvstate = ['','',sha3(msg.data),'']
-    recvaddr = sha3(rlp.encode([msg.sender,senderstate[NONCE_INDEX]]))[12:]
+    snapshot = block.snapshot()
+    sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
+    nonce = encode_int(block.get_nonce(msg.sender))
+    recvaddr = sha3(rlp.encode([sender,nonce]))
     code = msg.data
-    statedb.put(sha3(msg.data),msg.data)
+    # Transfer value, instaquit if not enough
+    block.delta_balance(recvaddr,msg.value)
+    o = block.delta_balance(msg.sender,msg.value)
+    if not o:
+        return 0, msg.gas
+    block.set_code(recvaddr,msg.data)
     compustate = Compustate(gas=msg.gas)
-    # Not enough vaue to send, instaquit
-    if decode_int(senderstate[BALANCE_INDEX]) < msg.value:
-        recvstate[2] = []
-        block.state.update(recvaddr,recvstate)
-        return recvaddr, compustate.gas
-    # Transfer value and update nonce
-    senderstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX])-msg.value)
-    senderstate[NONCE_INDEX] = encode_int(decode_int(senderstate[NONCE_INDEX])+1)
-    recvstate[BALANCE_INDEX] = encode_int(decode_int(senderstate[BALANCE_INDEX])+msg.value)
-    block.state.update(msg.sender.decode('hex'),senderstate)
-    block.state.update(recvaddr,recvstate)
     # Temporary pre-POC5: don't do the code/init thing
     return recvaddr, compustate.gas
     # Main loop
@@ -151,11 +121,8 @@ def create_contract(block,tx,msg):
                 block.state.root = oldroot
                 return 0, 0
             else:
-                recvstate = block.state.get(recvaddr)
-                recvstate[CODE_INDEX] = sha3(map(chr,o))
-                statedb.put(sha3(map(chr,o)),map(chr,o))
-                block.state.update(recvaddr,recvstate)
-                return recvaddr, recvstate
+                block.set_code(''.join(map(chr,o)))
+                return recvaddr, compustate.gas
     
 def get_op_data(code,index):
     opcode = ord(code[index]) if index < len(code) else 0
@@ -199,13 +166,13 @@ def multipop(stack,pops):
     return o
 
 # Does not include paying opfee
-def apply_op(block,tx,msg,code,compustate,op):
-    op_data = get_op_data(code,compustate.pc)
+def apply_op(block,tx,msg,code,compustate):
+    op, in_args, out_args = get_op_data(code,compustate.pc)
     # empty stack error
-    if op_data[1] > len(compustate.stack):
+    if in_args > len(compustate.stack):
         return []
     stackargs = []
-    for i in range(op.data[1]):
+    for i in range(in_args):
         stackargs.push(stack.pop())
     # out of gas error
     fee = calcfee(block,tx,msg,compustate,op)
@@ -263,7 +230,7 @@ def apply_op(block,tx,msg,code,compustate,op):
     elif op == 'ADDRESS':
         stk.push(msg.to)
     elif op == 'BALANCE':
-        stk.push(block.state.get(msg.to)[BALANCE_INDEX])
+        stk.push(block.get_balance(msg.to))
     elif op == 'ORIGIN':
         stk.push(tx.sender)
     elif op == 'CALLER':
@@ -316,14 +283,9 @@ def apply_op(block,tx,msg,code,compustate,op):
             mem.extend([0] * (stackargs[0] + 1 - len(mem)))
         mem[stackargs[0]] = stackargs[1] % 256
     elif op == 'SLOAD':
-        trie = Trie(block.state.get(msg.to)[STORAGE_INDEX],'statedb')
-        stk.push(trie.get(stackargs[0]))
+        stk.push(block.get_storage_data(msg.to,stackargs[0]))
     elif op == 'SSTORE':
-        mystate = block.state.get(msg.to)
-        trie = Trie(mystate[STORAGE_INDEX],'statedb')
-        trie.update(stackargs[0],stackargs[1])
-        mystate[STORAGE_INDEX] = trie.root
-        block.state.update(msg.to,mystate)
+        block.set_storage_data(msg.to,stackargs[0],stackargs[1])
     elif op == 'JUMP':
         newpc = stackargs[0]
     elif op == 'JUMPI':
