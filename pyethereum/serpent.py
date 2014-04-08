@@ -23,7 +23,7 @@ funtable = [
     ['<=', 2, 1, ['<1>','<0>','GT','NOT'] ],
     ['>', 2, 1, ['<1>','<0>','GT'] ],
     ['>=', 2, 1, ['<1>','<0>','LT','NOT'] ],
-    ['!', 1, 1, ['NOT'] ],
+    ['!', 1, 1, ['<0>','NOT'] ],
     ['or', 2, 1, ['<1>','<0>','DUP',4,'PC','ADD','JMPI','POP','SWAP','POP'] ],
     ['||', 2, 1, ['<1>','<0>','DUP',4,'PC','ADD','JMPI','POP','SWAP','POP'] ],
     ['and', 2, 1, ['<1>','<0>','NOT','NOT','MUL'] ],
@@ -53,7 +53,7 @@ funtable = [
     ['sha3bytes', 1, 1, ['SHA3'] ],
     ['sload', 1, 1, ['<0>','SLOAD'] ],
     ['sstore', 2, 0, ['<1>','<0>','SSTORE'] ],
-    ['calldataload', 1, 0, ['<0>','CALLDATALOAD'] ],
+    ['calldataload', 1, 1, ['<0>',32,'MUL','CALLDATALOAD'] ],
     ['id', 1, 1, ['<0>'] ],
     # 0 MSIZE (SWAP) MSIZE 0 (MSIZE) MSIZE 0 MSIZE (MSTORE) MSIZE (32 SWAP) 32 MSIZE
     ['return', 1, 0, ['<0>','MSIZE','SWAP','MSIZE','MSTORE',32,'SWAP','RETURN'] ], # returns single value
@@ -116,8 +116,10 @@ def rewrite(ast):
             else:
                 return ['arrset',rewrite(ast[1][1]),rewrite(ast[1][2]),rewrite(ast[2])]
     elif ast[0] == 'access':
-        if ast[2] == 'msg.data':
+        if ast[1] == 'msg.data':
             return ['calldataload',rewrite(ast[2])]
+        elif ast[1] == 'contract.storage':
+            return ['sload',rewrite(ast[2])]
     return map(rewrite,ast)
 
 # Main compiler code
@@ -208,7 +210,10 @@ def compile_expr(ast,varhash,lc=[0]):
 
 # Stuff to add once to each program
 def add_wrappers(c,varhash):
-    return [0,len(varhash)*32-1,'MSTORE8'] + c
+    if len(varhash):
+        return [0,len(varhash)*32-1,'MSTORE8'] + c
+    else:
+        return c
 
 # Optimizations
 
@@ -238,8 +243,8 @@ def optimize(c):
             if isinstance(oq[-2],(int,long)) and isinstance(oq[-3],(int,long)):
                 ntok = ops[oq[-1]](oq[-2],oq[-3])
                 multipop(oq,3).append(ntok)
-        if oq[-1] == 'JMPI' and len(oq) >= 3 and oq[-2] == 'NOT' and oq[-3] == 'NOT':
-            multipop(oq,3).append('JMPI')
+        if oq[-1] == 'NOT' and len(oq) >= 2 and oq[-2] == 'NOT':
+            multipop(oq,2)
         if oq[-1] == 'ADD' and len(oq) >= 3 and oq[-2] == 0:
             multipop(oq,2)
         if oq[-1] in ['SUB','ADD'] and len(oq) >= 3 and oq[-3] == 0:
@@ -303,6 +308,14 @@ def serialize(source):
 def assemble(asm): return serialize(dereference(asm))
 
 def compile(source): return assemble(compile_to_assembly(parse(source)))
+
+def encode_datalist(vals):
+    def enc(n):
+        if isinstance(n,(int,long)): return ''.join(map(chr,tobytearr(n,32)))
+        elif isinstance(n,str): return '\x00'*(32-len(n))+n
+        elif n is True: return 1
+        elif n is False or n is None: return 0
+    return ''.join(map(enc,vals))
 
 if len(sys.argv) >= 2:
     input_index = 2
