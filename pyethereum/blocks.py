@@ -64,7 +64,7 @@ class Block(object):
     def get_index(self,address,index):
         if len(address) == 40: address = address.decode('hex')
         acct = self.state.get(address) or ['','','','']
-        return decode_int(acct[index])
+        return acct[index]
 
     # set_index(bin or hex, int, bin)
     def set_index(self,address,index,value):
@@ -77,13 +77,13 @@ class Block(object):
     def delta_index(self,address,index,value):
         if len(address) == 40: address = address.decode('hex')
         acct = self.state.get(address) or ['','','','']
-        if decode_int(acct[index]) < value:
+        if decode_int(acct[index]) + value < 0:
             return False
         acct[index] = encode_int(decode_int(acct[index])+value)
         self.state.update(address,acct)
         return True
 
-    def coerce_to_enc(n):
+    def coerce_to_enc(self,n):
         return encode_int(n) if isinstance(n,(int,long)) else n
     def get_nonce(self,address):
         return decode_int(self.get_index(address,NONCE_INDEX))
@@ -96,16 +96,18 @@ class Block(object):
     def delta_balance(self,address,value):
         return self.delta_index(address,BALANCE_INDEX,value)
     def get_code(self,address):
-        return DB('statedb').get(self.get_index(address,CODE_INDEX))
+        codehash = self.get_index(address,CODE_INDEX)
+        return DB('statedb').get(codehash) if codehash else ''
     def set_code(self,address,value):
         DB('statedb').put(sha3(value),value)
         self.set_index(address,CODE_INDEX,sha3(value))
+    def get_storage(self,address):
+        return Trie('statedb',self.get_index(address,STORAGE_INDEX))
     def get_storage_data(self,address,index):
-        t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
-        return decode_int(t.get(coerce_to_enc(index)))
+        return decode_int(self.get_storage(address).get(self.coerce_to_enc(index)))
     def set_storage_data(self,address,index,val):
-        t = Trie('statedb',get_index(address,STORAGE_INDEX))
-        t.update(coerce_to_enc(index))
+        t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
+        t.update(self.coerce_to_enc(index),encode_int(val))
         self.set_index(address,STORAGE_INDEX,t.root)
     
     # Revert computation
@@ -138,7 +140,7 @@ class Block(object):
             t = Trie('statedb',state[s][STORAGE_INDEX])
             o = [0] * ACCT_RLP_LENGTH
             o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
-            o[BALANCE_INDEX] = decode_int(state[s][NONCE_INDEX])
+            o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])
             o[CODE_INDEX] = state[s][CODE_INDEX]
             o[STORAGE_INDEX] = t.to_dict(True)
             nstate[s.encode('hex')] = o
@@ -160,8 +162,7 @@ class Block(object):
     def genesis(cls,initial_alloc):
         block = cls()
         for addr in initial_alloc:
-            addr2 = addr.decode('hex') if len(addr) == 40 else addr
-            block.state.update(addr2,['',encode_int(initial_alloc[addr]),'',''])
+            block.set_balance(addr,initial_alloc[addr])
         return block
 
     def hash(self):
