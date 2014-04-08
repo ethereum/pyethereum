@@ -48,8 +48,9 @@ class Message(object):
         self.data = data
 
 def apply_tx(block,tx):
-    if block.get_nonce(tx.sender) != tx.nonce:
-        raise Exception("Invalid nonce!")
+    acctnonce = block.get_nonce(tx.sender)
+    if acctnonce != tx.nonce:
+        raise Exception("Invalid nonce! Sender %s tx %s" % (acctnonce,tx.nonce))
     o = block.delta_balance(tx.sender,-tx.gasprice * tx.startgas)
     if not o:
         raise Exception("Insufficient balance to pay fee!")
@@ -58,17 +59,19 @@ def apply_tx(block,tx):
     message_gas = tx.startgas - GTXDATA * len(tx.data)
     message = Message(tx.sender,tx.to,tx.value,message_gas,tx.data)
     if tx.to:
-        s,g,d = apply_msg(block,tx,message)
+        result,gas,data = apply_msg(block,tx,message)
     else:
-        s,g = create_contract(block,tx,message)
-    if not s:
+        result,gas = create_contract(block,tx,message)
+    if not result: # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_consumed += tx.startgas
-        block.delta_balance(block.coinbase,fee)
+        block.delta_balance(block.coinbase,tx.gasprice * tx.startgas)
+        return OUT_OF_GAS
     else:
-        block.delta_balance(tx.sender,tx.gasprice * g)
-        block.delta_balance(block.coinbase,tx.gasprice * (tx.startgas - g))
-        block.gas_consumed += tx.startgas - g
+        block.delta_balance(tx.sender,tx.gasprice * gas)
+        block.delta_balance(block.coinbase,tx.gasprice * (tx.startgas - gas))
+        block.gas_consumed += tx.startgas - gas
+        return data if tx.to else result
 
 class Compustate():
     def __init__(self,**kwargs):
@@ -138,7 +141,7 @@ def create_contract(block,tx,msg):
     
 def get_op_data(code,index):
     opcode = ord(code[index]) if index < len(code) else 0
-    if opcode < 96 or opcode == 255:
+    if opcode < 96 or (opcode > 240 and opcode <= 255):
         if opcode in opcodes: return opcodes[opcode]
         else: return 'INVALID',0,0
     elif opcode < 128: return 'PUSH'+str(opcode-95),0,1
@@ -185,8 +188,6 @@ def multipop(stack,pops):
 # Does not include paying opfee
 def apply_op(block,tx,msg,code,compustate):
     op, in_args, out_args = get_op_data(code,compustate.pc)
-    if debug:
-        print op, in_args, out_args
     # empty stack error
     if in_args > len(compustate.stack):
         return []
@@ -197,6 +198,12 @@ def apply_op(block,tx,msg,code,compustate):
     stackargs = []
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
+    if debug:
+        if op[:4] == 'PUSH':
+            start,n = compustate.pc + 1, int(op[4:])
+            print op, decode_int(code[start:start+n])
+        else:
+            print op, ' '.join(map(str,stackargs))
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -213,14 +220,18 @@ def apply_op(block,tx,msg,code,compustate):
     elif op == 'MUL':
         stk.append((stackargs[0] * stackargs[1]) % 2**256)
     elif op == 'DIV':
+        if stackargs[1] == 0: return []
         stk.append(stackargs[0] / stackargs[1])
     elif op == 'MOD':
+        if stackargs[1] == 0: return []
         stk.append(stackargs[0] % stackargs[1])
     elif op == 'SDIV':
+        if stackargs[1] == 0: return []
         if stackargs[0] >= 2**255: stackargs[0] -= 2**256
         if stackargs[1] >= 2**255: stackargs[1] -= 2**256
         stk.append((stackargs[0] / stackargs[1]) % 2**256)
     elif op == 'SMOD':
+        if stackargs[1] == 0: return []
         if stackargs[0] >= 2**255: stackargs[0] -= 2**256
         if stackargs[1] >= 2**255: stackargs[1] -= 2**256
         stk.append((stackargs[0] % stackargs[1]) % 2**256)
@@ -257,7 +268,7 @@ def apply_op(block,tx,msg,code,compustate):
     elif op == 'ORIGIN':
         stk.append(tx.sender)
     elif op == 'CALLER':
-        stk.append(msg.sender)
+        stk.append(decode_int(msg.sender.decode('hex')))
     elif op == 'CALLVALUE':
         stk.append(msg.value)
     elif op == 'CALLDATALOAD':
@@ -270,9 +281,9 @@ def apply_op(block,tx,msg,code,compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'PREVHASH':
-        stk.append(block.prevhash)
+        stk.append(decode_int(block.prevhash))
     elif op == 'COINBASE':
-        stk.append(block.coinbase)
+        stk.append(decode_int(block.coinbase.decode('hex')))
     elif op == 'TIMESTAMP':
         stk.append(block.timestamp)
     elif op == 'NUMBER':
@@ -293,7 +304,7 @@ def apply_op(block,tx,msg,code,compustate):
         if len(mem) < stackargs[0] + 32:
             mem.extend([0] * (stackargs[0] + 32 - len(mem)))
         data = ''.join(map(chr,mem[stackargs[0]:stackargs[0] + 32]))
-        stk.append(decode(data,256))
+        stk.append(decode_int(data))
     elif op == 'MSTORE':
         if len(mem) < stackargs[0] + 32:
             mem.extend([0] * (stackargs[0] + 32 - len(mem)))

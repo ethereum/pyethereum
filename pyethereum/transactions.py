@@ -76,12 +76,16 @@ class Transaction(object):
         self.sender = privtoaddr(key)
         return self
 
-    def serialize(self,signed=True):
+    def coerce_to_hex(self, n):
+        return n.encode('hex') if len(n) == 20 else n
+
+
+    def serialize(self, signed=True):
         return rlp.encode([encode_int(self.nonce),
                            encode_int(self.value),
                            encode_int(self.gasprice),
                            encode_int(self.startgas),
-                           self.to.decode('hex'),
+                           self.coerce_to_hex(self.to),
                            self.data,
                            encode_int(self.v),
                            encode_int(self.r),

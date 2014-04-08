@@ -112,10 +112,11 @@ class Block(object):
     
     # Revert computation
     def snapshot(self):
-        return self.state.root
+        return { 'state': self.state.root, 'gas': self.gas_consumed }
 
-    def revert(self,root):
-        self.state.root = root
+    def revert(self,mysnapshot):
+        self.state.root = mysnapshot['state']
+        self.gas_consumed = mysnapshot['gas']
 
     # Serialization method; should act as perfect inverse function of the
     # constructor assuming no verification failures
@@ -142,7 +143,8 @@ class Block(object):
             o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
             o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])
             o[CODE_INDEX] = state[s][CODE_INDEX]
-            o[STORAGE_INDEX] = t.to_dict(True)
+            td = t.to_dict(True)
+            o[STORAGE_INDEX] = {k:decode_int(td[k]) for k in td}
             nstate[s.encode('hex')] = o
             
         return {

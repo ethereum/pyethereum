@@ -5,5 +5,5 @@ console_scripts = ['eth=pyethereum.eth:main']
 
 setup(name="pyethereum",
       packages=find_packages("."),
-      install_requires=['leveldb', 'pybitcointools', 'pysha3'],
+      install_requires=['leveldb', 'bitcoin', 'pysha3'],
       entry_points=dict(console_scripts=console_scripts))

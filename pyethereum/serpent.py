@@ -62,17 +62,17 @@ funtable = [
 
 # Pseudo-variables representing opcodes
 pseudovars = {
-    'msg.datasize': 'CALLDATASIZE',
-    'msg.sender': 'CALLER',
-    'msg.value': 'CALLVALUE',
-    'tx.gasprice': 'GASPRICE',
-    'tx.origin': 'ORIGIN',
-    'tx.gas': 'GAS',
-    'contract.balance': 'BALANCE',
-    'block.prevhash': 'BLK_PREVHASH',
-    'block.coinbase': 'BLK_COINBASE',
-    'block.timestamp': 'BLK_TIMESTAMP',
-    'block.number': 'BLK_NUMBER',
+    'msg.datasize': [32,'CALLDATASIZE','DIV'],
+    'msg.sender': ['CALLER'],
+    'msg.value': ['CALLVALUE'],
+    'tx.gasprice': ['GASPRICE'],
+    'tx.origin': ['ORIGIN'],
+    'tx.gas': ['GAS'],
+    'contract.balance': ['BALANCE'],
+    'block.prevhash': ['BLK_PREVHASH'],
+    'block.coinbase': ['BLK_COINBASE'],
+    'block.timestamp': ['BLK_TIMESTAMP'],
+    'block.number': ['BLK_NUMBER'],
     'block.difficulty': 'BLK_DIFFICULTY',
     'block.gaslimit': 'GASLIMIT',
 }
@@ -153,7 +153,7 @@ def compile_expr(ast,varhash,lc=[0]):
         if is_numberlike(ast):
             return [numberize(ast)]
         elif ast in pseudovars:
-            return [pseudovars[ast]]
+            return pseudovars[ast]
         else:
             if ast not in varhash:
                 varhash[ast] = len(varhash) * 32
@@ -175,7 +175,9 @@ def compile_expr(ast,varhash,lc=[0]):
         h = compile_expr(ast[3],varhash,lc) if len(ast) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        if h: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ ref, 'JUMP' ] + h + [ label ]
+        label2, ref2 = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
+        lc[0] += 1
+        if h: return f + [ 'NOT', ref2, 'JUMPI' ] + g + [ ref, 'JUMP', label2 ] + h + [ label ]
         else: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ label ]
     # While loops
     elif ast[0] == 'while':
@@ -280,7 +282,7 @@ def dereference(c):
             if isinstance(front,str) and front[:4] == 'REF_':
                 pos += 5
             elif isinstance(front,(int,long)):
-                pos += max(1,log256(front))
+                pos += 1 + max(1,log256(front))
             else:
                 pos += 1
     oq = []
@@ -305,16 +307,35 @@ def serialize(source):
         else: raise Exception("Cannot serialize: "+str(arg))
     return ''.join(map(chr,map(numberize,source)))
 
+def deserialize(source):
+    o = []
+    i,j = 0,-1
+    while i < len(source):
+        p = ord(source[i])
+        if j >= 0: o.append(p)
+        elif p >= 96 and p <= 127: o.append('PUSH'+str(p-95))
+        else: o.append(opcodes[p][0])
+        if p >= 96 and p <= 127: j = p-95
+        j -= 1
+        i += 1
+    return o
+
 def assemble(asm): return serialize(dereference(asm))
 
 def compile(source): return assemble(compile_to_assembly(parse(source)))
 
 def encode_datalist(vals):
     def enc(n):
-        if isinstance(n,(int,long)): return ''.join(map(chr,tobytearr(n,32)))
-        elif isinstance(n,str): return '\x00'*(32-len(n))+n
-        elif n is True: return 1
-        elif n is False or n is None: return 0
+        if isinstance(n,(int,long)):
+            return ''.join(map(chr,tobytearr(n,32)))
+        elif isinstance(n,str) and len(n) == 40:
+            return '\x00'*12+n.decode('hex')
+        elif isinstance(n,str):
+            return '\x00'*(32-len(n))+n
+        elif n is True:
+            return 1
+        elif n is False or n is None:
+            return 0
     return ''.join(map(enc,vals))
 
 if len(sys.argv) >= 2:
