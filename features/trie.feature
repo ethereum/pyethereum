@@ -55,12 +55,9 @@ Feature: trie tree manipulate
       | ["A", "Z", "0"] |
     # ---- end: insert to a diverge node---------
 
-
-  Scenario: insert in a more sophisticated case
-    Given pairs with keys: ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]
-    When clear trie tree
-    And insert pairs
-    Then for each pair, get with key will return the correct value
+    Examples: insert in a more sophisticated case
+      | keys                                                                     |
+      | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
 
 
   Scenario Outline: update existing node
@@ -106,6 +103,7 @@ Feature: trie tree manipulate
     And delete by the key: <key>
     Then for each pair, get with key will return the correct value
     And get by the key: <key> will return None
+    And tree has no change if key does not exist
 
     Examples: basic
       | key  | keys   |
@@ -140,9 +138,10 @@ Feature: trie tree manipulate
       | "0Z"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
 
     Examples: key not existing
-      | key     | keys |
-      | "ABDCD" | []   |
-      | "X"     | []   |
+      | key        | keys                     |
+      | "ABDCD"    | []                       |
+      | "X"        | []                       |
+      | "\x01\xf4" | ["\x03\xe8", "\x03\xe9"] |
 
 
   Scenario Outline: get node size
