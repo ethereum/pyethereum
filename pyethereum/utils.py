@@ -8,6 +8,41 @@ def privtoaddr(x):
     if len(x) > 32: x = x.decode('hex')
     return sha3(privtopub(x)[1:])[12:].encode('hex')
 
+def zpad(x,l):
+    return '\x00' * max(0,l - len(x)) + x
+
+def coerce_addr_to_bin(x):
+    if isinstance(x,(int,long)):
+        return zpad(int_to_big_endian(x),20).encode('hex')
+    elif len(x) == 40:
+        return x.decode('hex')
+    else:
+        return zpad(x,20)[-20:]
+
+def coerce_addr_to_hex(x):
+    if isinstance(x,(int,long)):
+        return zpad(int_to_big_endian(x),20).encode('hex')
+    elif len(x) == 40:
+        return x
+    else:
+        return zpad(x,20)[-20:].encode('hex')
+
+def coerce_to_int(x):
+    if isinstance(x,(int,long)):
+        return x
+    elif len(x) == 40:
+        return big_endian_to_int(x.decode('hex'))
+    else:
+        return big_endian_to_int(x)
+
+def coerce_to_bytes(x):
+    if isinstance(x,(int,long)):
+        return int_to_big_endian(x)
+    elif len(x) == 40:
+        return x.decode('hex')
+    else:
+        return x
+
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
     # 0 is a special case, treated same as ''

@@ -43,10 +43,10 @@ funtable = [
     ['setch', 3, 0, ['<2>','<1>','<0>','ADD','MSTORE'] ], # arr, ind, val
     # len MSIZE (SWAP) MSIZE len (MSIZE ADD) MSIZE MSIZE+len (1) MSIZE MSIZE+len 1 (SWAP SUB) MSIZE MSIZE+len-1 (0 SWAP MSTORE8) MSIZE
     ['string', 1, 1, ['<0>','MSIZE','SWAP','MSIZE','ADD',1,'SWAP','SUB',0,'SWAP','MSTORE8'] ], #len -> arr
-    ['send', 2, 1, [0,0,0,0,0,'<1>','<0>'] ], # to, value, 0, [] -> /dev/null
-    ['send', 3, 1, [0,0,0,0,'<2>','<1>','<0>'] ], # to, value, gas, [] -> /dev/null
+    #['send', 2, 1, [0,0,0,0,0,'<1>','<0>','CALL'] ], # to, value, 0, [] -> /dev/null
+    ['send', 3, 1, [0,0,0,0,'<2>','<1>','<0>','CALL'] ], # to, value, gas, [] -> /dev/null
     # MSIZE 0 MSIZE (MSTORE) MSIZE (DUP) MSIZE MSIZE (...) MSIZE MSIZE 32 <4> <3> <2> <1> <0> (CALL) MSIZE FLAG (POP) MSIZE (MLOAD) RESULT
-    ['msg', 5, 1, ['MSIZE',0,'MSIZE','MSTORE','DUP',32,'<4>','<3>','<2>','<1>','<0>','CALL','POP','MLOAD'] ], # to, value, gas, data, datasize -> out32
+    ['msg', 5, 1, ['MSIZE',0,'MSIZE','MSTORE','DUP',32,'SWAP','<4>',32,'MUL','<3>','<2>','<1>','<0>','CALL','POP','MLOAD'] ], # to, value, gas, data, datasize -> out32
     # <5> MSIZE (SWAP) MSIZE <5> (MSIZE SWAP) MSIZE MSIZE <5> (32 MUL) MSIZE MSIZE <5>*32 (DUP ADD 1 SWAP SUB) MSIZE MSIZE <6>*32 MEND (MSTORE8) MSIZE MSIZE <6>*32 (... CALL)
     ['msg', 6, 0, ['<5>','MSIZE','SWAP','MSIZE','SWAP',32,'MUL','DUP','ADD',1,'SWAP','SUB','MSTORE8','<4>','<3>','<2>','<1>','<0>','CALL','POP'] ], # to, value, gas, data, datasize, outsize -> out
     ['create', 4, 1, ['<3>','<2>','<1>','<0>','CREATE'] ], # value, gas, data, datasize
@@ -58,8 +58,8 @@ funtable = [
     ['id', 1, 1, ['<0>'] ],
     # 0 MSIZE (SWAP) MSIZE 0 (MSIZE) MSIZE 0 MSIZE (MSTORE) MSIZE (32 SWAP) 32 MSIZE
     ['return', 1, 0, ['<0>','MSIZE','SWAP','MSIZE','MSTORE',32,'SWAP','RETURN'] ], # returns single value
-    ['return', 2, 0, ['RETURN'] ],
-    ['suicide', 1, 0, ['RETURN'] ],
+    ['return', 2, 0, ['<1>',32,'MUL','<0>','RETURN'] ],
+    ['suicide', 1, 0, ['<0>','SUICIDE'] ],
 ]
 
 # Pseudo-variables representing opcodes
@@ -108,6 +108,8 @@ def numberize(b):
 
 # Apply rewrite rules
 
+tempcount = [0]
+
 def rewrite(ast):
     if isinstance(ast,(str,unicode)):
         return ast
@@ -123,9 +125,11 @@ def rewrite(ast):
         elif ast[1] == 'contract.storage':
             return ['sload',rewrite(ast[2])]
     elif ast[0] == 'array_lit':
-        o1 = ['set','_temp',['array',str(len(ast[1:]))]]
-        of = map(lambda i: ['arrset','_temp',str(i),ast[i+1]], range(0,len(ast[1:])))
-        return ['seq'] + [o1] + of + ['_temp']
+        tempvar = '_temp'+str(tempcount[0])
+        tempcount[0] += 1
+        o1 = ['set',tempvar,['array',str(len(ast[1:]))]]
+        of = map(lambda i: ['arrset',tempvar,str(i),rewrite(ast[i+1])], range(0,len(ast[1:])))
+        return ['seq'] + [o1] + of + [tempvar]
     return map(rewrite,ast)
 
 # Main compiler code
@@ -219,7 +223,7 @@ def compile_expr(ast,varhash,lc=[0]):
 
 # Stuff to add once to each program
 def add_wrappers(c,varhash):
-    if len(varhash):
+    if len(varhash) and 'MSIZE' in c:
         return [0,len(varhash)*32-1,'MSTORE8'] + c
     else:
         return c
@@ -345,6 +349,13 @@ def encode_datalist(vals):
             return 0
     return ''.join(map(enc,vals))
 
+def decode_datalist(arr):
+    if isinstance(arr,list): arr = ''.join(map(chr,arr))
+    o = []
+    for i in range(0,len(arr),32):
+        o.append(frombytes(arr[i:i+32]))
+    return o
+
 if len(sys.argv) >= 2:
     input_index = 2
     if sys.argv[1] == '-p':
@@ -353,11 +364,16 @@ if len(sys.argv) >= 2:
         f = lambda x: ' '.join(map(str,compile_to_assembly(x)))
     elif sys.argv[1] == '-a2':
         f = lambda x: ' '.join(map(str,dereference(compile_to_assembly(x))))
+    elif sys.argv[1] == '-v':
+        def f(x):
+            varhash = {}
+            c2 = compile_expr(rewrite(parse(x)),varhash,[0])
+            return varhash
     else:
         input_index = 1
         f = lambda x: compile(x).encode('hex')
     if os.path.exists(sys.argv[input_index]):
         d = open(sys.argv[input_index]).read()
     else:
-        d = sys.argv[1]
+        d = sys.argv[input_index]
     print f(d)

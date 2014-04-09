@@ -14,11 +14,10 @@ v2 = u.privtoaddr(k2)
 print "Starting boring transfer test"
 blk = b.Block.genesis({ v: 10**18 })
 # Give tx2 some money
-tx = t.Transaction(0,10**16,10**14,1000,v2,'').sign(k)
+tx = t.Transaction(0,10**16,10**12,1000,v2,'').sign(k)
 pb.apply_tx(blk,tx)
 print "New balance of v1: ", blk.get_balance(v)
 print "New balance of v2: ", blk.get_balance(v2)
-print blk.to_dict()
 
 print "Starting namecoin tests"
 blk = b.Block.genesis({ v: 10**18 })
@@ -26,28 +25,26 @@ scode1 = '''
 if !contract.storage[msg.data[0]]:
     contract.storage[msg.data[0]] = msg.data[1]
     return(1)
+else:
+    return(0)
 '''
 code1 = serpent.compile(scode1)
 print "AST", serpent.rewrite(serpent.parse(scode1))
 print "Assembly", serpent.compile_to_assembly(scode1)
-print "Code", serpent.deserialize(code1)
-tx1 = t.Transaction.contract(0,0,10**14,1000,code1).sign(k)
+tx1 = t.Transaction.contract(0,0,10**12,1000,code1).sign(k)
 addr = pb.apply_tx(blk,tx1)
 snapshot = blk.snapshot()
 print "Contract address", addr.encode('hex')
-tx2 = t.Transaction(1,0,10**14,1000,addr,serpent.encode_datalist(['george',45]))
+tx2 = t.Transaction(1,0,10**12,1000,addr,serpent.encode_datalist(['george',45]))
 tx2.sign(k)
 o = pb.apply_tx(blk,tx2)
-print "Result of registering george:45: ", o
-print blk.to_dict()
-tx3 = t.Transaction(2,0,10**14,1000,addr,serpent.encode_datalist(['george',20])).sign(k)
+print "Result of registering george:45: ", serpent.decode_datalist(o)
+tx3 = t.Transaction(2,0,10**12,1000,addr,serpent.encode_datalist(['george',20])).sign(k)
 o = pb.apply_tx(blk,tx3)
-print "Result of registering george:20: ", o
-print blk.to_dict()
-tx4 = t.Transaction(3,0,10**14,1000,addr,serpent.encode_datalist(['harry',60])).sign(k)
+print "Result of registering george:20: ", serpent.decode_datalist(o)
+tx4 = t.Transaction(3,0,10**12,1000,addr,serpent.encode_datalist(['harry',60])).sign(k)
 o = pb.apply_tx(blk,tx4)
-print "Result of registering harry:60: ", o
-print blk.to_dict()
+print "Result of registering harry:60: ", serpent.decode_datalist(o)
 
 scode2 = '''
 if !contract.storage[1000]:
@@ -65,92 +62,121 @@ else:
         contract.storage[from] = fromvalue - value
         contract.storage[to] = contract.storage[to] + value
         return(1)
+    else:
+        return(0)
 ''' % v
 code2 = serpent.compile(scode2)
 print "AST", serpent.rewrite(serpent.parse(scode2))
 print "Assembly", serpent.compile_to_assembly(scode2)
-print "Code", serpent.deserialize(code2)
 print "Starting currency contract tests"
 blk = b.Block.genesis({ v: 10**18 })
-tx4 = t.Transaction.contract(0,0,10**14,1000,code2).sign(k)
+tx4 = t.Transaction.contract(0,0,10**12,1000,code2).sign(k)
 addr = pb.apply_tx(blk,tx4)
 print "Contract address", addr.encode('hex')
-tx5 = t.Transaction(1,0,10**14,1000,addr,'').sign(k)
+tx5 = t.Transaction(1,0,10**12,1000,addr,'').sign(k)
 o = pb.apply_tx(blk,tx5)
 print "Initialization finished"
-print blk.to_dict()
-tx6 = t.Transaction(2,0,10**14,1000,addr,serpent.encode_datalist([v2,200])).sign(k)
+tx6 = t.Transaction(2,0,10**12,1000,addr,serpent.encode_datalist([v2,200])).sign(k)
 o = pb.apply_tx(blk,tx6)
-print "Result of sending v->v2 200: ", o
-print blk.to_dict()
-tx7 = t.Transaction(3,0,10**14,1000,addr,serpent.encode_datalist([v2,900])).sign(k)
+print "Result of sending v->v2 200: ", serpent.decode_datalist(o)
+tx7 = t.Transaction(3,0,10**12,1000,addr,serpent.encode_datalist([v2,900])).sign(k)
 o = pb.apply_tx(blk,tx7)
-print "Result of sending v->v2 900: ", o
-print blk.to_dict()
-tx8 = t.Transaction(4,0,10**14,1000,addr,serpent.encode_datalist([v])).sign(k)
+print "Result of sending v->v2 900: ", serpent.decode_datalist(o)
+tx8 = t.Transaction(4,0,10**12,1000,addr,serpent.encode_datalist([v])).sign(k)
 o = pb.apply_tx(blk,tx8)
-print "Result of querying v: ", o
-print blk.to_dict()
-tx9 = t.Transaction(5,0,10**14,1000,addr,serpent.encode_datalist([v2])).sign(k)
+print "Result of querying v: ", serpent.decode_datalist(o)
+tx9 = t.Transaction(5,0,10**12,1000,addr,serpent.encode_datalist([v2])).sign(k)
 o = pb.apply_tx(blk,tx9)
-print "Result of querying v2: ", o
-print blk.to_dict()
+print "Result of querying v2: ", serpent.decode_datalist(o)
 
 scode3 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
     contract.storage[1001] = msg.sender
+    return(0)
 elif msg.sender == contract.storage[1001] and msg.datasize == 2:
     contract.storage[msg.data[0]] = msg.data[1]
+    return(1)
 else:
     return(contract.storage[msg.data[0]])
 '''
 code3 = serpent.compile(scode3)
 print "AST", serpent.rewrite(serpent.parse(scode3))
-print "Assembly", serpent.compile_to_assembly(scode2)
-print "Code", serpent.deserialize(code2)
-blk = b.Block.genesis({ v: 10**18 })
-tx10 = t.Transaction.contract(0,0,10**14,1000,code3).sign(k)
+print "Assembly", serpent.compile_to_assembly(scode3)
+blk = b.Block.genesis({ v: 10**18, v2: 10**18 })
+tx10 = t.Transaction.contract(0,0,10**12,1000,code3).sign(k)
 addr = pb.apply_tx(blk,tx10)
 print "Address:", addr.encode('hex')
-tx11 = t.Transaction(1,0,10**14,1000,addr,'').sign(k)
+tx11 = t.Transaction(1,0,10**12,1000,addr,'').sign(k)
 o = pb.apply_tx(blk,tx11)
-print "Initialization complete"
-print blk.to_dict()
-tx12 = t.Transaction(2,0,10**14,1000,addr,serpent.encode_datalist([500])).sign(k)
+print "Initialization complete", serpent.decode_datalist(o)
+tx12 = t.Transaction(2,0,10**12,1000,addr,serpent.encode_datalist([500])).sign(k)
 o = pb.apply_tx(blk,tx12)
-print o
-print blk.to_dict()
-tx13 = t.Transaction(3,0,10**14,1000,addr,serpent.encode_datalist([500,726])).sign(k)
+print "Balance", serpent.decode_datalist(o)
+tx13 = t.Transaction(3,0,10**12,1000,addr,serpent.encode_datalist([500,726])).sign(k)
 o = pb.apply_tx(blk,tx13)
-print "Set balance to 500:726", o
-print blk.to_dict()
-tx14 = t.Transaction(4,0,10**14,1000,addr,serpent.encode_datalist([500])).sign(k)
+print "Set balance to 500:726", serpent.decode_datalist(o)
+tx14 = t.Transaction(4,0,10**12,1000,addr,serpent.encode_datalist([500])).sign(k)
 o = pb.apply_tx(blk,tx14)
-print "Balance", o
-print blk.to_dict()
+print "Balance", serpent.decode_datalist(o)
 
 scode4 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = msg.sender
     contract.storage[1002] = msg.value
     contract.storage[1003] = msg.data[0]
+    return(1)
 elif !contract.storage[1001]:
     ethvalue = contract.storage[1002]
     if msg.value >= ethvalue:
         contract.storage[1001] = msg.sender
-    contract.storage[1004] = ethvalue * msg(%s,0,1000,[contract.storage[1003]],1)
+    othervalue = ethvalue * msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    contract.storage[1004] = othervalue
     contract.storage[1005] = block.timestamp + 86400
+    return([2,othervalue],2)
 else:
     othervalue = contract.storage[1004]
-    ethvalue = othervalue / msg(%s,0,1000,[contract.storage[1003]],1)
+    ethvalue = othervalue / msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
     if ethvalue >= contract.balance: 
-        suicide(contract.storage[1000])
+        send(contract.storage[1000],contract.balance,tx.gas-100)
+        return(3)
+    elif block.timestamp > contract.storage[1005]:
+        send(contract.storage[1001],contract.balance - ethvalue,tx.gas-100)
+        send(contract.storage[1000],ethvalue,tx.gas-100)
+        return(4)
     else:
-        send(contract.storage[1000],ethvalue,1000)
-        suicide(contract.storage[1001])
-''' % (v,v)
+        return(5)
+''' % (addr.encode('hex'),addr.encode('hex'))
 code4 = serpent.compile(scode4)
-#print "AST", serpent.rewrite(serpent.parse(scode3))
-#print "Assembly", serpent.compile_to_assembly(scode2)
-#print "Code", serpent.deserialize(code2)
+print "AST", serpent.rewrite(serpent.parse(scode4))
+print "Assembly", serpent.compile_to_assembly(scode4)
+# important: no new genesis block
+tx15 = t.Transaction.contract(5,0,10**12,2000,code4).sign(k)
+addr2 = pb.apply_tx(blk,tx15)
+print "Address:", addr.encode('hex')
+tx16 = t.Transaction(6,10**17,10**12,2000,addr2,serpent.encode_datalist([500])).sign(k)
+o = pb.apply_tx(blk,tx16)
+print "First participant added", serpent.decode_datalist(o)
+tx17 = t.Transaction(0,10**17,10**12,2000,addr2,serpent.encode_datalist([500])).sign(k2)
+o = pb.apply_tx(blk,tx17)
+print "Second participant added, USDvalue settled", serpent.decode_datalist(o)
+snapshot = blk.snapshot()
+tx18 = t.Transaction(7,0,10**12,2000,addr2,'').sign(k)
+o = pb.apply_tx(blk,tx18)
+print "Attempting to cash out immediately", o if o == -1 else serpent.decode_datalist(o)
+tx19 = t.Transaction(8,0,10**12,2000,addr,serpent.encode_datalist([500,300])).sign(k)
+o = pb.apply_tx(blk,tx19)
+print "Changing value to 300", serpent.decode_datalist(o)
+print blk.to_dict()
+tx20 = t.Transaction(9,0,10**12,2000,addr2,'').sign(k)
+print "Old balances", blk.get_balance(v), blk.get_balance(v2)
+o = pb.apply_tx(blk,tx20)
+print "Attempting to cash out with value drop", o if o == -1 else serpent.decode_datalist(o)
+print "New balances", blk.get_balance(v), blk.get_balance(v2)
+blk.revert(snapshot)
+blk.timestamp += 200000
+tx21 = t.Transaction(7,0,10**12,2000,addr2,'').sign(k)
+print "Old balances", blk.get_balance(v), blk.get_balance(v2)
+o = pb.apply_tx(blk,tx21)
+print "Attempting to cash out after expiry", o if o == -1 else serpent.decode_datalist(o)
+print "New balances", blk.get_balance(v), blk.get_balance(v2)
