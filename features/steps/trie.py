@@ -49,14 +49,23 @@ def step_impl(context, key):
     assert context.trie.get(key) is None
 
 
+@then(u'tree has no change if key does not exist')  # noqa
+def step_impl(context):
+    if not context.key_exisits:
+        assert context.trie.root == context.original_root
+
+
 @when(u'delete by the key: {key:Py}')  # noqa
 def step_impl(context, key):
     new_pairs = []
+    context.key_exisits = False
     for (k, v) in context.pairs:
         if k == key:
             context.trie.delete(k)
+            context.key_exisits = True
         else:
             new_pairs.append((k, v))
+    context.original_root = context.trie.root
     context.pairs = new_pairs
 
 
