@@ -262,8 +262,8 @@ class Trie(object):
         :param key: nibble list without terminator
         :param value: node or hash, a blank node means to delete it
         :param value_is_node: value is leaf or intermediate node
-        :return: (node, is_node) where node is the updated node or hash,
-        is_node denote whether the node is a node or a value
+        :return: (node, is_node) where `node` is the updated normalized node
+        or hash, `is_node` denote whether the node is a node or a value
         """
         # FIXME: delete unused data from db
         if not is_node:
