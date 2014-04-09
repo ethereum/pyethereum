@@ -5,6 +5,7 @@ from trie import Trie, DB
 from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3
+import utils
 
 ACCT_RLP_LENGTH = 4
 NONCE_INDEX = 0
@@ -64,7 +65,6 @@ class Block(object):
     def get_index(self,address,index):
         if len(address) == 40: address = address.decode('hex')
         acct = self.state.get(address) or ['','','','']
-        print 'a',acct
         return acct[index]
 
     # set_index(bin or hex, int, bin)
@@ -84,8 +84,6 @@ class Block(object):
         self.state.update(address,acct)
         return True
 
-    def coerce_to_enc(self,n):
-        return encode_int(n) if isinstance(n,(int,long)) else n
     def get_nonce(self,address):
         return decode_int(self.get_index(address,NONCE_INDEX))
     def increment_nonce(self,address):
@@ -105,14 +103,11 @@ class Block(object):
     def get_storage(self,address):
         return Trie('statedb',self.get_index(address,STORAGE_INDEX))
     def get_storage_data(self,address,index):
-        return decode_int(self.get_storage(address).get(self.coerce_to_enc(index)))
+        t = self.get_storage(address)
+        return decode_int(t.get(utils.coerce_to_bytes(index)))
     def set_storage_data(self,address,index,val):
-        t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
-        print 'd1',t.to_dict()
-        print t.root.encode('hex') if isinstance(t.root,(str,unicode)) else ''
-        print self.coerce_to_enc(index).encode('hex'),encode_int(val).encode('hex')
-        t.update(self.coerce_to_enc(index),encode_int(val))
-        print 'd2',t.to_dict()
+        t = self.get_storage(address)
+        t.update(utils.coerce_to_bytes(index),encode_int(val))
         self.set_index(address,STORAGE_INDEX,t.root)
     
     # Revert computation

@@ -34,10 +34,17 @@ class Transaction(object):
             self.startgas = args[4]
             self.to = args[5]
             self.data = args[6]
+            # includes signature
             if len(args) > 7:
                 self.v, self.r, self.s = args[7:10]
+                rawhash = sha3(rlp.encode(self.serialize(False)))
+                pub = encode_pubkey(
+                    ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
+                self.sender = sha3(pub[1:])[-20:].encode('hex')
+            # does not include signature
             else:
                 self.v, self.r, self.s = 0,0,0
+                self.sender = 0
 
     # nonce,value,gasprice,startgas,code
     @classmethod
@@ -64,10 +71,6 @@ class Transaction(object):
                  decode_int(o[6]),
                  decode_int(o[7]),
                  decode_int(o[8]))
-        rawhash = sha3(rlp.encode(tx.serialize(False)))
-        pub = encode_pubkey(
-            ecdsa_raw_recover(rawhash, (tx.v, tx.r, tx.s)), 'bin')
-        tx.sender = sha3(pub[1:])[-20:].encode('hex')
         return tx
 
     def sign(self, key):

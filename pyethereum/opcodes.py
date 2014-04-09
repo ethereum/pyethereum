@@ -44,6 +44,7 @@ opcodes = {
     0x5a: ['JUMPI', 2, 0],
     0x5b: ['PC', 0, 1],
     0x5c: ['MSIZE', 0, 1],
+    0x5d: ['GAS', 0, 1],
     0x60: ['PUSH', 0, 1], #encompasses 96...127
     0xf0: ['CREATE', 4, 1],
     0xf1: ['CALL', 7, 1],

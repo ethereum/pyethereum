@@ -10,11 +10,10 @@ from opcodes import opcodes
 from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3, privtoaddr
+import utils
 
-def encoded_plus(a,b):
-    return encode_int(decode_int(a) + decode_int(b))
 
-debug = 1
+debug = 0
 
 # params
 
@@ -48,6 +47,8 @@ class Message(object):
         self.data = data
 
 def apply_tx(block,tx):
+    if not tx.sender:
+        raise Exception("Trying to apply unsigned transaction!")
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
         raise Exception("Invalid nonce! Sender %s tx %s" % (acctnonce,tx.nonce))
@@ -81,7 +82,6 @@ class Compustate():
         self.gas = 0
         for kw in kwargs:
             vars(self)[kw] = kwargs[kw]
-
 def apply_msg(block,tx,msg):
     snapshot = block.snapshot()
     code = block.get_code(msg.to)
@@ -92,16 +92,15 @@ def apply_msg(block,tx,msg):
         return 0, msg.gas, []
     compustate = Compustate(gas=msg.gas)
     # Main loop
-    if debug:
-        print map(ord,code)
     while 1:
         if debug:
+            import serpent
             print {
-                "Storage": block.get_storage(msg.to).to_dict(),
                 "Stack": compustate.stack,
-                "Memory": compustate.memory,
                 "PC": compustate.pc,
                 "Gas": compustate.gas,
+                "Memory": serpent.decode_datalist(compustate.memory),
+                "Storage": block.get_storage(msg.to).to_dict(),
             }
         o = apply_op(block,tx,msg,code,compustate)
         if o is not None:
@@ -166,10 +165,10 @@ def calcfee(block,tx,msg,compustate,op):
         m_extend = max(0,stk[-1] + 1 - len(mem))
         return GSTEP + m_extend * GMEMORY
     elif op == 'CALL':
-        m_extend = max(0,stk[-3]+stk[-4]-len(mem), stk[-5]+stk[-6]-len(mem))
-        return GCALL + stk[-2] + m_extend * GMEMORY
+        m_extend = max(0,stk[-4]+stk[-5]-len(mem), stk[-6]+stk[-7]-len(mem))
+        return GCALL + stk[-3] + m_extend * GMEMORY
     elif op == 'CREATE':
-        m_extend = max(0,stk[-2]+stk[-3]-len(mem))
+        m_extend = max(0,stk[-3]+stk[-4]-len(mem))
         return GCREATE + stk[-2] + m_extend * GMEMORY
     elif op == 'RETURN':
         m_extend = max(0,stk[-1] + stk[-2] - len(mem))
@@ -194,6 +193,9 @@ def apply_op(block,tx,msg,code,compustate):
     # out of gas error
     fee = calcfee(block,tx,msg,compustate,op)
     if fee > compustate.gas:
+        if debug:
+            print "Out of gas", compustate.gas, "need", fee
+            print op, list(reversed(compustate.stack))
         return OUT_OF_GAS
     stackargs = []
     for i in range(in_args):
@@ -268,7 +270,7 @@ def apply_op(block,tx,msg,code,compustate):
     elif op == 'ORIGIN':
         stk.append(tx.sender)
     elif op == 'CALLER':
-        stk.append(decode_int(msg.sender.decode('hex')))
+        stk.append(utils.coerce_to_int(msg.sender))
     elif op == 'CALLVALUE':
         stk.append(msg.value)
     elif op == 'CALLDATALOAD':
@@ -338,21 +340,36 @@ def apply_op(block,tx,msg,code,compustate):
     elif op == 'CREATE':
         if len(mem) < stackargs[2] + stackargs[3]:
             mem.extend([0] * (stackargs[2] + stackargs[3] - len(mem)))
-        value = stackhash[0]
-        gas = stackhash[1]
-        data = ''.join(map(chr,mem[stackhash[2]:stackhash[2]+stackhash[3]]))
+        value = stackargs[0]
+        gas = stackargs[1]
+        data = ''.join(map(chr,mem[stackargs[2]:stackargs[2]+stackargs[3]]))
+        if debug:
+            print "Sub-contract:", msg.to, value, gas, data
         create_contract(block,tx,Message(msg.to,'',value,gas,data))
     elif op == 'CALL':
         if len(mem) < stackargs[3] + stackargs[4]:
             mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))
         if len(mem) < stackargs[5] + stackargs[6]:
             mem.extend([0] * (stackargs[5] + stackargs[6] - len(mem)))
-        to = encode_int(stackhash[0])
+        to = encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
-        value = stackhash[1]
-        gas = stackhash[2]
-        data = ''.join(map(chr,mem[stackhash[3]:stackhash[3]+stackhash[4]]))
-        apply_msg(block,tx,Message(msg.to,to,value,gas,data))
+        value = stackargs[1]
+        gas = stackargs[2]
+        data = ''.join(map(chr,mem[stackargs[3]:stackargs[3]+stackargs[4]]))
+        if debug:
+            print "Sub-call:", utils.coerce_addr_to_hex(msg.to), utils.coerce_addr_to_hex(to), value, gas, data
+        result,gas,data = apply_msg(block,tx,Message(msg.to,to,value,gas,data))
+        if debug:
+            print "Output of sub-call:", result, data, "length", len(data), "expected", stackargs[6]
+        for i in range(stackargs[6]):
+            mem[stackargs[5]+i] = 0
+        if result == 0:
+            stk.append(0)
+        else:
+            stk.append(1)
+            compustate.gas += gas
+            for i in range(len(data)):
+                mem[stackargs[5]+i] = data[i]
     elif op == 'RETURN':
         if len(mem) < stackargs[0] + stackargs[1]:
             mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
