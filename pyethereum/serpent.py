@@ -219,7 +219,7 @@ def compile_expr(ast,varhash,lc=[0]):
 
 # Stuff to add once to each program
 def add_wrappers(c,varhash):
-    if len(varhash):
+    if len(varhash) and 'MSIZE' in c:
         return [0,len(varhash)*32-1,'MSTORE8'] + c
     else:
         return c
