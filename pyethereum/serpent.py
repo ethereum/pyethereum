@@ -108,6 +108,8 @@ def numberize(b):
 
 # Apply rewrite rules
 
+tempcount = [0]
+
 def rewrite(ast):
     if isinstance(ast,(str,unicode)):
         return ast
@@ -123,9 +125,11 @@ def rewrite(ast):
         elif ast[1] == 'contract.storage':
             return ['sload',rewrite(ast[2])]
     elif ast[0] == 'array_lit':
-        o1 = ['set','_temp',['array',str(len(ast[1:]))]]
-        of = map(lambda i: ['arrset','_temp',str(i),rewrite(ast[i+1])], range(0,len(ast[1:])))
-        return ['seq'] + [o1] + of + ['_temp']
+        tempvar = '_temp'+str(tempcount[0])
+        tempcount[0] += 1
+        o1 = ['set',tempvar,['array',str(len(ast[1:]))]]
+        of = map(lambda i: ['arrset',tempvar,str(i),rewrite(ast[i+1])], range(0,len(ast[1:])))
+        return ['seq'] + [o1] + of + [tempvar]
     return map(rewrite,ast)
 
 # Main compiler code
@@ -360,6 +364,11 @@ if len(sys.argv) >= 2:
         f = lambda x: ' '.join(map(str,compile_to_assembly(x)))
     elif sys.argv[1] == '-a2':
         f = lambda x: ' '.join(map(str,dereference(compile_to_assembly(x))))
+    elif sys.argv[1] == '-v':
+        def f(x):
+            varhash = {}
+            c2 = compile_expr(rewrite(parse(x)),varhash,[0])
+            return varhash
     else:
         input_index = 1
         f = lambda x: compile(x).encode('hex')
