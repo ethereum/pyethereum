@@ -366,5 +366,5 @@ if len(sys.argv) >= 2:
     if os.path.exists(sys.argv[input_index]):
         d = open(sys.argv[input_index]).read()
     else:
-        d = sys.argv[1]
+        d = sys.argv[input_index]
     print f(d)
