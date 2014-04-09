@@ -35,9 +35,6 @@ class ChainManagerInPort(object):
     def request_transactions(self, peer):
         self.in_queue.put(('request_transactions', peer.id()))
 
-    def pingpong(self, reply=False):
-        self.in_queue.put(('pingpong', reply))
-
     def get_next_cmd(self):
         try:
             return self.in_queue.get(timeout=.1)
@@ -67,9 +64,6 @@ class ChainManagerOutPort(object):
 
     def send_get_chain(self, count=1, parents_H=[]):
         self.out_queue.put(('get_chain', count, parents_H))
-
-    def pingpong(self, reply=False):
-        self.out_queue.put(('pingpong', reply))
 
     def get_next_cmd(self):
         try:
@@ -156,10 +150,5 @@ class ChainManager(threading.Thread):
         elif cmd == 'request_transactions':
             peer_id = data[0]
             self.out_port.send_transactions(self.transactions, peer_id)
-        elif cmd == 'pingpong':
-            reply = data
-            logger.debug('%r received pingpong(reply=%r)' % (self, reply))
-            if reply:
-                self.out_port.pingpong()
         else:
             raise Exception('unknown commad')

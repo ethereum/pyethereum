@@ -416,11 +416,6 @@ class WireProtocol(object):
                 print "sending get chain", count, parents_H
                 if count and len(parents_H):
                     self._broadcast(self.send_GetChain, count, parents_H)
-            elif cmd == 'pingpong':
-                reply = data[0]
-                logger.debug('%r received pingpong(reply=%r)' % (self, reply))
-                if reply:
-                    self.chain_manager_in_port.pingpong()
             else:
                 raise Exception('unknown commad')
 
