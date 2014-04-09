@@ -100,7 +100,7 @@ scode3 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
     contract.storage[1001] = msg.sender
-elif msg.sender == contract.storage[1001]:
+elif msg.sender == contract.storage[1001] and msg.datasize == 2:
     contract.storage[msg.data[0]] = msg.data[1]
 else:
     return(contract.storage[msg.data[0]])
@@ -149,7 +149,7 @@ else:
     else:
         send(contract.storage[1000],ethvalue,1000)
         suicide(contract.storage[1001])
-'''
+''' % (v,v)
 code4 = serpent.compile(scode4)
 #print "AST", serpent.rewrite(serpent.parse(scode3))
 #print "Assembly", serpent.compile_to_assembly(scode2)

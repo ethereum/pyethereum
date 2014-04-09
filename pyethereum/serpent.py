@@ -59,6 +59,7 @@ funtable = [
     # 0 MSIZE (SWAP) MSIZE 0 (MSIZE) MSIZE 0 MSIZE (MSTORE) MSIZE (32 SWAP) 32 MSIZE
     ['return', 1, 0, ['<0>','MSIZE','SWAP','MSIZE','MSTORE',32,'SWAP','RETURN'] ], # returns single value
     ['return', 2, 0, ['RETURN'] ],
+    ['suicide', 1, 0, ['RETURN'] ],
 ]
 
 # Pseudo-variables representing opcodes
@@ -70,12 +71,12 @@ pseudovars = {
     'tx.origin': ['ORIGIN'],
     'tx.gas': ['GAS'],
     'contract.balance': ['BALANCE'],
-    'block.prevhash': ['BLK_PREVHASH'],
-    'block.coinbase': ['BLK_COINBASE'],
-    'block.timestamp': ['BLK_TIMESTAMP'],
-    'block.number': ['BLK_NUMBER'],
-    'block.difficulty': 'BLK_DIFFICULTY',
-    'block.gaslimit': 'GASLIMIT',
+    'block.prevhash': ['PREVHASH'],
+    'block.coinbase': ['COINBASE'],
+    'block.timestamp': ['TIMESTAMP'],
+    'block.number': ['NUMBER'],
+    'block.difficulty': ['DIFFICULTY'],
+    'block.gaslimit': ['GASLIMIT'],
 }
 
 
