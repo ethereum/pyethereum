@@ -97,5 +97,60 @@ print "Result of querying v2: ", o
 print blk.to_dict()
 
 scode3 = '''
+if !contract.storage[1000]:
+    contract.storage[1000] = 1
+    contract.storage[1001] = msg.sender
+elif msg.sender == contract.storage[1001]:
+    contract.storage[msg.data[0]] = msg.data[1]
+else:
+    return(contract.storage[msg.data[0]])
 '''
+code3 = serpent.compile(scode3)
+print "AST", serpent.rewrite(serpent.parse(scode3))
+print "Assembly", serpent.compile_to_assembly(scode2)
+print "Code", serpent.deserialize(code2)
+blk = b.Block.genesis({ v: 10**18 })
+tx10 = t.Transaction.contract(0,0,10**14,1000,code3).sign(k)
+addr = pb.apply_tx(blk,tx10)
+print "Address:", addr.encode('hex')
+tx11 = t.Transaction(1,0,10**14,1000,addr,'').sign(k)
+o = pb.apply_tx(blk,tx11)
+print "Initialization complete"
+print blk.to_dict()
+tx12 = t.Transaction(2,0,10**14,1000,addr,serpent.encode_datalist([500])).sign(k)
+o = pb.apply_tx(blk,tx12)
+print o
+print blk.to_dict()
+tx13 = t.Transaction(3,0,10**14,1000,addr,serpent.encode_datalist([500,726])).sign(k)
+o = pb.apply_tx(blk,tx13)
+print "Set balance to 500:726", o
+print blk.to_dict()
+tx14 = t.Transaction(4,0,10**14,1000,addr,serpent.encode_datalist([500])).sign(k)
+o = pb.apply_tx(blk,tx14)
+print "Balance", o
+print blk.to_dict()
+
+scode4 = '''
+if !contract.storage[1000]:
+    contract.storage[1000] = msg.sender
+    contract.storage[1002] = msg.value
+    contract.storage[1003] = msg.data[0]
+elif !contract.storage[1001]:
+    ethvalue = contract.storage[1002]
+    if msg.value >= ethvalue:
+        contract.storage[1001] = msg.sender
+    contract.storage[1004] = ethvalue * msg(%s,0,1000,[contract.storage[1003]],1)
+    contract.storage[1005] = block.timestamp + 86400
+else:
+    othervalue = contract.storage[1004]
+    ethvalue = othervalue / msg(%s,0,1000,[contract.storage[1003]],1)
+    if ethvalue >= contract.balance: 
+        suicide(contract.storage[1000])
+    else:
+        send(contract.storage[1000],ethvalue,1000)
+        suicide(contract.storage[1001])
 '''
+code4 = serpent.compile(scode4)
+#print "AST", serpent.rewrite(serpent.parse(scode3))
+#print "Assembly", serpent.compile_to_assembly(scode2)
+#print "Code", serpent.deserialize(code2)

@@ -64,6 +64,7 @@ class Block(object):
     def get_index(self,address,index):
         if len(address) == 40: address = address.decode('hex')
         acct = self.state.get(address) or ['','','','']
+        print 'a',acct
         return acct[index]
 
     # set_index(bin or hex, int, bin)
@@ -107,7 +108,11 @@ class Block(object):
         return decode_int(self.get_storage(address).get(self.coerce_to_enc(index)))
     def set_storage_data(self,address,index,val):
         t = Trie('statedb',self.get_index(address,STORAGE_INDEX))
+        print 'd1',t.to_dict()
+        print t.root.encode('hex') if isinstance(t.root,(str,unicode)) else ''
+        print self.coerce_to_enc(index).encode('hex'),encode_int(val).encode('hex')
         t.update(self.coerce_to_enc(index),encode_int(val))
+        print 'd2',t.to_dict()
         self.set_index(address,STORAGE_INDEX,t.root)
     
     # Revert computation

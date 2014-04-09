@@ -2,6 +2,7 @@
 import re, sys, os
 from parser import *
 from opcodes import opcodes, reverse_opcodes
+import random
 
 # All functions go here
 #
@@ -35,13 +36,13 @@ funtable = [
     # Word array methods
     ['access', 2, 1, ['<0>','<1>',32,'MUL','ADD','MLOAD'] ], # arr, ind -> val
     ['arrset', 3, 0, ['<2>','<0>','<1>',32,'MUL','ADD','MSTORE'] ], # arr, ind, val
-    # len (32 MUL) len*32 (MSIZE) len*32 MSIZE (SWAP) MSIZE len*32 (MSIZE ADD) MSIZE MSIZE+len*32 (1) MSIZE MSIZE+len*32 1 (SWAP SUB) MSIZE MSIZE+len*32-1 (MSTORE8) MSIZE
-    ['array', 1, 1, ['<0>',32,'MUL','MSIZE','SWAP','MSIZE','ADD',1,'SWAP','SUB','MSTORE8'] ], #len -> arr
+    # len (32 MUL) len*32 (MSIZE) len*32 MSIZE (SWAP) MSIZE len*32 (MSIZE ADD) MSIZE MSIZE+len*32 (1) MSIZE MSIZE+len*32 1 (SWAP SUB) MSIZE MSIZE+len*32-1 (0 SWAP MSTORE8) MSIZE
+    ['array', 1, 1, ['<0>',32,'MUL','MSIZE','SWAP','MSIZE','ADD',1,'SWAP','SUB',0,'SWAP','MSTORE8'] ], #len -> arr
     # String array methods
     ['getch', 2, 1, ['<1>','<0>','ADD','MLOAD',255,'AND'] ], # arr, ind -> val
     ['setch', 3, 0, ['<2>','<1>','<0>','ADD','MSTORE'] ], # arr, ind, val
-    # len MSIZE (SWAP) MSIZE len (MSIZE ADD) MSIZE MSIZE+len (1) MSIZE MSIZE+len 1 (SWAP SUB) MSIZE MSIZE+len-1 (MSTORE8) MSIZE
-    ['string', 1, 1, ['<0>','MSIZE','SWAP','MSIZE','ADD',1,'SWAP','SUB','MSTORE8'] ], #len -> arr
+    # len MSIZE (SWAP) MSIZE len (MSIZE ADD) MSIZE MSIZE+len (1) MSIZE MSIZE+len 1 (SWAP SUB) MSIZE MSIZE+len-1 (0 SWAP MSTORE8) MSIZE
+    ['string', 1, 1, ['<0>','MSIZE','SWAP','MSIZE','ADD',1,'SWAP','SUB',0,'SWAP','MSTORE8'] ], #len -> arr
     ['send', 2, 1, [0,0,0,0,0,'<1>','<0>'] ], # to, value, 0, [] -> /dev/null
     ['send', 3, 1, [0,0,0,0,'<2>','<1>','<0>'] ], # to, value, gas, [] -> /dev/null
     # MSIZE 0 MSIZE (MSTORE) MSIZE (DUP) MSIZE MSIZE (...) MSIZE MSIZE 32 <4> <3> <2> <1> <0> (CALL) MSIZE FLAG (POP) MSIZE (MLOAD) RESULT
@@ -120,6 +121,10 @@ def rewrite(ast):
             return ['calldataload',rewrite(ast[2])]
         elif ast[1] == 'contract.storage':
             return ['sload',rewrite(ast[2])]
+    elif ast[0] == 'array_lit':
+        o1 = ['set','_temp',['array',str(len(ast[1:]))]]
+        of = map(lambda i: ['arrset','_temp',str(i),ast[i+1]], range(0,len(ast[1:])))
+        return ['seq'] + [o1] + of + ['_temp']
     return map(rewrite,ast)
 
 # Main compiler code
@@ -127,13 +132,13 @@ def arity(ast):
     if isinstance(ast,(str,unicode)): return 1
     elif ast[0] == 'set': return 0
     elif ast[0] == 'if': return 0
-    elif ast[0] == 'seq': return 0
+    elif ast[0] == 'seq':
+        return 1 if len(ast[1:]) and arity(ast[-1]) == 1 else 0
     else:
         for f in funtable:
             if ast[0] == f[0]: return f[2]
 
 # Debugging
-import random
 def print_wrapper(f):
     def wrapper(*args,**kwargs):
         print args[0]
@@ -192,6 +197,7 @@ def compile_expr(ast,varhash,lc=[0]):
         o = []
         for arg in ast[1:]:
             o.extend(compile_expr(arg,varhash,lc))
+            if arity(arg) == 1 and arg != ast[-1]: o.append('POP')
         return o
     # Functions and operations
     for f in funtable:
