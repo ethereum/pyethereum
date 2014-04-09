@@ -2,7 +2,13 @@
 import re, sys, os
 from parser import *
 from opcodes import opcodes, reverse_opcodes
-import random
+import random, json
+
+label_counter = [0]
+
+def mklabel(prefix):
+    label_counter[0] += 1
+    return prefix+str(label_counter[0]-1)
 
 # All functions go here
 #
@@ -108,8 +114,6 @@ def numberize(b):
 
 # Apply rewrite rules
 
-tempcount = [0]
-
 def rewrite(ast):
     if isinstance(ast,(str,unicode)):
         return ast
@@ -125,8 +129,7 @@ def rewrite(ast):
         elif ast[1] == 'contract.storage':
             return ['sload',rewrite(ast[2])]
     elif ast[0] == 'array_lit':
-        tempvar = '_temp'+str(tempcount[0])
-        tempcount[0] += 1
+        tempvar = mklabel('_temp')
         o1 = ['set',tempvar,['array',str(len(ast[1:]))]]
         of = map(lambda i: ['arrset',tempvar,str(i),rewrite(ast[i+1])], range(0,len(ast[1:])))
         return ['seq'] + [o1] + of + [tempvar]
@@ -275,6 +278,14 @@ def compile_to_assembly(source,optimize_flag=1):
     c4 = optimize(c3) if optimize_flag else c3
     return c4
 
+def get_vars(source):
+    if isinstance(source,(str,unicode)):
+        source = parse(source)
+    varhash = {}
+    c1 = rewrite(source)
+    c2 = compile_expr(c1,varhash,[0])
+    return varhash
+
 def log256(n): return 0 if n == 0 else 1 + log256(n / 256)
 def tobytearr(n,L): return [] if L == 0 else tobytearr(n / 256,L-1) + [n % 256]
         
@@ -356,24 +367,29 @@ def decode_datalist(arr):
         o.append(frombytes(arr[i:i+32]))
     return o
 
-if len(sys.argv) >= 2:
-    input_index = 2
-    if sys.argv[1] == '-p':
-        f = lambda x: parse(x)
-    elif sys.argv[1] == '-a':
-        f = lambda x: ' '.join(map(str,compile_to_assembly(x)))
-    elif sys.argv[1] == '-a2':
-        f = lambda x: ' '.join(map(str,dereference(compile_to_assembly(x))))
-    elif sys.argv[1] == '-v':
-        def f(x):
-            varhash = {}
-            c2 = compile_expr(rewrite(parse(x)),varhash,[0])
-            return varhash
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        print "serpent <command> <arg1> <arg2> ..."
     else:
-        input_index = 1
-        f = lambda x: compile(x).encode('hex')
-    if os.path.exists(sys.argv[input_index]):
-        d = open(sys.argv[input_index]).read()
-    else:
-        d = sys.argv[input_index]
-    print f(d)
+        cmd = sys.argv[2] if sys.argv[1][0] == '-' else sys.argv[1]
+        if sys.argv[1] == '-s':
+            args = re.findall(r'\S\S*',sys.stdin.read())+sys.argv[3:]
+        elif sys.argv[1] == '-B':
+            args = [sys.stdin.read()]+sys.argv[3:]
+        elif sys.argv[1] == '-b':
+            args = [sys.stdin.read()[:-1]]+sys.argv[3:] # remove trailing \n
+        elif sys.argv[1] == '-j':
+            args = [json.loads(sys.stdin.read())]+sys.argv[3:]
+        elif sys.argv[1] == '-J':
+            args = json.loads(sys.stdin.read())+sys.argv[3:]
+        else:
+            cmd = sys.argv[1]
+            args = sys.argv[2:]
+        if args[0] in os.listdir(os.getcwd()):
+            args[0] = open(args[0]).read()
+        o = vars()[cmd](*args)
+        if isinstance(o,(list,dict)):
+            print json.dumps(o)
+        else:
+            print o.encode('hex')
+

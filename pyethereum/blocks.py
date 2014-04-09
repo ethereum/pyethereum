@@ -28,6 +28,7 @@ class Block(object):
             self.state = Trie('statedb')
             self.transactions_root = ''
             self.transactions = []
+            self.uncles = []
             self.difficulty = 2**23
             self.timestamp = 0
             self.extradata = ''
@@ -38,26 +39,24 @@ class Block(object):
             data = data.decode('hex')
 
         header,  transaction_list, self.uncles = rlp.decode(data)
-        [self.number,
-         self.prevhash,
-         self.uncles_root,
-         self.coinbase,
-         state_root,
-         self.transactions_root,
-         self.difficulty,
-         self.timestamp,
-         self.extradata,
-         self.nonce] = header
+        self.number = decode_int(header[0])
+        self.prevhash = header[1]
+        self.uncles_root = header[2]
+        self.coinbase = header[3].encode('hex')
+        self.state = Trie('statedb', header[4])
+        self.transactions_root = header[5]
+        self.difficulty = decode_int(header[6])
+        self.timestamp = decode_int(header[7])
+        self.extradata = header[8]
+        self.nonce = decode_int(header[9])
         self.transactions = [Transaction(x) for x in transaction_list]
-        self.state = Trie('statedb', state_root)
-
 
         # Verifications
         if self.state.root != '' and self.state.db.get(self.state.root) == '':
             raise Exception("State Merkle root not found in database!")
-        if bin_sha256(rlp.encode(transaction_list)) != self.transactions_root:
+        if sha3(rlp.encode(transaction_list)) != self.transactions_root:
             raise Exception("Transaction list root hash does not match!")
-        if bin_sha256(rlp.encode(self.uncles)) != self.uncles_root:
+        if sha3(rlp.encode(self.uncles)) != self.uncles_root:
             raise Exception("Uncle root hash does not match!")
         # TODO: check POW
 
@@ -122,16 +121,16 @@ class Block(object):
     # constructor assuming no verification failures
     def serialize(self):
         txlist = [x.serialize() for x in self.transactions]
-        header = [self.number,
+        header = [encode_int(self.number),
                   self.prevhash,
-                  bin_sha256(rlp.encode(self.uncles)),
-                  self.coinbase,
+                  sha3(rlp.encode(self.uncles)),
+                  self.coinbase.decode('hex'),
                   self.state.root,
-                  bin_sha256(rlp.encode(txlist)),
-                  self.difficulty,
-                  self.timestamp,
+                  sha3(rlp.encode(txlist)),
+                  encode_int(self.difficulty),
+                  encode_int(self.timestamp),
                   self.extradata,
-                  self.nonce]
+                  encode_int(self.nonce)]
         return rlp.encode([header, txlist, self.uncles])
 
     def to_dict(self):
@@ -168,4 +167,4 @@ class Block(object):
         return block
 
     def hash(self):
-        return bin_sha256(self.serialize())
+        return sha3(self.serialize())
