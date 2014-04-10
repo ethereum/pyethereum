@@ -4,4 +4,3 @@ import trie
 import blocks
 import transactions
 import processblock
-import serpent

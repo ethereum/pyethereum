@@ -83,6 +83,14 @@ class Compustate():
         for kw in kwargs:
             vars(self)[kw] = kwargs[kw]
 
+def decode_datalist(arr):
+    if isinstance(arr, list):
+        arr = ''.join(map(chr, arr))
+    o = []
+    for i in range(0, len(arr), 32):
+        o.append(decode_int(arr[i:i + 32]))
+    return o
+
 def apply_msg(block,tx,msg):
     snapshot = block.snapshot()
     code = block.get_code(msg.to)
@@ -100,7 +108,7 @@ def apply_msg(block,tx,msg):
                 "Stack": compustate.stack,
                 "PC": compustate.pc,
                 "Gas": compustate.gas,
-                "Memory": serpent.decode_datalist(compustate.memory),
+                "Memory": decode_datalist(compustate.memory),
                 "Storage": block.get_storage(msg.to).to_dict(),
             }
         o = apply_op(block,tx,msg,code,compustate)
