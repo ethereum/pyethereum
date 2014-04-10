@@ -283,15 +283,15 @@ class Trie(object):
 
         if node_type == NODE_TYPE_BLANK:
             if not value_is_node:
+                if value == BLANK_NODE:
+                    return BLANK_NODE, True
+
                 return self._normalize_node(
                     self._rlp_encode(
                         [pack_nibbles(with_terminator(key)), value]),
                     True)
             # a inner node
             else:
-                if value == BLANK_NODE:
-                    return BLANK_NODE, True
-
                 return self._normalize_node(
                     self._rlp_encode([pack_nibbles(key), value]), True)
 
