@@ -115,6 +115,7 @@ def sha3(x):
 
 databases = {}
 
+
 class DB(object):
 
     def __init__(self, dbfile):
@@ -134,9 +135,8 @@ class DB(object):
     def commit(self):
         batch = leveldb.WriteBatch()
         for k in self.uncommitted:
-            batch.Put(k,self.uncommitted[k])
+            batch.Put(k, self.uncommitted[k])
         self.db.Write(batch, sync=True)
-            
 
     def delete(self, key):
         return self.db.Delete(key)
@@ -293,15 +293,15 @@ class Trie(object):
 
         if node_type == NODE_TYPE_BLANK:
             if not value_is_node:
-                if value == BLANK_NODE:
-                    return BLANK_NODE, True
-
                 return self._normalize_node(
                     self._rlp_encode(
                         [pack_nibbles(with_terminator(key)), value]),
                     True)
             # a inner node
             else:
+                if value == BLANK_NODE:
+                    return BLANK_NODE, True
+
                 return self._normalize_node(
                     self._rlp_encode([pack_nibbles(key), value]), True)
 
@@ -462,7 +462,26 @@ class Trie(object):
             self._rlp_encode(diverge_node), True)
 
     def delete(self, key):
-        return self.update(key, BLANK_NODE)
+        '''
+        :param key: a string with length of [0, 32]
+        '''
+        if not isinstance(key, (str, unicode)):
+            raise Exception("Key must be strings")
+
+        if len(key) > 32:
+            raise Exception("Max key length is 32")
+
+        ''' .. note:: value_is_node should be true, or the key will be updated
+        with a blank value
+        '''
+        self.root, _ = self._update(
+            self.root,
+            True,
+            bin_to_nibbles(str(key)),
+            BLANK_NODE,
+            value_is_node=True)
+        self.db.commit()
+        return self._rlp_decode(self.root)
 
     def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
