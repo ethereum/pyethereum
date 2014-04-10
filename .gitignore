@@ -17,3 +17,4 @@ __pycache__/
 .installed.cfg
 logging.conf
 .*.log
+/statedb/
