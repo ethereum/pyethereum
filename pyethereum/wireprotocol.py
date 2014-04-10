@@ -1,15 +1,11 @@
-import sys
-import socket
 import logging
-import threading
-import traceback
 import struct
 import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
-from chainmanager import (rlp_hash_hex, Peer,
-                     ChainManagerInPort, ChainManagerOutPort)
+from chainmanager import (rlp_hash_hex,
+                          ChainManagerInPort, ChainManagerOutPort)
 
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
@@ -87,7 +83,7 @@ class Packeter(object):
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
 
-    @staticmethod
+    @classmethod
     def load_packet(cls, packet):
         '''
         Though TCP provides a connection-oriented medium, Ethereum nodes
@@ -125,7 +121,7 @@ class Packeter(object):
         _, _, cmd, data = res
         return cmd, data
 
-    @staticmethod
+    @classmethod
     def dump_packet(cls, data):
         """
         4-byte synchronisation token, (0x22400891),
@@ -418,49 +414,3 @@ class WireProtocol(object):
                     self._broadcast(self.send_GetChain, count, parents_H)
             else:
                 raise Exception('unknown commad')
-
-
-class TcpServer(threading.Thread):
-
-    def __init__(self, peer_manager, host, port):
-        self.peer_manager = peer_manager
-        threading.Thread.__init__(self)
-        self.daemon = True
-        self.host = host
-        self.port = port
-        self.lock = threading.Lock()
-
-        # start server
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
-        sock.listen(5)
-        self.sock = sock
-        self.ip, self.port = sock.getsockname()
-        logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
-
-    def run(self):
-        while not self.peer_manager.stopped():
-            logger.debug('in run loop')
-            try:
-                connection, (host, port) = self.sock.accept()
-            except IOError as e:
-                traceback.print_exc(file=sys.stdout)
-                time.sleep(0.1)
-                continue
-
-            connection.settimeout(.1)
-            try:
-                peer = Peer(self, connection, host, None)
-                self.peer_manager.add_peer(peer)
-                peer.start()
-                logger.debug(
-                    "new TCP connection {0} {1}:{2}"
-                    .format(connection, host, port))
-            except BaseException as e:
-                logger.error(
-                    "cannot start TCP session \"{0}\" {1}:{2} "
-                    .format(str(e), host, port))
-                traceback.print_exc(file=sys.stdout)
-                connection.close()
-                time.sleep(0.1)

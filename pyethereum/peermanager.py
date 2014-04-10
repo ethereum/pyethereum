@@ -270,5 +270,51 @@ class PeerManager(threading.Thread):
     def run(self):
         while not self.stopped():
             self.manage_connections()
-            self.wire.process_chainmanager_queue()
+            self.wire.send_chain_out_cmd()
             time.sleep(0.1)
+
+
+class TcpServer(threading.Thread):
+
+    def __init__(self, peer_manager, host, port):
+        self.peer_manager = peer_manager
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self.host = host
+        self.port = port
+        self.lock = threading.Lock()
+
+        # start server
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen(5)
+        self.sock = sock
+        self.ip, self.port = sock.getsockname()
+        logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
+
+    def run(self):
+        while not self.peer_manager.stopped():
+            logger.debug('in run loop')
+            try:
+                connection, (host, port) = self.sock.accept()
+            except IOError as e:
+                traceback.print_exc(file=sys.stdout)
+                time.sleep(0.1)
+                continue
+
+            connection.settimeout(.1)
+            try:
+                peer = Peer(self, connection, host, None)
+                self.peer_manager.add_peer(peer)
+                peer.start()
+                logger.debug(
+                    "new TCP connection {0} {1}:{2}"
+                    .format(connection, host, port))
+            except BaseException as e:
+                logger.error(
+                    "cannot start TCP session \"{0}\" {1}:{2} "
+                    .format(str(e), host, port))
+                traceback.print_exc(file=sys.stdout)
+                connection.close()
+                time.sleep(0.1)

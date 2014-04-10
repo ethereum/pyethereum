@@ -110,7 +110,7 @@ class ChainManager(threading.Thread):
 
     def run(self):
         while not self.stopped():
-            self.process_queue()
+            self.process_in_cmd()
             self.mine()
 
     def mine(self):
