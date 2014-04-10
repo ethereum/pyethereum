@@ -363,11 +363,9 @@ class Trie(object):
             key[prefix_length:], value, value_is_node)
 
         # create node for key prefix
-        new_node, new_type = self._update(
+        return self._update(
             BLANK_NODE, True,
             curr_key[:prefix_length], post_curr_key_node, is_node)
-        u = self._normalize_node(new_node, new_type)
-        return u
 
     def _normalize_pair(self, key, value, value_is_node):
         '''if value is also a key-value node, merge its key to key
@@ -514,10 +512,7 @@ class Trie(object):
             Here key is in full form, rather than key of the individual node
         '''
         if not is_node:
-            if node:
-                return {'': self._rlp_decode(node)}
-            else:
-                return {}
+            return {'': self._rlp_decode(node)}
 
         (node_type, content) = self._inspect_node(node)
 

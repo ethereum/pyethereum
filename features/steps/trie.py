@@ -10,6 +10,7 @@ register_type(Py=parse_py)
 
 def gen_random_value():
     value = range(random.randint(5, 40))
+    value.extend([0]*20)
     random.shuffle(value)
     value = ''.join(str(x) for x in value)
     return value
