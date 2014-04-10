@@ -6,6 +6,7 @@ from opcodes import reverse_opcodes
 from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3, privtoaddr
+import utils
 
 class Transaction(object):
 
@@ -32,15 +33,16 @@ class Transaction(object):
             self.value = args[2]
             self.gasprice = args[3]
             self.startgas = args[4]
-            self.to = args[5]
+            self.to = utils.coerce_addr_to_bin(args[5])
             self.data = args[6]
             # includes signature
             if len(args) > 7:
                 self.v, self.r, self.s = args[7:10]
-                rawhash = sha3(rlp.encode(self.serialize(False)))
-                pub = encode_pubkey(
-                    ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
-                self.sender = sha3(pub[1:])[-20:].encode('hex')
+                if self.r > 0 and self.s > 0:
+                    rawhash = sha3(rlp.encode(self.serialize(False)))
+                    pub = encode_pubkey(
+                        ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
+                    self.sender = sha3(pub[1:])[-20:].encode('hex')
             # does not include signature
             else:
                 self.v, self.r, self.s = 0,0,0
@@ -61,7 +63,7 @@ class Transaction(object):
     def parse(cls, data):
         if re.match('^[0-9a-fA-F]*$', data):
             data = data.decode('hex')
-        o = rlp.decode(data)
+        o = rlp.decode(data) + ['','','']
         tx = cls(decode_int(o[0]),
                  decode_int(o[1]),
                  decode_int(o[2]),
@@ -88,7 +90,7 @@ class Transaction(object):
                            encode_int(self.value),
                            encode_int(self.gasprice),
                            encode_int(self.startgas),
-                           self.coerce_to_hex(self.to),
+                           utils.coerce_addr_to_bin(self.to),
                            self.data,
                            encode_int(self.v),
                            encode_int(self.r),

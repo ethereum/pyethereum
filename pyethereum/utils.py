@@ -14,7 +14,7 @@ def zpad(x,l):
 def coerce_addr_to_bin(x):
     if isinstance(x,(int,long)):
         return zpad(int_to_big_endian(x),20).encode('hex')
-    elif len(x) == 40:
+    elif len(x) == 40 or len(x) == 0:
         return x.decode('hex')
     else:
         return zpad(x,20)[-20:]
@@ -22,7 +22,7 @@ def coerce_addr_to_bin(x):
 def coerce_addr_to_hex(x):
     if isinstance(x,(int,long)):
         return zpad(int_to_big_endian(x),20).encode('hex')
-    elif len(x) == 40:
+    elif len(x) == 40 or len(x) == 0:
         return x
     else:
         return zpad(x,20)[-20:].encode('hex')

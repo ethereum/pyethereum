@@ -72,7 +72,7 @@ def apply_tx(block,tx):
         block.delta_balance(tx.sender,tx.gasprice * gas)
         block.delta_balance(block.coinbase,tx.gasprice * (tx.startgas - gas))
         block.gas_consumed += tx.startgas - gas
-        return data if tx.to else result
+        return ''.join(map(chr,data)) if tx.to else result
 
 class Compustate():
     def __init__(self,**kwargs):
@@ -82,6 +82,7 @@ class Compustate():
         self.gas = 0
         for kw in kwargs:
             vars(self)[kw] = kwargs[kw]
+
 def apply_msg(block,tx,msg):
     snapshot = block.snapshot()
     code = block.get_code(msg.to)
