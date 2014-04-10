@@ -325,6 +325,7 @@ class Trie(object):
             self._rlp_encode(content), True)
 
     def _update_kv_node(self, node_type, content, key, value, value_is_node):
+
         '''when the current node is a (key, value) node
 
         :param content: an  (key, value) tuple
@@ -434,25 +435,16 @@ class Trie(object):
         key2, value2, value2_is_node = self._normalize_pair(
             key2, value2, value2_is_node)
 
-        if not key1 and not key2:
-            return self._update(
-                value1, value1_is_node, [], value2, value2_is_node)
-
         diverge_node = [BLANK_NODE] * 17
-
-        if key1 and not key2:
-            diverge_node[key1[0]] = self._update(
-                [], True, key1[1:], value1, value1_is_node)[0]
-            diverge_node[-1] = value2
-
-        elif key2 and not key1:
-            diverge_node[key2[0]] = self._update(
-                [], True, key2[1:], value2, value2_is_node)[0]
+        
+        if not key1:
             diverge_node[-1] = value1
-
-        elif key1 and key2:
+        else:
             diverge_node[key1[0]] = self._update(
                 [], True, key1[1:], value1, value1_is_node)[0]
+        if not key2:
+            diverge_node[-1] = value2
+        else:
             diverge_node[key2[0]] = self._update(
                 [], True, key2[1:], value2, value2_is_node)[0]
 

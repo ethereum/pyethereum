@@ -201,6 +201,10 @@ Feature: trie tree manipulate
       | keys                                                             |
       | ["AB", "AC", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"] |
 
+    Examples: rewriting
+      | keys                                 |
+      | ["\x03\xe8", "\x03\xe9", "\x03\xe8"] |
+
 
   Scenario Outline: confirm to fixture
     Given input dictionary: <in>
