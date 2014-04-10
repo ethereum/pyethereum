@@ -8,8 +8,11 @@ import time
 import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
-from chainmanager import (rlp_hash_hex, Peer,
-                     ChainManagerInPort, ChainManagerOutPort)
+from blockmanager import rlp_hash_hex
+from blockmanager import ChainManagerInPort
+from blockmanager import ChainManagerOutPort
+
+
 
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer

@@ -6,8 +6,9 @@ import ConfigParser
 from optparse import OptionParser
 import logging
 import logging.config
-from peermanager import PeerManager, TcpServer
-from chainmanager import ChainManager
+from peermanager import PeerManager
+from wireprotocol import TcpServer
+from blockmanager import ChainManager
 
 logger = logging.getLogger(__name__)
 

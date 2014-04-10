@@ -270,5 +270,5 @@ class PeerManager(threading.Thread):
     def run(self):
         while not self.stopped():
             self.manage_connections()
-            self.wire.process_chainmanager_queue()
+            self.wire.send_chain_out_cmd()
             time.sleep(0.1)
