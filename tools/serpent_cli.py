@@ -3,7 +3,7 @@ import os
 import sys
 import re
 import json
-from pyethereum import serpent
+import serpent
 
 
 def main():
