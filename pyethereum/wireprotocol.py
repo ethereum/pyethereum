@@ -5,7 +5,7 @@ import rlp
 from utils import big_endian_to_int as idec
 from utils import int_to_big_endian as ienc
 from chainmanager import (rlp_hash_hex,
-                          ChainManagerInPort, ChainManagerOutPort)
+                          ChainManagerInProxy, ChainManagerOutProxy)
 
 
 ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
@@ -204,8 +204,8 @@ class WireProtocol(object):
     def __init__(self, peer_manager, config):
         self.packeter = Packeter(config)
         self.peer_manager = peer_manager
-        self.chain_manager_out_port = ChainManagerOutPort()
-        self.chain_manager_in_port = ChainManagerInPort()
+        self.chain_manager_out_proxy = ChainManagerOutProxy()
+        self.chain_manager_in_proxy = ChainManagerInProxy()
 
     def rcv_packet(self, peer, packet):
         try:
@@ -369,7 +369,7 @@ class WireProtocol(object):
         specification.
         """
         logger.info('received transactions', len(data), peer)
-        self.chain_manager_in_port.addTransactions(data)
+        self.chain_manager_in_proxy.addTransactions(data)
 
     def send_Transactions(self, peer, transactions):
         peer.send_transaction(self.packeter.dump_Transactions(transactions))
@@ -381,7 +381,7 @@ class WireProtocol(object):
         See Transactions.
         """
         logger.debug('received get_transaction', peer)
-        self.chain_manager_in_port.request_transactions(peer.id())
+        self.chain_manager_in_proxy.request_transactions(peer.id())
 
     def send_GetTransactions(self, peer):
         logger.info('asking for transactions')
@@ -393,7 +393,7 @@ class WireProtocol(object):
 
     def send_chain_out_cmd(self):
         while True:
-            command = self.chain_manager_out_port.get_next_cmd()
+            command = self.chain_manager_out_proxy.get_next_cmd()
             if not command:
                 return
             cmd, data = command[0], command[1:]

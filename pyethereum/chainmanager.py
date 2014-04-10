@@ -10,7 +10,7 @@ rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
 rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
 
-class ChainManagerInPort(object):
+class ChainManagerInProxy(object):
 
     """
     In port of ChainManager to accept command
@@ -42,7 +42,7 @@ class ChainManagerInPort(object):
             return None
 
 
-class ChainManagerOutPort(object):
+class ChainManagerOutProxy(object):
 
     """
     Out port of ChainManager to send out command
@@ -85,8 +85,8 @@ class ChainManager(threading.Thread):
         # self.blockchain = blockchain
         self.transactions = set()
         self.dummy_blockchain = dict()  # hash > block
-        self.in_port = ChainManagerInPort()
-        self.out_port = ChainManagerOutPort()
+        self.in_proxy = ChainManagerInProxy()
+        self.out_proxy = ChainManagerOutProxy()
 
     def bootstrap_blockchain(self):
         # genesis block
@@ -96,7 +96,7 @@ class ChainManager(threading.Thread):
             return
         genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f'\
             '0a4b86b286e9d540099cf'.decode('hex')
-        self.out_port.send_get_chain(count=1, parents_H=[genesis_H])
+        self.out_proxy.send_get_chain(count=1, parents_H=[genesis_H])
 
     def stop(self):
         with self.lock:
@@ -129,10 +129,10 @@ class ChainManager(threading.Thread):
         # ask for children
         for h in new_blocks_H:
             print self, "_rcv_blocks: ask for child block", h.encode('hex')
-            self.out_port.send_get_chain(1, [h])
+            self.out_proxy.send_get_chain(1, [h])
 
     def process_in_cmd(self):
-        command = self.in_port.get_next_cmd()
+        command = self.in_proxy.get_next_cmd()
         if not command:
             return
         cmd, data = command[0], command[1:]
@@ -149,6 +149,6 @@ class ChainManager(threading.Thread):
             pass
         elif cmd == 'request_transactions':
             peer_id = data[0]
-            self.out_port.send_transactions(self.transactions, peer_id)
+            self.out_proxy.send_transactions(self.transactions, peer_id)
         else:
             raise Exception('unknown commad')
