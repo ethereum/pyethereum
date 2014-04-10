@@ -95,9 +95,10 @@ class Block(object):
         return self.delta_index(address,BALANCE_INDEX,value)
     def get_code(self,address):
         codehash = self.get_index(address,CODE_INDEX)
-        return DB('statedb').get(codehash) if codehash else ''
+        return self.state.db.get(codehash) if codehash else ''
     def set_code(self,address,value):
-        DB('statedb').put(sha3(value),value)
+        self.state.db.put(sha3(value),value)
+        self.state.db.commit()
         self.set_index(address,CODE_INDEX,sha3(value))
     def get_storage(self,address):
         return Trie('statedb',self.get_index(address,STORAGE_INDEX))

@@ -121,12 +121,22 @@ class DB(object):
         if dbfile not in databases:
             databases[dbfile] = leveldb.LevelDB(dbfile)
         self.db = databases[dbfile]
+        self.uncommitted = {}
 
     def get(self, key):
+        if key in self.uncommitted:
+            return self.uncommitted[key]
         return self.db.Get(key)
 
     def put(self, key, value):
-        return self.db.Put(key, value)
+        self.uncommitted[key] = value
+
+    def commit(self):
+        batch = leveldb.WriteBatch()
+        for k in self.uncommitted:
+            batch.Put(k,self.uncommitted[k])
+        self.db.Write(batch, sync=True)
+            
 
     def delete(self, key):
         return self.db.Delete(key)
@@ -553,6 +563,7 @@ class Trie(object):
             bin_to_nibbles(str(key)),
             self._rlp_encode(value),
             value_is_node=False)
+        self.db.commit()
         return self._rlp_decode(self.root)
 
 if __name__ == "__main__":

@@ -350,9 +350,9 @@ def encode_datalist(vals):
     def enc(n):
         if isinstance(n,(int,long)):
             return ''.join(map(chr,tobytearr(n,32)))
-        elif isinstance(n,str) and len(n) == 40:
+        elif isinstance(n,(str,unicode)) and len(n) == 40:
             return '\x00'*12+n.decode('hex')
-        elif isinstance(n,str):
+        elif isinstance(n,(str,unicode)):
             return '\x00'*(32-len(n))+n
         elif n is True:
             return 1
@@ -382,6 +382,8 @@ if __name__ == '__main__':
             args = [json.loads(sys.stdin.read())]+sys.argv[3:]
         elif sys.argv[1] == '-J':
             args = json.loads(sys.stdin.read())+sys.argv[3:]
+        elif sys.argv[1] == '-h':
+            args = [x.decode('hex') for x in sys.argv[3:]]
         else:
             cmd = sys.argv[1]
             args = sys.argv[2:]
