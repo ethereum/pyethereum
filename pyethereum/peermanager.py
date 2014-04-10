@@ -74,8 +74,6 @@ class Peer(threading.Thread):
         except Queue.Empty:
             packet = ''
 
-        size = len(packet)
-
         while packet:
             logger.debug('{0}: send packet {1}'.format(
                 repr(self), str(load_packet(packet))[:60]))
@@ -88,7 +86,10 @@ class Peer(threading.Thread):
                     .format(repr(self), str(e)))
                 self.stop()
                 break
-        return size
+        if packet:
+            return len(packet)
+        else:
+            return 0
 
     def _process_recv(self):
         '''
