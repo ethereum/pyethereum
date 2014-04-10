@@ -4,7 +4,7 @@ import transactions
 import blocks
 import rlp
 import utils
-import sys, re
+import sys, re, json
 import trie
 
 def sha3(x):
@@ -17,7 +17,7 @@ def privtoaddr(x):
 def mkgenesis(addr,value):
     return blocks.Block.genesis({ addr: int(value) }).serialize().encode('hex')
 
-def mktx(nonce,to,value,data):
+def mktx(nonce,value,to,data):
     return transactions.Transaction(int(nonce),int(value),10**12,10000,to,data.decode('hex')).serialize(False).encode('hex')
 
 def mkcontract(nonce,value,code):
@@ -41,6 +41,10 @@ def getcode(blockdata,address):
     block = blocks.Block(blockdata.decode('hex'))
     return block.get_code(address)
 
+def getstate(blockdata):
+    block = blocks.Block(blockdata.decode('hex'))
+    return block.to_dict()
+
 def dbget(x):
     db = trie.DB('statedb')
     print db.get(x.decode('hex'))
@@ -63,5 +67,7 @@ else:
         cmd = sys.argv[1]
         args = sys.argv[2:]
     o = vars()[cmd](*args)
-    if isinstance(o,(list,dict)): print json.dumps(o)
+    if isinstance(o,(list,dict)):
+        try: print json.dumps(o)
+        except: print o
     else: print o
