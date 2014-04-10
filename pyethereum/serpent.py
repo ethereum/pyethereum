@@ -325,7 +325,8 @@ def get_vars(source):
         source = parse(source)
     varhash = {}
     c1 = rewrite(source)
-    c2 = compile_expr(c1, varhash, [0])
+    # fill varhash
+    compile_expr(c1, varhash, [0])
     return varhash
 
 
@@ -358,7 +359,6 @@ def dereference(c):
     oq = []
     for m in mq:
         if isinstance(m, str) and m[:4] == 'REF_':
-            val = labelmap[m[4]]
             oq.append('PUSH4')
             oq.extend(tobytearr(labelmap[m[4:]], 4))
         elif isinstance(m, (int, long)):
