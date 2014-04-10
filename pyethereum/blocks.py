@@ -107,7 +107,10 @@ class Block(object):
         return decode_int(t.get(utils.coerce_to_bytes(index)))
     def set_storage_data(self,address,index,val):
         t = self.get_storage(address)
-        t.update(utils.coerce_to_bytes(index),encode_int(val))
+        if val:
+            t.update(utils.coerce_to_bytes(index),encode_int(val))
+        else:
+            t.delete(utils.coerce_to_bytes(index))
         self.set_index(address,STORAGE_INDEX,t.root)
     
     # Revert computation
