@@ -14,7 +14,7 @@ def step_impl(context, data):
         recursive_int_to_big_endian(context.data))
 
 
-@when(u'packeted')  # noqa
+@when(u'dump the data to packet')  # noqa
 def step_impl(context):
     context.packet = context.packeter.dump_packet(context.data)
 
