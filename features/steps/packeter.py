@@ -24,7 +24,7 @@ def step_impl(context):
     assert context.packet[:4] == '22400891'.decode('hex')
 
 
-@then(u'bytes [4:8) is "payload size"(big-endian integer)')  # noqa
+@then(u'bytes [4:8) is "payload(rlp serialized data) size" in form of big-endian integer')  # noqa
 def step_impl(context):
     length = big_endian_to_int(context.packet[4:8])
     assert length == len(context.encoded_data)
