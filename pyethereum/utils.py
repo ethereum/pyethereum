@@ -1,47 +1,57 @@
 from sha3 import sha3_256
 from bitcoin import privtopub
+import struct
+
 
 def sha3(seed):
     return sha3_256(seed).digest()
 
+
 def privtoaddr(x):
-    if len(x) > 32: x = x.decode('hex')
+    if len(x) > 32:
+        x = x.decode('hex')
     return sha3(privtopub(x)[1:])[12:].encode('hex')
 
-def zpad(x,l):
-    return '\x00' * max(0,l - len(x)) + x
+
+def zpad(x, l):
+    return '\x00' * max(0, l - len(x)) + x
+
 
 def coerce_addr_to_bin(x):
-    if isinstance(x,(int,long)):
-        return zpad(int_to_big_endian(x),20).encode('hex')
+    if isinstance(x, (int, long)):
+        return zpad(int_to_big_endian(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return x.decode('hex')
     else:
-        return zpad(x,20)[-20:]
+        return zpad(x, 20)[-20:]
+
 
 def coerce_addr_to_hex(x):
-    if isinstance(x,(int,long)):
-        return zpad(int_to_big_endian(x),20).encode('hex')
+    if isinstance(x, (int, long)):
+        return zpad(int_to_big_endian(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return x
     else:
-        return zpad(x,20)[-20:].encode('hex')
+        return zpad(x, 20)[-20:].encode('hex')
+
 
 def coerce_to_int(x):
-    if isinstance(x,(int,long)):
+    if isinstance(x, (int, long)):
         return x
     elif len(x) == 40:
         return big_endian_to_int(x.decode('hex'))
     else:
         return big_endian_to_int(x)
 
+
 def coerce_to_bytes(x):
-    if isinstance(x,(int,long)):
+    if isinstance(x, (int, long)):
         return int_to_big_endian(x)
     elif len(x) == 40:
         return x.decode('hex')
     else:
         return x
+
 
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
@@ -54,6 +64,11 @@ def int_to_big_endian(integer):
     return s.decode('hex')
 
 
+def int_to_big_endian4(integer):
+    ''' 4 bytes big endian integer'''
+    return struct.pack('>I', integer)
+
+
 def big_endian_to_int(string):
     '''convert a big endian binary string to integer'''
     # '' is a special case, treated same as 0
@@ -62,7 +77,7 @@ def big_endian_to_int(string):
     return long(s, 16)
 
 
-def recurseive_int_to_big_endian(item):
+def recursive_int_to_big_endian(item):
     ''' convert all int to int_to_big_endian recursively
     '''
     if isinstance(item, (int, long)):
@@ -70,7 +85,7 @@ def recurseive_int_to_big_endian(item):
     elif isinstance(item, (list, tuple)):
         res = []
         for item in item:
-            res.append(recurseive_int_to_big_endian(item))
+            res.append(recursive_int_to_big_endian(item))
         return res
     return item
 

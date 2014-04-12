@@ -1,28 +1,14 @@
 import logging
-import struct
 import time
 import rlp
-from utils import big_endian_to_int as idec
-from utils import int_to_big_endian as ienc
+from utils import (big_endian_to_int as idec,
+                   int_to_big_endian4 as ienc4,
+                   recursive_int_to_big_endian)
 from chainmanager import (rlp_hash_hex,
                           ChainManagerInProxy, ChainManagerOutProxy)
 
 
-ienc4 = lambda x: struct.pack('>I', x)  # 4 bytes big endian integer
 logger = logging.getLogger(__name__)
-
-
-def list_ienc(lst):
-    "recursively big endian encode all integers in a list"
-    nlst = []
-    for i, e in enumerate(lst):
-        if isinstance(e, list):
-            nlst.append(list_ienc(e))
-        elif isinstance(e, int):
-            nlst.append(ienc(e))
-        else:
-            nlst.append(e)
-    return nlst
 
 
 def lrlp_decode(data):
@@ -128,7 +114,8 @@ class Packeter(object):
         a 4-byte "payload size", to be interpreted as a big-endian integer
         an N-byte RLP-serialised data structure
         """
-        payload = rlp.encode(list_ienc(data))
+        payload = rlp.encode(recursive_int_to_big_endian(data))
+
         packet = ienc4(cls.SYNCHRONIZATION_TOKEN)
         packet += ienc4(len(payload))
         packet += payload
