@@ -194,7 +194,7 @@ class WireProtocol(object):
         self.chain_manager_out_proxy = ChainManagerOutProxy()
         self.chain_manager_in_proxy = ChainManagerInProxy()
 
-    def rcv_packet(self, peer, packet):
+    def recv_packet(self, peer, packet):
         try:
             cmd, data = self.packeter.load_cmd(packet)
         except Exception as e:
@@ -204,7 +204,7 @@ class WireProtocol(object):
         # good peer
         peer.last_valid_packet_received = time.time()
 
-        func_name = "_rcv_{0}".format(cmd)
+        func_name = "_recv_{0}".format(cmd)
 
         if not hasattr(self, func_name):
             logger.warn('unknown cmd \'{0}\''.format(func_name))
@@ -224,7 +224,7 @@ class WireProtocol(object):
         peer.send_packet(self.packeter.dump_Hello())
         peer.hello_sent = True
 
-    def _rcv_Hello(self, peer, data):
+    def _recv_Hello(self, peer, data):
         """
         [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
         LISTEN_PORT, NODE_ID]
@@ -277,13 +277,13 @@ class WireProtocol(object):
     def send_Ping(self, peer):
         peer.send_packet(self.packeter.dump_Ping())
 
-    def _rcv_Ping(self, peer, data):
+    def _recv_Ping(self, peer, data):
         self.send_Pong(peer)
 
     def send_Pong(self, peer):
         peer.send_packet(self.packeter.dump_Pong())
 
-    def _rcv_Pong(self, peer, data):
+    def _recv_Pong(self, peer, data):
         self.send_GetTransactions(peer)  # FIXME
 
     def send_Disconnect(self, peer, reason=None):
@@ -292,13 +292,13 @@ class WireProtocol(object):
         time.sleep(2)
         self.peer_manager.remove_peer(peer)
 
-    def _rcv_Disconnect(self, peer, data):
+    def _recv_Disconnect(self, peer, data):
         if len(data):
             reason = self.packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(peer), reason))
         self.peer_manager.remove_peer(peer)
 
-    def _rcv_GetPeers(self, peer, data):
+    def _recv_GetPeers(self, peer, data):
         """
         [0x10]
         Request the peer to enumerate some known peers for us to connect to.
@@ -309,7 +309,7 @@ class WireProtocol(object):
     def send_GetPeers(self, peer):
         peer.send_packet(self.packeter.dump_GetPeers())
 
-    def _rcv_Peers(self, peer, data):
+    def _recv_Peers(self, peer, data):
         """
         [0x11, [IP1, Port1, Id1], [IP2, Port2, Id2], ... ]
         Specifies a number of known peers. IP is a 4-byte array 'ABCD' that
@@ -332,7 +332,7 @@ class WireProtocol(object):
         if packet:
             peer.send_packet()
 
-    def _rcv_Blocks(self, peer, data):
+    def _recv_Blocks(self, peer, data):
         """
         [0x13, [block_header, transaction_list, uncle_list], ... ]
         Specify (a) block(s) that the peer should know about. The items in the
@@ -346,7 +346,7 @@ class WireProtocol(object):
         # FIXME  (which event should trigger this?)
         self.send_GetTransactions(peer)
 
-    def _rcv_Transactions(self, peer, data):
+    def _recv_Transactions(self, peer, data):
         """
         [0x12, [nonce, receiving_address, value, ... ], ... ] Specify (a)
         transaction(s) that the peer should make sure is included on its
@@ -360,7 +360,7 @@ class WireProtocol(object):
     def send_Transactions(self, peer, transactions):
         peer.send_transaction(self.packeter.dump_Transactions(transactions))
 
-    def _rcv_GetTransactions(self, peer):
+    def _recv_GetTransactions(self, peer):
         """
         [0x16]
         Request the peer to send all transactions currently in the queue.

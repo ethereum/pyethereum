@@ -1,11 +1,11 @@
 @wireprotocol
 Feature: wire protocol
 
-  @wip
   Scenario: hello
     When I receive a HELLO command from peer
     Then a HELLO will be sent to peer
 
+  @wip
   Scenario: receive disconnect
     When I receive a DISCONNECT command form peer
     Then I will disconnect peer immediately.

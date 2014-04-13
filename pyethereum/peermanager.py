@@ -108,7 +108,7 @@ class Peer(threading.Thread):
         if packet:
             logger.debug('{0}: received packet {1}'.format(
                 repr(self), str(load_packet(packet))[:60]))
-            self.wire.rcv_packet(self, packet)
+            self.wire.recv_packet(self, packet)
         return len(packet)
 
     def run(self):
@@ -168,9 +168,13 @@ class PeerManager(threading.Thread):
         with self.lock:
             return self._stopped
 
-    def add_peer(self, peer):
+    def add_peer(self, connection, host):
+        # FIXME: should check existance first
+        peer = Peer(self.wire, connection, host)
+        peer.start()
         with self.lock:
             self.connected_peers.add(peer)
+        return peer
 
     def remove_peer(self, peer):
         peer.stop()
@@ -192,9 +196,7 @@ class PeerManager(threading.Thread):
         sock.settimeout(.1)
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))
-        peer = Peer(self.wire, sock, ip, port)
-        self.add_peer(peer)
-        peer.start()
+        peer = self.add_peer(self.wire, sock, ip, port)
 
         # Send Hello
         peer.wire.send_Hello(peer)
@@ -295,6 +297,8 @@ class TcpServer(threading.Thread):
         logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
 
     def run(self):
+        import sys
+        import traceback
         while not self.peer_manager.stopped():
             logger.debug('in run loop')
             try:
@@ -306,9 +310,7 @@ class TcpServer(threading.Thread):
 
             connection.settimeout(.1)
             try:
-                peer = Peer(self, connection, host, None)
-                self.peer_manager.add_peer(peer)
-                peer.start()
+                self.peer_manager.add_peer(connection, host)
                 logger.debug(
                     "new TCP connection {0} {1}:{2}"
                     .format(connection, host, port))

@@ -117,18 +117,18 @@ class ChainManager(threading.Thread):
         "in the meanwhile mine a bit, not efficient though"
         pass
 
-    def _rcv_blocks(self, blocks):
+    def _recv_blocks(self, blocks):
         new_blocks_H = set()
         # memorize
         for block in blocks:
             h = rlp_hash(block)
-            print self, "_rcv_blocks:",  rlp_hash_hex(block)
+            print self, "_recv_blocks:",  rlp_hash_hex(block)
             if h not in self.dummy_blockchain:
                 new_blocks_H.add(h)
                 self.dummy_blockchain[h] = block
         # ask for children
         for h in new_blocks_H:
-            print self, "_rcv_blocks: ask for child block", h.encode('hex')
+            print self, "_recv_blocks: ask for child block", h.encode('hex')
             self.out_proxy.send_get_chain(1, [h])
 
     def process_in_cmd(self):
@@ -140,7 +140,7 @@ class ChainManager(threading.Thread):
         logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
         if cmd == "add_blocks":
             print self, "add_blocks in queue seen"
-            self._rcv_blocks(data)
+            self._recv_blocks(data)
         elif cmd == "add_transactions":
             tx_list = data[0]
             for tx in tx_list:
