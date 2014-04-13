@@ -110,8 +110,11 @@ def starts_with(full, part):
     return full[:len(part)] == part
 
 
-def sha3(x):
-    return sha3_256(x).digest()
+sha3 = lambda x: sha3_256(x).digest()
+
+rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
+
+rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
 databases = {}
 
@@ -436,7 +439,7 @@ class Trie(object):
             key2, value2, value2_is_node)
 
         diverge_node = [BLANK_NODE] * 17
-        
+
         if not key1:
             diverge_node[-1] = value1
         else:

@@ -6,8 +6,11 @@ import ConfigParser
 from optparse import OptionParser
 import logging
 import logging.config
-from peermanager import PeerManager, TcpServer
-from chainmanager import ChainManager
+from signals import config_ready
+
+from tcpserver import TcpServer
+from peermanager import peer_manager
+from chainmanager import chain_manager
 
 logger = logging.getLogger(__name__)
 
@@ -150,17 +153,11 @@ def configure_logging(loggerlevels, verbosity=1):
 
 def main():
     config = create_config()
-
-    # chain manager
-    chain_manager = ChainManager(config=config)
-
-    # peer manager
-    peer_manager = PeerManager(config=config)
+    config_ready.send(sender=config)
 
     # start tcp server
     try:
-        tcp_server = TcpServer(peer_manager,
-                               config.get('network', 'listen_host'),
+        tcp_server = TcpServer(config.get('network', 'listen_host'),
                                config.getint('network', 'listen_port'))
     except IOError as e:
         logger.error("Could not start TCP server: \"{0}\"".format(str(e)))
@@ -176,7 +173,8 @@ def main():
         logger.info('Signal handler called with signal {0}'.format(signum))
         peer_manager.stop()
         chain_manager.stop()
-        # tcp_server checks for peer_manager.stopped()
+        tcp_server.stop()
+
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT, signal.SIGINT]:
         signal.signal(sig, signal_handler)
 
@@ -193,7 +191,7 @@ def main():
             chain_manager.bootstrap_blockchain()
 
     logger.info('exiting')
-    # tcp_server.join() # does not work!
+
     peer_manager.join()
 
 if __name__ == '__main__':

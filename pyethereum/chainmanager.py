@@ -1,92 +1,29 @@
-import rlp
-import threading
-import Queue
 import logging
-from sha3 import sha3_256
+import Queue
+
+from dispatch import receiver
+
+from common import StoppableLoopThread
+from trie import rlp_hash, rlp_hash_hex
+import signals
 
 logger = logging.getLogger(__name__)
 
-rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
-rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
-
-class ChainManagerInProxy(object):
-
-    """
-    In port of ChainManager to accept command
-
-    stateless, queues are shared between all instances
-    Will we have an  API?
-    http://forum.ethereum.org/discussion/247/how-will-the-outside-api-be-like
-    """
-
-    in_queue = Queue.Queue()
-
-    def add_blocks(self, blocks):
-        logger.debug("chainmanager add blocks:", [rlp_hash(b) for b in blocks])
-        self.in_queue.put(('add_blocks', blocks))
-
-    def add_transactions(self, transactions):
-        self.in_queue.put(('add_transactions', transactions))
-
-    def request_blocks(self, block_hashes, peer):
-        self.in_queue.put(('request_blocks', block_hashes, peer.id()))
-
-    def request_transactions(self, peer):
-        self.in_queue.put(('request_transactions', peer.id()))
-
-    def get_next_cmd(self):
-        try:
-            return self.in_queue.get(timeout=.1)
-        except Queue.Empty:
-            return None
-
-
-class ChainManagerOutProxy(object):
-
-    """
-    Out port of ChainManager to send out command
-
-    stateless, queues are shared between all instances
-    """
-    out_queue = Queue.Queue()
-
-    def send_blocks(self, blks, peer_id=False):
-        "broadcast if no peer specified"
-
-    def send_transactions(self, transactions, peer_id=False):
-        "broadcast if no peer specified"
-        self.out_queue.put('send_transactions', transactions, peer_id)
-
-    def send_not_in_chain(self, hash, peer_id):
-        "broadcast if no peer specified"
-        pass
-
-    def send_get_chain(self, count=1, parents_H=[]):
-        self.out_queue.put(('get_chain', count, parents_H))
-
-    def get_next_cmd(self):
-        try:
-            return self.out_queue.get(timeout=.1)
-        except Queue.Empty:
-            return None
-
-
-class ChainManager(threading.Thread):
+class ChainManager(StoppableLoopThread):
 
     """
     Manages the chain and requests to it.
     """
 
-    def __init__(self, config):
-        threading.Thread.__init__(self)
-        self._stopped = False
-        self.lock = threading.Lock()
-        # self.blockchain = blockchain
+    def __init__(self):
+        super(ChainManager, self).__init__()
         self.transactions = set()
         self.dummy_blockchain = dict()  # hash > block
-        self.in_proxy = ChainManagerInProxy()
-        self.out_proxy = ChainManagerOutProxy()
+        self.request_queue = Queue.Queue()
+
+    def config(self, config):
+        self.config = config
 
     def bootstrap_blockchain(self):
         # genesis block
@@ -98,20 +35,9 @@ class ChainManager(threading.Thread):
             '0a4b86b286e9d540099cf'.decode('hex')
         self.out_proxy.send_get_chain(count=1, parents_H=[genesis_H])
 
-    def stop(self):
-        with self.lock:
-            if self._stopped:
-                return
-            self._stopped = True
-
-    def stopped(self):
-        with self.lock:
-            return self._stopped
-
-    def run(self):
-        while not self.stopped():
-            self.process_in_cmd()
-            self.mine()
+    def loop_body(self):
+        self.process_request_queue()
+        self.mine()
 
     def mine(self):
         "in the meanwhile mine a bit, not efficient though"
@@ -131,8 +57,8 @@ class ChainManager(threading.Thread):
             print self, "_recv_blocks: ask for child block", h.encode('hex')
             self.out_proxy.send_get_chain(1, [h])
 
-    def process_in_cmd(self):
-        command = self.in_proxy.get_next_cmd()
+    def process_request_queue(self):
+        command = self.request_queue.get()
         if not command:
             return
         cmd, data = command[0], command[1:]
@@ -149,6 +75,30 @@ class ChainManager(threading.Thread):
             pass
         elif cmd == 'request_transactions':
             peer_id = data[0]
-            self.out_proxy.send_transactions(self.transactions, peer_id)
+            signals.transactions_data_ready(self.transactions, peer_id)
         else:
             raise Exception('unknown commad')
+
+
+chain_manager = ChainManager()
+
+
+@receiver(signals.config_ready)
+def config_chainmanager(sender, **kwargs):
+    chain_manager.config(sender)
+
+
+@receiver(signals.transactions_data_requested)
+def transactions_data_requested_handler(sender, request_data, **kwargs):
+    chain_manager.request_queue.put('request_transactions', request_data)
+
+
+@receiver(signals.blocks_data_requested)
+def blocks_data_requested_handler(sender, request_data, **kwargs):
+    chain_manager.request_queue.put('request_blocks', request_data)
+
+
+@receiver(signals.new_blocks_received)
+def new_blocks_received_handler(sender, blocks, **kwargs):
+        print "received blocks", [rlp_hash_hex(b) for b in blocks]
+        chain_manager.request_queue.add_blocks(blocks)

@@ -1,140 +1,39 @@
 import time
-import Queue
 import socket
-import threading
 import logging
-from wireprotocol import WireProtocol, load_packet
+import traceback
+import sys
 
+from dispatch import receiver
+
+from common import StoppableLoopThread
+import signals
+from peer import Peer
 
 logger = logging.getLogger(__name__)
 
 
-class Peer(threading.Thread):
-
-    def __init__(self, wire, connection, ip, port=None):
-        threading.Thread.__init__(self)
-        self.wire = wire
-        self._stopped = False
-        self.lock = threading.Lock()
-        self._connection = connection
-
-        assert ip.count('.') == 3
-        self.ip = ip
-        # None if peer was created in response to external connect
-        self.port = port
-        self.node_id = ''
-        self.response_queue = Queue.Queue()
-        self.hello_received = False
-        self.hello_sent = False
-        self.last_valid_packet_received = time.time()
-        self.last_asked_for_peers = 0
-        self.last_pinged = 0
-
-    def __repr__(self):
-        return "<Peer(%s:%r)>" % (self.ip, self.port)
-
-    def id(self):
-        return hash(repr(self))
-
-    def connection(self):
-        if self.stopped():
-            raise IOError("Connection was stopped")
-        else:
-            return self._connection
-
-    def stop(self):
-        logger.debug('disconnected: {0}'.format(repr(self)))
-        with self.lock:
-            if self._stopped:
-                return
-            self._stopped = True
-
-        # shut down
-        try:
-            self._connection.shutdown(socket.SHUT_RDWR)
-        except IOError as e:
-            logger.debug(
-                "shutting down failed {0} \"{1}\"".format(repr(self), str(e)))
-        self._connection.close()
-
-    def stopped(self):
-        with self.lock:
-            return self._stopped
-
-    def send_packet(self, response):
-        self.response_queue.put(response)
-
-    def _process_send(self):
-        '''
-        :return: size of processed data
-        '''
-        # send packet
-        try:
-            packet = self.response_queue.get(timeout=.1)
-        except Queue.Empty:
-            packet = ''
-
-        while packet:
-            logger.debug('{0}: send packet {1}'.format(
-                repr(self), str(load_packet(packet))[:60]))
-            try:
-                n = self.connection().send(packet)
-                packet = packet[n:]
-            except IOError as e:
-                logger.debug(
-                    '{0}: send packet failed, {1}'
-                    .format(repr(self), str(e)))
-                self.stop()
-                break
-        if packet:
-            return len(packet)
-        else:
-            return 0
-
-    def _process_recv(self):
-        '''
-        :return: size of processed data
-        '''
-        packet = ""
-        while True:
-            try:
-                chunk = self.connection().recv(2048)
-            except IOError:
-                chunk = ''
-            if not chunk:
-                break
-            packet += chunk
-
-        if packet:
-            logger.debug('{0}: received packet {1}'.format(
-                repr(self), str(load_packet(packet))[:60]))
-            self.wire.recv_packet(self, packet)
-        return len(packet)
-
-    def run(self):
-        while not self.stopped():
-            send_size = self._process_send()
-            recv_size = self._process_recv()
-            # pause
-            if not (send_size or recv_size):
-                time.sleep(0.1)
-
-
-class PeerManager(threading.Thread):
+class PeerManager(StoppableLoopThread):
 
     max_silence = 5  # how long before pinging a peer
     max_ping_wait = 1.  # how long to wait before disconenctiong after ping
     max_ask_for_peers_elapsed = 30  # how long before asking for peers
 
-    def __init__(self, config):
-        threading.Thread.__init__(self)
-        self.config = config
+    def __init__(self):
+        super(PeerManager, self).__init__()
         self.connected_peers = set()
         self._seen_peers = set()  # (host, port, node_id)
-        self._stopped = False
         self.local_address = ()  # host, port
-        self.lock = threading.Lock()
-        self.wire = WireProtocol(self, config)
+
+    def config(self, config):
+        self.config = config
+
+    def stop(self):
+        with self.lock:
+            if not self._stopped:
+                for peer in self.connected_peers:
+                    peer.stop()
+        super(PeerManager, self).stop()
 
     def get_peer_by_id(self, peer_id):
         for peer in self.connected_peers:
@@ -157,25 +56,6 @@ class PeerManager(threading.Thread):
         return set((p.ip, p.port, p.node_id) for p in self.connected_peers
                    if p.port)
 
-    def stop(self):
-        with self.lock:
-            if not self._stopped:
-                for peer in self.connected_peers:
-                    peer.stop()
-            self._stopped = True
-
-    def stopped(self):
-        with self.lock:
-            return self._stopped
-
-    def add_peer(self, connection, host):
-        # FIXME: should check existance first
-        peer = Peer(self.wire, connection, host)
-        peer.start()
-        with self.lock:
-            self.connected_peers.add(peer)
-        return peer
-
     def remove_peer(self, peer):
         peer.stop()
         with self.lock:
@@ -196,11 +76,11 @@ class PeerManager(threading.Thread):
         sock.settimeout(.1)
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))
-        peer = self.add_peer(self.wire, sock, ip, port)
+        peer = self.add_peer(sock, ip, port)
 
         # Send Hello
-        peer.wire.send_Hello(peer)
-        peer.wire.send_GetPeers(peer)
+        peer.send_Hello()
+        peer.send_GetPeers()
         return True
 
     def _peer_candidates(self):
@@ -213,7 +93,7 @@ class PeerManager(threading.Thread):
     def _poll_more_candidates(self):
         for peer in list(self.connected_peers):
             with peer.lock:
-                peer.wire.send_GetPeers(peer)
+                peer.send_GetPeers()
 
     def _connect_peers(self):
         num_peers = self.config.getint('network', 'num_peers')
@@ -248,8 +128,7 @@ class PeerManager(threading.Thread):
             logger.debug('pinging silent peer {0}'.format(peer))
 
             with peer.lock:
-                peer.wire.send_Ping(peer)
-                peer.last_pinged = now
+                peer.send_Ping()
 
     def manage_connections(self):
         self._connect_peers()
@@ -267,57 +146,59 @@ class PeerManager(threading.Thread):
             if now - peer.last_asked_for_peers >\
                     self.max_ask_for_peers_elapsed:
                 with peer.lock:
-                    peer.wire.send_GetPeers(peer)
+                    peer.send_GetPeers()
                     peer.last_asked_for_peers = now
 
-    def run(self):
-        while not self.stopped():
-            self.manage_connections()
-            self.wire.send_chain_out_cmd()
+    def loop_body(self):
+        self.manage_connections()
+        # self.wire.send_chain_out_cmd()
+        time.sleep(10)
+
+    def add_peer(self, connection, host, port):
+        # FIXME: should check existance first
+        connection.settimeout(.1)
+        try:
+            peer = Peer(connection, host, port)
+            peer.start()
+            with self.lock:
+                self.connected_peers.add(peer)
+            logger.debug(
+                "new TCP connection {0} {1}:{2}"
+                .format(connection, host, port))
+        except BaseException as e:
+            logger.error(
+                "cannot start TCP session \"{0}\" {1}:{2} "
+                .format(str(e), host, port))
+            traceback.print_exc(file=sys.stdout)
+            connection.close()
             time.sleep(0.1)
+        return peer
+
+peer_manager = PeerManager()
 
 
-class TcpServer(threading.Thread):
+@receiver(signals.config_ready)
+def config_peermanager(sender, **kwargs):
+    peer_manager.config(sender)
 
-    def __init__(self, peer_manager, host, port):
-        self.peer_manager = peer_manager
-        threading.Thread.__init__(self)
-        self.daemon = True
-        self.host = host
-        self.port = port
-        self.lock = threading.Lock()
 
-        # start server
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
-        sock.listen(5)
-        self.sock = sock
-        self.ip, self.port = sock.getsockname()
-        logger.info("TCP server started {0}:{1}".format(self.ip, self.port))
+@receiver(signals.connection_accepted)
+def connection_accepted_handler(sender, connection, host, port, **kwargs):
+    peer_manager.add_peer(connection, host, port)
 
-    def run(self):
-        import sys
-        import traceback
-        while not self.peer_manager.stopped():
-            logger.debug('in run loop')
-            try:
-                connection, (host, port) = self.sock.accept()
-            except IOError as e:
-                traceback.print_exc(file=sys.stdout)
-                time.sleep(0.1)
-                continue
 
-            connection.settimeout(.1)
-            try:
-                self.peer_manager.add_peer(connection, host)
-                logger.debug(
-                    "new TCP connection {0} {1}:{2}"
-                    .format(connection, host, port))
-            except BaseException as e:
-                logger.error(
-                    "cannot start TCP session \"{0}\" {1}:{2} "
-                    .format(str(e), host, port))
-                traceback.print_exc(file=sys.stdout)
-                connection.close()
-                time.sleep(0.1)
+@receiver(signals.peers_data_requested)
+def peers_data_requested_handler(sender, data, **kwargs):
+    peers = peer_manager.get_known_peer_addresses()
+    signals.peers_data_ready.send(None, requester=sender, ready_data=peers)
+
+
+@receiver(signals.disconnect_requested)
+def disconnect_requested_handler(sender, **kwargs):
+    peer = sender
+    peer_manager.remove_peer(peer)
+
+
+@receiver(signals.new_peer_received)
+def new_peer_received_handler(sender, peer, **kwargs):
+    peer_manager.add_peer_address(*peer)
