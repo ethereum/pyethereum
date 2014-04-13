@@ -204,7 +204,7 @@ class WireProtocol(object):
         # good peer
         peer.last_valid_packet_received = time.time()
 
-        func_name = "_rcv_%s".format(cmd)
+        func_name = "_rcv_{0}".format(cmd)
 
         if not hasattr(self, func_name):
             logger.warn('unknown cmd \'{0}\''.format(func_name))
@@ -249,14 +249,13 @@ class WireProtocol(object):
         NODE_ID is optional and specifies a 512-bit hash, (potentially to be
             used as public key) that identifies this node.
         """
-        logger.debug(data[:-1] + [data[-1][20]])
         # check compatibility
-        if idec(data[0]) != self.PROTOCOL_VERSION:
+        if idec(data[0]) != self.packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
                 peer,
                 reason='Incompatible network protocols')
 
-        if idec(data[1]) != self.NETWORK_ID:
+        if idec(data[1]) != self.packeter.NETWORK_ID:
             return self.send_Disconnect(peer, reason='Wrong genesis block')
 
         """

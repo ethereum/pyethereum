@@ -1,6 +1,7 @@
 @wireprotocol
 Feature: wire protocol
 
+  @wip
   Scenario: hello
     When I receive a HELLO command from peer
     Then a HELLO will be sent to peer
