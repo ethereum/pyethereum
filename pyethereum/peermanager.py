@@ -151,7 +151,6 @@ class PeerManager(StoppableLoopThread):
 
     def loop_body(self):
         self.manage_connections()
-        # self.wire.send_chain_out_cmd()
         time.sleep(10)
 
     def add_peer(self, connection, host, port):
