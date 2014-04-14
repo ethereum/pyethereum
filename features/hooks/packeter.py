@@ -19,6 +19,7 @@ class PacketerHook(object):
 
         config.get.side_effect = get_side_effect
         config.getint.side_effect = getint_side_effect
-        context.packeter = Packeter(config)
+        context.packeter = packeter = Packeter()
+        packeter.config(config)
 
 hook = PacketerHook()
