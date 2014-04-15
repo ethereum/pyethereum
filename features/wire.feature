@@ -1,3 +1,4 @@
+# @wireprotocol
 # Feature: wire protocol
 
 #   Scenario: hello
