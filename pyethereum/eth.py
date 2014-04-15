@@ -194,5 +194,7 @@ def main():
 
     peer_manager.join()
 
+    logger.debug('main thread finished')
+
 if __name__ == '__main__':
     main()

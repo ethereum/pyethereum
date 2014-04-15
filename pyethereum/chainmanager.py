@@ -58,9 +58,11 @@ class ChainManager(StoppableLoopThread):
             self.out_proxy.send_get_chain(1, [h])
 
     def process_request_queue(self):
-        command = self.request_queue.get()
-        if not command:
+        try:
+            command = self.request_queue.get(block=True, timeout=0.1)
+        except Queue.Empty:
             return
+
         cmd, data = command[0], command[1:]
 
         logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
