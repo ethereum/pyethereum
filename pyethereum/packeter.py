@@ -71,7 +71,7 @@ class Packeter(object):
     def __init__(self):
         pass
 
-    def config(self, config):
+    def configure(self, config):
         self.config = config
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
@@ -221,4 +221,4 @@ packeter = Packeter()
 @dispatch.receiver(signals.config_ready)
 def config_packeter(sender, **kwargs):
     config = sender
-    packeter.config(config)
+    packeter.configure(config)

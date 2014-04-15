@@ -6,7 +6,8 @@ class ConfigHook(object):
         '''
         .. note::
 
-            `context.conf` is used instead of `context.config`
+            `context.conf` is used instead of `context.config` because `config`
+            is used internally in `context` by *behave*
 
         '''
         context.conf = conf = mock.MagicMock()

@@ -22,7 +22,7 @@ class ChainManager(StoppableLoopThread):
         self.dummy_blockchain = dict()  # hash > block
         self.request_queue = Queue.Queue()
 
-    def config(self, config):
+    def configure(self, config):
         self.config = config
 
     def bootstrap_blockchain(self):
@@ -87,7 +87,7 @@ chain_manager = ChainManager()
 
 @receiver(signals.config_ready)
 def config_chainmanager(sender, **kwargs):
-    chain_manager.config(sender)
+    chain_manager.configure(sender)
 
 
 @receiver(signals.transactions_data_requested)

@@ -25,7 +25,7 @@ class PeerManager(StoppableLoopThread):
         self._seen_peers = set()  # (host, port, node_id)
         self.local_address = ()  # host, port
 
-    def config(self, config):
+    def configure(self, config):
         self.config = config
 
     def stop(self):
@@ -178,7 +178,7 @@ peer_manager = PeerManager()
 
 @receiver(signals.config_ready)
 def config_peermanager(sender, **kwargs):
-    peer_manager.config(sender)
+    peer_manager.configure(sender)
 
 
 @receiver(signals.connection_accepted)

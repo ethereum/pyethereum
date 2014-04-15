@@ -1,4 +1,4 @@
-@packeter
+@config @packeter
 Feature: packeter
 
   Scenario Outline: data can be packed correctly
