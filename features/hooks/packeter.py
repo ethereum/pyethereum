@@ -1,25 +1,9 @@
-import mock
-
-
 class PacketerHook(object):
     def before_feature(self, context, feature):
-        from pyethereum.wireprotocol import Packeter
-        config = mock.Mock()
+        from pyethereum.packeter import Packeter
+        context._hooks['config'].before_feature(context, feature)
 
-        def get_side_effect(section, option):
-            if section == 'network' and option == 'client_id':
-                return 'client id'
-
-            if section == 'wallet' and option == 'pub_key':
-                return 'this pub key'
-
-        def getint_side_effect(section, option):
-            if section == 'network' and option == 'listen_port':
-                return 1234
-
-        config.get.side_effect = get_side_effect
-        config.getint.side_effect = getint_side_effect
         context.packeter = packeter = Packeter()
-        packeter.config(config)
+        packeter.config(context.conf)
 
 hook = PacketerHook()
