@@ -3,6 +3,8 @@ import math  # noqa
 from contextlib import contextmanager
 import parse
 
+import mock
+
 
 @parse.with_pattern(r"[\s\S]+")
 def parse_py(text):
@@ -18,3 +20,9 @@ def AssertException(e):
     except e:
         caught = True
     assert caught
+
+
+def instrument(func):
+    instrumented = mock.MagicMock()
+    instrumented.side_effect = lambda *args, **kwargs: func(*args, **kwargs)
+    return instrumented

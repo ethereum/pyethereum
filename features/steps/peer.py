@@ -1,4 +1,4 @@
-import mock
+from utils import instrument
 
 
 @given(u'a packet')  # noqa
@@ -37,11 +37,6 @@ def step_impl(context):
     context.packet = context.packeter.dump_Hello()
 
 
-@then(u'one and only one Hello packet should be sent throught the connection')  # noqa
-def step_impl(context):
-    assert context.sent_packets == [context.packet]
-
-
 @given(u'a Hello packet with protocol version incompatible')  # noqa
 def step_impl(context):
     packeter = context.packeter
@@ -70,9 +65,21 @@ def step_impl(context):
     context.packet = packeter.dump_packet(data)
 
 
+@when(u'peer.send_Hello is instrumented')  # noqa
+def step_impl(context):
+    context.peer.send_Hello = instrument(context.peer.send_Hello)
+
+
+@then(u'peer.send_Hello should be called once')  # noqa
+def step_impl(context):
+    func = context.peer.send_Hello
+    assert func.called
+    assert func.call_count == 1
+
+
 @when(u'peer.send_Disconnect is instrumented')  # noqa
 def step_impl(context):
-    context.peer.send_Disconnect = mock.MagicMock()
+    context.peer.send_Disconnect = instrument(context.peer.send_Disconnect)
 
 
 @when(u'received the packet from peer')  # noqa
@@ -82,10 +89,10 @@ def step_impl(context):
 
 @then(u'peer.send_Disconnect should be called once with args: reason')  # noqa
 def step_impl(context):
-    mock = context.peer.send_Disconnect
-    assert mock.called
-    assert mock.call_count == 1
-    assert len(mock.call_args[0]) == 1 or 'reason' in mock.call_args[1]
+    func = context.peer.send_Disconnect
+    assert func.called
+    assert func.call_count == 1
+    assert len(func.call_args[0]) == 1 or 'reason' in func.call_args[1]
 
 
 @when(u'peer.send_Ping is called')  # noqa
@@ -97,3 +104,20 @@ def step_impl(context):
 def step_impl(context):
     packet = context.packeter.dump_Ping()
     assert context.sent_packets == [packet]
+
+
+@given(u'a Ping packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Ping()
+
+
+@when(u'peer.send_Pong is instrumented')  # noqa
+def step_impl(context):
+    context.peer.send_Pong = instrument(context.peer.send_Pong)
+
+
+@then(u'peer.send_Pong should be called once')  # noqa
+def step_impl(context):
+    func = context.peer.send_Pong
+    assert func.called
+    assert func.call_count == 1
