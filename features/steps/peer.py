@@ -1,14 +1,29 @@
 import mock
 
-@when(u'peer.send_Hello is called')  # noqa
+
+@given(u'a packet')  # noqa
 def step_impl(context):
-    context.peer.send_Hello()
-    context.set_recv_packet('')
+    context.packet = context.packeter.dump_packet('this is a test packet')
+
+
+@when(u'peer.send_packet is called')  # noqa
+def step_impl(context):
+    context.peer.send_packet(context.packet)
 
 
 @when(u'all data with the peer is processed')  # noqa
 def step_impl(context):
     context.peer.run()
+
+
+@then(u'the packet sent through connection is the given packet')  # noqa
+def step_impl(context):
+    assert context.get_sent_packet() == [context.packet]
+
+
+@when(u'peer.send_Hello is called')  # noqa
+def step_impl(context):
+    context.peer.send_Hello()
 
 
 @then(u'the packet sent through connection is a Hello packet')  # noqa

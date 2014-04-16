@@ -39,6 +39,7 @@ class PeerHook(object):
 
         connection.recv = mock.MagicMock()
         context.set_recv_packet = set_recv_packet
+        context.set_recv_packet('')
 
         sent_packets = []
 

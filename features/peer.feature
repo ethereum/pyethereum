@@ -1,6 +1,12 @@
 @config @peer @wip
 Feature: peer
 
+  Scenario: send packet to peer
+    Given a packet
+    When peer.send_packet is called
+    And all data with the peer is processed
+    Then the packet sent through connection is the given packet
+
   Scenario: send Hello to peer
     When peer.send_Hello is called
     And all data with the peer is processed
