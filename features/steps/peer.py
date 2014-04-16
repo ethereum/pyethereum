@@ -1,4 +1,5 @@
 from utils import instrument
+import mock
 
 
 @given(u'a packet')  # noqa
@@ -73,7 +74,6 @@ def step_impl(context):
 @then(u'peer.send_Hello should be called once')  # noqa
 def step_impl(context):
     func = context.peer.send_Hello
-    assert func.called
     assert func.call_count == 1
 
 
@@ -82,7 +82,7 @@ def step_impl(context):
     context.peer.send_Disconnect = instrument(context.peer.send_Disconnect)
 
 
-@when(u'received the packet from peer')  # noqa
+@when(u'the packet is received from peer')  # noqa
 def step_impl(context):
     context.add_recv_packet(context.packet)
 
@@ -90,7 +90,6 @@ def step_impl(context):
 @then(u'peer.send_Disconnect should be called once with args: reason')  # noqa
 def step_impl(context):
     func = context.peer.send_Disconnect
-    assert func.called
     assert func.call_count == 1
     assert len(func.call_args[0]) == 1 or 'reason' in func.call_args[1]
 
@@ -119,7 +118,6 @@ def step_impl(context):
 @then(u'peer.send_Pong should be called once')  # noqa
 def step_impl(context):
     func = context.peer.send_Pong
-    assert func.called
     assert func.call_count == 1
 
 
@@ -137,3 +135,29 @@ def step_impl(context):
 @given(u'a Pong packet')  # noqa
 def step_impl(context):
     context.packet = context.packeter.dump_Pong()
+
+
+@when(u'handler for a disconnect_requested signal is registered')  # noqa
+def step_impl(context):
+    from pyethereum.signals import disconnect_requested
+    context.handler = mock.MagicMock()
+    disconnect_requested.connect(context.handler)
+
+
+@when(u'peer.send_Disconnect is called')  # noqa
+def step_impl(context):
+    context.peer.send_Disconnect()
+
+
+@then(u'the packet sent through connection is a Disconnect packet')  # noqa
+def step_impl(context):
+    packet = context.packeter.dump_Disconnect()
+    assert context.sent_packets == [packet]
+
+
+@then(u'the handler is called after sleeping for at least 2 seconds')  # noqa
+def step_impl(context):
+    import time  # time is already pathced for mocks
+    assert context.handler.call_count == 1
+    sleeping = sum(x[0][0] for x in time.sleep.call_args_list)
+    assert sleeping >= 2

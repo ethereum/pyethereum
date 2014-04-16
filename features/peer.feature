@@ -15,22 +15,22 @@ Feature: peer
   Scenario: receive a valid Hello packet
     Given a valid Hello packet
     When peer.send_Hello is instrumented
-    And received the packet from peer
+    And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Hello should be called once
 
   Scenario: receive two valid Hello packets
     Given a valid Hello packet
     When peer.send_Hello is instrumented
-    And received the packet from peer
-    And received the packet from peer
+    And the packet is received from peer
+    And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Hello should be called once
 
   Scenario Outline: receive an incompatible Hello packet
     Given a Hello packet with <incompatible reason> incompatible
     When peer.send_Disconnect is instrumented
-    And received the packet from peer
+    And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Disconnect should be called once with args: reason
 
@@ -47,7 +47,7 @@ Feature: peer
   Scenario: receive a Ping packet
     Given a Ping packet
     When peer.send_Pong is instrumented
-    And received the packet from peer
+    And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Pong should be called once
 
@@ -58,5 +58,12 @@ Feature: peer
 
   Scenario: receive a Pong packet
     Given a Pong packet
-    When received the packet from peer
+    When the packet is received from peer
     And all data with the peer is processed
+
+  Scenario: send Disconnect to peer
+    When handler for a disconnect_requested signal is registered
+    And peer.send_Disconnect is called
+    And all data with the peer is processed
+    Then the packet sent through connection is a Disconnect packet
+    And the handler is called after sleeping for at least 2 seconds
