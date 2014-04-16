@@ -76,3 +76,14 @@ def step_impl(context):
     assert mock.called
     assert mock.call_count == 1
     assert len(mock.call_args[0]) == 1 or 'reason' in mock.call_args[1]
+
+
+@when(u'peer.send_Ping is called')  # noqa
+def step_impl(context):
+    context.peer.send_Ping()
+
+
+@then(u'the packet sent through connection is a Ping packet')  # noqa
+def step_impl(context):
+    packet = context.packeter.dump_Ping()
+    assert context.get_sent_packet() == [packet]

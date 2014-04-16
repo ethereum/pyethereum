@@ -23,3 +23,8 @@ Feature: peer
       | incompatible reason |
       | protocol version    |
       | network id          |
+
+  Scenario: send Ping to peer
+    When peer.send_Ping is called
+    And all data with the peer is processed
+    Then the packet sent through connection is a Ping packet

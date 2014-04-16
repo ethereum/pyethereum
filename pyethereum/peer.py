@@ -64,7 +64,7 @@ class Peer(StoppableLoopThread):
         '''
         # send packet
         try:
-            packet = self.response_queue.get(timeout=.1)
+            packet = self.response_queue.get(block=False)
         except Queue.Empty:
             packet = ''
 

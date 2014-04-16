@@ -16,7 +16,7 @@ class PeerHook(object):
         peer = context.peer
 
         def side_effect():
-            for i in range(5):
+            for i in range(2):
                 peer.loop_body()
 
         peer.run = mock.MagicMock()
@@ -52,6 +52,13 @@ class PeerHook(object):
 
         connection.send = mock.MagicMock(side_effect=side_effect)
         context.get_sent_packet = get_sent_packet
+
+        time_sleep_patcher = mock.patch('time.sleep')
+        time_sleep_patcher.start()
+        context.time_sleep_patcher = time_sleep_patcher
+
+    def after_scenario(self, context, scenario):
+        context.time_sleep_patcher.stop()
 
 
 hook = PeerHook()
