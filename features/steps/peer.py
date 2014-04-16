@@ -17,7 +17,7 @@ def step_impl(context):
     context.peer.run()
 
 
-@then(u'the packet sent through connection is the given packet')  # noqa
+@then(u'the packet sent through connection should be the given packet')  # noqa
 def step_impl(context):
     assert context.sent_packets == [context.packet]
 
@@ -27,7 +27,7 @@ def step_impl(context):
     context.peer.send_Hello()
 
 
-@then(u'the packet sent through connection is a Hello packet')  # noqa
+@then(u'the packet sent through connection should be a Hello packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Hello()
     assert context.sent_packets == [packet]
@@ -99,7 +99,7 @@ def step_impl(context):
     context.peer.send_Ping()
 
 
-@then(u'the packet sent through connection is a Ping packet')  # noqa
+@then(u'the packet sent through connection should be a Ping packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Ping()
     assert context.sent_packets == [packet]
@@ -126,7 +126,7 @@ def step_impl(context):
     context.peer.send_Pong()
 
 
-@then(u'the packet sent through connection is a Pong packet')  # noqa
+@then(u'the packet sent through connection should be a Pong packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Pong()
     assert context.sent_packets == [packet]
@@ -149,15 +149,25 @@ def step_impl(context):
     context.peer.send_Disconnect()
 
 
-@then(u'the packet sent through connection is a Disconnect packet')  # noqa
+@then(u'the packet sent through connection should be a Disconnect packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Disconnect()
     assert context.sent_packets == [packet]
 
 
-@then(u'the handler is called after sleeping for at least 2 seconds')  # noqa
+@then(u'the handler should be called once after sleeping for at least 2 seconds')  # noqa
 def step_impl(context):
     import time  # time is already pathced for mocks
     assert context.handler.call_count == 1
     sleeping = sum(x[0][0] for x in time.sleep.call_args_list)
     assert sleeping >= 2
+
+
+@given(u'a Disconnect packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Disconnect()
+
+
+@then(u'the handler should be called once')  # noqa
+def step_impl(context):
+    assert context.handler.call_count == 1
