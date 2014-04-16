@@ -74,3 +74,8 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then the handler should be called once
+
+  Scenario: send GetPeers to peer
+    When peer.send_GetPeers is called
+    And all data with the peer is processed
+    Then the packet sent through connection should be a GetPeers packet

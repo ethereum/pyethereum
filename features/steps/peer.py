@@ -171,3 +171,14 @@ def step_impl(context):
 @then(u'the handler should be called once')  # noqa
 def step_impl(context):
     assert context.handler.call_count == 1
+
+
+@when(u'peer.send_GetPeers is called')  # noqa
+def step_impl(context):
+    context.peer.send_GetPeers()
+
+
+@then(u'the packet sent through connection should be a GetPeers packet')  # noqa
+def step_impl(context):
+    packet = context.packeter.dump_GetPeers()
+    assert context.sent_packets == [packet]
