@@ -238,7 +238,6 @@ class Peer(StoppableLoopThread):
     def loop_body(self):
         send_size = self._process_send()
         recv_size = self._process_recv()
-        print 'now received'
         # pause
         if not (send_size or recv_size):
             time.sleep(0.1)

@@ -13,6 +13,15 @@ class PeerHook(object):
         context.peer = Peer(connection, '127.0.0.1', 1234)
 
     def before_scenario(self, context, scenario):
+        peer = context.peer
+
+        def side_effect():
+            for i in range(5):
+                peer.loop_body()
+
+        peer.run = mock.MagicMock()
+        peer.run.side_effect = side_effect
+
         connection = context._connection
 
         def set_recv_packet(packet):
