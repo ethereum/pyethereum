@@ -18,7 +18,7 @@ def step_impl(context):
 
 @then(u'the packet sent through connection is the given packet')  # noqa
 def step_impl(context):
-    assert context.get_sent_packet() == [context.packet]
+    assert context.sent_packets == [context.packet]
 
 
 @when(u'peer.send_Hello is called')  # noqa
@@ -29,7 +29,17 @@ def step_impl(context):
 @then(u'the packet sent through connection is a Hello packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Hello()
-    assert context.get_sent_packet() == [packet]
+    assert context.sent_packets == [packet]
+
+
+@given(u'a valid Hello packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Hello()
+
+
+@then(u'one and only one Hello packet should be sent throught the connection')  # noqa
+def step_impl(context):
+    assert context.sent_packets == [context.packet]
 
 
 @given(u'a Hello packet with protocol version incompatible')  # noqa
@@ -60,14 +70,14 @@ def step_impl(context):
     context.packet = packeter.dump_packet(data)
 
 
-@when(u'peer.send_Disconnect is observed')  # noqa
+@when(u'peer.send_Disconnect is instrumented')  # noqa
 def step_impl(context):
     context.peer.send_Disconnect = mock.MagicMock()
 
 
 @when(u'received the packet from peer')  # noqa
 def step_impl(context):
-    context.set_recv_packet(context.packet)
+    context.add_recv_packet(context.packet)
 
 
 @then(u'peer.send_Disconnect should be called once with args: reason')  # noqa
@@ -86,4 +96,4 @@ def step_impl(context):
 @then(u'the packet sent through connection is a Ping packet')  # noqa
 def step_impl(context):
     packet = context.packeter.dump_Ping()
-    assert context.get_sent_packet() == [packet]
+    assert context.sent_packets == [packet]
