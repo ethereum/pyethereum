@@ -47,6 +47,16 @@ Feature: peer
   Scenario: receive a Ping packet
     Given a Ping packet
     When peer.send_Pong is instrumented
-    When received the packet from peer
+    And received the packet from peer
     And all data with the peer is processed
     Then peer.send_Pong should be called once
+
+  Scenario: send Pong to peer
+    When peer.send_Pong is called
+    And all data with the peer is processed
+    Then the packet sent through connection is a Pong packet
+
+  Scenario: receive a Pong packet
+    Given a Pong packet
+    When received the packet from peer
+    And all data with the peer is processed

@@ -121,3 +121,19 @@ def step_impl(context):
     func = context.peer.send_Pong
     assert func.called
     assert func.call_count == 1
+
+
+@when(u'peer.send_Pong is called')  # noqa
+def step_impl(context):
+    context.peer.send_Pong()
+
+
+@then(u'the packet sent through connection is a Pong packet')  # noqa
+def step_impl(context):
+    packet = context.packeter.dump_Pong()
+    assert context.sent_packets == [packet]
+
+
+@given(u'a Pong packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Pong()
