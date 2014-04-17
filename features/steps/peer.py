@@ -1,4 +1,5 @@
 from utils import instrument
+from pyethereum.utils import recursive_int_to_big_endian
 import mock
 
 
@@ -308,3 +309,38 @@ def step_impl(context):
     assert context.peer.send_Transactions.call_count == 1
     transactions_args = context.peer.send_Transactions.call_args[0][0]
     assert transactions_args == context.transactions_data
+
+
+@when(u'peer.send_Transactions is called')  # noqa
+def step_impl(context):
+    context.peer.send_Transactions(context.transactions_data)
+
+
+@then(u'the packet sent through connection should be'  # noqa
+' a Transactions packet with the transactions data')
+def step_impl(context):
+    packet = context.packeter.dump_Transactions(context.transactions_data)
+    assert context.sent_packets == [packet]
+
+
+@given(u'a Transactions packet with the transactions data')  # noqa
+def step_impl(context):
+    packet = context.packeter.dump_Transactions(context.transactions_data)
+    context.packet = packet
+
+
+@when(u'handler for a new_transactions_received signal is registered')  # noqa
+def step_impl(context):
+    context.new_transactions_received_handler = mock.MagicMock()
+    from pyethereum.signals import new_transactions_received
+    new_transactions_received.connect(
+        context.new_transactions_received_handler)
+
+
+@then(u'the new_transactions_received handler'  # noqa
+' should be called once with the transactions data')
+def step_impl(context):
+    mock = context.new_transactions_received_handler
+    assert mock.call_count == 1
+    assert mock.call_args[1]['transactions'] == recursive_int_to_big_endian(
+        context.transactions_data)

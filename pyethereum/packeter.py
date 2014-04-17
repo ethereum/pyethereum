@@ -195,7 +195,7 @@ class Packeter(object):
         return self.dump_packet(data)
 
     def dump_Transactions(self, transactions):
-        data = [self.cmd_map_by_name['Transactions']] + [transactions]
+        data = [self.cmd_map_by_name['Transactions']] + transactions
         return self.dump_packet(data)
 
     def dump_GetTransactions(self):

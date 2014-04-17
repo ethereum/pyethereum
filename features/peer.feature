@@ -122,3 +122,17 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Transactions should be called once with the transactions data
+
+  Scenario: send Transactions to peer
+    Given transactions data
+    When peer.send_Transactions is called
+    And all data with the peer is processed
+    Then the packet sent through connection should be a Transactions packet with the transactions data
+
+  Scenario: receive a Transactions packet
+    Given transactions data
+    And a Transactions packet with the transactions data
+    When handler for a new_transactions_received signal is registered
+    And the packet is received from peer
+    And all data with the peer is processed
+    Then the new_transactions_received handler should be called once with the transactions data
