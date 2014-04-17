@@ -83,7 +83,10 @@ Feature: peer
   Scenario: receive a GetPeers packet
     Given a GetPeers packet
     And peers data
-    And a peers data provider which handle peers_data_requested signal to return peers data and send peers_data_ready signal
+    And a peers data provider
+    '''which handle peers_data_requested signal
+    and send peers_data_ready signal
+    '''
     When peer.send_Peers is instrumented
     And the packet is received from peer
     And all data with the peer is processed

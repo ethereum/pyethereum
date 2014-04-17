@@ -197,7 +197,7 @@ def step_impl(context):
     ]
 
 
-@given(u'a peers data provider which handle peers_data_requested signal to return peers data and send peers_data_ready signal')  # noqa
+@given(u'a peers data provider')  # noqa
 def step_impl(context):
     from pyethereum.signals import peers_data_requested, peers_data_ready
 
