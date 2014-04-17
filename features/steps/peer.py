@@ -140,8 +140,8 @@ def step_impl(context):
 @when(u'handler for a disconnect_requested signal is registered')  # noqa
 def step_impl(context):
     from pyethereum.signals import disconnect_requested
-    context.handler = mock.MagicMock()
-    disconnect_requested.connect(context.handler)
+    context.disconnect_requested_handler = mock.MagicMock()
+    disconnect_requested.connect(context.disconnect_requested_handler)
 
 
 @when(u'peer.send_Disconnect is called')  # noqa
@@ -149,16 +149,18 @@ def step_impl(context):
     context.peer.send_Disconnect()
 
 
-@then(u'the packet sent through connection should be a Disconnect packet')  # noqa
+@then(u'the packet sent through connection should be'  # noqa
+' a Disconnect packet')
 def step_impl(context):
     packet = context.packeter.dump_Disconnect()
     assert context.sent_packets == [packet]
 
 
-@then(u'the handler should be called once after sleeping for at least 2 seconds')  # noqa
+@then(u'the disconnect_requested handler should be called once'  # noqa
+' after sleeping for at least 2 seconds')
 def step_impl(context):
     import time  # time is already pathced for mocks
-    assert context.handler.call_count == 1
+    assert context.disconnect_requested_handler.call_count == 1
     sleeping = sum(x[0][0] for x in time.sleep.call_args_list)
     assert sleeping >= 2
 
@@ -168,9 +170,9 @@ def step_impl(context):
     context.packet = context.packeter.dump_Disconnect()
 
 
-@then(u'the handler should be called once')  # noqa
+@then(u'the disconnect_requested handler should be called once')  # noqa
 def step_impl(context):
-    assert context.handler.call_count == 1
+    assert context.disconnect_requested_handler.call_count == 1
 
 
 @when(u'peer.send_GetPeers is called')  # noqa
@@ -178,7 +180,8 @@ def step_impl(context):
     context.peer.send_GetPeers()
 
 
-@then(u'the packet sent through connection should be a GetPeers packet')  # noqa
+@then(u'the packet sent through connection should be'  # noqa
+' a GetPeers packet')
 def step_impl(context):
     packet = context.packeter.dump_GetPeers()
     assert context.sent_packets == [packet]
@@ -192,8 +195,8 @@ def step_impl(context):
 @given(u'peers data')  # noqa
 def step_impl(context):
     context.peers_data = [
-        ['127.0.0.1', '1234', 'loal'],
-        ['1.0.0.1', '1234', 'remote'],
+        ['127.0.0.1', 1234, 'local'],
+        ['1.0.0.1', 1234, 'remote'],
     ]
 
 
@@ -218,3 +221,37 @@ def step_impl(context):
 def step_impl(context):
     assert context.peer.send_Peers.call_count == 1
     assert context.peer.send_Peers.call_args[0][0] == context.peers_data
+
+
+@when(u'peer.send_Peers is called')  # noqa
+def step_impl(context):
+    context.peer.send_Peers(context.peers_data)
+
+
+@then(u'the packet sent through connection should be a Peers packet'  # noqa
+' with the peers data')
+def step_impl(context):
+    assert context.sent_packets == [
+        context.packeter.dump_Peers(context.peers_data)]
+
+
+@given(u'a Peers packet with the peers data')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Peers(context.peers_data)
+
+
+@when(u'handler for a new_peer_received signal is registered')  # noqa
+def step_impl(context):
+    context.new_peer_received_handler = mock.MagicMock()
+    from pyethereum.signals import new_peer_received
+    new_peer_received.connect(context.new_peer_received_handler)
+
+
+@then(u'the new_peer_received handler should be called once'  # noqa
+' for each peer')
+def step_impl(context):
+    call_args_list = context.new_peer_received_handler.call_args_list
+    assert len(call_args_list) == len(context.peers_data)
+    pairs = zip(call_args_list, context.peers_data)
+    for call, peer in pairs:
+        assert call[1]['peer'] == peer
