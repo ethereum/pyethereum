@@ -385,3 +385,50 @@ def step_impl(context):
     from pyethereum.signals import new_blocks_received
     new_blocks_received.connect(
         context.new_blocks_received_handler)
+
+
+@given(u'a GetChain request data')  # noqa
+def step_impl(context):
+    context.request_data = ['Parent1', 'Parent2', 3]
+
+
+@when(u'peer.send_GetChain is called withe the request data')  # noqa
+def step_impl(context):
+    context.peer.send_GetChain(context.request_data)
+
+
+@then(u'the packet sent through connection'  # noqa
+' should be a GetChain packet')
+def step_impl(context):
+    packet = context.packeter.dump_GetChain(context.request_data)
+    assert context.sent_packets == [packet]
+
+
+@given(u'a GetChain packet with the request data')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_GetChain(context.request_data)
+
+
+@given(u'a chain data provider')  # noqa
+def step_impl(context):
+    from pyethereum.signals import (blocks_data_requested,
+                                    blocks_data_ready)
+
+    def handler(sender, request_data, **kwargs):
+        blocks_data_ready.send(
+            sender=None, requester=sender,
+            ready_data=context.blocks_data)
+
+    context.blocks_data_requested_handler = handler
+    blocks_data_requested.connect(handler)
+
+
+@when(u'peer.send_Blocks is instrumented')  # noqa
+def step_impl(context):
+    context.peer.send_Blocks = instrument(context.peer.send_Blocks)
+
+
+@then(u'peer.send_Blocks should be called once with the blocks data')  # noqa
+def step_impl(context):
+    assert context.peer.send_Blocks.call_count == 1
+    assert context.peer.send_Blocks.call_args[0][0] == context.blocks_data

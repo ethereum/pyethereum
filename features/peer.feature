@@ -115,8 +115,8 @@ Feature: peer
     Given a GetTransactions packet
     And transactions data
     And a transactions data provider
-    '''which handle peers_data_requested signal
-    and send peers_data_ready signal
+    '''which handle transactions_data_requested signal
+    and send transactions_data_ready signal
     '''
     When peer.send_Transactions is instrumented
     And the packet is received from peer
@@ -150,3 +150,22 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then the new_blocks_received handler should be called once with the blocks data
+
+  Scenario: send GetChain to peer
+    Given a GetChain request data
+    When peer.send_GetChain is called withe the request data
+    And all data with the peer is processed
+    Then the packet sent through connection should be a GetChain packet
+
+  Scenario: receive a GetChain packet
+    Given a GetChain request data
+    And a GetChain packet with the request data
+    And blocks data
+    And a chain data provider
+    '''which handle chain_data_requested signal
+    and send chain_data_ready signal
+    '''
+    When peer.send_Blocks is instrumented
+    And the packet is received from peer
+    And all data with the peer is processed
+    Then peer.send_Blocks should be called once with the blocks data
