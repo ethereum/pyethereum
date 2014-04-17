@@ -217,16 +217,16 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.new_blocks_received(sender=self, blocks=data)
+        signals.new_blocks_received.send(sender=self, blocks=data)
 
-    def send_GetChain(self):
-        self.send_packet(packeter.dump_GetChain())
+    def send_GetChain(self, request_data):
+        self.send_packet(packeter.dump_GetChain(request_data))
 
-    def _recv_GetChain(self):
+    def _recv_GetChain(self, request_data):
         signals.request_data_async(
             self,
             'blocks',
-            None,
+            request_data,
             self.send_Blocks)
 
     def send_NotInChain(self):

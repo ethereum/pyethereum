@@ -206,8 +206,8 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Blocks']] + blocks
         return self.dump_packet(data)
 
-    def dump_GetChain(self):
-        data = [self.cmd_map_by_name['GetChain']]
+    def dump_GetChain(self, request_data):
+        data = [self.cmd_map_by_name['GetChain']] + request_data
         return self.dump_packet(data)
 
     def dump_NotInChain(self):

@@ -344,3 +344,44 @@ def step_impl(context):
     assert mock.call_count == 1
     assert mock.call_args[1]['transactions'] == recursive_int_to_big_endian(
         context.transactions_data)
+
+
+@given(u'blocks data')  # noqa
+def step_impl(context):
+    context.blocks_data = [
+        ['block_headerA', ['txA1', 'txA2'], ['uncleA1', 'uncleA2']],
+        ['block_headerB', ['txB', 'txB'], ['uncleB', 'uncleB2']],
+    ]
+
+
+@when(u'peer.send_Blocks is called')  # noqa
+def step_impl(context):
+    context.peer.send_Blocks(context.blocks_data)
+
+
+@then(u'the packet sent through connection should be'  # noqa
+' a Blocks packet with the blocks data')
+def step_impl(context):
+    packet = context.packeter.dump_Blocks(context.blocks_data)
+    assert context.sent_packets == [packet]
+
+
+@given(u'a Blocks packet with the blocks data')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_Blocks(context.blocks_data)
+
+
+@when(u'handler for a new_blocks_received signal is registered')  # noqa
+def step_impl(context):
+    context.new_blocks_received_handler = mock.MagicMock()
+    from pyethereum.signals import new_blocks_received
+    new_blocks_received.connect(context.new_blocks_received_handler)
+
+
+@then(u'the new_blocks_received handler should be'  # noqa
+' called once with the blocks data')
+def step_impl(context):
+    context.new_blocks_received_handler = mock.MagicMock()
+    from pyethereum.signals import new_blocks_received
+    new_blocks_received.connect(
+        context.new_blocks_received_handler)
