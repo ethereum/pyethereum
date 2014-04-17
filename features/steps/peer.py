@@ -255,3 +255,56 @@ def step_impl(context):
     pairs = zip(call_args_list, context.peers_data)
     for call, peer in pairs:
         assert call[1]['peer'] == peer
+
+
+@when(u'peer.send_GetTransactions is called')  # noqa
+def step_impl(context):
+    context.peer.send_GetTransactions()
+
+
+@then(u'the packet sent through connection should be'  # noqa
+' a GetTransactions packet')
+def step_impl(context):
+    packet = context.packeter.dump_GetTransactions()
+    assert context.sent_packets == [packet]
+
+
+@given(u'a GetTransactions packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_GetTransactions()
+
+
+@given(u'transactions data')  # noqa
+def step_impl(context):
+    context.transactions_data = [
+        ['nonce-1', 'receiving_address-1', 1],
+        ['nonce-2', 'receiving_address-2', 2],
+        ['nonce-3', 'receiving_address-3', 3],
+    ]
+
+
+@given(u'a transactions data provider')  # noqa
+def step_impl(context):
+    from pyethereum.signals import (transactions_data_requested,
+                                    transactions_data_ready)
+
+    def handler(sender, request_data, **kwargs):
+        transactions_data_ready.send(
+            sender=None, requester=sender,
+            ready_data=context.transactions_data)
+
+    context.transactions_data_requested_handler = handler
+    transactions_data_requested.connect(handler)
+
+
+@when(u'peer.send_Transactions is instrumented')  # noqa
+def step_impl(context):
+    context.peer.send_Transactions = instrument(context.peer.send_Transactions)
+
+
+@then(u'peer.send_Transactions should be called once'  # noqa
+' with the transactions data')
+def step_impl(context):
+    assert context.peer.send_Transactions.call_count == 1
+    transactions_args = context.peer.send_Transactions.call_args[0][0]
+    assert transactions_args == context.transactions_data

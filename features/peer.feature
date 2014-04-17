@@ -105,3 +105,20 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then the new_peer_received handler should be called once for each peer
+
+  Scenario: send GetTransactions to peer
+    When peer.send_GetTransactions is called
+    And all data with the peer is processed
+    Then the packet sent through connection should be a GetTransactions packet
+
+  Scenario: receive a GetTransactions packet
+    Given a GetTransactions packet
+    And transactions data
+    And a transactions data provider
+    '''which handle peers_data_requested signal
+    and send peers_data_ready signal
+    '''
+    When peer.send_Transactions is instrumented
+    And the packet is received from peer
+    And all data with the peer is processed
+    Then peer.send_Transactions should be called once with the transactions data
