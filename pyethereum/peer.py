@@ -232,7 +232,7 @@ class Peer(StoppableLoopThread):
     def send_NotInChain(self):
         self.send_packet(packeter.dump_NotInChain())
 
-    def _recv_NotInChain(self):
+    def _recv_NotInChain(self, data):
         pass
 
     def loop_body(self):

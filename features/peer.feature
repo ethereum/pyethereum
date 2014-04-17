@@ -169,3 +169,13 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Blocks should be called once with the blocks data
+
+  Scenario: send NotInChain to peer
+    When peer.send_NotInChain is called
+    And all data with the peer is processed
+    Then the packet sent through connection should be a NotInChain packet
+
+  Scenario: receive a valid NotInChain packet
+    Given a NotInChain packet
+    When the packet is received from peer
+    And all data with the peer is processed
