@@ -182,3 +182,39 @@ def step_impl(context):
 def step_impl(context):
     packet = context.packeter.dump_GetPeers()
     assert context.sent_packets == [packet]
+
+
+@given(u'a GetPeers packet')  # noqa
+def step_impl(context):
+    context.packet = context.packeter.dump_GetPeers()
+
+
+@given(u'peers data')  # noqa
+def step_impl(context):
+    context.peers_data = [
+        ['127.0.0.1', '1234', 'loal'],
+        ['1.0.0.1', '1234', 'remote'],
+    ]
+
+
+@given(u'a peers data provider which handle peers_data_requested signal to return peers data and send peers_data_ready signal')  # noqa
+def step_impl(context):
+    from pyethereum.signals import peers_data_requested, peers_data_ready
+
+    def peers_data_requested_handler(sender, request_data, **kwargs):
+        peers_data_ready.send(
+            sender=None, requester=sender, ready_data=context.peers_data)
+
+    context.peers_data_requested_handler = peers_data_requested_handler
+    peers_data_requested.connect(context.peers_data_requested_handler)
+
+
+@when(u'peer.send_Peers is instrumented')  # noqa
+def step_impl(context):
+    context.peer.send_Peers = instrument(context.peer.send_Peers)
+
+
+@then(u'peer.send_Peers should be called once with the peers data')  # noqa
+def step_impl(context):
+    assert context.peer.send_Peers.call_count == 1
+    assert context.peer.send_Peers.call_args[0][0] == context.peers_data
