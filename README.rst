@@ -27,7 +27,8 @@ one-liner:
 
 If your system has ``wget`` and not ``curl`` you can also use ``wget -O -`` 
 in place of ``curl``. Otherwise download the `bootstrap script <http://downloads.buildout.org/2/bootstrap.py>`_
-into the project folder and call ``python bootstrap.py``.
+into the project folder and call ``python bootstrap.py``.  (If you get setuptools issue, try
+``python bootstrap.py -v 2.1.1``)
 
 Building:
 ----------
