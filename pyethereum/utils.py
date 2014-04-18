@@ -1,6 +1,7 @@
 from sha3 import sha3_256
 from bitcoin import privtopub
 import struct
+import os, errno
 
 
 def sha3(seed):
@@ -131,3 +132,11 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
             return res
         return wrapper
     return inner
+
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
