@@ -156,7 +156,7 @@ class PeerManager(StoppableLoopThread):
         self.manage_connections()
         time.sleep(10)
 
-    def _start_peer(connection, ip, port):
+    def _start_peer(self, connection, ip, port):
         peer = Peer(connection, ip, port)
         peer.start()
         return peer
