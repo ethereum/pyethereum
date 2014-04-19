@@ -22,7 +22,7 @@ class PeerManager(StoppableLoopThread):
     def __init__(self):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
-        self._seen_peers = set()  # (host, port, node_id)
+        self._known_peers = set()  # (host, port, node_id)
         self.local_address = ()  # host, port
 
     def configure(self, config):
@@ -41,15 +41,15 @@ class PeerManager(StoppableLoopThread):
                 return peer
         return None
 
-    def add_peer_address(self, ip, port, node_id):
+    def add_known_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
         with self.lock:
-            if ipn not in self._seen_peers:
-                self._seen_peers.add(ipn)
+            if ipn not in self._known_peers:
+                self._known_peers.add(ipn)
 
     def get_known_peer_addresses(self):
-        # fixme add self
-        return set(self._seen_peers).union(self.get_connected_peer_addresses())
+        return set(self._known_peers).union(
+            self.get_connected_peer_addresses())
 
     def get_connected_peer_addresses(self):
         "get peers, we connected and have a port"
@@ -106,7 +106,7 @@ class PeerManager(StoppableLoopThread):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
                 # don't use this node again in case of connect error > remove
-                self._seen_peers.remove((ip, port, node_id))
+                self._known_peers.remove((ip, port, node_id))
             else:
                 self._poll_more_candidates()
 
@@ -200,4 +200,6 @@ def disconnect_requested_handler(sender, **kwargs):
 
 @receiver(signals.new_peer_received)
 def new_peer_received_handler(sender, peer, **kwargs):
-    peer_manager.add_peer_address(*peer)
+    ''' peer should be (ip, port, node_id)
+    '''
+    peer_manager.add_known_peer_address(*peer)
