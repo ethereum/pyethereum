@@ -7,6 +7,7 @@ from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3, privtoaddr
 import utils
+import sys
 
 class Transaction(object):
 
@@ -51,13 +52,9 @@ class Transaction(object):
     # nonce,value,gasprice,startgas,code
     @classmethod
     def contract(*args):
-        cls = args[0]
-        tx = cls(args[1],args[2],args[3],args[4],'',args[5])
-        if len(args) > 6:
-            tx.v, tx.r, tx.s = args[6:9]
-        else:
-            tx.v, tx.r, tx.s = 0,0,0
-        return tx
+        sys.stderr.write("Deprecated method. Use pyethereum.transactions.contract "+
+                         "instead of pyethereum.transactions.Transaction.contract\n")
+        return contract(*args[1:])
 
     @classmethod
     def parse(cls, data):
@@ -101,3 +98,8 @@ class Transaction(object):
 
     def hash(self):
         return sha3(self.serialize())
+
+def contract(nonce, endowment, gasprice, startgas, code, v=0,r=0, s=0):
+    tx = Transaction(nonce, endowment, gasprice, startgas, '', code)
+    tx.v, tx.r, tx.s = v,r,s
+    return tx

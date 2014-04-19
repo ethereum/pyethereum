@@ -6,12 +6,29 @@ from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3
 import utils
+import os
+import sys
 
 ACCT_RLP_LENGTH = 4
 NONCE_INDEX = 0
 BALANCE_INDEX = 1
 CODE_INDEX = 2
 STORAGE_INDEX = 3
+
+ethdirs = {
+    "linux2": "~/.pyethereum",
+    "darwin": "~/Library/Application Support/Pyethereum/",
+    "win32": "~/AppData/Roaming/Pyethereum",
+    "win64": "~/AppData/Roaming/Pyethereum",
+}
+
+prenormalized_ethdir = ethdirs.get(sys.platform,'~/.pyethereum').split('/')
+
+ETHEREUM_DIR = os.path.expanduser(os.path.join(*prenormalized_ethdir))
+
+utils.mkdir_p(ETHEREUM_DIR)
+
+STATEDB_DIR = os.path.join(ETHEREUM_DIR,'statedb')
 
 class Block(object):
     def __init__(self, data=None):
@@ -25,7 +42,7 @@ class Block(object):
             self.prevhash = ''
             self.uncles_root = ''
             self.coinbase = '0'*40
-            self.state = Trie('statedb')
+            self.state = Trie(STATEDB_DIR)
             self.transactions_root = ''
             self.transactions = []
             self.uncles = []
@@ -43,7 +60,7 @@ class Block(object):
         self.prevhash = header[1]
         self.uncles_root = header[2]
         self.coinbase = header[3].encode('hex')
-        self.state = Trie('statedb', header[4])
+        self.state = Trie(STATEDB_DIR, header[4])
         self.transactions_root = header[5]
         self.difficulty = decode_int(header[6])
         self.timestamp = decode_int(header[7])
@@ -101,7 +118,7 @@ class Block(object):
         self.state.db.commit()
         self.set_index(address,CODE_INDEX,sha3(value))
     def get_storage(self,address):
-        return Trie('statedb',self.get_index(address,STORAGE_INDEX))
+        return Trie(STATEDB_DIR,self.get_index(address,STORAGE_INDEX))
     def get_storage_data(self,address,index):
         t = self.get_storage(address)
         return decode_int(t.get(utils.coerce_to_bytes(index)))
@@ -141,7 +158,7 @@ class Block(object):
         state = self.state.to_dict(True)
         nstate = {}
         for s in state:
-            t = Trie('statedb',state[s][STORAGE_INDEX])
+            t = Trie(STATEDB_DIR,state[s][STORAGE_INDEX])
             o = [0] * ACCT_RLP_LENGTH
             o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
             o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])
@@ -163,12 +180,17 @@ class Block(object):
             "nonce": self.nonce
         }
 
-    @classmethod
-    def genesis(cls,initial_alloc):
-        block = cls()
-        for addr in initial_alloc:
-            block.set_balance(addr,initial_alloc[addr])
-        return block
-
     def hash(self):
         return sha3(self.serialize())
+
+    @classmethod
+    def genesis(cls,initial_alloc):
+        sys.stderr.write("Deprecated method. Use pyethereum.blocks.genesis"+
+                          "instead of pyethereum.blocks.Block.genesis\n")
+        return genesis(initial_alloc)
+
+def genesis(initial_alloc):
+    block = Block()
+    for addr in initial_alloc:
+        block.set_balance(addr,initial_alloc[addr])
+    return block
