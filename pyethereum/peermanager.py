@@ -153,12 +153,16 @@ class PeerManager(StoppableLoopThread):
         self.manage_connections()
         time.sleep(10)
 
+    def _start_peer(connection, host, port):
+        peer = Peer(connection, host, port)
+        peer.start()
+        return peer
+
     def add_peer(self, connection, host, port):
         # FIXME: should check existance first
         connection.settimeout(.1)
         try:
-            peer = Peer(connection, host, port)
-            peer.start()
+            peer = self._start_peer(connection, host, port)
             with self.lock:
                 self.connected_peers.add(peer)
             logger.debug(
