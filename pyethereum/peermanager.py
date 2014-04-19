@@ -22,8 +22,8 @@ class PeerManager(StoppableLoopThread):
     def __init__(self):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
-        self._known_peers = set()  # (host, port, node_id)
-        self.local_address = ()  # host, port
+        self._known_peers = set()  # (ip, port, node_id)
+        self.local_address = ()  # ip, port
 
     def configure(self, config):
         self.config = config
@@ -63,6 +63,9 @@ class PeerManager(StoppableLoopThread):
         # connect new peers if there are no candidates
 
     def connect_peer(self, host, port):
+        '''
+        :param host:  domain notation or IP
+        '''
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(1)
@@ -153,25 +156,25 @@ class PeerManager(StoppableLoopThread):
         self.manage_connections()
         time.sleep(10)
 
-    def _start_peer(connection, host, port):
-        peer = Peer(connection, host, port)
+    def _start_peer(connection, ip, port):
+        peer = Peer(connection, ip, port)
         peer.start()
         return peer
 
-    def add_peer(self, connection, host, port):
+    def add_peer(self, connection, ip, port):
         # FIXME: should check existance first
         connection.settimeout(.1)
         try:
-            peer = self._start_peer(connection, host, port)
+            peer = self._start_peer(connection, ip, port)
             with self.lock:
                 self.connected_peers.add(peer)
             logger.debug(
                 "new TCP connection {0} {1}:{2}"
-                .format(connection, host, port))
+                .format(connection, ip, port))
         except BaseException as e:
             logger.error(
                 "cannot start TCP session \"{0}\" {1}:{2} "
-                .format(str(e), host, port))
+                .format(str(e), ip, port))
             traceback.print_exc(file=sys.stdout)
             connection.close()
             time.sleep(0.1)
@@ -186,8 +189,8 @@ def config_peermanager(sender, **kwargs):
 
 
 @receiver(signals.connection_accepted)
-def connection_accepted_handler(sender, connection, host, port, **kwargs):
-    peer_manager.add_peer(connection, host, port)
+def connection_accepted_handler(sender, connection, ip, port, **kwargs):
+    peer_manager.add_peer(connection, ip, port)
 
 
 @receiver(signals.peers_data_requested)
