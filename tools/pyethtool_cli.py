@@ -3,11 +3,29 @@ import sys
 import re
 import json
 from pyethereum import pyethtool
+import shlex
 
+def smart_print(o):
+    if isinstance(o, (list, dict)):
+        try:
+            print json.dumps(o)
+        except:
+            print o
+    else:
+        print o
 
 def main():
     if len(sys.argv) == 1:
-        print "pyethtool <command> <arg1> <arg2> ..."
+        # Shell
+        while 1:
+            cmdline = raw_input('> ')
+            if cmdline in ['quit','exit']:
+                break
+            tokens = shlex.split(cmdline)
+            cmd, args = tokens[0], tokens[1:]
+            o = getattr(pyethtool, cmd)(*args)
+            smart_print(o)
+
     else:
         cmd = sys.argv[2] if sys.argv[1][0] == '-' else sys.argv[1]
         if sys.argv[1] == '-s':
@@ -24,13 +42,8 @@ def main():
             cmd = sys.argv[1]
             args = sys.argv[2:]
         o = getattr(pyethtool, cmd)(*args)
-        if isinstance(o, (list, dict)):
-            try:
-                print json.dumps(o)
-            except:
-                print o
-        else:
-            print o
+        smart_print(o)
+
 
 
 if __name__ == '__main__':
