@@ -102,26 +102,35 @@ class Block(object):
 
     def get_nonce(self,address):
         return decode_int(self.get_index(address,NONCE_INDEX))
+
     def increment_nonce(self,address):
         return self.delta_index(address,NONCE_INDEX,1)
+
     def get_balance(self,address):
         return decode_int(self.get_index(address,BALANCE_INDEX))
+
     def set_balance(self,address,value):
         self.set_index(address,BALANCE_INDEX,encode_int(value))
+
     def delta_balance(self,address,value):
         return self.delta_index(address,BALANCE_INDEX,value)
+
     def get_code(self,address):
         codehash = self.get_index(address,CODE_INDEX)
         return self.state.db.get(codehash) if codehash else ''
+
     def set_code(self,address,value):
         self.state.db.put(sha3(value),value)
         self.state.db.commit()
         self.set_index(address,CODE_INDEX,sha3(value))
+
     def get_storage(self,address):
         return Trie(STATEDB_DIR,self.get_index(address,STORAGE_INDEX))
+
     def get_storage_data(self,address,index):
         t = self.get_storage(address)
         return decode_int(t.get(utils.coerce_to_bytes(index)))
+
     def set_storage_data(self,address,index,val):
         t = self.get_storage(address)
         if val:
@@ -129,6 +138,19 @@ class Block(object):
         else:
             t.delete(utils.coerce_to_bytes(index))
         self.set_index(address,STORAGE_INDEX,t.root)
+
+    def account_to_dict(self,address):
+        if len(address) == 40:
+            address = address.decode('hex')
+        acct = self.state.get(address) or ['','','','']
+        chash = acct[CODE_INDEX]
+        stdict = Trie(STATEDB_DIR,acct[STORAGE_INDEX]).to_dict(True)
+        return {
+            'nonce': decode_int(acct[NONCE_INDEX]),
+            'balance': decode_int(acct[BALANCE_INDEX]),
+            'code': self.state.db.get(chash).encode('hex') if chash else '',
+            'storage': {decode_int(k):decode_int(stdict[k]) for k in stdict}
+        }
     
     # Revert computation
     def snapshot(self):
@@ -164,7 +186,7 @@ class Block(object):
             o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])
             o[CODE_INDEX] = state[s][CODE_INDEX]
             td = t.to_dict(True)
-            o[STORAGE_INDEX] = {k:decode_int(td[k]) for k in td}
+            o[STORAGE_INDEX] = {decode_int(k):decode_int(td[k]) for k in td}
             nstate[s.encode('hex')] = o
             
         return {
