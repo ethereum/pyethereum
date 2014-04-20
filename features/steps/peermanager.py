@@ -40,3 +40,46 @@ def step_impl(context):
 def step_impl(context):
     for peer in context.peer_manager.connected_peers:
         assert peer.stop.call_count == 1
+
+
+@given(u'connected peer addresses, with each item is (ip, port, node_id)')  # noqa
+def step_impl(context):
+    context.peer_addresses = (
+        ('192.168.1.2', 1234, 'it'),
+        ('192.18.1.2', 1234, 'he'),
+        ('192.68.1.2', 1234, 'she'),
+    )
+
+
+@given(u'add the connected peer addresses to to `connected_peers`')  # noqa
+def step_impl(context):
+    context.peer_manager.connected_peers = []
+    for ip, port, node_id in context.peer_addresses:
+        peer = utils.mock_peer(utils.mock_connection(), ip, port)
+        peer.node_id = node_id
+        context.peer_manager.connected_peers.append(peer)
+
+
+@then(u'get_connected_peer_addresses will'  # noqa
+' return the given peer addresses')
+def step_impl(context):
+    res = context.peer_manager.get_connected_peer_addresses()
+    for peer_address in context.peer_addresses:
+        assert peer_address in res
+
+
+@given(u'peer address of (ip, port, node_id)')  # noqa
+def step_impl(context):
+    context.peer_address = ('192.168.1.1', 1234, 'me')
+
+
+@when(u'add_known_peer_address is called with the given peer address')  # noqa
+def step_impl(context):
+    context.peer_manager.add_known_peer_address(*context.peer_address)
+
+
+@then(u'get_known_peer_addresses will contain the given peer address')  # noqa
+def step_impl(context):
+    res = context.peer_manager.get_known_peer_addresses()
+    assert context.peer_address in res
+

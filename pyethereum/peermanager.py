@@ -1,8 +1,6 @@
 import time
 import socket
 import logging
-import traceback
-import sys
 
 from dispatch import receiver
 
@@ -35,12 +33,6 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
-    def get_peer_by_id(self, peer_id):
-        for peer in self.connected_peers:
-            if peer_id == peer.id():
-                return peer
-        return None
-
     def add_known_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
         with self.lock:
@@ -57,7 +49,8 @@ class PeerManager(StoppableLoopThread):
                    if p.port)
 
     def remove_peer(self, peer):
-        peer.stop()
+        if not peer.stopped():
+            peer.stop()
         with self.lock:
             self.connected_peers.remove(peer)
         # connect new peers if there are no candidates
@@ -82,7 +75,6 @@ class PeerManager(StoppableLoopThread):
 
         # Send Hello
         peer.send_Hello()
-        peer.send_GetPeers()
         return True
 
     def _peer_candidates(self):
@@ -92,30 +84,15 @@ class PeerManager(StoppableLoopThread):
             ipn for ipn in candidates if not ipn[:2] == self.local_address]
         return candidates
 
-    def _poll_more_candidates(self):
-        for peer in list(self.connected_peers):
-            with peer.lock:
-                peer.send_GetPeers()
-
-    def _connect_peers(self):
-        num_peers = self.config.getint('network', 'num_peers')
-        candidates = self._peer_candidates()
-        if len(self.connected_peers) < num_peers:
-            logger.debug('not enough peers: {0}'.format(
-                len(self.connected_peers)))
-            logger.debug('num candidates: {0}'.format(len(candidates)))
-            if len(candidates):
-                ip, port, node_id = candidates.pop()
-                self.connect_peer(ip, port)
-                # don't use this node again in case of connect error > remove
-                self._known_peers.remove((ip, port, node_id))
-            else:
-                self._poll_more_candidates()
-
     def _check_alive(self, peer):
+        if peer.stopped():
+            self.remove_peer(peer)
+            return
+
         now = time.time()
         dt_ping = now - peer.last_pinged
         dt_seen = now - peer.last_valid_packet_received
+
         # if ping was sent and not returned within last second
         if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
             logger.debug(
@@ -132,27 +109,27 @@ class PeerManager(StoppableLoopThread):
             with peer.lock:
                 peer.send_Ping()
 
-    def manage_connections(self):
-        self._connect_peers()
-
-        for peer in list(self.connected_peers):
-            if peer.stopped():
-                self.remove_peer(peer)
-                continue
-
-            self._check_alive(peer)
-
-            now = time.time()
-
-            # ask for peers
-            if now - peer.last_asked_for_peers >\
-                    self.max_ask_for_peers_elapsed:
-                with peer.lock:
-                    peer.send_GetPeers()
-                    peer.last_asked_for_peers = now
+    def _connect_peers(self):
+        num_peers = self.config.getint('network', 'num_peers')
+        candidates = self._peer_candidates()
+        if len(self.connected_peers) < num_peers:
+            logger.debug('not enough peers: {0}'.format(
+                len(self.connected_peers)))
+            logger.debug('num candidates: {0}'.format(len(candidates)))
+            if len(candidates):
+                ip, port, node_id = candidates.pop()
+                self.connect_peer(ip, port)
+                # don't use this node again in case of connect error > remove
+                self._known_peers.remove((ip, port, node_id))
+            else:
+                for peer in list(self.connected_peers):
+                    with peer.lock:
+                        peer.send_GetPeers()
 
     def loop_body(self):
-        self.manage_connections()
+        for peer in list(self.connected_peers):
+            self._check_alive(peer)
+        self._connect_peers()
         time.sleep(10)
 
     def _start_peer(self, connection, ip, port):
@@ -163,20 +140,9 @@ class PeerManager(StoppableLoopThread):
     def add_peer(self, connection, ip, port):
         # FIXME: should check existance first
         connection.settimeout(1)
-        try:
-            peer = self._start_peer(connection, ip, port)
-            with self.lock:
-                self.connected_peers.add(peer)
-            logger.debug(
-                "new TCP connection {0} {1}:{2}"
-                .format(connection, ip, port))
-        except BaseException as e:
-            logger.error(
-                "cannot start TCP session \"{0}\" {1}:{2} "
-                .format(str(e), ip, port))
-            traceback.print_exc(file=sys.stdout)
-            connection.close()
-            time.sleep(0.1)
+        peer = self._start_peer(connection, ip, port)
+        with self.lock:
+            self.connected_peers.add(peer)
         return peer
 
 peer_manager = PeerManager()
