@@ -94,7 +94,9 @@ class Peer(StoppableLoopThread):
         '''
         while True:
             try:
+                print 'before recv...'
                 self.recv_buffer += self.connection().recv(2048)
+                print 'after recv...'
             except socket.error:
                 break
         length = len(self.recv_buffer)
