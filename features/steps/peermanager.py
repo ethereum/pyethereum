@@ -36,7 +36,7 @@ def step_impl(context):
     context.peer_manager.stop()
 
 
-@then(u'each peer\'s `stop` method is called once')  # noqa
+@then(u'each peer\'s `stop` method should be called once')  # noqa
 def step_impl(context):
     for peer in context.peer_manager.connected_peers:
         assert peer.stop.call_count == 1
@@ -51,7 +51,7 @@ def step_impl(context):
     )
 
 
-@given(u'add the connected peer addresses to to `connected_peers`')  # noqa
+@given(u'add the connected peer addresses to `connected_peers`')  # noqa
 def step_impl(context):
     context.peer_manager.connected_peers = []
     for ip, port, node_id in context.peer_addresses:
@@ -60,7 +60,7 @@ def step_impl(context):
         context.peer_manager.connected_peers.append(peer)
 
 
-@then(u'get_connected_peer_addresses will'  # noqa
+@then(u'get_connected_peer_addresses should'  # noqa
 ' return the given peer addresses')
 def step_impl(context):
     res = context.peer_manager.get_connected_peer_addresses()
@@ -78,8 +78,27 @@ def step_impl(context):
     context.peer_manager.add_known_peer_address(*context.peer_address)
 
 
-@then(u'get_known_peer_addresses will contain the given peer address')  # noqa
+@then(u'get_known_peer_addresses should contain the given peer address')  # noqa
 def step_impl(context):
     res = context.peer_manager.get_known_peer_addresses()
     assert context.peer_address in res
 
+
+@given(u'the given peer is added')  # noqa
+def step_impl(context):
+    context.peer = context.peer_manager.add_peer(*context.peer_data)
+
+
+@when(u'remove_peer is called with the peer')  # noqa
+def step_impl(context):
+    context.peer_manager.remove_peer(context.peer)
+
+
+@then(u'the peer should be stopped')  # noqa
+def step_impl(context):
+    assert context.peer.stopped()
+
+
+@then(u'the peer should not present in connected_peers')  # noqa
+def step_impl(context):
+    assert context.peer not in context.peer_manager.connected_peers
