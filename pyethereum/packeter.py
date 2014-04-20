@@ -63,7 +63,7 @@ class Packeter(object):
 
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x09
+    PROTOCOL_VERSION = 0x0C
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
@@ -97,6 +97,13 @@ class Packeter(object):
 
         try:
             payload_len = idec(packet[4:8])
+        except Exception as e:
+            return False, str(e)
+
+        if len(packet) < payload_len + 8:
+            return False, 'Packet is broken'
+
+        try:
             payload = lrlp_decode(packet[8:8 + payload_len])
         except Exception as e:
             return False, str(e)
@@ -105,14 +112,15 @@ class Packeter(object):
             return False, 'check cmd failed'
 
         cmd = Packeter.cmd_map.get(idec(payload[0]))
-        return True, (header, payload_len, cmd, payload[1:])
+        remain = packet[8 + payload_len:]
+        return True, (header, payload_len, cmd, payload[1:], remain)
 
     def load_cmd(self, packet):
         success, res = self.load_packet(packet)
         if not success:
             raise Exception(res)
-        _, _, cmd, data = res
-        return cmd, data
+        _, _, cmd, data, remain = res
+        return cmd, data, remain
 
     @classmethod
     def dump_packet(cls, data):

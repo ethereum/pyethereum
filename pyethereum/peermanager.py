@@ -76,7 +76,6 @@ class PeerManager(StoppableLoopThread):
             logger.debug(
                 'Conencting {0}:{1} failed, {2}'.format(host, port, str(e)))
             return False
-        sock.settimeout(.1)
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))
         peer = self.add_peer(sock, ip, port)
@@ -163,7 +162,7 @@ class PeerManager(StoppableLoopThread):
 
     def add_peer(self, connection, ip, port):
         # FIXME: should check existance first
-        connection.settimeout(.1)
+        connection.settimeout(1)
         try:
             peer = self._start_peer(connection, ip, port)
             with self.lock:
