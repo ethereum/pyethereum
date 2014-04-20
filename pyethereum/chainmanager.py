@@ -79,7 +79,7 @@ class ChainManager(StoppableLoopThread):
             peer_id = data[0]
             signals.transactions_data_ready(self.transactions, peer_id)
         else:
-            raise Exception('unknown commad')
+            raise Exception('unknown command:%s' % cmd)
 
 
 chain_manager = ChainManager()
