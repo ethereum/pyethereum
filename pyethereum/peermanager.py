@@ -159,7 +159,7 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
 
 
 @receiver(signals.peers_data_requested)
-def peers_data_requested_handler(sender, data, **kwargs):
+def peers_data_requested_handler(sender, request_data, **kwargs):
     peers = peer_manager.get_known_peer_addresses()
     signals.peers_data_ready.send(None, requester=sender, ready_data=peers)
 
