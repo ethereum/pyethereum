@@ -3,6 +3,8 @@ import utils
 
 
 class PeerHook(object):
+    ''' need @config before @peer
+    '''
     def before_feature(self, context, feature):
         from pyethereum.packeter import packeter
 

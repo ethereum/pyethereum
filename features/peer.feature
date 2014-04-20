@@ -1,4 +1,4 @@
-@config @peer @wip
+@config @peer
 Feature: peer
 
   Scenario: send packet to peer

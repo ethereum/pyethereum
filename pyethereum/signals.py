@@ -1,7 +1,7 @@
 from dispatch import Signal
 
 config_ready = Signal(providing_args=[""])
-connection_accepted = Signal(providing_args=["connection", "host", "port"])
+connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 
 packet_sending = Signal(providing_args=["packet"])
 packet_sent = Signal(providing_args=["packet"])

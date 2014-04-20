@@ -1,4 +1,5 @@
 import mock
+import socket
 
 
 def mock_peer(connection, ip, port):
@@ -16,7 +17,6 @@ def mock_peer(connection, ip, port):
 
 
 def mock_connection():
-    import socket
     return mock.MagicMock(spec=socket.socket)
 
 
@@ -30,7 +30,7 @@ def mock_connection_recv(connection):
             for packet in received_packets:
                 for i in range(0, len(packet), bufsize):
                     yield packet[i: i + bufsize]
-                yield ''
+                yield None
 
         status = dict()
 
@@ -39,9 +39,13 @@ def mock_connection_recv(connection):
                 status.update(genarator=genarator(bufsize))
 
             try:
-                return status['genarator'].next()
+                buf = status['genarator'].next()
             except:
-                return ''
+                buf = None
+
+            if not buf:
+                raise socket.error('time out')
+            return buf
 
         connection.recv.side_effect = side_effect
 
