@@ -59,15 +59,13 @@ class ChainManager(StoppableLoopThread):
 
     def process_request_queue(self):
         try:
-            command = self.request_queue.get(block=True, timeout=0.1)
+            cmd, data = self.request_queue.get(block=True, timeout=0.1)
         except Queue.Empty:
             return
 
-        cmd, data = command[0], command[1:]
-
-        logger.debug('%r received %s datalen:%d' % (self, cmd, len(data)))
+        logger.debug('%r received %s datalen:%d' % (self, cmd, len(data or [])))
         if cmd == "add_blocks":
-            print self, "add_blocks in queue seen"
+            logger.debug("add_blocks in queue seen")
             self._recv_blocks(data)
         elif cmd == "add_transactions":
             tx_list = data[0]
@@ -92,15 +90,15 @@ def config_chainmanager(sender, **kwargs):
 
 @receiver(signals.transactions_data_requested)
 def transactions_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put('request_transactions', request_data)
+    chain_manager.request_queue.put(('request_transactions', request_data))
 
 
 @receiver(signals.blocks_data_requested)
 def blocks_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put('request_blocks', request_data)
+    chain_manager.request_queue.put(('request_blocks', request_data))
 
 
 @receiver(signals.new_blocks_received)
 def new_blocks_received_handler(sender, blocks, **kwargs):
-        print "received blocks", [rlp_hash_hex(b) for b in blocks]
-        chain_manager.request_queue.add_blocks(blocks)
+    logger.debug("received blocks: %r" %([rlp_hash_hex(b) for b in blocks]))
+    chain_manager.request_queue.put(('add_blocks', blocks))
