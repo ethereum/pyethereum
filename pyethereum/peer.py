@@ -30,6 +30,8 @@ class Peer(StoppableLoopThread):
         self.last_asked_for_peers = 0
         self.last_pinged = 0
 
+        self.recv_buffer = ''
+
         # connect signals
 
     def __repr__(self):
@@ -50,7 +52,7 @@ class Peer(StoppableLoopThread):
         # shut down
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
-        except IOError as e:
+        except socket.error as e:
             logger.debug(
                 "shutting down failed {0} \"{1}\"".format(repr(self), str(e)))
         self._connection.close()
@@ -73,7 +75,7 @@ class Peer(StoppableLoopThread):
             try:
                 n = self.connection().send(packet)
                 packet = packet[n:]
-            except IOError as e:
+            except socket.error as e:
                 logger.debug(
                     '{0}: send packet failed, {1}'
                     .format(repr(self), str(e)))
@@ -90,24 +92,21 @@ class Peer(StoppableLoopThread):
         '''
         :return: size of processed data
         '''
-        packet = ""
         while True:
             try:
-                chunk = self.connection().recv(2048)
-            except IOError:
-                chunk = ''
-            if not chunk:
+                self.recv_buffer += self.connection().recv(2048)
+            except socket.error:
                 break
-            packet += chunk
+        length = len(self.recv_buffer)
+        if length:
+            self._process_recv_buffer()
+        return length
 
-        if packet:
-            self._recv_packet(packet)
-        return len(packet)
-
-    def _recv_packet(self, packet):
+    def _process_recv_buffer(self):
         try:
-            cmd, data = packeter.load_cmd(packet)
+            cmd, data, self.recv_buffer = packeter.load_cmd(self.recv_buffer)
         except Exception as e:
+            self.recv_buffer = ''
             logger.warn(e)
             return self.send_Disconnect(reason='Bad protocol')
 
@@ -164,6 +163,8 @@ class Peer(StoppableLoopThread):
         self.send_GetTransactions()  # FIXME
 
     def send_Disconnect(self, reason=None):
+        logger.info('disconnecting {0}, reason: {1}'.format(
+            str(self), reason or ''))
         self.send_packet(packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
