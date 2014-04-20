@@ -206,7 +206,7 @@ Feature: trie tree manipulate
       | ["\x03\xe8", "\x03\xe9", "\x03\xe8"] |
 
 
-  Scenario Outline: confirm to fixture
+  Scenario Outline: conform to fixture
     Given input dictionary: <in>
     When clear trie tree
     And build trie tree from the input
