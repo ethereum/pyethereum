@@ -221,3 +221,77 @@ def step_impl(context):
     ])
 
     assert right == set(context.res)
+
+
+@given(u'a mock stopped peer')  # noqa
+def step_impl(context):
+    from pyethereum.peer import Peer
+    context.peer = mock.MagicMock(spec=Peer)
+    context.peer.stopped = mock.MagicMock(return_value=True)
+
+
+@given(u'remove_peer is mocked')  # noqa
+def step_impl(context):
+    context.peer_manager.remove_peer = mock.MagicMock()
+
+
+@when(u'_check_alive is called with the peer')  # noqa
+def step_impl(context):
+    context.peer_manager._check_alive(context.peer)
+
+
+@then(u'remove_peer is called once with the peer')  # noqa
+def step_impl(context):
+    assert context.peer_manager.remove_peer.call_count == 1
+
+
+@given(u'a mock normal peer')  # noqa
+def step_impl(context):
+    from pyethereum.peer import Peer
+    context.peer = Peer(utils.mock_connection(), '1.1.1.1', 1234)
+    context.peer.send_Ping = mock.MagicMock()
+
+
+@given(u'time.time is patched')  # noqa
+def step_impl(context):
+    context.time_time_pactcher = mock.patch('pyethereum.peermanager.time.time')
+    context.time_time = context.time_time_pactcher.start()
+    context.time_time.return_value = 10
+
+
+@given(u'ping was sent and not responsed in time')  # noqa
+def step_impl(context):
+    context.peer.last_pinged = 4
+    context.peer.last_valid_packet_received = 1
+    context.peer_manager.max_ping_wait = 5
+    context.peer_manager.max_silence = 2
+
+    now = context.time_time()
+    dt_ping = now - context.peer.last_pinged
+    dt_seen = now - context.peer.last_valid_packet_received
+
+    assert dt_ping < dt_seen and dt_ping > context.peer_manager.max_ping_wait
+
+
+@when(u'time.time is unpatched')  # noqa
+def step_impl(context):
+    context.time_time_pactcher.stop()
+
+
+@given(u'peer is slient for a long time')  # noqa
+def step_impl(context):
+    context.peer.last_pinged = 4
+    context.peer.last_valid_packet_received = 7
+    context.peer_manager.max_ping_wait = 5
+    context.peer_manager.max_silence = 2
+
+    now = context.time_time()
+    dt_ping = now - context.peer.last_pinged
+    dt_seen = now - context.peer.last_valid_packet_received
+
+    assert min(dt_seen, dt_ping) > context.peer_manager.max_silence
+
+
+@then(u'peer.send_Ping is called once')  # noqa
+def step_impl(context):
+    assert context.peer.send_Ping.call_count == 1

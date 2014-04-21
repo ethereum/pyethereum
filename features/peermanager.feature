@@ -63,3 +63,26 @@ Feature: peer manager
     And local_address is local_address
     When _peer_candidates is called
     Then the result candidates should be right
+
+  Scenario: check alive on stopped peer
+    Given a mock stopped peer
+    And remove_peer is mocked
+    When _check_alive is called with the peer
+    Then remove_peer is called once with the peer
+
+  Scenario: check alive on unalive peer
+    Given a mock normal peer
+    And time.time is patched
+    And ping was sent and not responsed in time
+    And remove_peer is mocked
+    When _check_alive is called with the peer
+    And time.time is unpatched
+    Then remove_peer is called once with the peer
+
+  Scenario: check alive on alive peer
+    Given a mock normal peer
+    And time.time is patched
+    And peer is slient for a long time
+    When _check_alive is called with the peer
+    And time.time is unpatched
+    Then peer.send_Ping is called once
