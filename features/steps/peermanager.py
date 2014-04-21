@@ -188,20 +188,20 @@ def step_impl(context):
 @given(u'get_known_peer_addresses is mocked')  # noqa
 def step_impl(context):
     context.peer_manager.get_known_peer_addresses = mock.MagicMock(
-        return_value=[
+        return_value=set([
             ('192.168.1.1', 1234, 'it'),
             ('1.168.1.1', 1234, 'he'),
             ('1.1.1.1', 1234, 'me'),
-        ])
+        ]))
 
 
 @given(u'get_connected_peer_addresses is mocked')  # noqa
 def step_impl(context):
     context.peer_manager.get_connected_peer_addresses = mock.MagicMock(
-        return_value=[
+        return_value=set([
             ('192.168.1.1', 1234, 'it'),
             ('9.168.1.1', 1234, 'she'),
-        ])
+        ]))
 
 
 @given(u'local_address is local_address')  # noqa
@@ -209,18 +209,15 @@ def step_impl(context):
     context.peer_manager.local_address = ('1.1.1.1', 1234)
 
 
-@when(u'get_known_peer_addresses is called')  # noqa
+@when(u'_peer_candidates is called')  # noqa
 def step_impl(context):
-    context.res = context.peer_manager.get_known_peer_addresses()
+    context.res = context.peer_manager._peer_candidates()
 
 
 @then(u'the result candidates should be right')  # noqa
 def step_impl(context):
-    right = [
-        ('192.168.1.1', 1234, 'it'),
+    right = set([
         ('1.168.1.1', 1234, 'he'),
-        ('9.168.1.1', 1234, 'she'),
-    ]
+    ])
 
-    assert len(right) == len(context.res)
-    set(right) == set(context.res)
+    assert right == set(context.res)
