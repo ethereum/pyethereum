@@ -105,6 +105,16 @@ def step_impl(context):
     assert context.peer not in context.peer_manager.connected_peers
 
 
+@when(u'_create_peer_sock')  # noqa
+def step_impl(context):
+    context.res = context.peer_manager._create_peer_sock()
+
+
+@then(u'return a socket')  # noqa
+def step_impl(context):
+    assert context.res
+
+
 @given(u'peer address of (host, port)')  # noqa
 def step_impl(context):
     context.peer_address = ('myhost', 1234)
@@ -156,3 +166,20 @@ def step_impl(context):
 @then(u'connect_peer should return peer')  # noqa
 def step_impl(context):
     assert context.res == context.peer
+
+
+@when(u'call of socket.connect will fail')  # noqa
+def step_impl(context):
+    def side_effect():
+        raise Exception()
+    context.sock.connect.side_effect = side_effect
+
+
+@then(u'add_peer should not be called')  # noqa
+def step_impl(context):
+    assert context.peer_manager.add_peer.call_count == 0
+
+
+@then(u'connect_peer should return None')  # noqa
+def step_impl(context):
+    assert context.res is None
