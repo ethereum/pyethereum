@@ -1,4 +1,5 @@
 import utils
+import mock
 
 
 @given(u'peer data of (connection, ip, port)')  # noqa
@@ -102,3 +103,56 @@ def step_impl(context):
 @then(u'the peer should not present in connected_peers')  # noqa
 def step_impl(context):
     assert context.peer not in context.peer_manager.connected_peers
+
+
+@given(u'peer address of (host, port)')  # noqa
+def step_impl(context):
+    context.peer_address = ('myhost', 1234)
+
+
+@when(u'socket is mocked')  # noqa
+def step_impl(context):
+    context.peer_manager._create_peer_sock = mock.MagicMock()
+    context.sock = context.peer_manager._create_peer_sock.return_value
+    context.sock.getpeername.return_value = ('192.168.1.1', 1234)
+
+
+@then(u'socket.connect should be called with (host, port)')  # noqa
+def step_impl(context):
+    assert context.sock.connect.call_args[0][0] == context.peer_address
+
+
+@when(u'call of socket.connect will success')  # noqa
+def step_impl(context):
+    pass
+
+
+@when(u'add_peer is mocked, and the return value is recorded as peer')  # noqa
+def step_impl(context):
+    context.peer_manager.add_peer = mock.MagicMock()
+    context.peer = context.peer_manager.add_peer.return_value
+
+
+@when(u'send_Hello is mocked')  # noqa
+def step_impl(context):
+    context.peer_manager.send_Hello = mock.MagicMock()
+
+
+@when(u'connect_peer is called with the given peer address')  # noqa
+def step_impl(context):
+    context.res = context.peer_manager.connect_peer(*context.peer_address)
+
+
+@then(u'add_peer should be called once')  # noqa
+def step_impl(context):
+    assert context.peer_manager.add_peer.call_count == 1
+
+
+@then(u'the peer should have send_Hello called once')  # noqa
+def step_impl(context):
+    assert context.peer.send_Hello.call_count == 1
+
+
+@then(u'connect_peer should return peer')  # noqa
+def step_impl(context):
+    assert context.res == context.peer

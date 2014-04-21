@@ -55,27 +55,31 @@ class PeerManager(StoppableLoopThread):
             self.connected_peers.remove(peer)
         # connect new peers if there are no candidates
 
+    def _create_peer_sock(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.settimeout(1)
+        return sock
+
     def connect_peer(self, host, port):
         '''
         :param host:  domain notation or IP
         '''
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(1)
+        sock = self._create_peer_sock()
         logger.debug('connecting {0}:{1}'.format(host, port))
         try:
             sock.connect((host, port))
         except Exception as e:
             logger.debug(
                 'Conencting {0}:{1} failed, {2}'.format(host, port, str(e)))
-            return False
+            return None
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))
         peer = self.add_peer(sock, ip, port)
 
         # Send Hello
         peer.send_Hello()
-        return True
+        return peer
 
     def _peer_candidates(self):
         candidates = self.get_known_peer_addresses().difference(
