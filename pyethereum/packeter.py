@@ -1,8 +1,9 @@
 import logging
 import rlp
-from utils import (big_endian_to_int as idec,
-                   int_to_big_endian4 as ienc4,
-                   recursive_int_to_big_endian)
+from utils import big_endian_to_int as idec
+from utils import int_to_big_endian4 as ienc4
+from utils import int_to_big_endian as ienc
+from utils import recursive_int_to_big_endian
 import dispatch
 
 import signals
@@ -198,7 +199,7 @@ class Packeter(object):
         '''
         data = [self.cmd_map_by_name['Peers']]
         for ip, port, pid in peers:
-            ip = list((chr(int(x)) for x in ip.split('.')))
+            ip = list((ienc(int(x)) for x in ip.split('.')))
             data.append([ip, port, pid])
         return self.dump_packet(data)
 
