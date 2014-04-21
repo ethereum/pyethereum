@@ -64,7 +64,7 @@ class Packeter(object):
 
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x0C
+    PROTOCOL_VERSION = 11
     NETWORK_ID = 0
     CLIENT_ID = 'Ethereum(py)/0.0.1'
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
