@@ -127,18 +127,18 @@ class Peer(StoppableLoopThread):
 
     def _recv_Hello(self, data):
         # check compatibility
-        if idec(data[0]) != packeter.PROTOCOL_VERSION:
+        peer_protocol_version = idec(data[0])
+        
+        log.debug('received Hello protocol_version:%d' % peer_protocol_version)
+
+        if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols expected:%s received:%s' %(packeter.PROTOCOL_VERSION, idec(data[0])))
+                reason='Incompatible network protocols expected:%s received:%s' %(packeter.PROTOCOL_VERSION, peer_protocol_version))
 
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        """
-        spec has CAPABILITIES after PORT, CPP client the other way round.
-        emulating the latter, see  https://github.com/ethereum/cpp-ethereum
-        /blob/master/libethereum/PeerNetwork.cpp#L144
-        """
+
 
         # TODO add to known peers list
         self.hello_received = True
