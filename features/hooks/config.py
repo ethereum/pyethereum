@@ -23,6 +23,9 @@ class ConfigHook(object):
             if section == 'network' and option == 'listen_port':
                 return 1234
 
+            if section == 'network' and option == 'num_peers':
+                return 10
+
         conf.get.side_effect = get_side_effect
         conf.getint.side_effect = getint_side_effect
 
