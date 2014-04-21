@@ -183,3 +183,44 @@ def step_impl(context):
 @then(u'connect_peer should return None')  # noqa
 def step_impl(context):
     assert context.res is None
+
+
+@given(u'get_known_peer_addresses is mocked')  # noqa
+def step_impl(context):
+    context.peer_manager.get_known_peer_addresses = mock.MagicMock(
+        return_value=[
+            ('192.168.1.1', 1234, 'it'),
+            ('1.168.1.1', 1234, 'he'),
+            ('1.1.1.1', 1234, 'me'),
+        ])
+
+
+@given(u'get_connected_peer_addresses is mocked')  # noqa
+def step_impl(context):
+    context.peer_manager.get_connected_peer_addresses = mock.MagicMock(
+        return_value=[
+            ('192.168.1.1', 1234, 'it'),
+            ('9.168.1.1', 1234, 'she'),
+        ])
+
+
+@given(u'local_address is local_address')  # noqa
+def step_impl(context):
+    context.peer_manager.local_address = ('1.1.1.1', 1234)
+
+
+@when(u'get_known_peer_addresses is called')  # noqa
+def step_impl(context):
+    context.res = context.peer_manager.get_known_peer_addresses()
+
+
+@then(u'the result candidates should be right')  # noqa
+def step_impl(context):
+    right = [
+        ('192.168.1.1', 1234, 'it'),
+        ('1.168.1.1', 1234, 'he'),
+        ('9.168.1.1', 1234, 'she'),
+    ]
+
+    assert len(right) == len(context.res)
+    set(right) == set(context.res)

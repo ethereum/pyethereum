@@ -57,3 +57,9 @@ Feature: peer manager
     Then the peer should be stopped
     And the peer should not present in connected_peers
 
+  Scenario: get peer candidates
+    Given get_known_peer_addresses is mocked
+    And  get_connected_peer_addresses is mocked
+    And local_address is local_address
+    When get_known_peer_addresses is called
+    Then the result candidates should be right
