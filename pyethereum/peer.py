@@ -129,7 +129,7 @@ class Peer(StoppableLoopThread):
         # check compatibility
         peer_protocol_version = idec(data[0])
         
-        log.debug('received Hello protocol_version:%d' % peer_protocol_version)
+        logger.debug('received Hello protocol_version:%d' % peer_protocol_version)
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
