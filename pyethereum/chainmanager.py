@@ -92,15 +92,14 @@ def config_chainmanager(sender, **kwargs):
 
 @receiver(signals.transactions_data_requested)
 def transactions_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put('request_transactions', request_data)
+    chain_manager.request_queue.put(('request_transactions', request_data))
 
 
 @receiver(signals.blocks_data_requested)
 def blocks_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put('request_blocks', request_data)
+    chain_manager.request_queue.put(('request_blocks', request_data))
 
 
 @receiver(signals.new_blocks_received)
 def new_blocks_received_handler(sender, blocks, **kwargs):
-        print "received blocks", [rlp_hash_hex(b) for b in blocks]
-        chain_manager.request_queue.add_blocks(blocks)
+        chain_manager.request_queue(('add_blocks', blocks))
