@@ -81,7 +81,7 @@ class PeerManager(StoppableLoopThread):
         peer.send_Hello()
         return peer
 
-    def _peer_candidates(self):
+    def get_peer_candidates(self):
         candidates = self.get_known_peer_addresses().difference(
             self.get_connected_peer_addresses())
         candidates = [
@@ -115,7 +115,7 @@ class PeerManager(StoppableLoopThread):
 
     def _connect_peers(self):
         num_peers = self.config.getint('network', 'num_peers')
-        candidates = self._peer_candidates()
+        candidates = self.get_peer_candidates()
         if len(self.connected_peers) < num_peers:
             logger.debug('not enough peers: {0}'.format(
                 len(self.connected_peers)))
