@@ -113,8 +113,9 @@ class Peer(StoppableLoopThread):
         # good peer
         self.last_valid_packet_received = time.time()
 
-        func_name = "_recv_{0}".format(cmd)
+        logger.debug('received cmd:%s data:%r' %(cmd, data))
 
+        func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
             logger.warn('unknown cmd \'{0}\''.format(func_name))
             return
