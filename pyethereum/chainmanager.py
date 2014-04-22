@@ -1,6 +1,5 @@
 import logging
-import Queue
-
+import time
 from dispatch import receiver
 
 from common import StoppableLoopThread
@@ -20,7 +19,6 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
         self.transactions = set()
         self.dummy_blockchain = dict()  # hash > block
-        self.request_queue = Queue.Queue()
 
     def configure(self, config):
         self.config = config
@@ -35,35 +33,12 @@ class ChainManager(StoppableLoopThread):
             '0a4b86b286e9d540099cf'.decode('hex')
 
     def loop_body(self):
-        self.process_request_queue()
         self.mine()
+        time.sleep(.1)
 
     def mine(self):
         "in the meanwhile mine a bit, not efficient though"
         pass
-
-    def process_request_queue(self):
-        try:
-            cmd, data = self.request_queue.get(block=True, timeout=0.1)
-        except Queue.Empty:
-            return
-
-        logger.debug('%r received %s datalen:%d' %
-                     (self, cmd, len(data or [])))
-        if cmd == "add_blocks":
-            logger.debug("add_blocks in queue seen")
-            self.recv_blocks(data)
-        elif cmd == "add_transactions":
-            tx_list = data[0]
-            for tx in tx_list:
-                self.transactions.add(tx)
-        elif cmd == "request_blocks":
-            pass
-        elif cmd == 'request_transactions':
-            peer_id = data[0]
-            signals.transactions_data_ready(self.transactions, peer_id)
-        else:
-            raise Exception('unknown command:%s' % cmd)
 
     def recv_blocks(self, blocks):
         new_blocks_H = set()
