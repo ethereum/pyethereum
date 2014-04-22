@@ -131,12 +131,14 @@ class Peer(StoppableLoopThread):
         # check compatibility
         peer_protocol_version = idec(data[0])
 
-        logger.debug('received Hello protocol_version:%d' %
-                     peer_protocol_version)
+        logger.debug('received Hello protocol_version:{0:#04x}'.format(
+                     peer_protocol_version))
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols expected:%s received:%s' % (packeter.PROTOCOL_VERSION, peer_protocol_version))
+                reason='Incompatible network protocols'
+                'expected:{0:#04x} received:{1:#04x}'.format(
+                    packeter.PROTOCOL_VERSION, peer_protocol_version))
 
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
