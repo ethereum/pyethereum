@@ -43,30 +43,17 @@ class ChainManager(StoppableLoopThread):
         "in the meanwhile mine a bit, not efficient though"
         pass
 
-    def _recv_blocks(self, blocks):
-        new_blocks_H = set()
-        # memorize
-        for block in blocks:
-            h = rlp_hash(block)
-            print self, "_recv_blocks:",  rlp_hash_hex(block)
-            if h not in self.dummy_blockchain:
-                new_blocks_H.add(h)
-                self.dummy_blockchain[h] = block
-        # ask for children
-        for h in new_blocks_H:
-            print self, "_recv_blocks: ask for child block", h.encode('hex')
-            self.out_proxy.send_get_chain(1, [h])
-
     def process_request_queue(self):
         try:
             cmd, data = self.request_queue.get(block=True, timeout=0.1)
         except Queue.Empty:
             return
 
-        logger.debug('%r received %s datalen:%d' % (self, cmd, len(data or [])))
+        logger.debug('%r received %s datalen:%d' %
+                     (self, cmd, len(data or [])))
         if cmd == "add_blocks":
             logger.debug("add_blocks in queue seen")
-            self._recv_blocks(data)
+            self.recv_blocks(data)
         elif cmd == "add_transactions":
             tx_list = data[0]
             for tx in tx_list:
@@ -79,6 +66,31 @@ class ChainManager(StoppableLoopThread):
         else:
             raise Exception('unknown command:%s' % cmd)
 
+    def recv_blocks(self, blocks):
+        new_blocks_H = set()
+        # memorize
+        for block in blocks:
+            h = rlp_hash(block)
+            logger.debug("recv_blocks: %r" % rlp_hash_hex(block))
+            if h not in self.dummy_blockchain:
+                new_blocks_H.add(h)
+                self.dummy_blockchain[h] = block
+        # ask for children
+        for h in new_blocks_H:
+            logger.debug("recv_blocks: ask for child block %r" %
+                         h.encode('hex'))
+            #self.out_proxy.send_get_chain(1, [h])
+            signals.remote_chain_data_requested.send(
+                sender=self, parents=[h], count=1)
+
+    def add_transactions(self, transactions):
+        logger.debug("add transactions %r" % transactions)
+        for tx in tx_list:
+            self.transactions.add(tx)
+
+    def get_transactions(self):
+        logger.debug("get transactions")
+        return self.transactions
 
 chain_manager = ChainManager()
 
@@ -88,17 +100,22 @@ def config_chainmanager(sender, **kwargs):
     chain_manager.configure(sender)
 
 
+@receiver(signals.new_transactions_received)
+def new_transactions_received_handler(sender, transactions, **kwargs):
+    chain_manager.add_transactions(transactions)
+
+
 @receiver(signals.transactions_data_requested)
-def transactions_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put(('request_transactions', request_data))
+def transactions_data_requested_handler(sender, **kwargs):
+    transactions = chain_manager.get_transactions()
 
 
 @receiver(signals.blocks_data_requested)
 def blocks_data_requested_handler(sender, request_data, **kwargs):
-    chain_manager.request_queue.put(('request_blocks', request_data))
+    pass
 
 
 @receiver(signals.new_blocks_received)
 def new_blocks_received_handler(sender, blocks, **kwargs):
-    logger.debug("received blocks: %r" %([rlp_hash_hex(b) for b in blocks]))
-    chain_manager.request_queue.put(('add_blocks', blocks))
+    logger.debug("received blocks: %r" % ([rlp_hash_hex(b) for b in blocks]))
+    chain_manager.recv_blocks(blocks)

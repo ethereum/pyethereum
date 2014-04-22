@@ -3,11 +3,12 @@ from dispatch import Signal
 config_ready = Signal(providing_args=[""])
 connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 
-packet_sending = Signal(providing_args=["packet"])
-packet_sent = Signal(providing_args=["packet"])
+#packet_sending = Signal(providing_args=["packet"])
+#packet_sent = Signal(providing_args=["packet"])
 
 peers_data_requested = Signal(providing_args=["request_data"])
 peers_data_ready = Signal(providing_args=["requester", "ready_data"])
+
 
 disconnect_requested = Signal(providing_args=[""])
 
@@ -21,6 +22,9 @@ transactions_data_requested = Signal(
     providing_args=["request_data", "request_uid"])
 blocks_data_requested = Signal(
     providing_args=["request_data", "request_uid"])
+
+remote_chain_data_requested = Signal(providing_args=["parents", "count"])
+
 
 # send by abort_data_request, consumed by data provider
 transactions_data_request_aborted = Signal(providing_args=["request_uid"])

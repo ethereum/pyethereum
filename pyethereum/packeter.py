@@ -24,6 +24,7 @@ def load_packet(packet):
 
 
 class Packeter(object):
+
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
@@ -215,12 +216,12 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Blocks']] + blocks
         return self.dump_packet(data)
 
-    def dump_GetChain(self, request_data):
-        data = [self.cmd_map_by_name['GetChain']] + request_data
+    def dump_GetChain(self, parents=[], count=1):
+        data = [self.cmd_map_by_name['GetChain']] + parents + [count]
         return self.dump_packet(data)
 
-    def dump_NotInChain(self):
-        data = [self.cmd_map_by_name['NotInChain']]
+    def dump_NotInChain(self, block_hash):
+        data = [self.cmd_map_by_name['NotInChain'], block_hash]
         return self.dump_packet(data)
 
 

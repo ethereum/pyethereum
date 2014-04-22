@@ -58,6 +58,7 @@ class Peer(StoppableLoopThread):
         self._connection.close()
 
     def send_packet(self, response):
+        logger.debug('sending packet %r' % response)
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -71,7 +72,7 @@ class Peer(StoppableLoopThread):
             packet = ''
 
         while packet:
-            signals.packet_sending.send(sender=self, packet=packet)
+#           signals.packet_sending.send(sender=self, packet=packet)
             try:
                 n = self.connection().send(packet)
                 packet = packet[n:]
@@ -81,7 +82,7 @@ class Peer(StoppableLoopThread):
                     .format(repr(self), str(e)))
                 self.stop()
                 break
-            signals.packet_sent.send(sender=self, packet=packet)
+#            signals.packet_sent.send(sender=self, packet=packet)
 
         if packet:
             return len(packet)
@@ -113,7 +114,7 @@ class Peer(StoppableLoopThread):
         # good peer
         self.last_valid_packet_received = time.time()
 
-        logger.debug('received cmd:%s data:%r' %(cmd, data))
+        logger.debug('received cmd:%s data:%r' % (cmd, data))
 
         func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
@@ -129,17 +130,16 @@ class Peer(StoppableLoopThread):
     def _recv_Hello(self, data):
         # check compatibility
         peer_protocol_version = idec(data[0])
-        
-        logger.debug('received Hello protocol_version:%d' % peer_protocol_version)
+
+        logger.debug('received Hello protocol_version:%d' %
+                     peer_protocol_version)
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols expected:%s received:%s' %(packeter.PROTOCOL_VERSION, peer_protocol_version))
+                reason='Incompatible network protocols expected:%s received:%s' % (packeter.PROTOCOL_VERSION, peer_protocol_version))
 
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
-
-
 
         # TODO add to known peers list
         self.hello_received = True
@@ -221,8 +221,8 @@ class Peer(StoppableLoopThread):
     def _recv_Blocks(self, data):
         signals.new_blocks_received.send(sender=self, blocks=data)
 
-    def send_GetChain(self, request_data):
-        self.send_packet(packeter.dump_GetChain(request_data))
+    def send_GetChain(self, parents=[], count=1):
+        self.send_packet(packeter.dump_GetChain(parents, count))
 
     def _recv_GetChain(self, request_data):
         signals.request_data_async(
