@@ -436,16 +436,16 @@ def step_impl(context):
 
 @when(u'peer.send_NotInChain is called')  # noqa
 def step_impl(context):
-    context.peer.send_NotInChain()
+    context.peer.send_NotInChain('some hash')
 
 
 @then(u'the packet sent through connection should'  # noqa
 ' be a NotInChain packet')
 def step_impl(context):
-    packet = context.packeter.dump_NotInChain()
+    packet = context.packeter.dump_NotInChain('some hash')
     assert context.sent_packets == [packet]
 
 
 @given(u'a NotInChain packet')  # noqa
 def step_impl(context):
-    context.packet = context.packeter.dump_NotInChain()
+    context.packet = context.packeter.dump_NotInChain('some hash')

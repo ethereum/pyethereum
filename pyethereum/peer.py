@@ -233,8 +233,8 @@ class Peer(StoppableLoopThread):
             request_data,
             self.send_Blocks)
 
-    def send_NotInChain(self):
-        self.send_packet(packeter.dump_NotInChain())
+    def send_NotInChain(self, block_hash):
+        self.send_packet(packeter.dump_NotInChain(block_hash))
 
     def _recv_NotInChain(self, data):
         pass
