@@ -1,3 +1,4 @@
 leveldb
 bitcoin
 pysha3
+bottle
