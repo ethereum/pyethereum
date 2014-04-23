@@ -86,5 +86,5 @@ def account_to_dict(blockdata, address):
 
 
 def dbget(x):
-    db = trie.DB('statedb')
+    db = trie.DB(utils.get_db_path())
     print db.get(x.decode('hex'))

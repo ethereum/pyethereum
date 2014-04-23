@@ -4,8 +4,7 @@ from transactions import Transaction
 from trie import Trie
 from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
-from utils import sha3
-from utils import ensure_get_eth_dir
+from utils import sha3, get_db_path
 import utils
 import os
 import sys
@@ -18,8 +17,6 @@ NONCE_INDEX = 0
 BALANCE_INDEX = 1
 CODE_INDEX = 2
 STORAGE_INDEX = 3
-
-STATEDB_DIR = os.path.join(ensure_get_eth_dir(), 'statedb')
 
 
 class Block(object):
@@ -35,7 +32,7 @@ class Block(object):
             self.prevhash = ''
             self.uncles_root = ''
             self.coinbase = '0' * 40
-            self.state = Trie(STATEDB_DIR)
+            self.state = Trie(get_db_path())
             self.transactions_root = ''
             self.transactions = []
             self.uncles = []

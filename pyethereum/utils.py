@@ -157,3 +157,10 @@ def ensure_get_eth_dir():
     eth_dir = os.path.expanduser(os.path.normpath(eth_dir))
     mkdir_p(eth_dir)
     return eth_dir
+
+
+STATEDB_DIR = os.path.join(ensure_get_eth_dir(), 'statedb')
+
+
+def get_db_path():
+    return STATEDB_DIR
