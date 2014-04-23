@@ -107,18 +107,17 @@ def apply_msg(block, tx, msg):
     # Main loop
     while 1:
         if debug:
-            import serpent
-            print {
+            print({
                 "Stack": compustate.stack,
                 "PC": compustate.pc,
                 "Gas": compustate.gas,
                 "Memory": decode_datalist(compustate.memory),
                 "Storage": block.get_storage(msg.to).to_dict(),
-            }
+            })
         o = apply_op(block, tx, msg, code, compustate)
         if o is not None:
             if debug:
-                print 'done', o
+                print('done', o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, 0, []
@@ -220,8 +219,8 @@ def apply_op(block, tx, msg, code, compustate):
     fee = calcfee(block, tx, msg, compustate, op)
     if fee > compustate.gas:
         if debug:
-            print "Out of gas", compustate.gas, "need", fee
-            print op, list(reversed(compustate.stack))
+            print("Out of gas", compustate.gas, "need", fee)
+            print(op, list(reversed(compustate.stack)))
         return OUT_OF_GAS
     stackargs = []
     for i in range(in_args):
@@ -229,9 +228,9 @@ def apply_op(block, tx, msg, code, compustate):
     if debug:
         if op[:4] == 'PUSH':
             start, n = compustate.pc + 1, int(op[4:])
-            print op, decode_int(code[start:start + n])
+            print(op, decode_int(code[start:start + n]))
         else:
-            print op, ' '.join(map(str, stackargs))
+            print(op, ' '.join(map(str, stackargs)))
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -382,7 +381,7 @@ def apply_op(block, tx, msg, code, compustate):
         gas = stackargs[1]
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
         if debug:
-            print "Sub-contract:", msg.to, value, gas, data
+            print("Sub-contract:", msg.to, value, gas, data)
         create_contract(block, tx, Message(msg.to, '', value, gas, data))
     elif op == 'CALL':
         if len(mem) < stackargs[3] + stackargs[4]:
