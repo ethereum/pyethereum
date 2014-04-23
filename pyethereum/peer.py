@@ -72,7 +72,7 @@ class Peer(StoppableLoopThread):
             packet = ''
 
         while packet:
-#           signals.packet_sending.send(sender=self, packet=packet)
+            #  signals.packet_sending.send(sender=self, packet=packet)
             try:
                 n = self.connection().send(packet)
                 packet = packet[n:]
@@ -82,7 +82,7 @@ class Peer(StoppableLoopThread):
                     .format(repr(self), str(e)))
                 self.stop()
                 break
-#            signals.packet_sent.send(sender=self, packet=packet)
+            #  signals.packet_sent.send(sender=self, packet=packet)
 
         if packet:
             return len(packet)
