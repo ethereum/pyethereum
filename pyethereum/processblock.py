@@ -130,7 +130,6 @@ def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = encode_int(block.get_nonce(msg.sender))
     recvaddr = sha3(rlp.encode([sender, nonce]))[12:]
-    code = msg.data
     # Transfer value, instaquit if not enough
     block.delta_balance(recvaddr, msg.value)
     o = block.delta_balance(msg.sender, msg.value)
@@ -145,7 +144,7 @@ def create_contract(block, tx, msg):
         o = apply_op(block, tx, msg, msg.data, compustate.op)
         if o is not None:
             if o == OUT_OF_GAS:
-                block.state.root = oldroot
+                block.revert(snapshot)
                 return 0, 0
             else:
                 block.set_code(''.join(map(chr, o)))
@@ -197,15 +196,6 @@ def calcfee(block, tx, msg, compustate, op):
         return GSTOP
     else:
         return GSTEP
-
-# multi pop
-
-
-def multipop(stack, pops):
-    o = []
-    for i in range(pops):
-        o.append(stack.pop())
-    return o
 
 # Does not include paying opfee
 
@@ -415,7 +405,7 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'SUICIDE':
-        to = encode_int(stackhash[0])
+        to = encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
         block.delta_balance(to, block.get_balance(msg.to))
         block.state.update(msg.to, '')
