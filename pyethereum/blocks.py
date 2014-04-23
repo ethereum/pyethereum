@@ -72,7 +72,7 @@ class Block(object):
 
     # _get_acct_item(bin or hex, int) -> bin
     def _get_acct_item(self, address, index):
-        '''
+        ''' get account item
         :param address: account address, can be binary or hex string
         :param index: item index
         '''
@@ -83,6 +83,11 @@ class Block(object):
 
     # _set_acct_item(bin or hex, int, bin)
     def _set_acct_item(self, address, index, value):
+        ''' set account item
+        :param address: account address, can be binary or hex string
+        :param index: item index
+        :param value: new value
+        '''
         if len(address) == 40:
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
@@ -91,7 +96,9 @@ class Block(object):
 
     # _delta_item(bin or hex, int, int) -> success/fail
     def _delta_item(self, address, index, value):
-        ''' add value to item
+        ''' add value to account item
+        :param address: account address, can be binary or hex string
+        :param index: item index
         :param value: can be positive or negative
         '''
         if len(address) == 40:
