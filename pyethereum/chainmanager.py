@@ -33,7 +33,6 @@ class ChainManager(StoppableLoopThread):
             return
         genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f'\
             '0a4b86b286e9d540099cf'.decode('hex')
-        self.out_proxy.send_get_chain(count=1, parents_H=[genesis_H])
 
     def loop_body(self):
         self.process_request_queue()
@@ -79,7 +78,6 @@ class ChainManager(StoppableLoopThread):
         for h in new_blocks_H:
             logger.debug("recv_blocks: ask for child block %r" %
                          h.encode('hex'))
-            #self.out_proxy.send_get_chain(1, [h])
             signals.remote_chain_data_requested.send(
                 sender=self, parents=[h], count=1)
 

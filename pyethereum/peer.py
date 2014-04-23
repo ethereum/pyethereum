@@ -6,7 +6,8 @@ import logging
 import signals
 from common import StoppableLoopThread
 from packeter import packeter
-from utils import big_endian_to_int as idec
+from utils import big_endian_to_int as idec, recursive_int_to_big_endian
+import rlp
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class Peer(StoppableLoopThread):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
 
     def id(self):
-        return hash(repr(self))
+        return self.node_id.encode('hex')[:5] if self.node_id else 'NO_ID'
 
     def connection(self):
         if self.stopped():
@@ -58,7 +59,8 @@ class Peer(StoppableLoopThread):
         self._connection.close()
 
     def send_packet(self, response):
-        logger.debug('sending packet %r' % response)
+        logger.debug('sending packet to {0}: {1}'.format(
+            self.id(), response.encode('hex')))
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -114,7 +116,10 @@ class Peer(StoppableLoopThread):
         # good peer
         self.last_valid_packet_received = time.time()
 
-        logger.debug('received cmd:%s data:%r' % (cmd, data))
+        logger.debug('receive from {0}: cmd: {1}: data: {2}'.format(
+            self.id(), cmd,
+            rlp.encode(recursive_int_to_big_endian(data)).encode('hex')
+        ))
 
         func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
