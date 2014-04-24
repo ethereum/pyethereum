@@ -50,7 +50,7 @@ class Block(object):
         self.prevhash = header[1]
         self.uncles_root = header[2]
         self.coinbase = header[3].encode('hex')
-        self.state = Trie(STATEDB_DIR, header[4])
+        self.state = Trie(get_db_path(), header[4])
         self.transactions_root = header[5]
         self.difficulty = decode_int(header[6])
         self.timestamp = decode_int(header[7])
@@ -132,7 +132,7 @@ class Block(object):
         self._set_acct_item(address, CODE_INDEX, sha3(value))
 
     def get_storage(self, address):
-        return Trie(STATEDB_DIR, self._get_acct_item(address, STORAGE_INDEX))
+        return Trie(get_db_path(), self._get_acct_item(address, STORAGE_INDEX))
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
@@ -151,7 +151,7 @@ class Block(object):
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
         chash = acct[CODE_INDEX]
-        stdict = Trie(STATEDB_DIR, acct[STORAGE_INDEX]).to_dict(True)
+        stdict = Trie(get_db_path(), acct[STORAGE_INDEX]).to_dict(True)
         return {
             'nonce': decode_int(acct[NONCE_INDEX]),
             'balance': decode_int(acct[BALANCE_INDEX]),
@@ -187,7 +187,7 @@ class Block(object):
         state = self.state.to_dict(True)
         nstate = {}
         for s in state:
-            t = Trie(STATEDB_DIR, state[s][STORAGE_INDEX])
+            t = Trie(get_db_path(), state[s][STORAGE_INDEX])
             o = [0] * ACCT_RLP_LENGTH
             o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
             o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])

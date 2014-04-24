@@ -38,8 +38,8 @@ class Peer(StoppableLoopThread):
     def __repr__(self):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
 
-    def id(self):
-        return self.node_id.encode('hex')[:5] if self.node_id else 'NO_ID'
+    def __str__(self):
+        return "[{0}: {1}]".format(self.ip, self.port)
 
     def connection(self):
         if self.stopped():
@@ -59,8 +59,8 @@ class Peer(StoppableLoopThread):
         self._connection.close()
 
     def send_packet(self, response):
-        logger.debug('sending packet to {0}: {1}'.format(
-            self.id(), response.encode('hex')))
+        logger.debug('sending packet to {0} >>> {1}'.format(
+            self, response.encode('hex')))
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -80,7 +80,7 @@ class Peer(StoppableLoopThread):
             except socket.error as e:
                 logger.debug(
                     '{0}: send packet failed, {1}'
-                    .format(repr(self), str(e)))
+                    .format(self, str(e)))
                 self.stop()
                 break
 
@@ -114,8 +114,8 @@ class Peer(StoppableLoopThread):
         # good peer
         self.last_valid_packet_received = time.time()
 
-        logger.debug('receive from {0}: cmd: {1}: data: {2}'.format(
-            self.id(), cmd,
+        logger.debug('receive from {0} <<< cmd: {1}: data: {2}'.format(
+            self, cmd,
             rlp.encode(recursive_int_to_big_endian(data)).encode('hex')
         ))
 

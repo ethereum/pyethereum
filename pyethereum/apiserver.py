@@ -4,7 +4,7 @@ import threading
 from bottle import run as bottle_run
 from dispatch import receiver
 
-from common import bottle_app
+from api import app
 import signals
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class ApiServer(threading.Thread):
         self.port = config.getint('api', 'listen_port')
 
     def run(self):
-        bottle_run(bottle_app, host=self.listen_host, port=self.port)
+        bottle_run(app, host=self.listen_host, port=self.port)
 
 api_server = ApiServer()
 
