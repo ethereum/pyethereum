@@ -12,7 +12,7 @@ from blocks import Block
 
 logger = logging.getLogger(__name__)
 
-GENESIS_H = 'b6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'\
+GENESIS_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'\
             .decode('hex')
 
 
@@ -26,7 +26,6 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
         self.transactions = set()
         self.blockchain = DB(utils.get_db_path())
-        self.request_queue = Queue.Queue()
         self.head = None
 
     # Returns True if block is latest
