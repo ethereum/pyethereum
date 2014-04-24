@@ -1,6 +1,5 @@
 import logging
-import Queue
-
+import time
 from dispatch import receiver
 
 from common import StoppableLoopThread
@@ -9,6 +8,7 @@ import signals
 from db import DB
 import utils
 import rlp
+from blocks import Block
 
 logger = logging.getLogger(__name__)
 
@@ -62,39 +62,16 @@ class ChainManager(StoppableLoopThread):
         # genesis block
         # http://etherchain.org/#/block/
         # ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
-        if len(self.dummy_blockchain):
+        if self.head:
             return
 
     def loop_body(self):
-        self.process_request_queue()
         self.mine()
+        time.sleep(.1)
 
     def mine(self):
         "in the meanwhile mine a bit, not efficient though"
         pass
-
-    def process_request_queue(self):
-        try:
-            cmd, data = self.request_queue.get(block=True, timeout=0.1)
-        except Queue.Empty:
-            return
-
-        logger.debug('%r received %s datalen:%d' %
-                     (self, cmd, len(data or [])))
-        if cmd == "add_blocks":
-            logger.debug("add_blocks in queue seen")
-            self.recv_blocks(data)
-        elif cmd == "add_transactions":
-            tx_list = data[0]
-            for tx in tx_list:
-                self.transactions.add(tx)
-        elif cmd == "request_blocks":
-            pass
-        elif cmd == 'request_transactions':
-            peer_id = data[0]
-            signals.transactions_data_ready(self.transactions, peer_id)
-        else:
-            raise Exception('unknown command:%s' % cmd)
 
     def recv_blocks(self, blocks):
         new_blocks_H = set()
@@ -102,9 +79,11 @@ class ChainManager(StoppableLoopThread):
         for block in blocks:
             h = rlp_hash(block)
             logger.debug("recv_blocks: %r" % rlp_hash_hex(block))
-            if h not in self.dummy_blockchain:
+            try:
+                self.blockchain.get(h)
+            except:
+                self.add_block(Block(block))
                 new_blocks_H.add(h)
-                self.dummy_blockchain[h] = block
         # ask for children
         for h in new_blocks_H:
             logger.debug("recv_blocks: ask for child block %r" %
