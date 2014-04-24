@@ -8,9 +8,10 @@ import logging
 import logging.config
 from signals import config_ready
 
-from tcpserver import TcpServer
+from tcpserver import tcp_server
 from peermanager import peer_manager
 from chainmanager import chain_manager
+from apiserver import api_server
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,16 @@ def create_config():
     config = ConfigParser.ConfigParser()
     # set some defaults, which may be overwritten
     config.add_section('network')
-    config.set('network', 'listen_host', 'localhost')
+    config.set('network', 'listen_host', '0.0.0.0')
     config.set('network', 'listen_port', '30303')
     config.set('network', 'num_peers', '5')
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
     config.set('network', 'client_id', 'Ethereum(py)/0.0.1')
+
+    config.add_section('api')
+    config.set('api', 'listen_host', '127.0.0.1')
+    config.set('api', 'listen_port', '30203')
 
     config.add_section('misc')
     config.set('misc', 'verbosity', '1')
@@ -155,18 +160,15 @@ def main():
     config = create_config()
     config_ready.send(sender=config)
 
-    # start tcp server
     try:
-        tcp_server = TcpServer(config.get('network', 'listen_host'),
-                               config.getint('network', 'listen_port'))
+        tcp_server.start()
     except IOError as e:
         logger.error("Could not start TCP server: \"{0}\"".format(str(e)))
         sys.exit(1)
 
-    peer_manager.local_address = (tcp_server.ip, tcp_server.port)
-    tcp_server.start()
     peer_manager.start()
     chain_manager.start()
+    api_server.start()
 
     # handle termination signals
     def signal_handler(signum=None, frame=None):

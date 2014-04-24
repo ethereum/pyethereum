@@ -157,6 +157,12 @@ def config_peermanager(sender, **kwargs):
     peer_manager.configure(sender)
 
 
+@receiver(signals.local_address_set)
+def local_address_set_handler(sender, ip, port, **kwargs):
+    with peer_manager.lock:
+        peer_manager.local_address = (ip, port)
+
+
 @receiver(signals.connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)

@@ -1,6 +1,8 @@
 import threading
 import logging
 
+from bottle import Bottle
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,11 +23,20 @@ class StoppableLoopThread(threading.Thread):
         with self.lock:
             return self._stopped
 
-    def run(self):
+    def pre_loop(self):
         logger.debug('Thread {0} start to run'.format(self))
+
+    def post_loop(self):
+        logger.debug('Thread {0} stopped'.format(self))
+
+    def run(self):
+        self.pre_loop()
         while not self.stopped():
             self.loop_body()
-        logger.debug('Thread {0} stopped'.format(self))
+        self.post_loop()
 
     def loop_body(self):
         raise Exception('Not Implemented')
+
+
+bottle_app = Bottle()
