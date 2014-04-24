@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import os
-import leveldb
 import rlp
 from sha3 import sha3_256
+from db import DB
 
 
 def bin_to_nibbles(s):
@@ -115,35 +115,6 @@ sha3 = lambda x: sha3_256(x).digest()
 rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
 
 rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
-
-databases = {}
-
-
-class DB(object):
-
-    def __init__(self, dbfile):
-        if dbfile not in databases:
-            databases[dbfile] = leveldb.LevelDB(dbfile)
-        self.db = databases[dbfile]
-        self.uncommitted = {}
-
-    def get(self, key):
-        if key in self.uncommitted:
-            return self.uncommitted[key]
-        return self.db.Get(key)
-
-    def put(self, key, value):
-        self.uncommitted[key] = value
-
-    def commit(self):
-        batch = leveldb.WriteBatch()
-        for k in self.uncommitted:
-            batch.Put(k, self.uncommitted[k])
-        self.db.Write(batch, sync=True)
-
-    def delete(self, key):
-        return self.db.Delete(key)
-
 
 (
     NODE_TYPE_BLANK,

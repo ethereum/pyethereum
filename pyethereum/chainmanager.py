@@ -6,8 +6,14 @@ from dispatch import receiver
 from common import StoppableLoopThread
 from trie import rlp_hash, rlp_hash_hex
 import signals
+from db import DB
+import utils
+import rlp
 
 logger = logging.getLogger(__name__)
+
+GENESIS_H = 'b6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'\
+            .decode('hex')
 
 
 class ChainManager(StoppableLoopThread):
@@ -19,8 +25,35 @@ class ChainManager(StoppableLoopThread):
     def __init__(self):
         super(ChainManager, self).__init__()
         self.transactions = set()
-        self.dummy_blockchain = dict()  # hash > block
+        self.blockchain = DB(utils.get_db_path())
         self.request_queue = Queue.Queue()
+        self.head = None
+
+    # Returns True if block is latest
+    def add_block(self, block):
+        blockdata = block.serialize()
+        blockhash = utils.sha3(block.serialize())
+        if blockhash == GENESIS_H:
+            parent_score = 0
+        else:
+            try:
+                parent = rlp.decode(self.blockchain.get(block.prevhash))
+            except:
+                raise Exception("Parent of block not found")
+            parent_score = utils.big_endian_to_int(parent[1])
+        total_score = utils.int_to_big_endian(block.difficulty + parent_score)
+        self.blockchain.put(blockhash, rlp.encode([blockdata, total_score]))
+        try:
+            head = self.blockchain.get('head')
+            head_data = rlp.decode(self.blockchain.get(head))
+            head_score = utils.big_endian_to_int(head_data[1])
+        except:
+            head_score = 0
+        if total_score > head_score:
+            self.head = blockhash
+            self.blockchain.put('head', blockhash)
+            return True
+        return False
 
     def configure(self, config):
         self.config = config
@@ -31,8 +64,6 @@ class ChainManager(StoppableLoopThread):
         # ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
         if len(self.dummy_blockchain):
             return
-        genesis_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f'\
-            '0a4b86b286e9d540099cf'.decode('hex')
 
     def loop_body(self):
         self.process_request_queue()
@@ -83,7 +114,7 @@ class ChainManager(StoppableLoopThread):
 
     def add_transactions(self, transactions):
         logger.debug("add transactions %r" % transactions)
-        for tx in tx_list:
+        for tx in transactions:
             self.transactions.add(tx)
 
     def get_transactions(self):

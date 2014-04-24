@@ -6,7 +6,6 @@ from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3, get_db_path
 import utils
-import os
 import sys
 
 '''
