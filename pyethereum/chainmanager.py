@@ -29,10 +29,13 @@ class ChainManager(StoppableLoopThread):
         self.head = None
         # FIXME: intialize blockchain with genesis block
 
+    def _initialize_blockchain(self):
+        genesis = blocks.genesis()
+
     # Returns True if block is latest
     def add_block(self, block):
-        blockdata = block.serialize()
-        blockhash = utils.sha3(block.serialize())
+
+        blockhash = block.hash()
         if blockhash == GENESIS_H:
             parent_score = 0
         else:
@@ -42,7 +45,8 @@ class ChainManager(StoppableLoopThread):
                 raise Exception("Parent of block not found")
             parent_score = utils.big_endian_to_int(parent[1])
         total_score = utils.int_to_big_endian(block.difficulty + parent_score)
-        self.blockchain.put(blockhash, rlp.encode([blockdata, total_score]))
+        self.blockchain.put(
+            blockhash, rlp.encode([block.serialize(), total_score]))
         try:
             head = self.blockchain.get('head')
             head_data = rlp.decode(self.blockchain.get(head))
@@ -84,12 +88,12 @@ class ChainManager(StoppableLoopThread):
         # FIXME validate received chain, compare with local chain
         for data in block_lst:
             logger.debug("processing block: %r" % rlp_hash_hex(data))
-            block = Block(rlp.encode(data))
+            block = Block.deserialize(rlp.encode(data))
             h = rlp_hash(data)
             try:
                 self.blockchain.get(h)
             except KeyError:
-                self.add_block(Block(block))
+                self.add_block(block)
                 new_blocks_H.add(h)
 
  #       for h in new_blocks_H:

@@ -39,23 +39,15 @@ class Transaction(object):
     """
 
     # nonce,gasprice,startgas,to,value,data,v,r,s
-    def __init__(self, *args):
-        # From serialization
-        if len(args) == 1:
-            if re.match('^[0-9a-fA-F]*$', args[0]):
-                args = rlp.decode(args[0].decode('hex'))
-            else:
-                args = rlp.decode(args[0])
-            # Deserialize all properties
-            for i, (name, typ, default) in enumerate(tx_structure):
-                if i < len(args):
-                    setattr(self, name, utils.decoders[typ](args[i]))
-                else:
-                    setattr(self, name, default)
-        else:
-            # Directly use arguments
-            for i, (name, typ, default) in enumerate(tx_structure):
-                setattr(self, name, args[i] if i < len(args) else default)
+    def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
+        self.nonce = nonce
+        self.gasprice = gasprice
+        self.startgas = startgas
+        self.to = to
+        self.value = value
+        self.data = data
+        self.v, self.r, self.s = v, r, s
+
         # Determine sender
         if self.r and self.s:
             rawhash = sha3(rlp.encode(self.serialize(False)))
@@ -66,6 +58,22 @@ class Transaction(object):
         # does not include signature
         else:
             self.sender = 0
+
+    @classmethod
+    def deserialize(cls, rlpdata):
+        kargs = dict()
+        args = rlp.decode(rlpdata)
+        # Deserialize all properties
+        for i, (name, typ, default) in enumerate(tx_structure):
+            if i < len(args):
+                kargs[name] = utils.decoders[typ](args[i])
+            else:
+                kargs[name] = default
+        return Transaction(**kargs)
+
+    @classmethod
+    def hex_deserialize(cls, hexrlpdata):
+        return cls.deserialize(hexrlpdata.decode('hex'))
 
     def sign(self, key):
         rawhash = sha3(rlp.encode(self.serialize(False)))
@@ -79,11 +87,14 @@ class Transaction(object):
             o.append(utils.encoders[typ](getattr(self, name)))
         return rlp.encode(o if signed else o[:-3])
 
-    def hex_serialize(self):
-        return self.serialize().encode('hex')
+    def hex_serialize(self, signed=True):
+        return self.serialize(signed).encode('hex')
 
     def hash(self):
         return sha3(self.serialize())
+
+    def hex_hash(self):
+        return self.hash().encode('hex')
 
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):

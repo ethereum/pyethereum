@@ -5,18 +5,18 @@ from utils import int_to_big_endian as encode_int
 from utils import sha3, get_db_path
 import utils
 
-BLOCK_REWARD = 10**18
+BLOCK_REWARD = 10 ** 18
 
 block_structure = [
     ["prevhash", "bin", ""],
     ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
-    ["coinbase", "addr", "0"*40],
+    ["coinbase", "addr", "0" * 40],
     ["state_root", "trie_root", ''],
     ["tx_list_root", "trie_root", ''],
-    ["difficulty", "int", 2**23],
+    ["difficulty", "int", 2 ** 23],
     ["number", "int", 0],
-    ["min_gas_price", "int", 10**15],
-    ["gas_limit", "int", 10**6],
+    ["min_gas_price", "int", 10 ** 15],
+    ["gas_limit", "int", 10 ** 6],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
@@ -24,8 +24,8 @@ block_structure = [
 ]
 
 acct_structure = [
-    ["nonce", "int",  0],
-    ["balance", "int",  0],
+    ["nonce", "int", 0],
+    ["balance", "int", 0],
     ["code", "bin", ""],
     ["storage", "trie_root", ""],
 ]
@@ -37,27 +37,42 @@ for i, (name, typ, default) in enumerate(acct_structure):
 
 class Block(object):
 
-    def __init__(self, data=None):
+    def __init__(self,
+                 prevhash='',
+                 uncles_hash=block_structure[1][2],
+                 coinbase=block_structure[2][2],
+                 state_root='',
+                 tx_list_root='',
+                 difficulty=block_structure[5][2],
+                 number=0,
+                 min_gas_price=block_structure[7][2],
+                 gas_limit=block_structure[8][2],
+                 gas_used=0, timestamp=0, extra_data='', nonce='',
+                 transaction_list=[],
+                 uncles=[]):
+
+        self.prevhash = prevhash
+        self.uncles_hash = uncles_hash
+        self.coinbase = coinbase
+        self.state_root = state_root
+        self.tx_list_root = tx_list_root
+        self.difficulty = difficulty
+        self.number = number
+        self.min_gas_price = min_gas_price
+        self.gas_limit = gas_limit
+        self.gas_used = gas_used
+        self.timestamp = timestamp
+        self.extra_data = extra_data
+        self.nonce = nonce
+        self.transaction_list = transaction_list
+        self.uncles = uncles
 
         self.transactions = Trie(get_db_path())
         self.transaction_count = 0
 
-        # Initialize all properties to defaults
-        if not data:
-            for name, typ, default in block_structure:
-                setattr(self, name, default)
-            self.uncles = []
-
-        else:
-            if re.match('^[0-9a-fA-F]*$', data):
-                data = data.decode('hex')
-            header, transaction_list, self.uncles = rlp.decode(data)
-            # Deserialize all properties
-            for i, (name, typ, default) in enumerate(block_structure):
-                setattr(self, name, utils.decoders[typ](header[i]))
-            # Fill in nodes for transaction trie
-            for tx in transaction_list:
-                self.add_transaction_to_list(tx)
+        # Fill in nodes for transaction trie
+        for tx in transaction_list:
+            self.add_transaction_to_list(tx)
 
         self.state = Trie(get_db_path(), self.state_root)
 
@@ -73,6 +88,19 @@ class Block(object):
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
         # TODO: check POW
+
+    @classmethod
+    def deserialize(cls, rlpdata):
+        header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        kargs = dict(transaction_list=transaction_list, uncles=uncles)
+        # Deserialize all properties
+        for i, (name, typ, default) in enumerate(block_structure):
+            kargs[name] = utils.decoders[typ](header_args[i])
+        return Block(**kargs)
+
+    @classmethod
+    def hex_deserialize(cls, hexrlpdata):
+        return cls.deserialize(hexrlpdata.decode('hex'))
 
     # _get_acct_item(bin or hex, int) -> bin
     def _get_acct_item(self, address, param):
@@ -210,6 +238,9 @@ class Block(object):
             header.append(utils.encoders[typ](getattr(self, name)))
         return rlp.encode([header, txlist, self.uncles])
 
+    def hex_serialize(self):
+        return self.serialize().encode('hex')
+
     def to_dict(self):
         b = {}
         for name, typ, default in block_structure:
@@ -227,13 +258,13 @@ class Block(object):
     def hash(self):
         return sha3(self.serialize())
 
-def genesis(initial_alloc):
-    block = Block()
-    block.prevhash = "0"*32
-    block.coinbase = "0"*40
-    block.difficulty = 2**22
-    block.nonce = sha3(chr(42))
+    def hex_hash(self):
+        return self.hash().encode('hex')
 
+def genesis(initial_alloc={}):
+    # https://ethereum.etherpad.mozilla.org/11
+    block = Block(prevhash="0" * 32, coinbase="0" * 40,
+                  difficulty=2 ** 22, nonce=sha3(chr(42)))
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
