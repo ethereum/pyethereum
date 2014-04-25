@@ -201,3 +201,8 @@ def new_peer_received_handler(sender, peer, **kwargs):
     ''' peer should be (ip, port, node_id)
     '''
     peer_manager.add_known_peer_address(*peer)
+
+@receiver(signals.remote_chain_data_requested)
+def remote_chain_data_requested_handler(sender, parents=[], count=1, **kwargs):
+    for peer in peer_manager.connected_peers:
+        peer.send_GetChain(parents, count)
