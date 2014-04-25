@@ -42,6 +42,40 @@ def decode(s):
         return __decode(s)[0]
 
 
+def into(data, pos):
+    fchar = ord(data[pos])
+    if fchar < 192:
+        raise Exception("Cannot descend further")
+    elif fchar < 248:
+        return pos + 1
+    else:
+        return pos + 1 + (fchar - 247)
+
+
+def next(data, pos):
+    fchar = ord(data[pos])
+    if fchar < 128:
+        return pos + 1
+    elif (fchar % 64) < 56:
+        return pos + 1 + (fchar % 64)
+    else:
+        b = (fchar % 64) - 55
+        b2 = big_endian_to_int(data[pos + 1:pos + 1 + b])
+        return pos + 1 + b + b2
+
+
+def descend(data, *indices):
+    pos = 0
+    for i in indices:
+        fin = next(data, pos)
+        pos = into(data, pos)
+        for j in range(i):
+            pos = next(data, pos)
+            if pos >= fin:
+                raise Exception("End of list")
+    return data[pos: fin]
+
+
 def encode_length(L, offset):
     if L < 56:
         return chr(L + offset)
