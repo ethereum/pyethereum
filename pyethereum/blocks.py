@@ -1,11 +1,15 @@
 import rlp
-import re
 from trie import Trie
 from utils import int_to_big_endian as encode_int
 from utils import sha3, get_db_path
 import utils
+import time
 
 BLOCK_REWARD = 10 ** 18
+BLOCK_DIFF_FACTOR = 1024
+GASLIMIT_EMA_FACTOR = 1024
+BLKLIM_FACTOR_NOM = 6
+BLKLIM_FACTOR_DEN = 5
 
 block_structure = [
     ["prevhash", "bin", ""],
@@ -23,6 +27,10 @@ block_structure = [
     ["nonce", "bin", ""],
 ]
 
+block_structure_rev = {}
+for i, (name, typ, default) in enumerate(block_structure):
+    block_structure_rev[name] = [i, typ, default]
+
 acct_structure = [
     ["nonce", "int", 0],
     ["balance", "int", 0],
@@ -35,18 +43,30 @@ for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
 
+def calc_difficulty(parent, timestamp):
+    offset = parent.difficulty / BLOCK_DIFF_FACTOR
+    sign = 1 if timestamp - parent.timestamp < 42 else -1
+    return parent.difficulty + offset * sign
+
+
+def calc_gaslimit(parent):
+    prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
+    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
+    return (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
+
+
 class Block(object):
 
     def __init__(self,
                  prevhash='',
-                 uncles_hash=block_structure[1][2],
-                 coinbase=block_structure[2][2],
+                 uncles_hash=block_structure_rev['uncles_hash'][2],
+                 coinbase=block_structure_rev['coinbase'][2],
                  state_root='',
                  tx_list_root='',
-                 difficulty=block_structure[5][2],
+                 difficulty=block_structure_rev['difficulty'][2],
                  number=0,
-                 min_gas_price=block_structure[7][2],
-                 gas_limit=block_structure[8][2],
+                 min_gas_price=block_structure_rev['min_gas_price'][2],
+                 gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
                  uncles=[]):
@@ -233,6 +253,7 @@ class Block(object):
             txlist.append(self.transactions.get(utils.encode_int(i)))
         self.state_root = self.state.root
         self.tx_list_root = self.transactions.root
+        self.uncles_hash = sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
             header.append(utils.encoders[typ](getattr(self, name)))
@@ -261,10 +282,32 @@ class Block(object):
     def hex_hash(self):
         return self.hash().encode('hex')
 
+    @classmethod
+    def init_from_parent(cls, parent, coinbase, extra_data='',
+                         now=time.time()):
+        return Block(
+            prevhash=parent.hash,
+            uncles_hash=sha3(rlp.encode([])),
+            coinbase=coinbase,
+            state_root=parent.state.root,
+            tx_list_root='',
+            difficulty=calc_difficulty(parent, now),
+            number=parent.number + 1,
+            min_gas_price=0,
+            gas_limit=calc_gaslimit(parent),
+            gas_used=0,
+            timestamp=now,
+            extra_data=extra_data,
+            nonce='',
+            transaction_list=[],
+            uncles=[])
+
+
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11
-    block = Block(prevhash="0" * 32, coinbase="0" * 40,
-                  difficulty=2 ** 22, nonce=sha3(chr(42)))
+    block = Block(prevhash="\x00" * 32, coinbase="0" * 40,
+                  difficulty=2 ** 22, nonce=sha3(chr(42)),
+                  gas_limit=10 ** 6)
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
