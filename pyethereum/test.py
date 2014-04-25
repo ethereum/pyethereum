@@ -13,6 +13,9 @@ v2 = u.privtoaddr(k2)
 
 print "Starting boring transfer test"
 blk = b.genesis({ v: 10**18 })
+
+assert blk.hex_hash() == b.Block.hex_deserialize(blk.hex_serialize()).hex_hash()
+
 # Give tx2 some money
 
 gasprice = 10**12
@@ -20,6 +23,9 @@ startgas = 1000
 
 # nonce,gasprice,startgas,to,value,data,v,r,s
 tx = t.Transaction(0,gasprice,startgas,v2,10**16,'').sign(k)
+
+assert tx.hex_hash() == t.Transaction.deserialize(tx.serialize()).hex_hash()
+assert tx.hex_hash() ==  t.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
 
 pb.apply_tx(blk,tx)
 print "New balance of v1: ", blk.get_balance(v)
