@@ -258,6 +258,8 @@ class Block(object):
     def hash(self):
         return sha3(self.serialize())
 
+    def hex_hash(self):
+        return self.hash().encode('hex')
 
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11

@@ -13,6 +13,9 @@ v2 = u.privtoaddr(k2)
 
 print "Starting boring transfer test"
 blk = b.genesis({ v: 10**18 })
+
+assert blk.hex_hash() == b.Block.hex_deserialize(blk.hex_serialize()).hex_hash()
+
 # Give tx2 some money
 
 gasprice = 10**12
