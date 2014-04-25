@@ -2,7 +2,7 @@ import logging
 import time
 from dispatch import receiver
 
-from common import StoppableLoopThread
+from stoppable import StoppableLoopThread
 from trie import rlp_hash, rlp_hash_hex
 import signals
 from db import DB
