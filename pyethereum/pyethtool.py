@@ -23,18 +23,18 @@ def mkgenesis(*args):
 def genesis(*args):
     if len(args) == 2 and ':' not in args[0]:
         return blocks.genesis({
-            args[0]: int(args[1])}).serialize().encode('hex')
+            args[0]: int(args[1])}).hex_serialize()
     else:
         o = {}
         for a in args:
             o[a[:a.find(':')]] = int(a[a.find(':') + 1:])
-        return blocks.genesis(o).serialize().encode('hex')
+        return blocks.genesis(o).hex_serialize()
 
 
 def mktx(nonce, to, value, data):
     return transactions.Transaction(
         int(nonce), 10 ** 12, 10000, to, int(value), data.decode('hex')
-    ).serialize(False).encode('hex')
+    ).hex_serialize(False)
 
 
 def mkcontract(*args):
@@ -44,7 +44,7 @@ def mkcontract(*args):
 def contract(nonce, value, code):
     return transactions.contract(
         int(nonce), 10 ** 12, 10000, int(value), code.decode('hex')
-    ).serialize(False).encode('hex')
+    ).hex_serialize(False)
 
 
 def sign(txdata, key):
@@ -52,13 +52,13 @@ def sign(txdata, key):
 
 def alloc(blockdata, addr, val):
     val = int(val)
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     block.delta_balance(addr, val)
-    return block.serialize().encode('hex')
+    return block.hex_serialize()
 
 
 def applytx(blockdata, txdata, debug=0, limit=2 ** 100):
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     tx = transactions.Transaction.hex_deserialize(txdata)
     if tx.startgas > limit:
         raise Exception("Transaction is asking for too much gas!")
@@ -66,23 +66,23 @@ def applytx(blockdata, txdata, debug=0, limit=2 ** 100):
         processblock.debug = 1
     success, o = processblock.apply_tx(block, tx)
     return {
-        "block": block.serialize().encode('hex'),
+        "block": block.hex_serialize(),
         "result": ''.join(o).encode('hex') if tx.to else ''.join(o)
     }
 
 
 def getbalance(blockdata, address):
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     return block.get_balance(address)
 
 
 def getcode(blockdata, address):
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     return block.get_code(address).encode('hex')
 
 
 def getstate(blockdata, address=None):
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     if not address:
         return block.to_dict()
     else:
@@ -90,7 +90,7 @@ def getstate(blockdata, address=None):
 
 
 def account_to_dict(blockdata, address):
-    block = blocks.Block(blockdata.decode('hex'))
+    block = blocks.Block.hex_deserialize(blockdata)
     return block.account_to_dict(address)
 
 
