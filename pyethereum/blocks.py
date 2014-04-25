@@ -227,9 +227,13 @@ class Block(object):
     def hash(self):
         return sha3(self.serialize())
 
-
 def genesis(initial_alloc):
     block = Block()
+    block.prevhash = "0"*32
+    block.coinbase = "0"*20
+    block.difficulty = 2**22
+    block.nonce = sha3(chr(42))
+
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
