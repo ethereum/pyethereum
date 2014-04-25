@@ -132,10 +132,14 @@ class PeerManager(StoppableLoopThread):
                         peer.send_GetPeers()
 
     def loop_body(self):
+        "check peer health every 10 seconds"
         for peer in list(self.connected_peers):
             self._check_alive(peer)
         self._connect_peers()
-        time.sleep(10)
+
+        for i in range(100):
+            if not self.stopped():
+                time.sleep(.1)
 
     def _start_peer(self, connection, ip, port):
         peer = Peer(connection, ip, port)
@@ -197,3 +201,8 @@ def new_peer_received_handler(sender, peer, **kwargs):
     ''' peer should be (ip, port, node_id)
     '''
     peer_manager.add_known_peer_address(*peer)
+
+@receiver(signals.remote_chain_data_requested)
+def remote_chain_data_requested_handler(sender, parents=[], count=1, **kwargs):
+    for peer in peer_manager.connected_peers:
+        peer.send_GetChain(parents, count)

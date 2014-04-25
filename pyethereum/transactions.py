@@ -38,7 +38,7 @@ class Transaction(object):
     (ii) the sending account has enough funds to pay the fee and the value.
     """
 
-    # nonce,value,gasprice,startgas,to,data
+    # nonce,gasprice,startgas,to,value,data,v,r,s
     def __init__(self, *args):
         # From serialization
         if len(args) == 1:
@@ -49,13 +49,13 @@ class Transaction(object):
             # Deserialize all properties
             for i, (name, typ, default) in enumerate(tx_structure):
                 if i < len(args):
-                    vars(self)[name] = utils.decoders[typ](args[i])
+                    setattr(self, name, utils.decoders[typ](args[i]))
                 else:
-                    vars(self)[name] = default
+                    setattr(self, name, default)
         else:
             # Directly use arguments
             for i, (name, typ, default) in enumerate(tx_structure):
-                vars(self)[name] = args[i] if i < len(args) else default
+                setattr(self, name, args[i] if i < len(args) else default)
         # Determine sender
         if self.r and self.s:
             rawhash = sha3(rlp.encode(self.serialize(False)))
@@ -76,7 +76,7 @@ class Transaction(object):
     def serialize(self, signed=True):
         o = []
         for i, (name, typ, default) in enumerate(tx_structure):
-            o.append(utils.encoders[typ](vars(self)[name]))
+            o.append(utils.encoders[typ](getattr(self, name)))
         return rlp.encode(o if signed else o[:-3])
 
     def hex_serialize(self):

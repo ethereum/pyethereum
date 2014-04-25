@@ -76,7 +76,8 @@ def apply_tx(block, tx):
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
     tx_data = [tx.serialize(), block.state.root, encode_int(block.gas_used)]
     block.add_transaction_to_list(tx_data)
-    return output
+    success = output is not OUT_OF_GAS
+    return success, output if success else ''
 
 
 class Compustate():
@@ -87,7 +88,7 @@ class Compustate():
         self.pc = 0
         self.gas = 0
         for kw in kwargs:
-            vars(self)[kw] = kwargs[kw]
+            setattr(self, kw, kwargs[kw])
 
 
 def decode_datalist(arr):
