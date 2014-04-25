@@ -186,7 +186,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetPeers())
 
     def _recv_GetPeers(self, data):
-        signals.request_data_async(self, 'peers', data, self.send_Peers)
+        signals.request_data_async('peers', self.send_Peers, data)
 
     def send_Peers(self, peers):
         packet = packeter.dump_Peers(peers)
@@ -207,11 +207,7 @@ class Peer(StoppableLoopThread):
 
     def _recv_GetTransactions(self, data):
         logger.info('asking for transactions')
-        signals.request_data_async(
-            self,
-            'transactions',
-            None,
-            self.send_Transactions)
+        signals.request_data_async('transactions', self.send_Transactions)
 
     def send_Transactions(self, transactions):
         self.send_packet(packeter.dump_Transactions(transactions))
@@ -229,12 +225,8 @@ class Peer(StoppableLoopThread):
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))
 
-    def _recv_GetChain(self, request_data):
-        signals.request_data_async(
-            self,
-            'blocks',
-            request_data,
-            self.send_Blocks)
+    def _recv_GetChain(self, data):
+        signals.request_data_async('blocks', self.send_Blocks, data)
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))

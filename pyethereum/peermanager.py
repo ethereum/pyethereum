@@ -184,10 +184,24 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
 
 
-@receiver(signals.peers_data_requested)
-def peers_data_requested_handler(sender, request_data, **kwargs):
+@receiver(signals.peers_requested)
+def peers_requested_handler(sender, req, **kwargs):
     peers = peer_manager.get_known_peer_addresses()
-    signals.peers_data_ready.send(None, requester=sender, ready_data=peers)
+    signals.peers_ready.send(None, data=peers)
+
+
+@receiver(signals.live_peers_requested)
+def live_peers_requested_handler(sender, req, **kwargs):
+    with peer_manager.lock:
+        peers = peer_manager.get_connected_peer_addresses()
+    signals.live_peers_ready.send(None, data=peers)
+
+
+@receiver(signals.known_peers_requested)
+def known_peers_requested_handler(sender, req, **kwargs):
+    with peer_manager.lock:
+        peers = peer_manager.get_known_peer_addresses()
+    signals.known_peers_ready.send(None, data=peers)
 
 
 @receiver(signals.disconnect_requested)
@@ -202,7 +216,8 @@ def new_peer_received_handler(sender, peer, **kwargs):
     '''
     peer_manager.add_known_peer_address(*peer)
 
-@receiver(signals.remote_chain_data_requested)
-def remote_chain_data_requested_handler(sender, parents=[], count=1, **kwargs):
+
+@receiver(signals.remote_chain_requested)
+def remote_chain_requested_handler(sender, parents=[], count=1, **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_GetChain(parents, count)

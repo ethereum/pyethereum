@@ -1,9 +1,21 @@
-from common import make_api_app
+from common import make_api_app, response_async_data
 from bottle import request  # noqa
+
+from models import Peer, PeerResponder
 
 app = make_api_app()
 
 
-@app.get('/')
-def index():
-    return dict(name="chen", last="houwu")
+def make_peers_response(peers):
+    peers = [Peer(host, ip, node_id) for (host, ip, node_id) in peers]
+    return PeerResponder().respond(peers)
+
+
+@app.get('/live/')
+def live():
+    return response_async_data('live_peers', None, make_peers_response)
+
+
+@app.get('/known/')
+def known():
+    return response_async_data('known_peers', None, make_peers_response)

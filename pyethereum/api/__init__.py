@@ -1,6 +1,6 @@
-from common import make_api_app  # noqa
+from common import make_api_app as _make_root_app
 
-app = make_api_app()
+app = _make_root_app()
 
 
 def _auto_discover():

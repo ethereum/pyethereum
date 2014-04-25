@@ -66,7 +66,7 @@ class ChainManager(StoppableLoopThread):
         # FIXME: execute once, when connected to required num peers
         if self.head:
             return
-        signals.remote_chain_data_requested.send(
+        signals.remote_chain_requested.send(
             sender=self, parents=[GENESIS_H], count=30)
 
     def loop_body(self):
@@ -99,7 +99,7 @@ class ChainManager(StoppableLoopThread):
  #       for h in new_blocks_H:
  #           logger.debug("recv_blocks: ask for child block %r" %
  #                        h.encode('hex'))
- #           signals.remote_chain_data_requested.send(
+ #           signals.remote_chain_requested.send(
  #               sender=self, parents=[h], count=1)
     def add_transactions(self, transactions):
         logger.debug("add transactions %r" % transactions)
@@ -123,13 +123,14 @@ def new_transactions_received_handler(sender, transactions, **kwargs):
     chain_manager.add_transactions(transactions)
 
 
-@receiver(signals.transactions_data_requested)
-def transactions_data_requested_handler(sender, **kwargs):
+@receiver(signals.transactions_requested)
+def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
+    signals.transactions_ready.send(sender=None, data=transactions)
 
 
-@receiver(signals.blocks_data_requested)
-def blocks_data_requested_handler(sender, request_data, **kwargs):
+@receiver(signals.blocks_requested)
+def blocks_requested_handler(sender, req, **kwargs):
     pass
 
 
