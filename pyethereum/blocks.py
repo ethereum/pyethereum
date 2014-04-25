@@ -20,7 +20,7 @@ block_structure = [
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
-    ["nonce", "int", 0],
+    ["nonce", "bin", ""],
 ]
 
 acct_structure = [
@@ -230,7 +230,7 @@ class Block(object):
 def genesis(initial_alloc):
     block = Block()
     block.prevhash = "0"*32
-    block.coinbase = "0"*20
+    block.coinbase = "0"*40
     block.difficulty = 2**22
     block.nonce = sha3(chr(42))
 
