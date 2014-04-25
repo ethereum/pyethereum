@@ -1,5 +1,7 @@
 from bottle import Bottle
 
-app = Bottle()
 
-app.config['autojson'] = True
+def make_api_app():
+    app = Bottle()
+    app.config['autojson'] = True
+    return app
