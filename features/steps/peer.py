@@ -288,7 +288,7 @@ def step_impl(context):
     from pyethereum.signals import (transactions_requested,
                                     transactions_ready)
 
-    def handler(sender, args, **kwargs):
+    def handler(sender, req, **kwargs):
         transactions_ready.send(sender=None, data=context.transactions_data)
 
     context.transactions_requested_handler = handler
@@ -411,7 +411,7 @@ def step_impl(context):
     from pyethereum.signals import (blocks_requested,
                                     blocks_ready)
 
-    def handler(sender, arg, **kwargs):
+    def handler(sender, req, **kwargs):
         blocks_ready.send(sender=None, data=context.blocks_data)
 
     context.blocks_requested_handler = handler
