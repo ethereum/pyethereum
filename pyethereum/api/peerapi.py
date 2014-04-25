@@ -13,9 +13,9 @@ def make_peers_response(peers):
 
 @app.get('/live/')
 def live():
-    return response_async_data('live_peers', None, make_peers_response)
+    return response_async_data('live_peers', make_peers_response)
 
 
 @app.get('/known/')
 def known():
-    return response_async_data('known_peers', None, make_peers_response)
+    return response_async_data('known_peers', make_peers_response)
