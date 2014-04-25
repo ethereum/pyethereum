@@ -27,11 +27,15 @@ class ChainManager(StoppableLoopThread):
         self.transactions = set()
         self.blockchain = DB(utils.get_db_path())
         self.head = None
+        # FIXME: intialize blockchain with genesis block
+
+    def _initialize_blockchain(self):
+        genesis = blocks.genesis()
 
     # Returns True if block is latest
     def add_block(self, block):
-        blockdata = block.serialize()
-        blockhash = utils.sha3(block.serialize())
+
+        blockhash = block.hash()
         if blockhash == GENESIS_H:
             parent_score = 0
         else:
@@ -41,7 +45,8 @@ class ChainManager(StoppableLoopThread):
                 raise Exception("Parent of block not found")
             parent_score = utils.big_endian_to_int(parent[1])
         total_score = utils.int_to_big_endian(block.difficulty + parent_score)
-        self.blockchain.put(blockhash, rlp.encode([blockdata, total_score]))
+        self.blockchain.put(
+            blockhash, rlp.encode([block.serialize(), total_score]))
         try:
             head = self.blockchain.get('head')
             head_data = rlp.decode(self.blockchain.get(head))
@@ -57,39 +62,45 @@ class ChainManager(StoppableLoopThread):
     def configure(self, config):
         self.config = config
 
-    def bootstrap_blockchain(self):
-        # genesis block
-        # http://etherchain.org/#/block/
-        # ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf
+    def synchronize_blockchain(self):
+        # FIXME: execute once, when connected to required num peers
         if self.head:
             return
+        signals.remote_chain_data_requested.send(
+            sender=self, parents=[GENESIS_H], count=30)
 
     def loop_body(self):
         self.mine()
-        time.sleep(.1)
+        time.sleep(10)
+        self.synchronize_blockchain()
 
     def mine(self):
         "in the meanwhile mine a bit, not efficient though"
         pass
 
-    def recv_blocks(self, blocks):
-        new_blocks_H = set()
-        # memorize
-        for block in blocks:
-            h = rlp_hash(block)
-            logger.debug("recv_blocks: %r" % rlp_hash_hex(block))
+    def recv_blocks(self, block_lst):
+        """
+        block_lst is rlp decoded data
+        """
+
+        block_lst.reverse()  # oldest block is sent first in list
+
+        # FIXME validate received chain, compare with local chain
+        for data in block_lst:
+            logger.debug("processing block: %r" % rlp_hash_hex(data))
+            block = Block.deserialize(rlp.encode(data))
+            h = rlp_hash(data)
             try:
                 self.blockchain.get(h)
-            except:
-                self.add_block(Block(block))
+            except KeyError:
+                self.add_block(block)
                 new_blocks_H.add(h)
-        # ask for children
-        for h in new_blocks_H:
-            logger.debug("recv_blocks: ask for child block %r" %
-                         h.encode('hex'))
-            signals.remote_chain_data_requested.send(
-                sender=self, parents=[h], count=1)
 
+ #       for h in new_blocks_H:
+ #           logger.debug("recv_blocks: ask for child block %r" %
+ #                        h.encode('hex'))
+ #           signals.remote_chain_data_requested.send(
+ #               sender=self, parents=[h], count=1)
     def add_transactions(self, transactions):
         logger.debug("add transactions %r" % transactions)
         for tx in transactions:
