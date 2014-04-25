@@ -5,7 +5,7 @@ import logging
 from dispatch import receiver
 import netifaces
 
-from common import StoppableLoopThread
+from stoppable import StoppableLoopThread
 import signals
 from peer import Peer
 

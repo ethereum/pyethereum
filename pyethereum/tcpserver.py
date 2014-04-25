@@ -6,7 +6,7 @@ import logging
 
 from dispatch import receiver
 
-from common import StoppableLoopThread
+from stoppable import StoppableLoopThread
 import signals
 
 logger = logging.getLogger(__name__)

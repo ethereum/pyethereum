@@ -1,13 +1,17 @@
-from common import app  # noqa
+from common import make_api_app  # noqa
+
+app = make_api_app()
 
 
-def auto_discover():
+def _auto_discover():
     from os import path
     import pkgutil
     current_dir = path.dirname(__file__)
     for finder, name, ispkg in pkgutil.iter_modules(path=[current_dir]):
-        main_name = path.splitext(name)[0]
-        if main_name.endswith('api'):
-            finder.find_module(name).load_module(name)
+        if name.endswith('api'):
+            full_name = 'pyethereum.api.{}'.format(name)
+            module = finder.find_module(full_name).load_module(full_name)
+            app.mount('/{}'.format(name[:-3]), module.app)
+    print app
 
-auto_discover()
+_auto_discover()

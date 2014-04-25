@@ -6,12 +6,15 @@ import ConfigParser
 from optparse import OptionParser
 import logging
 import logging.config
-from signals import config_ready
 
-from tcpserver import tcp_server
-from peermanager import peer_manager
-from chainmanager import chain_manager
-from apiserver import api_server
+from common import make_pyethereum_avail
+make_pyethereum_avail()
+
+from pyethereum.signals import config_ready
+from pyethereum.tcpserver import tcp_server
+from pyethereum.peermanager import peer_manager
+from pyethereum.chainmanager import chain_manager
+from pyethereum.apiserver import api_server
 
 logger = logging.getLogger(__name__)
 

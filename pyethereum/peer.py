@@ -4,7 +4,7 @@ import socket
 import logging
 
 import signals
-from common import StoppableLoopThread
+from stoppable import StoppableLoopThread
 from packeter import packeter
 from utils import big_endian_to_int as idec, recursive_int_to_big_endian
 import rlp

@@ -3,3 +3,4 @@ bitcoin
 pysha3
 bottle
 netifaces
+hyp
