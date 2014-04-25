@@ -21,6 +21,9 @@ startgas = 1000
 # nonce,gasprice,startgas,to,value,data,v,r,s
 tx = t.Transaction(0,gasprice,startgas,v2,10**16,'').sign(k)
 
+assert tx.hex_hash() == t.Transaction.deserialize(tx.serialize()).hex_hash()
+assert tx.hex_hash() ==  t.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
+
 pb.apply_tx(blk,tx)
 print "New balance of v1: ", blk.get_balance(v)
 print "New balance of v2: ", blk.get_balance(v2)

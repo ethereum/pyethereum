@@ -48,9 +48,7 @@ def contract(nonce, value, code):
 
 
 def sign(txdata, key):
-    return transactions.Transaction(
-        txdata.decode('hex')).sign(key).serialize(True).encode('hex')
-
+    return transactions.Transaction.hex_deserialize(txdata).sign(key).hex_serialize(True)
 
 def alloc(blockdata, addr, val):
     val = int(val)
@@ -61,7 +59,7 @@ def alloc(blockdata, addr, val):
 
 def applytx(blockdata, txdata, debug=0, limit=2 ** 100):
     block = blocks.Block(blockdata.decode('hex'))
-    tx = transactions.Transaction(txdata.decode('hex'))
+    tx = transactions.Transaction.hex_deserialize(txdata)
     if tx.startgas > limit:
         raise Exception("Transaction is asking for too much gas!")
     if debug:
