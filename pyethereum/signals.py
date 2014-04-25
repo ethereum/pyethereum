@@ -2,10 +2,9 @@ import uuid
 from dispatch import Signal
 
 config_ready = Signal(providing_args=[""])
-connection_accepted = Signal(providing_args=["connection", "ip", "port"])
-
 local_address_set = Signal(providing_args=["ip", "port"])
 
+connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 disconnect_requested = Signal(providing_args=[""])
 
 new_peer_received = Signal(providing_args=["peer"])
@@ -81,6 +80,10 @@ def request_data_async(name, callback, req=None, sender=None):
 
 
 def abort_data_request(name, uid):
+    '''
+    :param name: data name
+    :uid: request uid
+    '''
     ready_signal = globals()["{}_ready".format(name)]
     abort_signal = globals()["{}_request_aborted".format(name)]
     ready_signal.discconnect(dispatch_uid=uid)
