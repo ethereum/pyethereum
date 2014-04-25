@@ -24,8 +24,9 @@ opcodes = {
     0x33: ['CALLER', 0, 1],
     0x34: ['CALLVALUE', 0, 1],
     0x35: ['CALLDATALOAD', 1, 1],
-    0x36: ['CALLDATASIZE', 0, 1],
-    0x37: ['GASPRICE', 0, 1],
+    0x36: ['CALLDATACOPY', 3, 0],
+    0x37: ['CALLDATASIZE', 0, 1],
+    0x38: ['GASPRICE', 0, 1],
     0x40: ['PREVHASH', 0, 1],
     0x41: ['COINBASE', 0, 1],
     0x42: ['TIMESTAMP', 0, 1],
@@ -45,7 +46,7 @@ opcodes = {
     0x5a: ['PC', 0, 1],
     0x5b: ['MSIZE', 0, 1],
     0x5c: ['GAS', 0, 1],
-    0x60: ['PUSH', 0, 1], #encompasses 96...127
+    0x60: ['PUSH', 0, 1],  # encompasses 96...127
     0xf0: ['CREATE', 4, 1],
     0xf1: ['CALL', 7, 1],
     0xf2: ['RETURN', 2, 1],

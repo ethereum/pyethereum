@@ -21,6 +21,7 @@ GCREATE = 100
 GCALL = 20
 GMEMORY = 1
 GTXDATA = 5
+GTXCOST = 500
 
 OUT_OF_GAS = -1
 
@@ -57,7 +58,7 @@ def apply_tx(block, tx):
         raise Exception("Insufficient balance to pay fee!")
     block.increment_nonce(tx.sender)
     snapshot = block.snapshot()
-    message_gas = tx.startgas - GTXDATA * len(tx.data)
+    message_gas = tx.startgas - GTXDATA * len(tx.serialize()) - GTXCOST
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     if tx.to:
         result, gas, data = apply_msg(block, tx, message)
@@ -65,14 +66,17 @@ def apply_tx(block, tx):
         result, gas = create_contract(block, tx, message)
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
-        block.gas_consumed += tx.startgas
+        block.gas_used += tx.startgas
         block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
-        return OUT_OF_GAS
+        output = OUT_OF_GAS
     else:
         block.delta_balance(tx.sender, tx.gasprice * gas)
         block.delta_balance(block.coinbase, tx.gasprice * (tx.startgas - gas))
-        block.gas_consumed += tx.startgas - gas
-        return ''.join(map(chr, data)) if tx.to else result
+        block.gas_used += tx.startgas - gas
+        output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
+    tx_data = [tx.serialize(), block.state.root, encode_int(block.gas_used)]
+    block.add_transaction_to_list(tx_data)
+    return output
 
 
 class Compustate():
@@ -192,6 +196,9 @@ def calcfee(block, tx, msg, compustate, op):
     elif op == 'RETURN':
         m_extend = max(0, stk[-1] + stk[-2] - len(mem))
         return GSTEP + m_extend * GMEMORY
+    elif op == 'CALLDATACOPY':
+        m_extend = max(0, stk[-1] + stk[-3] - len(mem))
+        return GSTEP + m_extend * GMEMORY
     elif op == 'STOP' or op == 'INVALID':
         return GSTOP
     else:
@@ -306,6 +313,14 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(decode_int(dat + '\x00' * (32 - len(dat))))
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
+    elif op == 'CALLDATACOPY':
+        if len(mem) < stackargs[0] + stackargs[2]:
+            mem.extend([0] * (stackargs[0] + stackargs[2] - len(mem)))
+        for i in range(stackargs[2]):
+            if stackargs[0] + i < len(msg.data):
+                mem[stackargs[1] + i] = msg.data[stackargs[0] + i]
+            else:
+                mem[stackargs[1] + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'PREVHASH':

@@ -4,6 +4,7 @@ import struct
 import os
 import sys
 import errno
+import rlp
 
 
 def sha3(seed):
@@ -91,6 +92,79 @@ def recursive_int_to_big_endian(item):
             res.append(recursive_int_to_big_endian(item))
         return res
     return item
+
+# Format encoders/decoders for bin, addr, int
+
+
+def decode_bin(v):
+    '''decodes a bytearray from serialization'''
+    if not isinstance(v, (str, unicode)):
+        raise Exception("Value must be binary, not RLP array")
+    return v
+
+
+def decode_addr(v):
+    '''decodes an address from serialization'''
+    if len(v) not in [0, 20]:
+        raise Exception("Serialized addresses must be empty or 20 bytes long!")
+    return v.encode('hex')
+
+
+def decode_int(v):
+    '''decodes and integer from serialization'''
+    if len(v) > 0 and v[0] == '\x00':
+        raise Exception("No leading zero bytes allowed for integers")
+    return big_endian_to_int(v)
+
+
+def decode_root(root):
+    if isinstance(root, list):
+        if len(rlp.encode(root)) >= 32:
+            raise Exception("Direct RLP roots must have length <32")
+    elif isinstance(root, (str, unicode)):
+        if len(root) != 0 and len(root) != 32:
+            raise Exception("String roots must be empty or length-32")
+    else:
+        raise Exception("Invalid root")
+    return root
+
+
+def encode_bin(v):
+    '''encodes a bytearray into serialization'''
+    return v
+
+
+def encode_root(v):
+    '''encodes a trie root into serialization'''
+    return v
+
+
+def encode_addr(v):
+    '''encodes an address into serialization'''
+    if not isinstance(v, (str, unicode)) or len(v) not in [0, 40]:
+        raise Exception("Address must be empty or 40 chars long")
+    return v.decode('hex')
+
+
+def encode_int(v):
+    '''encodes an integer into serialization'''
+    if not isinstance(v, (int, long)) or v < 0 or v >= 2**256:
+        raise Exception("Integer invalid or out of range")
+    return int_to_big_endian(v)
+
+decoders = {
+    "bin": decode_bin,
+    "addr": decode_addr,
+    "int": decode_int,
+    "trie_root": decode_root,
+}
+
+encoders = {
+    "bin": encode_bin,
+    "addr": encode_addr,
+    "int": encode_int,
+    "trie_root": encode_root,
+}
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):

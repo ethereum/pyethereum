@@ -17,6 +17,10 @@ def privtoaddr(x):
 
 
 def mkgenesis(*args):
+    return genesis(*args)
+
+
+def genesis(*args):
     if len(args) == 2 and ':' not in args[0]:
         return blocks.genesis({
             args[0]: int(args[1])}).serialize().encode('hex')
@@ -27,20 +31,24 @@ def mkgenesis(*args):
         return blocks.genesis(o).serialize().encode('hex')
 
 
-def mktx(nonce, value, to, data):
+def mktx(nonce, to, value, data):
     return transactions.Transaction(
-        int(nonce), int(value), 10 ** 12, 10000, to, data.decode('hex')
+        int(nonce), 10 ** 12, 10000, to, int(value), data.decode('hex')
     ).serialize(False).encode('hex')
 
 
-def mkcontract(nonce, value, code):
-    return transactions.Transaction.contract(
-        int(nonce), int(value), 10 ** 12, 10000, code.decode('hex')
+def mkcontract(*args):
+    return contract(*args)
+
+
+def contract(nonce, value, code):
+    return transactions.contract(
+        int(nonce), 10 ** 12, 10000, int(value), code.decode('hex')
     ).serialize(False).encode('hex')
 
 
 def sign(txdata, key):
-    return transactions.Transaction.parse(
+    return transactions.Transaction(
         txdata.decode('hex')).sign(key).serialize(True).encode('hex')
 
 
@@ -53,13 +61,16 @@ def alloc(blockdata, addr, val):
 
 def applytx(blockdata, txdata, debug=0, limit=2 ** 100):
     block = blocks.Block(blockdata.decode('hex'))
-    tx = transactions.Transaction.parse(txdata.decode('hex'))
+    tx = transactions.Transaction(txdata.decode('hex'))
     if tx.startgas > limit:
         raise Exception("Transaction is asking for too much gas!")
     if debug:
         processblock.debug = 1
     o = processblock.apply_tx(block, tx)
-    return block.serialize().encode('hex'), ''.join(o).encode('hex')
+    return {
+        "block": block.serialize().encode('hex'),
+        "result": ''.join(o).encode('hex') if tx.to else ''.join(o)
+    }
 
 
 def getbalance(blockdata, address):

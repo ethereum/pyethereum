@@ -1,141 +1,159 @@
 import rlp
 import re
-from transactions import Transaction
 from trie import Trie
-from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3, get_db_path
 import utils
-import sys
 
-'''
-An account consists of [nonce, balance, code, storage]
-'''
-ACCT_RLP_LENGTH = 4
-NONCE_INDEX = 0
-BALANCE_INDEX = 1
-CODE_INDEX = 2
-STORAGE_INDEX = 3
+BLOCK_REWARD = 10**18
+
+block_structure = [
+    ["prevhash", "bin", ""],
+    ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
+    ["coinbase", "addr", "0"*40],
+    ["state_root", "trie_root", ''],
+    ["tx_list_root", "trie_root", ''],
+    ["difficulty", "int", 2**23],
+    ["number", "int", 0],
+    ["min_gas_price", "int", 10**15],
+    ["gas_limit", "int", 10**6],
+    ["gas_used", "int", 0],
+    ["timestamp", "int", 0],
+    ["extra_data", "bin", ""],
+    ["nonce", "int", 0],
+]
+
+acct_structure = [
+    ["nonce", "int",  0],
+    ["balance", "int",  0],
+    ["code", "bin", ""],
+    ["storage", "trie_root", ""],
+]
+
+acct_structure_rev = {}
+for i, (name, typ, default) in enumerate(acct_structure):
+    acct_structure_rev[name] = [i, typ, default]
 
 
 class Block(object):
 
     def __init__(self, data=None):
 
-        self.reward = 10 ** 18
-        self.gas_consumed = 0
-        self.gaslimit = 1000000  # for now
+        self.transactions = Trie(get_db_path())
+        self.transaction_count = 0
 
+        # Initialize all properties to defaults
         if not data:
-            self.number = 0
-            self.prevhash = ''
-            self.uncles_root = ''
-            self.coinbase = '0' * 40
-            self.state = Trie(get_db_path())
-            self.transactions_root = ''
-            self.transactions = []
+            for name, typ, default in block_structure:
+                vars(self)[name] = default
             self.uncles = []
-            self.difficulty = 2 ** 23
-            self.timestamp = 0
-            self.extradata = ''
-            self.nonce = 0
-            return
 
-        if re.match('^[0-9a-fA-F]*$', data):
-            data = data.decode('hex')
+        else:
+            if re.match('^[0-9a-fA-F]*$', data):
+                data = data.decode('hex')
+            header, transaction_list, self.uncles = rlp.decode(data)
+            # Deserialize all properties
+            for i, (name, typ, default) in enumerate(block_structure):
+                vars(self)[name] = utils.decoders[typ](header[i])
+            # Fill in nodes for transaction trie
+            for tx in transaction_list:
+                self.add_transaction_to_list(tx)
 
-        header,  transaction_list, self.uncles = rlp.decode(data)
-        self.number = decode_int(header[0])
-        self.prevhash = header[1]
-        self.uncles_root = header[2]
-        self.coinbase = header[3].encode('hex')
-        self.state = Trie(get_db_path(), header[4])
-        self.transactions_root = header[5]
-        self.difficulty = decode_int(header[6])
-        self.timestamp = decode_int(header[7])
-        self.extradata = header[8]
-        self.nonce = decode_int(header[9])
-        self.transactions = [Transaction(x) for x in transaction_list]
+        self.state = Trie(get_db_path(), self.state_root)
 
-        # Verifications
+        # Basic consistency verifications
         if self.state.root != '' and self.state.db.get(self.state.root) == '':
             raise Exception("State Merkle root not found in database!")
-        if sha3(rlp.encode(transaction_list)) != self.transactions_root:
+        if self.tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if sha3(rlp.encode(self.uncles)) != self.uncles_root:
+        if sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
+        if len(self.extra_data) > 1024:
+            raise Exception("Extra data cannot exceed 1024 bytes")
+        if self.coinbase == '':
+            raise Exception("Coinbase cannot be empty address")
         # TODO: check POW
 
     # _get_acct_item(bin or hex, int) -> bin
-    def _get_acct_item(self, address, index):
+    def _get_acct_item(self, address, param):
         ''' get account item
         :param address: account address, can be binary or hex string
-        :param index: item index
+        :param param: parameter to get
         '''
         if len(address) == 40:
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
-        return acct[index]
+        decoder = utils.decoders[acct_structure_rev[param][1]]
+        return decoder(acct[acct_structure_rev[param][0]])
 
     # _set_acct_item(bin or hex, int, bin)
-    def _set_acct_item(self, address, index, value):
+    def _set_acct_item(self, address, param, value):
         ''' set account item
         :param address: account address, can be binary or hex string
-        :param index: item index
+        :param param: parameter to set
         :param value: new value
         '''
         if len(address) == 40:
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
-        acct[index] = value
+        encoder = utils.encoders[acct_structure_rev[param][1]]
+        acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, acct)
 
     # _delta_item(bin or hex, int, int) -> success/fail
-    def _delta_item(self, address, index, value):
+    def _delta_item(self, address, param, value):
         ''' add value to account item
         :param address: account address, can be binary or hex string
-        :param index: item index
+        :param param: parameter to increase/decrease
         :param value: can be positive or negative
         '''
         if len(address) == 40:
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
-        if decode_int(acct[index]) + value < 0:
+        index = acct_structure_rev[param][0]
+        if utils.decode_int(acct[index]) + value < 0:
             return False
-        acct[index] = encode_int(decode_int(acct[index]) + value)
+        acct[index] = utils.encode_int(utils.decode_int(acct[index]) + value)
         self.state.update(address, acct)
         return True
 
+    def add_transaction_to_list(self, tx_rlp):
+        self.transactions.update(encode_int(self.transaction_count), tx_rlp)
+        self.transaction_count += 1
+        self.tx_list_root = self.transactions.root
+
     def get_nonce(self, address):
-        return decode_int(self._get_acct_item(address, NONCE_INDEX))
+        return self._get_acct_item(address, 'nonce')
 
     def increment_nonce(self, address):
-        return self._delta_item(address, NONCE_INDEX, 1)
+        return self._delta_item(address, 'nonce', 1)
 
     def get_balance(self, address):
-        return decode_int(self._get_acct_item(address, BALANCE_INDEX))
+        return self._get_acct_item(address, 'balance')
 
     def set_balance(self, address, value):
-        self._set_acct_item(address, BALANCE_INDEX, encode_int(value))
+        self._set_acct_item(address, 'balance', value)
 
     def delta_balance(self, address, value):
-        return self._delta_item(address, BALANCE_INDEX, value)
+        return self._delta_item(address, 'balance', value)
 
     def get_code(self, address):
-        codehash = self._get_acct_item(address, CODE_INDEX)
+        codehash = self._get_acct_item(address, 'code')
         return self.state.db.get(codehash) if codehash else ''
 
     def set_code(self, address, value):
         self.state.db.put(sha3(value), value)
         self.state.db.commit()
-        self._set_acct_item(address, CODE_INDEX, sha3(value))
+        self._set_acct_item(address, 'code', sha3(value))
 
     def get_storage(self, address):
-        return Trie(get_db_path(), self._get_acct_item(address, STORAGE_INDEX))
+        storage_root = self._get_acct_item(address, 'storage')
+        return Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
-        return decode_int(t.get(utils.coerce_to_bytes(index)))
+        val = t.get(utils.coerce_to_bytes(index))
+        return utils.decode_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
@@ -143,79 +161,71 @@ class Block(object):
             t.update(utils.coerce_to_bytes(index), encode_int(val))
         else:
             t.delete(utils.coerce_to_bytes(index))
-        self._set_acct_item(address, STORAGE_INDEX, t.root)
+        self._set_acct_item(address, 'storage', t.root)
+
+    def _account_to_dict(self, acct):
+        med_dict = {}
+        for i, (name, typ, default) in enumerate(acct_structure):
+            med_dict[name] = utils.decoders[typ](acct[i])
+        chash = med_dict['code']
+        strie = Trie(utils.get_db_path(), med_dict['storage']).to_dict()
+        med_dict['code'] = \
+            self.state.db.get(chash).encode('hex') if chash else ''
+        med_dict['storage'] = {
+            utils.decode_int(k): utils.decode_int(strie[k]) for k in strie
+        }
+        return med_dict
 
     def account_to_dict(self, address):
         if len(address) == 40:
             address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
-        chash = acct[CODE_INDEX]
-        stdict = Trie(get_db_path(), acct[STORAGE_INDEX]).to_dict(True)
-        return {
-            'nonce': decode_int(acct[NONCE_INDEX]),
-            'balance': decode_int(acct[BALANCE_INDEX]),
-            'code': self.state.db.get(chash).encode('hex') if chash else '',
-            'storage': {decode_int(k): decode_int(stdict[k]) for k in stdict}
-        }
+        return self._account_to_dict(acct)
 
     # Revert computation
     def snapshot(self):
-        return {'state': self.state.root, 'gas': self.gas_consumed}
+        return {
+            'state': self.state.root,
+            'gas': self.gas_used,
+            'txs': self.transactions,
+            'txcount': self.transaction_count,
+        }
 
     def revert(self, mysnapshot):
         self.state.root = mysnapshot['state']
-        self.gas_consumed = mysnapshot['gas']
+        self.gas_used = mysnapshot['gas']
+        self.transactions = mysnapshot['txs']
+        self.transaction_count = mysnapshot['txcount']
 
     # Serialization method; should act as perfect inverse function of the
     # constructor assuming no verification failures
     def serialize(self):
-        txlist = [x.serialize() for x in self.transactions]
-        header = [encode_int(self.number),
-                  self.prevhash,
-                  sha3(rlp.encode(self.uncles)),
-                  self.coinbase.decode('hex'),
-                  self.state.root,
-                  sha3(rlp.encode(txlist)),
-                  encode_int(self.difficulty),
-                  encode_int(self.timestamp),
-                  self.extradata,
-                  encode_int(self.nonce)]
+        txlist = []
+        for i in range(self.transaction_count):
+            txlist.append(self.transactions.get(utils.encode_int(i)))
+        self.state_root = self.state.root
+        self.tx_list_root = self.transactions.root
+        header = []
+        for name, typ, default in block_structure:
+            header.append(utils.encoders[typ](vars(self)[name]))
         return rlp.encode([header, txlist, self.uncles])
 
     def to_dict(self):
+        b = {}
+        for name, typ, default in block_structure:
+            b[name] = vars(self)[name]
         state = self.state.to_dict(True)
-        nstate = {}
+        b["state"] = {}
         for s in state:
-            t = Trie(get_db_path(), state[s][STORAGE_INDEX])
-            o = [0] * ACCT_RLP_LENGTH
-            o[NONCE_INDEX] = decode_int(state[s][NONCE_INDEX])
-            o[BALANCE_INDEX] = decode_int(state[s][BALANCE_INDEX])
-            o[CODE_INDEX] = state[s][CODE_INDEX]
-            td = t.to_dict(True)
-            o[STORAGE_INDEX] = {decode_int(k): decode_int(td[k]) for k in td}
-            nstate[s.encode('hex')] = o
-
-        return {
-            "number": self.number,
-            "prevhash": self.prevhash,
-            "uncles_root": self.uncles_root,
-            "coinbase": self.coinbase,
-            "state": nstate,
-            "transactions_root": self.transactions_root,
-            "difficulty": self.difficulty,
-            "timestamp": self.timestamp,
-            "extradata": self.extradata,
-            "nonce": self.nonce
-        }
+            b["state"][s.encode('hex')] = self._account_to_dict(state[s])
+        # txlist = []
+        # for i in range(self.transaction_count):
+        #     txlist.append(self.transactions.get(utils.encode_int(i)))
+        # b["transactions"] = txlist
+        return b
 
     def hash(self):
         return sha3(self.serialize())
-
-    @classmethod
-    def genesis(cls, initial_alloc):
-        sys.stderr.write("Deprecated method. Use pyethereum.blocks.genesis" +
-                         "instead of pyethereum.blocks.Block.genesis\n")
-        return genesis(initial_alloc)
 
 
 def genesis(initial_alloc):
