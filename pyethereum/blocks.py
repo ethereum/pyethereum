@@ -45,7 +45,7 @@ class Block(object):
         # Initialize all properties to defaults
         if not data:
             for name, typ, default in block_structure:
-                vars(self)[name] = default
+                setattr(self, name, default)
             self.uncles = []
 
         else:
@@ -54,7 +54,7 @@ class Block(object):
             header, transaction_list, self.uncles = rlp.decode(data)
             # Deserialize all properties
             for i, (name, typ, default) in enumerate(block_structure):
-                vars(self)[name] = utils.decoders[typ](header[i])
+                setattr(self, name, utils.decoders[typ](header[i]))
             # Fill in nodes for transaction trie
             for tx in transaction_list:
                 self.add_transaction_to_list(tx)
@@ -207,13 +207,13 @@ class Block(object):
         self.tx_list_root = self.transactions.root
         header = []
         for name, typ, default in block_structure:
-            header.append(utils.encoders[typ](vars(self)[name]))
+            header.append(utils.encoders[typ](getattr(self, name)))
         return rlp.encode([header, txlist, self.uncles])
 
     def to_dict(self):
         b = {}
         for name, typ, default in block_structure:
-            b[name] = vars(self)[name]
+            b[name] = getattr(self, name)
         state = self.state.to_dict(True)
         b["state"] = {}
         for s in state:

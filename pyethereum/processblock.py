@@ -88,7 +88,7 @@ class Compustate():
         self.pc = 0
         self.gas = 0
         for kw in kwargs:
-            vars(self)[kw] = kwargs[kw]
+            setattr(self, kw, kwargs[kw])
 
 
 def decode_datalist(arr):
