@@ -1,74 +1,135 @@
+import uuid
+import logging
+import traceback
+
+from threading import Timer, Lock
+
 from dispatch import Signal
 
-config_ready = Signal(providing_args=[""])
-connection_accepted = Signal(providing_args=["connection", "ip", "port"])
+logger = logging.getLogger(__name__)
 
+
+config_ready = Signal(providing_args=[""])
 local_address_set = Signal(providing_args=["ip", "port"])
 
-peers_data_requested = Signal(providing_args=["request_data"])
-peers_data_ready = Signal(providing_args=["requester", "ready_data"])
-
+connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 disconnect_requested = Signal(providing_args=[""])
 
 new_peer_received = Signal(providing_args=["peer"])
 new_transactions_received = Signal(providing_args=["transactions"])
 new_blocks_received = Signal(providing_args=["blocks"])
 
-# send by request_data_async, consumed by data provider
-transactions_data_requested = Signal(
-    providing_args=["request_data", "request_uid"])
-blocks_data_requested = Signal(
-    providing_args=["request_data", "request_uid"])
-
-remote_chain_data_requested = Signal(providing_args=["parents", "count"])
-
-# send by abort_data_request, consumed by data provider
-transactions_data_request_aborted = Signal(providing_args=["request_uid"])
-blocks_data_request_aborted = Signal(providing_args=["request_uid"])
-
-# send by data provider, consumed by requst_data_async
-transactions_data_ready = Signal(
-    providing_args=["requester", "ready_data", "request_uid"])
-blocks_data_ready = Signal(
-    providing_args=["requester", "ready_data", "request_uid"])
+remote_chain_requested = Signal(providing_args=["parents", "count"])
 
 
-def request_data_async(sender, data_name, request_data,
-                       ready_data_consumer, request_uid=None):
+_async_data_names = [
+    'transactions',
+    'blocks',
+    'peers',
+    'live_peers',
+    'known_peers',
+]
+
+
+def _create_async_req_signals():
+    for name in _async_data_names:
+        globals()['{}_requested'.format(name)] = Signal(
+            providing_args=["uid", "req"])
+        globals()['{}_request_aborted'.format(name)] = Signal(
+            providing_args=["uid"])
+        globals()['{}_ready'.format(name)] = Signal(
+            providing_args=["uid", "data", "error"])
+
+_create_async_req_signals()
+
+
+def request_data_async(name, req=None,
+                       success_callback=None, fail_callback=None,
+                       timeout=5, sender=None):
     '''
-    :param ready_data_consumer: should be a callable accept the ready data.
-    **Note**: it's weak referenced, so you should ensure it's
-    not garbage collected
-    :param request_uid: a unique id of any string.
-        multiple call with same uid won't have data consumed multiple times
-    '''
-    requested_signal = globals()["{0}_data_requested".format(data_name)]
-    ready_signal = globals()["{0}_data_ready".format(data_name)]
-    request_uid_saved = request_uid
-    sender_saved = sender
+    To use this function, two roles must be involved:
 
-    def data_ready_handler(
-            sender, requester, ready_data, request_uid=None, **kwargs):
-        # ignore ready signal for other requester
-        if requester is not sender_saved:
-            return
-        if request_uid and request_uid != request_uid_saved:
+    data provider
+        a handler for `{name}_requested` signal, which accept two
+        parameters: `req` and `uid`. When the data is ready,
+        it should send a `{name}_ready` signal. During the data
+        producing process, it can optionally handle the
+        `{name}_request_aborted` signal, and then abort the process
+        with same `request_uid` with the aborted signal
+
+        .. note: you handler will never got activated multiple times if with
+        `uid` argument
+
+    data consumer:
+        a callable takes one parameter, which will be called with the ready
+        `data`
+
+    :param name: data name
+    :param req: request arguments
+    :param success_callback: data consumer called when success, accept a `data`
+        args
+    :param fail_callback: exception consumer called when failed, accept a
+        `error` args denote the Exception
+    :param timeout: timeout to abort the request, if provided `fail_callback`,
+        it will be called with a time out Exception
+    :param sender: request sender
+    :return: the request uid
+    '''
+    requested_signal = globals()["{}_requested".format(name)]
+    ready_signal = globals()["{}_ready".format(name)]
+    uid = str(uuid.uuid4())
+    state = dict(finished=False)
+    lock = Lock()
+
+    def data_ready_handler(sender, data=None, error=None, **kwargs):
+        with lock:
+            if state['finished']:
+                return
+            else:
+                state['finished'] = True
+        try:
+            if error:
+                fail_callback(error)
+            else:
+                success_callback(data)
+        except:
+            logger.warning(traceback.format_exc())
+        finally:
+            ready_signal.disconnect(dispatch_uid=uid)
+
+    ready_signal.connect(data_ready_handler, dispatch_uid=uid, weak=False)
+    requested_signal.send(sender=sender, req=req, uid=uid)
+
+    def timeout_callback():
+        with lock:
+            if state['finished']:
+                return
+            else:
+                state['finished'] = True
+                abort_data_request(name, uid)
+
+        if not fail_callback:
             return
 
         try:
-            ready_data_consumer(ready_data)
+            fail_callback(Exception('time out for {} seconds'.format(timeout)))
         except:
-            pass
-        ready_signal.disconnect(data_ready_handler)
+            logger.warning(traceback.format_exc())
 
-    ready_signal.connect(
-        data_ready_handler, dispatch_uid=request_uid, weak=False)
-    requested_signal.send(
-        sender=sender, request_data=request_data, request_uid=request_uid)
+    with lock:
+        if not state['finished']:
+            timer = Timer(timeout, timeout_callback)
+            timer.start()
+
+    return uid
 
 
-def abort_data_request(data_name, request_uid):
-    ready_signal = globals()["{0}_data_ready".format(data_name)]
-    abort_signal = globals()["{0}_data_request_aborted".format(data_name)]
-    ready_signal.discconnect(dispatch_uid=request_uid)
-    abort_signal.send(sender=None, request_uid=request_uid)
+def abort_data_request(name, uid):
+    '''
+    :param name: data name
+    :uid: request uid
+    '''
+    ready_signal = globals()["{}_ready".format(name)]
+    abort_signal = globals()["{}_request_aborted".format(name)]
+    ready_signal.disconnect(dispatch_uid=uid)
+    abort_signal.send(sender=None, uid=uid)

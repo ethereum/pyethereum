@@ -5,6 +5,9 @@ from utils import big_endian_to_int as decode_int
 from utils import int_to_big_endian as encode_int
 from utils import sha3
 import utils
+import time
+import blocks
+import transactions
 
 
 debug = 0
@@ -34,6 +37,28 @@ def process(block, txs):
 
 def finalize(block):
     block.delta_balance(block.coinbase, block.reward)
+
+
+def verify(block, parent):
+    assert block.timestamp >= parent.timestamp
+    assert block.timestamp <= time.time() + 900
+    block2 = blocks.init_from_parent(parent,
+                                     block.coinbase,
+                                     block.extra_data,
+                                     block.timestamp)
+    assert block2.difficulty == block.difficulty
+    assert block2.gas_limit == block.gas_limit
+    for i in range(block.transaction_count):
+        tx, s, g = block.transactions.get(utils.encode_int(i))
+        tx = transactions.Transaction.deserialize(tx)
+        assert tx.startgas + block2.gas_used <= block.gas_limit
+        block2.apply_tx(tx)
+        assert s == block2.state.root
+        assert g == utils.encode_int(block2.gas_used)
+    finalize(block2)
+    assert block2.state.root == block.state.root
+    assert block2.gas_consumed == block.gas_consumed
+    return True
 
 
 class Message(object):
@@ -142,17 +167,15 @@ def create_contract(block, tx, msg):
         return 0, msg.gas
     block.set_code(recvaddr, msg.data)
     compustate = Compustate(gas=msg.gas)
-    # Temporary pre-POC5: don't do the code/init thing
-    return recvaddr, compustate.gas
     # Main loop
     while 1:
-        o = apply_op(block, tx, msg, msg.data, compustate.op)
+        o = apply_op(block, tx, msg, msg.data, compustate)
         if o is not None:
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, 0
             else:
-                block.set_code(''.join(map(chr, o)))
+                block.set_code(recvaddr, ''.join(map(chr, o)))
                 return recvaddr, compustate.gas
 
 
@@ -190,7 +213,7 @@ def calcfee(block, tx, msg, compustate, op):
     elif op == 'CALL':
         m_extend = max(
             0, stk[-4] + stk[-5] - len(mem), stk[-6] + stk[-7] - len(mem))
-        return GCALL + stk[-3] + m_extend * GMEMORY
+        return GCALL + stk[-1] + m_extend * GMEMORY
     elif op == 'CREATE':
         m_extend = max(0, stk[-3] + stk[-4] - len(mem))
         return GCREATE + stk[-2] + m_extend * GMEMORY
@@ -224,11 +247,13 @@ def apply_op(block, tx, msg, code, compustate):
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
     if debug:
+        import serpent
         if op[:4] == 'PUSH':
             start, n = compustate.pc + 1, int(op[4:])
             print(op, decode_int(code[start:start + n]))
         else:
-            print(op, ' '.join(map(str, stackargs)))
+            print(op, ' '.join(map(str, stackargs)),
+                  serpent.decode_datalist(compustate.memory))
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -319,7 +344,7 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (stackargs[0] + stackargs[2] - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(msg.data):
-                mem[stackargs[1] + i] = msg.data[stackargs[0] + i]
+                mem[stackargs[1] + i] = ord(msg.data[stackargs[0] + i])
             else:
                 mem[stackargs[1] + i] = 0
     elif op == 'GASPRICE':
@@ -383,8 +408,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CREATE':
         if len(mem) < stackargs[2] + stackargs[3]:
             mem.extend([0] * (stackargs[2] + stackargs[3] - len(mem)))
-        value = stackargs[0]
-        gas = stackargs[1]
+        gas = stackargs[0]
+        value = stackargs[1]
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
         if debug:
             print("Sub-contract:", msg.to, value, gas, data)
@@ -394,10 +419,10 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))
         if len(mem) < stackargs[5] + stackargs[6]:
             mem.extend([0] * (stackargs[5] + stackargs[6] - len(mem)))
-        to = encode_int(stackargs[0])
+        gas = stackargs[0]
+        to = encode_int(stackargs[1])
         to = (('\x00' * (32 - len(to))) + to)[12:]
-        value = stackargs[1]
-        gas = stackargs[2]
+        value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
         if debug:
             print("Sub-call:", utils.coerce_addr_to_hex(msg.to),
