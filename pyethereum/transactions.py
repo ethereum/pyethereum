@@ -51,7 +51,7 @@ class Transaction(object):
 
         # Determine sender
         if self.r and self.s:
-            rawhash = sha3(rlp.encode(self.serialize(False)))
+            rawhash = sha3(self.serialize(False))
             pub = encode_pubkey(
                 ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
                 'bin')
@@ -77,7 +77,7 @@ class Transaction(object):
         return cls.deserialize(hexrlpdata.decode('hex'))
 
     def sign(self, key):
-        rawhash = sha3(rlp.encode(self.serialize(False)))
+        rawhash = sha3(self.serialize(False))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
         self.sender = privtoaddr(key)
         return self
