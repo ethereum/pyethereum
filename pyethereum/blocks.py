@@ -224,7 +224,7 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address.decode('hex')) or ['', '', '', '']
         return self._account_to_dict(acct)
 
     # Revert computation
