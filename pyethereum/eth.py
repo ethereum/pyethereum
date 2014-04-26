@@ -15,6 +15,7 @@ from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.chainmanager import chain_manager
 from pyethereum.apiserver import api_server
+from pyethereum.packeter import Packeter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ def create_config():
     config.set('network', 'num_peers', '5')
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
-    config.set('network', 'client_id', 'Ethereum(py)/0.0.1')
+    config.set('network', 'client_id', Packeter.CLIENT_ID)
 
     config.add_section('api')
     config.set('api', 'listen_host', '127.0.0.1')
@@ -49,7 +50,7 @@ def create_config():
                '\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9')
 
     usage = "usage: %prog [options]"
-    parser = OptionParser(usage=usage,  version="%prog 0.1a")
+    parser = OptionParser(usage=usage,  version=Packeter.CLIENT_ID)
     parser.add_option(
         "-l", "--listen",
         dest="listen_port",

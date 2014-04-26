@@ -203,14 +203,13 @@ def step_impl(context):
 
 @given(u'a peers data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import peers_data_requested, peers_data_ready
+    from pyethereum.signals import peers_requested, peers_ready
 
-    def peers_data_requested_handler(sender, request_data, **kwargs):
-        peers_data_ready.send(
-            sender=None, requester=sender, ready_data=context.peers_data)
+    def peers_requested_handler(sender, req, **kwargs):
+        peers_ready.send(sender=None, data=context.peers_data)
 
-    context.peers_data_requested_handler = peers_data_requested_handler
-    peers_data_requested.connect(context.peers_data_requested_handler)
+    context.peers_requested_handler = peers_requested_handler
+    peers_requested.connect(context.peers_requested_handler)
 
 
 @when(u'peer.send_Peers is instrumented')  # noqa
@@ -286,16 +285,14 @@ def step_impl(context):
 
 @given(u'a transactions data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import (transactions_data_requested,
-                                    transactions_data_ready)
+    from pyethereum.signals import (transactions_requested,
+                                    transactions_ready)
 
-    def handler(sender, request_data, **kwargs):
-        transactions_data_ready.send(
-            sender=None, requester=sender,
-            ready_data=context.transactions_data)
+    def handler(sender, req, **kwargs):
+        transactions_ready.send(sender=None, data=context.transactions_data)
 
-    context.transactions_data_requested_handler = handler
-    transactions_data_requested.connect(handler)
+    context.transactions_requested_handler = handler
+    transactions_requested.connect(handler)
 
 
 @when(u'peer.send_Transactions is instrumented')  # noqa
@@ -411,16 +408,14 @@ def step_impl(context):
 
 @given(u'a chain data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import (blocks_data_requested,
-                                    blocks_data_ready)
+    from pyethereum.signals import (blocks_requested,
+                                    blocks_ready)
 
-    def handler(sender, request_data, **kwargs):
-        blocks_data_ready.send(
-            sender=None, requester=sender,
-            ready_data=context.blocks_data)
+    def handler(sender, req, **kwargs):
+        blocks_ready.send(sender=None, data=context.blocks_data)
 
-    context.blocks_data_requested_handler = handler
-    blocks_data_requested.connect(handler)
+    context.blocks_requested_handler = handler
+    blocks_requested.connect(handler)
 
 
 @when(u'peer.send_Blocks is instrumented')  # noqa

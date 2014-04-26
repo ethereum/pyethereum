@@ -22,7 +22,8 @@ class ApiServer(threading.Thread):
         self.port = config.getint('api', 'listen_port')
 
     def run(self):
-        bottle_run(app, host=self.listen_host, port=self.port)
+        bottle_run(app, server='waitress',
+                   host=self.listen_host, port=self.port)
 
 api_server = ApiServer()
 

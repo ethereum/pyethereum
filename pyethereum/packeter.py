@@ -5,7 +5,7 @@ from utils import int_to_big_endian4 as ienc4
 from utils import int_to_big_endian as ienc
 from utils import recursive_int_to_big_endian
 import dispatch
-
+import sys
 import signals
 
 logger = logging.getLogger(__name__)
@@ -65,9 +65,9 @@ class Packeter(object):
 
     # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x0b
+    PROTOCOL_VERSION = 0x0c
     NETWORK_ID = 0
-    CLIENT_ID = 'Ethereum(py)/0.0.1'
+    CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform, PROTOCOL_VERSION)
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
 
     def __init__(self):

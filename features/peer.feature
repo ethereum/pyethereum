@@ -84,8 +84,8 @@ Feature: peer
     Given a GetPeers packet
     And peers data
     And a peers data provider
-    '''which handle peers_data_requested signal
-    and send peers_data_ready signal
+    '''which handle peers_requested signal
+    and send peers_ready signal
     '''
     When peer.send_Peers is instrumented
     And the packet is received from peer
@@ -115,8 +115,8 @@ Feature: peer
     Given a GetTransactions packet
     And transactions data
     And a transactions data provider
-    '''which handle transactions_data_requested signal
-    and send transactions_data_ready signal
+    '''which handle transactions_requested signal
+    and send transactions_ready signal
     '''
     When peer.send_Transactions is instrumented
     And the packet is received from peer
@@ -162,8 +162,8 @@ Feature: peer
     And a GetChain packet with the request data
     And blocks data
     And a chain data provider
-    '''which handle chain_data_requested signal
-    and send chain_data_ready signal
+    '''which handle chain_requested signal
+    and send chain_ready signal
     '''
     When peer.send_Blocks is instrumented
     And the packet is received from peer

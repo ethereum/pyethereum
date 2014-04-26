@@ -1,6 +1,7 @@
 leveldb
 bitcoin
 pysha3
-bottle
 netifaces
+bottle
+waitress
 hyp
