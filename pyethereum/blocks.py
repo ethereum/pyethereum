@@ -224,8 +224,6 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        if len(address) == 40:
-            address = address.decode('hex')
         acct = self.state.get(address) or ['', '', '', '']
         return self._account_to_dict(acct)
 
