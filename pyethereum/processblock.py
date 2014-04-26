@@ -1,9 +1,6 @@
 import rlp
 from opcodes import opcodes
 
-from utils import big_endian_to_int as decode_int
-from utils import int_to_big_endian as encode_int
-from utils import sha3
 import utils
 import time
 import blocks
@@ -99,7 +96,9 @@ def apply_tx(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * (tx.startgas - gas))
         block.gas_used += tx.startgas - gas
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
-    tx_data = [tx.serialize(), block.state.root, encode_int(block.gas_used)]
+    tx_data = [tx.serialize(),
+               block.state.root,
+               utils.encode_int(block.gas_used)]
     block.add_transaction_to_list(tx_data)
     success = output is not OUT_OF_GAS
     return success, output if success else ''
@@ -121,7 +120,7 @@ def decode_datalist(arr):
         arr = ''.join(map(chr, arr))
     o = []
     for i in range(0, len(arr), 32):
-        o.append(decode_int(arr[i:i + 32]))
+        o.append(utils.big_endian_to_int(arr[i:i + 32]))
     return o
 
 
@@ -158,8 +157,8 @@ def apply_msg(block, tx, msg):
 def create_contract(block, tx, msg):
     snapshot = block.snapshot()
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
-    nonce = encode_int(block.get_nonce(msg.sender))
-    recvaddr = sha3(rlp.encode([sender, nonce]))[12:]
+    nonce = utils.encode_int(block.get_nonce(msg.sender))
+    recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
     # Transfer value, instaquit if not enough
     block.delta_balance(recvaddr, msg.value)
     o = block.delta_balance(msg.sender, msg.value)
@@ -250,7 +249,7 @@ def apply_op(block, tx, msg, code, compustate):
         import serpent
         if op[:4] == 'PUSH':
             start, n = compustate.pc + 1, int(op[4:])
-            print(op, decode_int(code[start:start + n]))
+            print(op, utils.big_endian_to_int(code[start:start + n]))
         else:
             print(op, ' '.join(map(str, stackargs)),
                   serpent.decode_datalist(compustate.memory))
@@ -320,7 +319,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < stackargs[0] + stackargs[1]:
             mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
-        stk.append(rlp.decode(sha3(data), 256))
+        stk.append(rlp.decode(utils.sha3(data), 256))
     elif op == 'ADDRESS':
         stk.append(msg.to)
     elif op == 'BALANCE':
@@ -336,7 +335,7 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
         else:
             dat = msg.data[stackargs[0]:stackargs[0] + 32]
-            stk.append(decode_int(dat + '\x00' * (32 - len(dat))))
+            stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
@@ -350,9 +349,9 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'PREVHASH':
-        stk.append(decode_int(block.prevhash))
+        stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
-        stk.append(decode_int(block.coinbase.decode('hex')))
+        stk.append(utils.big_endian_to_int(block.coinbase.decode('hex')))
     elif op == 'TIMESTAMP':
         stk.append(block.timestamp)
     elif op == 'NUMBER':
@@ -373,7 +372,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < stackargs[0] + 32:
             mem.extend([0] * (stackargs[0] + 32 - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + 32]))
-        stk.append(decode_int(data))
+        stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
         if len(mem) < stackargs[0] + 32:
             mem.extend([0] * (stackargs[0] + 32 - len(mem)))
@@ -404,7 +403,7 @@ def apply_op(block, tx, msg, code, compustate):
         pushnum = int(op[4:])
         compustate.pc = oldpc + 1 + pushnum
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
-        stk.append(decode_int(dat))
+        stk.append(utils.big_endian_to_int(dat))
     elif op == 'CREATE':
         if len(mem) < stackargs[2] + stackargs[3]:
             mem.extend([0] * (stackargs[2] + stackargs[3] - len(mem)))
@@ -420,7 +419,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < stackargs[5] + stackargs[6]:
             mem.extend([0] * (stackargs[5] + stackargs[6] - len(mem)))
         gas = stackargs[0]
-        to = encode_int(stackargs[1])
+        to = utils.encode_int(stackargs[1])
         to = (('\x00' * (32 - len(to))) + to)[12:]
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
@@ -446,7 +445,7 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'SUICIDE':
-        to = encode_int(stackargs[0])
+        to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
         block.delta_balance(to, block.get_balance(msg.to))
         block.state.update(msg.to, '')

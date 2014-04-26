@@ -2,7 +2,6 @@ import re
 import rlp
 from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
-from utils import sha3, privtoaddr
 import utils
 
 tx_structure = [
@@ -51,11 +50,11 @@ class Transaction(object):
 
         # Determine sender
         if self.r and self.s:
-            rawhash = sha3(self.serialize(False))
+            rawhash = utils.sha3(self.serialize(False))
             pub = encode_pubkey(
                 ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
                 'bin')
-            self.sender = sha3(pub[1:])[-20:].encode('hex')
+            self.sender = utils.sha3(pub[1:])[-20:].encode('hex')
         # does not include signature
         else:
             self.sender = 0
@@ -77,9 +76,9 @@ class Transaction(object):
         return cls.deserialize(hexrlpdata.decode('hex'))
 
     def sign(self, key):
-        rawhash = sha3(self.serialize(False))
+        rawhash = utils.sha3(self.serialize(False))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
-        self.sender = privtoaddr(key)
+        self.sender = utils.privtoaddr(key)
         return self
 
     def serialize(self, signed=True):
@@ -92,7 +91,7 @@ class Transaction(object):
         return self.serialize(signed).encode('hex')
 
     def hash(self):
-        return sha3(self.serialize())
+        return utils.sha3(self.serialize())
 
     def hex_hash(self):
         return self.hash().encode('hex')

@@ -1,7 +1,5 @@
 import rlp
 from trie import Trie
-from utils import int_to_big_endian as encode_int
-from utils import sha3, get_db_path
 import utils
 import time
 
@@ -87,21 +85,21 @@ class Block(object):
         self.transaction_list = transaction_list
         self.uncles = uncles
 
-        self.transactions = Trie(get_db_path())
+        self.transactions = Trie(utils.get_db_path())
         self.transaction_count = 0
 
         # Fill in nodes for transaction trie
         for tx in transaction_list:
             self.add_transaction_to_list(tx)
 
-        self.state = Trie(get_db_path(), self.state_root)
+        self.state = Trie(utils.get_db_path(), self.state_root)
 
         # Basic consistency verifications
         if self.state.root != '' and self.state.db.get(self.state.root) == '':
             raise Exception("State Merkle root not found in database!")
         if self.tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
         if len(self.extra_data) > 1024:
             raise Exception("Extra data cannot exceed 1024 bytes")
@@ -166,7 +164,8 @@ class Block(object):
         return True
 
     def add_transaction_to_list(self, tx_rlp):
-        self.transactions.update(encode_int(self.transaction_count), tx_rlp)
+        self.transactions.update(utils.encode_int(self.transaction_count),
+                                 tx_rlp)
         self.transaction_count += 1
         self.tx_list_root = self.transactions.root
 
@@ -190,9 +189,9 @@ class Block(object):
         return self.state.db.get(codehash) if codehash else ''
 
     def set_code(self, address, value):
-        self.state.db.put(sha3(value), value)
+        self.state.db.put(utils.sha3(value), value)
         self.state.db.commit()
-        self._set_acct_item(address, 'code', sha3(value))
+        self._set_acct_item(address, 'code', utils.sha3(value))
 
     def get_storage(self, address):
         storage_root = self._get_acct_item(address, 'storage')
@@ -206,7 +205,7 @@ class Block(object):
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
         if val:
-            t.update(utils.coerce_to_bytes(index), encode_int(val))
+            t.update(utils.coerce_to_bytes(index), utils.encode_int(val))
         else:
             t.delete(utils.coerce_to_bytes(index))
         self._set_acct_item(address, 'storage', t.root)
@@ -253,7 +252,7 @@ class Block(object):
             txlist.append(self.transactions.get(utils.encode_int(i)))
         self.state_root = self.state.root
         self.tx_list_root = self.transactions.root
-        self.uncles_hash = sha3(rlp.encode(self.uncles))
+        self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
             header.append(utils.encoders[typ](getattr(self, name)))
@@ -277,7 +276,7 @@ class Block(object):
         return b
 
     def hash(self):
-        return sha3(self.serialize())
+        return utils.sha3(self.serialize())
 
     def hex_hash(self):
         return self.hash().encode('hex')
@@ -287,7 +286,7 @@ class Block(object):
                          now=time.time()):
         return Block(
             prevhash=parent.hash,
-            uncles_hash=sha3(rlp.encode([])),
+            uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
             tx_list_root='',
@@ -306,7 +305,7 @@ class Block(object):
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash="\x00" * 32, coinbase="0" * 40,
-                  difficulty=2 ** 22, nonce=sha3(chr(42)),
+                  difficulty=2 ** 22, nonce=utils.sha3(chr(42)),
                   gas_limit=10 ** 6)
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
