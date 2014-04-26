@@ -17,7 +17,7 @@ def response_async_data(name, make_response, req=None):
     def callback(data):
         state.update(res=make_response(data), ready=True)
 
-    signals.request_data_async(name, callback, req)
+    signals.request_data_async(name, req, callback)
 
     for i in range(500):
         if state['ready']:

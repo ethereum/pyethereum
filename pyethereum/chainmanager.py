@@ -126,7 +126,7 @@ def new_transactions_received_handler(sender, transactions, **kwargs):
 @receiver(signals.transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
-    signals.transactions_ready.send(sender=None, data=transactions)
+    signals.transactions_ready.send(sender=None, data=list(transactions))
 
 
 @receiver(signals.blocks_requested)
