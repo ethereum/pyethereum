@@ -34,14 +34,13 @@ class ChainManager(StoppableLoopThread):
 
     # Returns True if block is latest
     def add_block(self, block):
-
         blockhash = block.hash()
         if blockhash == GENESIS_H:
             parent_score = 0
         else:
             try:
                 parent = rlp.decode(self.blockchain.get(block.prevhash))
-            except:
+            except KeyError:
                 raise Exception("Parent of block not found")
             parent_score = utils.big_endian_to_int(parent[1])
         total_score = utils.int_to_big_endian(block.difficulty + parent_score)
@@ -51,7 +50,7 @@ class ChainManager(StoppableLoopThread):
             head = self.blockchain.get('head')
             head_data = rlp.decode(self.blockchain.get(head))
             head_score = utils.big_endian_to_int(head_data[1])
-        except:
+        except KeyError:
             head_score = 0
         if total_score > head_score:
             self.head = blockhash
