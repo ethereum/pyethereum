@@ -132,7 +132,7 @@ class ChainManager(StoppableLoopThread):
             h = sha3(sha3(prefix + pack('>q', nonce)))
             l256 = beti(h)
             if l256 < target:
-                block.nonce = nonce_bin_prefix + pack('q', nonce)
+                block.nonce = nonce_bin_prefix + pack('>q', nonce)
                 assert len(block.nonce) == 32
                 logger.debug('Nonce found %d %r', nonce, block.nonce)
                 time.sleep(1)
