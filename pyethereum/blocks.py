@@ -95,7 +95,8 @@ class Block(object):
         self.state = Trie(utils.get_db_path(), self.state_root)
 
         # Basic consistency verifications
-        if self.state.root != '' and self.state.db.get(self.state.root) == '':
+        if len(self.state.root) == 32 and \
+                self.state.db.get(self.state.root) == '':
             raise Exception("State Merkle root not found in database!")
         if self.tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
