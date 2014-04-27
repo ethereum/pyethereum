@@ -303,9 +303,9 @@ class Block(object):
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
-                         now=time.time()):
+                         now=int(time.time())):
         return Block(
-            prevhash=parent.hash,
+            prevhash=parent.hash(),
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
