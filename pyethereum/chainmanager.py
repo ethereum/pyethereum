@@ -3,17 +3,15 @@ import time
 from dispatch import receiver
 
 from stoppable import StoppableLoopThread
-from trie import rlp_hash, rlp_hash_hex
 import signals
 from db import DB
 import utils
 import rlp
-from blocks import Block
+import blocks
 
 logger = logging.getLogger(__name__)
 
-GENESIS_H = 'ab6b9a5613970faa771b12d449b2e9bb925ab7a369f0a4b86b286e9d540099cf'\
-            .decode('hex')
+rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
 
 class ChainManager(StoppableLoopThread):
@@ -26,36 +24,56 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
         self.transactions = set()
         self.blockchain = DB(utils.get_db_path())
-        self.head = None
-        # FIXME: intialize blockchain with genesis block
+        logger.debug('Chain @ #%d %s' % (self.head.number, self.head.hex_hash()))
+
+    @property
+    def head(self):
+        if not 'HEAD' in self.blockchain:
+            self._initialize_blockchain()
+        ptr = self.blockchain.get('HEAD')
+        return blocks.Block.deserialize(self.blockchain.get(ptr ))
+
+    def get(self, blockhash):
+        return blocks.get_block(blockhash)
+
+    def has_block(self, blockhash):
+        return blockhash in self.blockchain
+
+    def __contains__(self, blockhash):
+        return self.has_block(blockhash)
+
+    def _store_block(self, block):
+        self.blockchain.put(block.hash(), block.serialize())
 
     def _initialize_blockchain(self):
+        logger.info('Initializing new chain @ %s', utils.get_db_path())
         genesis = blocks.genesis()
+        self._store_block(genesis)
+        self.blockchain.put('HEAD', genesis.hash())
+        self.blockchain.commit()
 
     # Returns True if block is latest
     def add_block(self, block):
-        blockhash = block.hash()
-        if blockhash == GENESIS_H:
-            parent_score = 0
-        else:
-            try:
-                parent = rlp.decode(self.blockchain.get(block.prevhash))
-            except KeyError:
-                raise Exception("Parent of block not found")
-            parent_score = utils.big_endian_to_int(parent[1])
-        total_score = utils.int_to_big_endian(block.difficulty + parent_score)
-        self.blockchain.put(
-            blockhash, rlp.encode([block.serialize(), total_score]))
-        try:
-            head = self.blockchain.get('head')
-            head_data = rlp.decode(self.blockchain.get(head))
-            head_score = utils.big_endian_to_int(head_data[1])
-        except KeyError:
-            head_score = 0
-        if total_score > head_score:
-            self.head = blockhash
-            self.blockchain.put('head', blockhash)
+
+        def summarized_difficulty(block):
+            # calculate the summarized_difficulty (on the fly for now)
+            if block.hash() == blocks.GENESIS_HASH:
+                return block.difficulty
+            else:
+                return block.difficulty + summarized_difficulty(block.get_parent())
+
+        # make sure we know the parent
+        if not block.has_parent() and block.hash() != blocks.GENESIS_HASH:
+            return False  # FIXME
+
+        self._store_block(block)
+
+        # set to head if this makes the longest chain w/ most work
+        if summarized_difficulty(block) > summarized_difficulty(self.head):
+            self.blockchain.put('HEAD', block.hash())
+            self.blockchain.commit()
             return True
+
         return False
 
     def configure(self, config):
@@ -63,10 +81,8 @@ class ChainManager(StoppableLoopThread):
 
     def synchronize_blockchain(self):
         # FIXME: execute once, when connected to required num peers
-        if self.head:
-            return
         signals.remote_chain_requested.send(
-            sender=self, parents=[GENESIS_H], count=30)
+            sender=self, parents=[self.head.hash()], count=30)
 
     def loop_body(self):
         self.mine()
@@ -74,32 +90,46 @@ class ChainManager(StoppableLoopThread):
         self.synchronize_blockchain()
 
     def mine(self):
-        "in the meanwhile mine a bit, not efficient though"
+        """
+        It is formally defined as PoW:
+        PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
+        where: RLP(Hn) is the RLP encoding of the block header H,
+        not including the final nonce component; SHA3 is the SHA3 hash function accepting
+        an arbitrary length series of bytes and evaluating to a series of 32 bytes
+        (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
+        operator; BE(X) evaluates to the value equal to X when interpreted as a 
+        big-endian-encoded integer.
+        """
         pass
 
     def recv_blocks(self, block_lst):
         """
         block_lst is rlp decoded data
         """
+        old_head = self.head
 
-        block_lst.reverse()  # oldest block is sent first in list
-
-        # FIXME validate received chain, compare with local chain
+        new_blocks = set()
         for data in block_lst:
-            logger.debug("processing block: %r" % rlp_hash_hex(data))
-            block = Block.deserialize(rlp.encode(data))
-            h = rlp_hash(data)
-            try:
-                self.blockchain.get(h)
-            except KeyError:
-                self.add_block(block)
-                new_blocks_H.add(h)
+            logger.debug("processing block: %r", rlp_hash_hex(data))
+            block = blocks.Block.deserialize(rlp.encode(data))
+            if self.has_block(block.hash()):
+                logger.debug('Known block %s', block.hex_hash())
+            else:
+                new_blocks.add(block)
 
- #       for h in new_blocks_H:
- #           logger.debug("recv_blocks: ask for child block %r" %
- #                        h.encode('hex'))
- #           signals.remote_chain_requested.send(
- #               sender=self, parents=[h], count=1)
+        # no assumption about order of blocks revceived
+        while new_blocks:
+            could_append = False
+            for block in new_blocks:
+                if self.has_block(block.prevhash):
+                    self.add_block(block)
+                    could_append = True
+            if not could_append:
+                break
+
+        if self.head != old_head:
+            self.synchronize_blockchain()
+
     def add_transactions(self, transactions):
         logger.debug("add transactions %r" % transactions)
         for tx in transactions:
