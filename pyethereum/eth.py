@@ -13,9 +13,10 @@ make_pyethereum_avail()
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
-from pyethereum.chainmanager import chain_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,9 @@ def configure_logging(loggerlevels, verbosity=1):
 def main():
     config = create_config()
     config_ready.send(sender=config)
+
+    # import after logger config is ready
+    from pyethereum.chainmanager import chain_manager
 
     try:
         tcp_server.start()
