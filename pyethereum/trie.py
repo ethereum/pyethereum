@@ -2,7 +2,7 @@
 
 import os
 import rlp
-from sha3 import sha3_256
+from utils import sha3
 from db import DB
 
 
@@ -109,12 +109,6 @@ def starts_with(full, part):
         return False
     return full[:len(part)] == part
 
-
-sha3 = lambda x: sha3_256(x).digest()
-
-rlp_hash = lambda data: sha3_256(rlp.encode(data)).digest()
-
-rlp_hash_hex = lambda data: sha3_256(rlp.encode(data)).hexdigest()
 
 (
     NODE_TYPE_BLANK,
