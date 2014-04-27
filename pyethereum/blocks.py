@@ -245,9 +245,17 @@ class Block(object):
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
 
-    # Serialization method; should act as perfect inverse function of the
-    # constructor assuming no verification failures
+
+    def serialize_header_without_nonce(self):
+        header = []
+        for name, typ, default in block_structure:
+            if name != 'nonce':
+                header.append(utils.encoders[typ](getattr(self, name)))
+        return rlp.encode(header)
+
     def serialize(self):
+        # Serialization method; should act as perfect inverse function of the
+        # constructor assuming no verification failures
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(self.transactions.get(utils.encode_int(i)))
@@ -256,6 +264,7 @@ class Block(object):
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
+            # print name, typ, default , getattr(self, name)
             header.append(utils.encoders[typ](getattr(self, name)))
         return rlp.encode([header, txlist, self.uncles])
 
@@ -291,7 +300,7 @@ class Block(object):
         try:
             self.get_parent()
             return True
-        except IndexError:
+        except KeyError:
             return False
 
 

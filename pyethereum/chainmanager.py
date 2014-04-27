@@ -1,5 +1,6 @@
 import logging
 import time
+import struct
 from dispatch import receiver
 
 from stoppable import StoppableLoopThread
@@ -20,18 +21,29 @@ class ChainManager(StoppableLoopThread):
     Manages the chain and requests to it.
     """
 
+    coinbase = "0" * 40  # FIXME
+
     def __init__(self):
         super(ChainManager, self).__init__()
         self.transactions = set()
         self.blockchain = DB(utils.get_db_path())
-        logger.debug('Chain @ #%d %s' % (self.head.number, self.head.hex_hash()))
+        logger.debug('Chain @ #%d %s' %
+                     (self.head.number, self.head.hex_hash()))
+        self._mining_nonce = 0
+
+    def configure(self, config):
+        self.config = config
 
     @property
     def head(self):
         if not 'HEAD' in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
-        return blocks.Block.deserialize(self.blockchain.get(ptr ))
+        return blocks.Block.deserialize(self.blockchain.get(ptr))
+
+    def _update_head(self, block):
+        self.blockchain.put('HEAD', block.hash())
+        self._mining_nonce = 0  # reset
 
     def get(self, blockhash):
         return blocks.get_block(blockhash)
@@ -49,7 +61,7 @@ class ChainManager(StoppableLoopThread):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
         genesis = blocks.genesis()
         self._store_block(genesis)
-        self.blockchain.put('HEAD', genesis.hash())
+        self._update_head(genesis)
         self.blockchain.commit()
 
     # Returns True if block is latest
@@ -64,20 +76,18 @@ class ChainManager(StoppableLoopThread):
 
         # make sure we know the parent
         if not block.has_parent() and block.hash() != blocks.GENESIS_HASH:
+            logger.debug('Missing parent for block %r' % block.hex_hash())
             return False  # FIXME
 
         self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work
         if summarized_difficulty(block) > summarized_difficulty(self.head):
-            self.blockchain.put('HEAD', block.hash())
-            self.blockchain.commit()
+            self._update_head(block)
             return True
 
+        self.blockchain.commit()
         return False
-
-    def configure(self, config):
-        self.config = config
 
     def synchronize_blockchain(self):
         # FIXME: execute once, when connected to required num peers
@@ -86,10 +96,10 @@ class ChainManager(StoppableLoopThread):
 
     def loop_body(self):
         self.mine()
-        time.sleep(10)
-        self.synchronize_blockchain()
+        time.sleep(.01)
+        # self.synchronize_blockchain()
 
-    def mine(self):
+    def mine(self, steps=1000):
         """
         It is formally defined as PoW:
         PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
@@ -100,7 +110,35 @@ class ChainManager(StoppableLoopThread):
         operator; BE(X) evaluates to the value equal to X when interpreted as a 
         big-endian-encoded integer.
         """
-        pass
+
+        pack = struct.pack
+        sha3 = utils.sha3
+        beti = utils.big_endian_to_int
+
+        nonce = self._mining_nonce
+        block = blocks.Block.init_from_parent(
+            self.head, coinbase=self.coinbase)
+        if nonce == 0:
+            logger.debug('Committing to mine on %s', block.hex_hash())
+
+        nonce_bin_prefix = '\x00' * (32 - len(pack('q', 0)))
+        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
+
+        target = 2 ** 256 / block.difficulty
+
+        for nonce in range(nonce, nonce + steps):
+            h = sha3(sha3(prefix + pack('q', nonce)))
+            l256 = beti(h)
+            if l256 < target:
+                block.nonce = nonce_bin_prefix + pack('q', nonce)
+                assert len(block.nonce) == 32
+                logger.debug('Nonce found %d %r', nonce, block.nonce)
+                time.sleep(1)
+                # create new block
+                self.add_block(block)
+                return
+
+        self._mining_nonce = nonce
 
     def recv_blocks(self, block_lst):
         """
@@ -120,11 +158,15 @@ class ChainManager(StoppableLoopThread):
         # no assumption about order of blocks revceived
         while new_blocks:
             could_append = False
-            for block in new_blocks:
+            for block in set(new_blocks):
                 if self.has_block(block.prevhash):
+                    logger.debug('Adding new block %s', block.hex_hash())
                     self.add_block(block)
+                    new_blocks.remove(block)
                     could_append = True
             if not could_append:
+                logger.debug(
+                    'Discarding blocks %r', [b.hex_hash() for b in new_blocks])
                 break
 
         if self.head != old_head:
