@@ -27,3 +27,13 @@ class DB(object):
 
     def delete(self, key):
         return self.db.Delete(key)
+
+    def has_key(self, key):
+        try:
+            self.get(key)
+            return True
+        except KeyError:
+            return False
+
+    def __contains__(self, key):
+        return self.has_key(key)
