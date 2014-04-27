@@ -119,7 +119,8 @@ class ChainManager(StoppableLoopThread):
         block = blocks.Block.init_from_parent(
             self.head, coinbase=self.coinbase)
         if nonce == 0:
-            logger.debug('Committing to mine on %s', block.hex_hash())
+            logger.debug('Mining %s', block.hex_hash())
+            logger.debug('Difficulty %s', block.difficulty)
 
         nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
         prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
