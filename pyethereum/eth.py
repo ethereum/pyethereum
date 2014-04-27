@@ -10,6 +10,7 @@ import logging.config
 from common import make_pyethereum_avail
 make_pyethereum_avail()
 
+from pyethereum.utils import configure_logging
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
@@ -117,48 +118,6 @@ def create_config():
     return config
 
 
-def configure_logging(loggerlevels, verbosity=1):
-    logconfig = dict(
-        version=1,
-        disable_existing_loggers=False,
-        formatters=dict(
-            debug=dict(
-                format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s:'
-                ' %(message)s'
-            ),
-            minimal=dict(
-                format='%(message)s'
-            ),
-        ),
-        handlers=dict(
-            default={
-                'level': 'INFO',
-                'class': 'logging.StreamHandler',
-                'formatter': 'minimal'
-            },
-            verbose={
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-                'formatter': 'debug'
-            },
-        ),
-        loggers=dict()
-    )
-
-    for loggerlevel in filter(lambda _: ':' in _, loggerlevels.split(',')):
-        name, level = loggerlevel.split(':')
-        logconfig['loggers'][name] = dict(
-            handlers=['verbose'], level=level, propagate=False)
-
-    if len(logconfig['loggers']) == 0:
-        logconfig['loggers'][''] = dict(
-            handlers=['default'],
-            level={0: 'ERROR', 1: 'WARNING', 2: 'INFO', 3: 'DEBUG'}.get(
-                verbosity),
-            propagate=True)
-
-    logging.config.dictConfig(logconfig)
-    logging.debug("logging set up like that: {0}".format(logconfig))
 
 
 def main():
