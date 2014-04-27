@@ -300,7 +300,7 @@ class Block(object):
         try:
             self.get_parent()
             return True
-        except KeyError:
+        except IndexError:
             return False
 
 
