@@ -1,5 +1,6 @@
 import rlp
-from trie import Trie
+import trie
+import db
 import utils
 import time
 
@@ -85,14 +86,14 @@ class Block(object):
         self.transaction_list = transaction_list
         self.uncles = uncles
 
-        self.transactions = Trie(utils.get_db_path())
+        self.transactions = trie.Trie(utils.get_db_path())
         self.transaction_count = 0
 
         # Fill in nodes for transaction trie
         for tx in transaction_list:
             self.add_transaction_to_list(tx)
 
-        self.state = Trie(utils.get_db_path(), self.state_root)
+        self.state = trie.Trie(utils.get_db_path(), self.state_root)
 
         # Basic consistency verifications
         if len(self.state.root) == 32 and \
@@ -197,7 +198,7 @@ class Block(object):
 
     def get_storage(self, address):
         storage_root = self._get_acct_item(address, 'storage')
-        return Trie(utils.get_db_path(), storage_root)
+        return trie.Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
@@ -217,7 +218,7 @@ class Block(object):
         for i, (name, typ, default) in enumerate(acct_structure):
             med_dict[name] = utils.decoders[typ](acct[i])
         chash = med_dict['code']
-        strie = Trie(utils.get_db_path(), med_dict['storage']).to_dict()
+        strie = trie.Trie(utils.get_db_path(), med_dict['storage']).to_dict()
         med_dict['code'] = \
             self.state.db.get(chash).encode('hex') if chash else ''
         med_dict['storage'] = {
