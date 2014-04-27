@@ -107,7 +107,19 @@ class Block(object):
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
-        # TODO: check POW
+
+        if not self.is_genesis() and self.nonce and not self.check_proof_of_work(self.nonce):
+            raise Exception("PoW check failed")
+
+    def is_genesis(self):
+        return self.prevhash == "\x00" * 32 and \
+            self.nonce == utils.sha3(chr(42))  # safe assumption?
+
+    def check_proof_of_work(self, nonce):
+        prefix = self.serialize_header_without_nonce()
+        h = utils.sha3(utils.sha3(prefix + nonce))
+        l256 = utils.big_endian_to_int(h)
+        return l256 < 2 ** 256 / self.difficulty
 
     @classmethod
     def deserialize(cls, rlpdata):
@@ -245,7 +257,6 @@ class Block(object):
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
 
-
     def serialize_header_without_nonce(self):
         header = []
         for name, typ, default in block_structure:
@@ -303,7 +314,6 @@ class Block(object):
         except IndexError:
             return False
 
-
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash() == other.hash()
 
@@ -351,6 +361,6 @@ def genesis(initial_alloc={}):
         block.set_balance(addr, initial_alloc[addr])
     return block
 
-GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode('hex')
+GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode(
+    'hex')
 assert GENESIS_HASH == genesis().hash()
-

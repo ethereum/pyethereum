@@ -79,6 +79,14 @@ class ChainManager(StoppableLoopThread):
             logger.debug('Missing parent for block %r' % block.hex_hash())
             return False  # FIXME
 
+        # check PoW
+        if not len(block.nonce) == 32:
+            logger.debug('Nonce not set %r' % block.hex_hash())
+            return False
+        elif not block.is_genesis() and not block.check_proof_of_work(block.nonce):
+            logger.debug('Invalid nonce %r' % block.hex_hash())
+            return False
+
         self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work
@@ -133,6 +141,7 @@ class ChainManager(StoppableLoopThread):
             l256 = beti(h)
             if l256 < target:
                 block.nonce = nonce_bin_prefix + pack('>q', nonce)
+                assert block.check_proof_of_work(block.nonce) is True
                 assert len(block.nonce) == 32
                 logger.debug('Nonce found %d %r', nonce, block.nonce)
                 time.sleep(1)
