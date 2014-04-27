@@ -121,13 +121,13 @@ class ChainManager(StoppableLoopThread):
         if nonce == 0:
             logger.debug('Committing to mine on %s', block.hex_hash())
 
-        nonce_bin_prefix = '\x00' * (32 - len(pack('q', 0)))
+        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
         prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
 
         target = 2 ** 256 / block.difficulty
 
         for nonce in range(nonce, nonce + steps):
-            h = sha3(sha3(prefix + pack('q', nonce)))
+            h = sha3(sha3(prefix + pack('>q', nonce)))
             l256 = beti(h)
             if l256 < target:
                 block.nonce = nonce_bin_prefix + pack('q', nonce)
