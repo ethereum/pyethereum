@@ -84,6 +84,7 @@ class ChainManager(StoppableLoopThread):
         # set to head if this makes the longest chain w/ most work
         if summarized_difficulty(block) > summarized_difficulty(self.head):
             self._update_head(block)
+            self.blockchain.commit()
             return True
 
         self.blockchain.commit()
