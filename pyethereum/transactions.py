@@ -63,6 +63,7 @@ class Transaction(object):
     def deserialize(cls, rlpdata):
         kargs = dict()
         args = rlp.decode(rlpdata)
+        assert len(args) in (len(tx_structure), len(tx_structure)-3)
         # Deserialize all properties
         for i, (name, typ, default) in enumerate(tx_structure):
             if i < len(args):

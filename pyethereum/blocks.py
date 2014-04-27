@@ -111,6 +111,7 @@ class Block(object):
     @classmethod
     def deserialize(cls, rlpdata):
         header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        assert len(header_args) == len(block_structure)
         kargs = dict(transaction_list=transaction_list, uncles=uncles)
         # Deserialize all properties
         for i, (name, typ, default) in enumerate(block_structure):
