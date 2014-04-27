@@ -282,6 +282,17 @@ class Block(object):
     def hex_hash(self):
         return self.hash().encode('hex')
 
+    def get_parent(self):
+        if self.number == 0:
+            raise IndexError('Genesis block has no parent')
+        return get_block(self.prevhash)
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.hash() == other.hash()
+
+    def __hash__(self):
+        return self.hash()
+
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
                          now=time.time()):
@@ -301,6 +312,17 @@ class Block(object):
             nonce='',
             transaction_list=[],
             uncles=[])
+
+# put the next two functions into this module to support Block.get_parent
+# should be probably be in chainmanager otherwise
+
+
+def get_block(blockhash):
+    return Block.deserialize(db.DB(utils.get_db_path()).get(blockhash))
+
+
+def has_block(blockhash):
+    return db.DB(utils.get_db_path()).has_key(blockhash)
 
 
 def genesis(initial_alloc={}):
