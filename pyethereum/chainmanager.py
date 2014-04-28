@@ -128,7 +128,7 @@ class ChainManager(StoppableLoopThread):
         block = blocks.Block.init_from_parent(
             self.head, coinbase=self.coinbase)
         if nonce == 0:
-            logger.debug('Mining %s', block.hex_hash())
+            logger.debug('Mining #%d %s', block.number, block.hex_hash())
             logger.debug('Difficulty %s', block.difficulty)
 
         nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
@@ -192,6 +192,23 @@ class ChainManager(StoppableLoopThread):
         logger.debug("get transactions")
         return self.transactions
 
+    def get_chain(self, start=0, count=100):
+        "return 'count' blocks starting from head (or start if >0)"
+        logger.debug("get_chain: start:%d count%d", start, count)
+        blocks = []
+        block = self.head
+        assert not start or start > 0
+        if int(start):
+            while block.number > start:
+                block = block.get_parent()
+        for i in range(count):
+            blocks.append(block)
+            if block.is_genesis():
+                break
+            block = block.get_parent()
+        return blocks
+
+
 chain_manager = ChainManager()
 
 
@@ -211,12 +228,7 @@ def transactions_requested_handler(sender, req, **kwargs):
     signals.transactions_ready.send(sender=None, data=list(transactions))
 
 
-@receiver(signals.blocks_requested)
-def blocks_requested_handler(sender, req, **kwargs):
-    pass
-
-
 @receiver(signals.new_blocks_received)
 def new_blocks_received_handler(sender, blocks, **kwargs):
-    logger.debug("received blocks: %r" % ([rlp_hash_hex(b) for b in blocks]))
+    logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in blocks])
     chain_manager.recv_blocks(blocks)
