@@ -26,7 +26,7 @@ _async_data_names = [
     'transactions',
     'blocks',
     'peers',
-    'live_peers',
+    'connected_peers',
     'known_peers',
 ]
 
@@ -41,7 +41,6 @@ def _create_async_req_signals():
             providing_args=["uid", "data", "error"])
 
 _create_async_req_signals()
-
 
 def request_data_async(name, req=None,
                        success_callback=None, fail_callback=None,

@@ -190,11 +190,11 @@ def peers_requested_handler(sender, req, **kwargs):
     signals.peers_ready.send(None, data=peers)
 
 
-@receiver(signals.live_peers_requested)
-def live_peers_requested_handler(sender, req, **kwargs):
+@receiver(signals.connected_peers_requested)
+def connected_peers_requested_handler(sender, req, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_connected_peer_addresses()
-    signals.live_peers_ready.send(None, data=peers)
+    signals.connected_peers_ready.send(None, data=peers)
 
 
 @receiver(signals.known_peers_requested)
