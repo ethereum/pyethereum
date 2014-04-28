@@ -91,11 +91,12 @@ class Transaction(object):
     def hex_serialize(self, signed=True):
         return self.serialize(signed).encode('hex')
 
+    @property
     def hash(self):
         return utils.sha3(self.serialize())
 
     def hex_hash(self):
-        return self.hash().encode('hex')
+        return self.hash.encode('hex')
 
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):

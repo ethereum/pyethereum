@@ -42,7 +42,7 @@ class ChainManager(StoppableLoopThread):
         return blocks.Block.deserialize(self.blockchain.get(ptr))
 
     def _update_head(self, block):
-        self.blockchain.put('HEAD', block.hash())
+        self.blockchain.put('HEAD', block.hash)
         self._mining_nonce = 0  # reset
 
     def get(self, blockhash):
@@ -55,7 +55,7 @@ class ChainManager(StoppableLoopThread):
         return self.has_block(blockhash)
 
     def _store_block(self, block):
-        self.blockchain.put(block.hash(), block.serialize())
+        self.blockchain.put(block.hash, block.serialize())
 
     def _initialize_blockchain(self):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
@@ -69,13 +69,13 @@ class ChainManager(StoppableLoopThread):
 
         def summarized_difficulty(block):
             # calculate the summarized_difficulty (on the fly for now)
-            if block.hash() == blocks.GENESIS_HASH:
+            if block.hash == blocks.GENESIS_HASH:
                 return block.difficulty
             else:
                 return block.difficulty + summarized_difficulty(block.get_parent())
 
         # make sure we know the parent
-        if not block.has_parent() and block.hash() != blocks.GENESIS_HASH:
+        if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
             logger.debug('Missing parent for block %r' % block.hex_hash())
             return False  # FIXME
 
@@ -101,7 +101,7 @@ class ChainManager(StoppableLoopThread):
     def synchronize_blockchain(self):
         # FIXME: execute once, when connected to required num peers
         signals.remote_chain_requested.send(
-            sender=self, parents=[self.head.hash()], count=30)
+            sender=self, parents=[self.head.hash], count=30)
 
     def loop_body(self):
         self.mine()
@@ -161,7 +161,7 @@ class ChainManager(StoppableLoopThread):
         for data in block_lst:
             logger.debug("processing block: %r", rlp_hash_hex(data))
             block = blocks.Block.deserialize(rlp.encode(data))
-            if self.has_block(block.hash()):
+            if self.has_block(block.hash):
                 logger.debug('Known block %s', block.hex_hash())
             else:
                 new_blocks.add(block)

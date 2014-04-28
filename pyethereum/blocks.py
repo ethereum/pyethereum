@@ -296,11 +296,12 @@ class Block(object):
         # b["transactions"] = txlist
         return b
 
+    @property
     def hash(self):
         return utils.sha3(self.serialize())
 
     def hex_hash(self):
-        return self.hash().encode('hex')
+        return self.hash.encode('hex')
 
     def get_parent(self):
         if self.number == 0:
@@ -315,16 +316,16 @@ class Block(object):
             return False
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.hash() == other.hash()
+        return isinstance(other, self.__class__) and self.hash == other.hash
 
     def __hash__(self):
-        return self.hash()
+        return self.hash
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
                          now=int(time.time())):
         return Block(
-            prevhash=parent.hash(),
+            prevhash=parent.hash,
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
@@ -363,4 +364,4 @@ def genesis(initial_alloc={}):
 
 GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode(
     'hex')
-assert GENESIS_HASH == genesis().hash()
+assert GENESIS_HASH == genesis().hash
