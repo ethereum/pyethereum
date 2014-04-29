@@ -364,4 +364,4 @@ def genesis(initial_alloc={}):
 
 GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode(
     'hex')
-assert GENESIS_HASH == genesis().hash
+#assert GENESIS_HASH == genesis().hash # do not leave uncomment

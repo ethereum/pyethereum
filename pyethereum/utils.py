@@ -8,6 +8,8 @@ import sys
 import errno
 import rlp
 
+logger = logging.getLogger(__name__)
+
 
 def sha3(seed):
     return sha3_256(seed).digest()
@@ -225,6 +227,7 @@ class DataDir(object):
         self._path = None
 
     def set(self, path):
+        path = os.path.abspath(path)
         if not os.path.exists(path):
             os.makedirs(path)
         assert os.path.isdir(path)

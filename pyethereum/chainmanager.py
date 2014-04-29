@@ -43,6 +43,7 @@ class ChainManager(StoppableLoopThread):
     def _update_head(self, block):
         self.blockchain.put('HEAD', block.hash)
         self._mining_nonce = 0  # reset
+        self.blockchain.commit()
 
     def get(self, blockhash):
         return blocks.get_block(blockhash)
@@ -55,6 +56,7 @@ class ChainManager(StoppableLoopThread):
 
     def _store_block(self, block):
         self.blockchain.put(block.hash, block.serialize())
+        self.blockchain.commit()
 
     def _initialize_blockchain(self):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
@@ -91,10 +93,8 @@ class ChainManager(StoppableLoopThread):
         # set to head if this makes the longest chain w/ most work
         if summarized_difficulty(block) > summarized_difficulty(self.head):
             self._update_head(block)
-            self.blockchain.commit()
             return True
 
-        self.blockchain.commit()
         return False
 
     def synchronize_blockchain(self):
@@ -232,4 +232,5 @@ def transactions_requested_handler(sender, req, **kwargs):
 @receiver(signals.new_blocks_received)
 def new_blocks_received_handler(sender, blocks, **kwargs):
     logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in blocks])
-    chain_manager.recv_blocks(blocks)
+    with chain_manager.lock:
+        chain_manager.recv_blocks(blocks)
