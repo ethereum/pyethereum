@@ -71,8 +71,7 @@ class PeerManager(StoppableLoopThread):
         try:
             sock.connect((host, port))
         except Exception as e:
-            logger.debug(
-                'Conencting {0}:{1} failed, {2}'.format(host, port, str(e)))
+            logger.debug('Connecting %s:%d failed, %s', host, port, e)
             return None
         ip, port = sock.getpeername()
         logger.debug('connected {0}:{1}'.format(ip, port))

@@ -24,13 +24,14 @@ class ChainManager(StoppableLoopThread):
     def __init__(self):
         super(ChainManager, self).__init__()
         self.transactions = set()
-        self.blockchain = DB(utils.get_db_path())
-        logger.debug('Chain @ #%d %s' %
-                     (self.head.number, self.head.hex_hash()))
         self._mining_nonce = 0
 
     def configure(self, config):
         self.config = config
+        logger.info('Opening chain @ %s', utils.get_db_path())
+        self.blockchain = DB(utils.get_db_path())
+        logger.debug('Chain @ #%d %s' %
+                     (self.head.number, self.head.hex_hash()))
 
     @property
     def head(self):
@@ -145,7 +146,8 @@ class ChainManager(StoppableLoopThread):
                 time.sleep(1)
                 # create new block
                 self.add_block(block)
-                signals.send_blocks.send(blocks=[rlp.decode(block.serialize())]) #FIXME DE/ENCODE
+                signals.send_blocks.send(
+                    blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
                 return
 
         self._mining_nonce = nonce
