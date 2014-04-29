@@ -9,7 +9,7 @@ from dispatch import Signal
 logger = logging.getLogger(__name__)
 
 
-config_ready = Signal(providing_args=[""])
+config_ready = Signal(providing_args=["config"])
 local_address_set = Signal(providing_args=["ip", "port"])
 
 connection_accepted = Signal(providing_args=["connection", "ip", "port"])
@@ -20,7 +20,7 @@ new_transactions_received = Signal(providing_args=["transactions"])
 new_blocks_received = Signal(providing_args=["blocks"])
 
 remote_chain_requested = Signal(providing_args=["parents", "count"])
-
+send_blocks = Signal(providing_args=["blocks"])
 
 _async_data_names = [
     'transactions',

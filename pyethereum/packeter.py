@@ -169,7 +169,7 @@ class Packeter(object):
                 self.CLIENT_ID,
                 self.config.getint('network', 'listen_port'),
                 self.CAPABILITIES,
-                self.config.get('wallet', 'pub_key')
+                self.config.get('wallet', 'coinbase')
                 ]
         return self.dump_packet(data)
 

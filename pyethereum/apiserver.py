@@ -3,6 +3,7 @@ import threading
 import time
 from bottle import run as bottle_run
 from bottle import Bottle
+from bottle import abort
 from dispatch import receiver
 from marshmallow import Serializer, fields
 from hyp.responder import Responder
@@ -11,7 +12,7 @@ from pyethereum.chainmanager import chain_manager
 from pyethereum.signals import request_data_async, config_ready
 
 logger = logging.getLogger(__name__)
-base_url = '/api/v1'
+base_url = '/api/v0alpha'
 
 
 class ApiServer(threading.Thread):
@@ -128,10 +129,11 @@ def block(blockhash=None):
     if blockhash in chain_manager:
         return BlocksResponder().respond(chain_manager.get(blockhash))
     else:
-        return '404 Not Found'  # 404
+        return abort(404, 'No block with id %s' % blockhash)
 
 
 # ######## Peers ###################
+
 
 class PeerSerializer(Serializer):
     ip = fields.Function(lambda o: o['ip'])

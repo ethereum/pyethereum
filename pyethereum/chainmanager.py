@@ -21,18 +21,17 @@ class ChainManager(StoppableLoopThread):
     Manages the chain and requests to it.
     """
 
-    coinbase = "0" * 40  # FIXME
-
     def __init__(self):
         super(ChainManager, self).__init__()
         self.transactions = set()
-        self.blockchain = DB(utils.get_db_path())
-        logger.debug('Chain @ #%d %s' %
-                     (self.head.number, self.head.hex_hash()))
         self._mining_nonce = 0
 
     def configure(self, config):
         self.config = config
+        logger.info('Opening chain @ %s', utils.get_db_path())
+        self.blockchain = DB(utils.get_db_path())
+        logger.debug('Chain @ #%d %s' %
+                     (self.head.number, self.head.hex_hash()))
 
     @property
     def head(self):
@@ -126,7 +125,7 @@ class ChainManager(StoppableLoopThread):
 
         nonce = self._mining_nonce
         block = blocks.Block.init_from_parent(
-            self.head, coinbase=self.coinbase)
+            self.head, coinbase=self.config.get('wallet', 'coinbase'))
         if nonce == 0:
             logger.debug('Mining #%d %s', block.number, block.hex_hash())
             logger.debug('Difficulty %s', block.difficulty)
@@ -147,6 +146,8 @@ class ChainManager(StoppableLoopThread):
                 time.sleep(1)
                 # create new block
                 self.add_block(block)
+                signals.send_blocks.send(
+                    blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
                 return
 
         self._mining_nonce = nonce

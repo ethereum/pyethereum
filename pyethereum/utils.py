@@ -150,7 +150,7 @@ def encode_addr(v):
 
 def encode_int(v):
     '''encodes an integer into serialization'''
-    if not isinstance(v, (int, long)) or v < 0 or v >= 2**256:
+    if not isinstance(v, (int, long)) or v < 0 or v >= 2 ** 256:
         raise Exception("Integer invalid or out of range")
     return int_to_big_endian(v)
 
@@ -212,34 +212,39 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
     return inner
 
 
-def mkdir_p(path):
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
+class DataDir(object):
 
-
-def ensure_get_eth_dir():
     ethdirs = {
         "linux2": "~/.pyethereum",
         "darwin": "~/Library/Application Support/Pyethereum/",
         "win32": "~/AppData/Roaming/Pyethereum",
         "win64": "~/AppData/Roaming/Pyethereum",
     }
-    eth_dir = ethdirs.get(sys.platform, '~/.pyethereum')
-    eth_dir = os.path.expanduser(os.path.normpath(eth_dir))
-    mkdir_p(eth_dir)
-    return eth_dir
 
+    def __init__(self):
+        self._path = None
 
-STATEDB_DIR = os.path.join(ensure_get_eth_dir(), 'statedb')
+    def set(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        assert os.path.isdir(path)
+        self._path = path
+
+    def _set_default(self):
+        p = self.ethdirs.get(sys.platform, self.ethdirs['linux2'])
+        self.set(os.path.expanduser(os.path.normpath(p)))
+
+    @property
+    def path(self):
+        if not self._path:
+            self._set_default()
+        return self._path
+
+data_dir = DataDir()
 
 
 def get_db_path():
-    return STATEDB_DIR
+    return os.path.join(data_dir.path, 'statedb')
 
 
 def configure_logging(loggerlevels=':DEBUG', verbosity=1):
@@ -284,4 +289,3 @@ def configure_logging(loggerlevels=':DEBUG', verbosity=1):
 
     logging.config.dictConfig(logconfig)
     #logging.debug("logging set up like that: %r", logconfig)
-
