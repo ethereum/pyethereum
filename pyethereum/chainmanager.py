@@ -222,19 +222,30 @@ def config_chainmanager(sender, **kwargs):
     chain_manager.configure(sender)
 
 
-@receiver(signals.new_transactions_received)
-def new_transactions_received_handler(sender, transactions, **kwargs):
+@receiver(signals.peer_handshake_success)
+def new_peer_connected(sender, **kwargs):
+    # request transactions
+    with sender.lock:
+        sender.send_GetTransactions()
+    # request chain
+    blocks = [b.hash for b in chain_manager.get_chain(count=30)]
+    with sender.lock:
+        sender.send_GetChain(blocks, count=30)
+
+
+@receiver(signals.remote_transactions_received)
+def remote_transactions_received_handler(sender, transactions, **kwargs):
     chain_manager.add_transactions(transactions)
 
 
-@receiver(signals.transactions_requested)
+@receiver(signals.local_transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
     signals.transactions_ready.send(sender=None, data=list(transactions))
 
 
-@receiver(signals.new_blocks_received)
-def new_blocks_received_handler(sender, blocks, **kwargs):
+@receiver(signals.remote_blocks_received)
+def remote_blocks_received_handler(sender, blocks, **kwargs):
     logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in blocks])
     with chain_manager.lock:
         chain_manager.recv_blocks(blocks)

@@ -10,37 +10,40 @@ logger = logging.getLogger(__name__)
 
 
 config_ready = Signal(providing_args=["config"])
-local_address_set = Signal(providing_args=["ip", "port"])
+local_peer_server_address_set = Signal(providing_args=["ip", "port"])
 
-connection_accepted = Signal(providing_args=["connection", "ip", "port"])
-disconnect_requested = Signal(providing_args=[""])
+peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
+peer_disconnect_requested = Signal(providing_args=[""])
 
-new_peer_received = Signal(providing_args=["peer"])
-new_transactions_received = Signal(providing_args=["transactions"])
-new_blocks_received = Signal(providing_args=["blocks"])
+peer_address_received = Signal(providing_args=["peer"])
+peer_handshake_success = Signal(providing_args=["peer"])
+
+remote_transactions_received = Signal(providing_args=["transactions"])
+remote_blocks_received = Signal(providing_args=["blocks"])
 
 remote_chain_requested = Signal(providing_args=["parents", "count"])
-send_blocks = Signal(providing_args=["blocks"])
+send_local_blocks = Signal(providing_args=["blocks"])
 
-_async_data_names = [
-    'transactions',
-    'blocks',
-    'peers',
-    'connected_peers',
-    'known_peers',
-]
+local_transactions_requested = Signal(providing_args=["uid", "req"])
+# local_transactions_request_aborted = Signal(providing_args=["uid"])
+# local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
 
+# local_blocks_requested = Signal(providing_args=["uid", "req"])
+# local_blocks_request_aborted = Signal(providing_args=["uid"])
+# local_blocks_ready = Signal(providing_args=["uid", "data", "error"])
 
-def _create_async_req_signals():
-    for name in _async_data_names:
-        globals()['{}_requested'.format(name)] = Signal(
-            providing_args=["uid", "req"])
-        globals()['{}_request_aborted'.format(name)] = Signal(
-            providing_args=["uid"])
-        globals()['{}_ready'.format(name)] = Signal(
-            providing_args=["uid", "data", "error"])
+known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
+known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
+known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 
-_create_async_req_signals()
+connected_peer_addresses_requested = Signal(providing_args=["uid", "req"])
+# local_connected_peers_request_aborted = Signal(providing_args=["uid"])
+# local_connected_peers_ready = Signal(providing_args=["uid", "data", "error"])
+
+# local_known_peers_requested = Signal(providing_args=["uid", "req"])
+# local_known_peers_request_aborted = Signal(providing_args=["uid"])
+# local_known_peers_ready = Signal(providing_args=["uid", "data", "error"])
+
 
 def request_data_async(name, req=None,
                        success_callback=None, fail_callback=None,

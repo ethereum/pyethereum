@@ -161,8 +161,8 @@ def config_peermanager(sender, **kwargs):
     peer_manager.configure(sender)
 
 
-@receiver(signals.local_address_set)
-def local_address_set_handler(sender, ip, port, **kwargs):
+@receiver(signals.local_peer_server_address_set)
+def local_peer_server_address_set_handler(sender, ip, port, **kwargs):
     local_addresses = []
     if ip == '0.0.0.0':
         for interface in netifaces.interfaces():
@@ -178,50 +178,39 @@ def local_address_set_handler(sender, ip, port, **kwargs):
         peer_manager.local_addresses.extend(local_addresses)
 
 
-@receiver(signals.connection_accepted)
+@receiver(signals.peer_connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
 
 
-@receiver(signals.peers_requested)
-def peers_requested_handler(sender, req, **kwargs):
-    peers = peer_manager.get_known_peer_addresses()
-    signals.peers_ready.send(None, data=peers)
-
-
-@receiver(signals.connected_peers_requested)
+@receiver(signals.connected_peer_addresses_requested)
 def connected_peers_requested_handler(sender, req, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_connected_peer_addresses()
-    signals.connected_peers_ready.send(None, data=peers)
+    signals.connected_peer_addresses_ready.send(None, data=peers)
 
 
-@receiver(signals.known_peers_requested)
+@receiver(signals.known_peer_addresses_requested)
 def known_peers_requested_handler(sender, req, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_known_peer_addresses()
-    signals.known_peers_ready.send(None, data=peers)
+    signals.known_peer_addresses_ready.send(None, data=peers)
 
 
-@receiver(signals.disconnect_requested)
+@receiver(signals.peer_disconnect_requested)
 def disconnect_requested_handler(sender, **kwargs):
     peer = sender
     peer_manager.remove_peer(peer)
 
 
-@receiver(signals.new_peer_received)
-def new_peer_received_handler(sender, peer, **kwargs):
+@receiver(signals.peer_address_received)
+def peer_address_received_handler(sender, peer, **kwargs):
     ''' peer should be (ip, port, node_id)
     '''
     peer_manager.add_known_peer_address(*peer)
 
 
-@receiver(signals.remote_chain_requested)
-def remote_chain_requested_handler(sender, parents=[], count=1, **kwargs):
-    for peer in peer_manager.connected_peers:
-        peer.send_GetChain(parents, count)
-
-@receiver(signals.send_blocks)
+@receiver(signals.send_local_blocks)
 def send_blocks(sender, blocks=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)

@@ -155,6 +155,8 @@ class Peer(StoppableLoopThread):
         if not self.hello_sent:
             self.send_Hello()
 
+        signals.peer_handshake_success.send(sender=self)
+
     def send_Ping(self):
         self.send_packet(packeter.dump_Ping())
         self.last_pinged = time.time()
@@ -186,7 +188,8 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetPeers())
 
     def _recv_GetPeers(self, data):
-        signals.request_data_async('peers', data, self.send_Peers)
+        signals.request_data_async(
+            'known_peer_addresses', data, self.send_Peers)
 
     def send_Peers(self, peers):
         packet = packeter.dump_Peers(peers)
@@ -199,7 +202,8 @@ class Peer(StoppableLoopThread):
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
-            signals.new_peer_received.send(sender=self, peer=[ip, port, pid])
+            signals.peer_address_received.send(
+                sender=self, peer=[ip, port, pid])
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')
@@ -207,7 +211,7 @@ class Peer(StoppableLoopThread):
 
     def _recv_GetTransactions(self, data):
         logger.info('asking for transactions')
-        signals.request_data_async('transactions', data,
+        signals.request_data_async('local_transactions', data,
                                    self.send_Transactions)
 
     def send_Transactions(self, transactions):
@@ -215,19 +219,20 @@ class Peer(StoppableLoopThread):
 
     def _recv_Transactions(self, data):
         logger.info('received transactions #%d', len(data))
-        signals.new_transactions_received.send(sender=self, transactions=data)
+        signals.remote_transactions_received.send(
+            sender=self, transactions=data)
 
     def send_Blocks(self, blocks):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.new_blocks_received.send(sender=self, blocks=data)
+        signals.remote_blocks_received.send(sender=self, blocks=data)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))
 
     def _recv_GetChain(self, data):
-        signals.request_data_async('blocks', data, self.send_Blocks)
+        signals.request_data_async('local_blocks', data, self.send_Blocks)
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))
