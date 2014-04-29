@@ -21,8 +21,6 @@ class ChainManager(StoppableLoopThread):
     Manages the chain and requests to it.
     """
 
-    coinbase = "0" * 40  # FIXME
-
     def __init__(self):
         super(ChainManager, self).__init__()
         self.transactions = set()
@@ -126,7 +124,7 @@ class ChainManager(StoppableLoopThread):
 
         nonce = self._mining_nonce
         block = blocks.Block.init_from_parent(
-            self.head, coinbase=self.coinbase)
+            self.head, coinbase=self.config.get('wallet', 'coinbase'))
         if nonce == 0:
             logger.debug('Mining #%d %s', block.number, block.hex_hash())
             logger.debug('Difficulty %s', block.difficulty)

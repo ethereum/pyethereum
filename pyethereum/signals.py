@@ -9,7 +9,7 @@ from dispatch import Signal
 logger = logging.getLogger(__name__)
 
 
-config_ready = Signal(providing_args=[""])
+config_ready = Signal(providing_args=["config"])
 local_address_set = Signal(providing_args=["ip", "port"])
 
 connection_accepted = Signal(providing_args=["connection", "ip", "port"])

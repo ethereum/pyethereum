@@ -44,12 +44,9 @@ def create_config():
     config.set('misc', 'logging', None)
 
     config.add_section('wallet')
-
     # NODE_ID == pubkey, needed in order to work with Ethereum(++)
-    config.set('wallet', 'pub_key',
-               'J\x02U\xfaFs\xfa\xa3\x0f\xc5\xab\xfd<U\x0b\xfd\xbc\r<\x97=5'
-               '\xf7&F:\xf8\x1cT\xa02\x81\xcf\xff"\xc5\xf5\x96[8\xacc\x01R'
-               '\x98wW\xa3\x17\x82G\x85I\xc3o|\x84\xcbD6\xbay\xd6\xd9')
+    config.set(
+        'wallet', 'coinbase', '9ffc7b66e5066078ccb1dc5a3e6af3501ddd1485')
 
     usage = "usage: %prog [options]"
     parser = OptionParser(usage=usage,  version=Packeter.CLIENT_ID)
