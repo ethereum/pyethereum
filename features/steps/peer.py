@@ -407,14 +407,12 @@ def step_impl(context):
 
 @given(u'a chain data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import (local_blocks_requested,
-                                    local_blocks_ready)
-
+    from pyethereum.signals import (local_chain_requested)
     def handler(sender, req, **kwargs):
-        local_blocks_ready.send(sender=None, data=context.blocks_data)
+        pass
 
     context.blocks_requested_handler = handler
-    local_blocks_requested.connect(handler)
+    local_chain_requested.connect(handler)
 
 
 @when(u'peer.send_Blocks is instrumented')  # noqa
