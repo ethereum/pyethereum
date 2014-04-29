@@ -58,7 +58,7 @@ api_server = ApiServer()
 def config_api_server(sender, **kwargs):
     api_server.configure(sender)
 
-app = Bottle()
+app = Bottle()  # FIXME line 32?
 app.config['autojson'] = True
 
 
