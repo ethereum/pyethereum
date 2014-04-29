@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from bottle import run as bottle_run
+from bottle import run as bottle_run, response
 from bottle import Bottle
 from bottle import abort
 from dispatch import receiver
@@ -32,7 +32,6 @@ class ApiServer(threading.Thread):
                    host=self.listen_host, port=self.port)
 
 
-
 def response_async_data(name, make_response, req=None):
     state = dict(res=None, ready=False)
 
@@ -48,10 +47,10 @@ def response_async_data(name, make_response, req=None):
     return Exception()
 
 
-
-####### create server ######
+# ###### create server ######
 
 api_server = ApiServer()
+
 
 @receiver(config_ready)
 def config_api_server(sender, **kwargs):
@@ -60,7 +59,20 @@ def config_api_server(sender, **kwargs):
 app = Bottle()
 app.config['autojson'] = True
 
-############# Blocks ######################
+
+@app.hook('after_request')
+def enable_cors():
+    """
+    You need to add some headers to each request.
+    Don't use the wildcard '*' for Access-Control-Allow-Origin in production.
+    """
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = \
+        'PUT, GET, POST, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = \
+        'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
+
+# ############ Blocks ######################
 
 
 class Binary(fields.Raw):
@@ -88,7 +100,8 @@ class BlocksResponder(Responder):
 @app.get(base_url + '/blocks/')
 def blocks():
     logger.debug('blocks/')
-    return BlocksResponder().respond(chain_manager.get_chain(start=0, count=20))
+    return BlocksResponder().respond(
+        chain_manager.get_chain(start=0, count=20))
 
 
 @app.get(base_url + '/blocks/<blockhash>')
@@ -101,27 +114,31 @@ def block(blockhash=None):
         return abort(404, 'No block with id %s' % blockhash)
 
 
-######### Peers ################### 
+# ######## Peers ###################
+
 
 class PeerSerializer(Serializer):
     ip = fields.Function(lambda o: o['ip'])
     port = fields.Function(lambda o: str(o['port']))
     node_id = fields.Function(lambda o: o['node_id'].encode('hex'))
-    
+
+
 class PeerResponder(Responder):
     TYPE = 'peer'
     SERIALIZER = PeerSerializer
 
+
 def make_peers_response(peers):
-    peers = [dict(ip=ip, port=port, node_id=node_id) for (ip, port, node_id) in peers]
+    peers = [dict(ip=ip, port=port, node_id=node_id) for
+             (ip, port, node_id) in peers]
     return PeerResponder().respond(peers)
+
 
 @app.get(base_url + '/connected_peers/')
 def connected_peers():
     return response_async_data('connected_peers', make_peers_response)
 
 
-@app.get(base_url +'/known_peers/')
+@app.get(base_url + '/known_peers/')
 def known_peers():
     return response_async_data('known_peers', make_peers_response)
-
