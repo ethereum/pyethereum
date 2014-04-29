@@ -214,7 +214,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Transactions(transactions))
 
     def _recv_Transactions(self, data):
-        logger.info('received transactions', len(data), self)
+        logger.info('received transactions #%d', len(data))
         signals.new_transactions_received.send(sender=self, transactions=data)
 
     def send_Blocks(self, blocks):

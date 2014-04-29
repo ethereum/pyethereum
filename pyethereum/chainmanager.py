@@ -143,11 +143,10 @@ class ChainManager(StoppableLoopThread):
                 assert block.check_proof_of_work(block.nonce) is True
                 assert len(block.nonce) == 32
                 logger.debug('Nonce found %d %r', nonce, block.nonce)
-                time.sleep(1)
                 # create new block
                 self.add_block(block)
-                signals.send_blocks.send(
-                    blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
+                signals.send_blocks.send(sender=self,
+                                         blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
                 return
 
         self._mining_nonce = nonce
@@ -158,19 +157,19 @@ class ChainManager(StoppableLoopThread):
         """
         old_head = self.head
 
-        new_blocks = set()
+        new_blocks = []
         for data in block_lst:
-            logger.debug("processing block: %r", rlp_hash_hex(data))
             block = blocks.Block.deserialize(rlp.encode(data))
             if self.has_block(block.hash):
                 logger.debug('Known block %s', block.hex_hash())
             else:
-                new_blocks.add(block)
+                logger.debug('New block %s', block.hex_hash())
+                new_blocks.append(block)
 
         # no assumption about order of blocks revceived
         while new_blocks:
             could_append = False
-            for block in set(new_blocks):
+            for block in list(new_blocks):
                 if self.has_block(block.prevhash):
                     logger.debug('Adding new block %s', block.hex_hash())
                     self.add_block(block)
