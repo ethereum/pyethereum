@@ -103,8 +103,13 @@ class ChainManager(StoppableLoopThread):
             sender=self, parents=[self.head.hash], count=30)
 
     def loop_body(self):
-        self.mine()
-        time.sleep(.01)
+        ts = time.time()
+        pct_cpu = self.config.getint('misc', 'mining')
+        if pct_cpu > 0:
+            self.mine()
+            time.sleep((time.time() - ts) * (100. / pct_cpu - 1))
+        else:
+            time.sleep(.1)
         # self.synchronize_blockchain()
 
     def mine(self, steps=1000):

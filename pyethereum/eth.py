@@ -43,6 +43,7 @@ def create_config():
     config.set('misc', 'config_file', None)
     config.set('misc', 'logging', None)
     config.set('misc', 'data_dir', data_dir.path)
+    config.set('misc', 'mining', '10')
 
     config.add_section('wallet')
     config.set('wallet', 'coinbase', '0' * 40)
@@ -83,6 +84,11 @@ def create_config():
         default=config.get('misc', 'verbosity'),
         help="<0 - 3>  Set the log verbosity from 0 to 3 (default: 1)")
     parser.add_option(
+        "-m", "--mining",
+        dest="mining",
+        default=config.get('misc', 'mining'),
+        help="<0 - 100> Percent CPU used for mining 0==off (default: 10)")
+    parser.add_option(
         "-L", "--logging",
         dest="logging",
         default=config.get('misc', 'logging'),
@@ -106,7 +112,7 @@ def create_config():
         config.set('network', attr, getattr(
             options, attr) or config.get('network', attr))
     # set misc options
-    for attr in ('verbosity', 'config_file', 'logging', 'data_dir'):
+    for attr in ('verbosity', 'config_file', 'logging', 'data_dir', 'mining'):
         config.set(
             'misc', attr, getattr(options, attr) or config.get('misc', attr))
 
