@@ -241,7 +241,7 @@ def remote_transactions_received_handler(sender, transactions, **kwargs):
 @receiver(signals.local_transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
-    signals.transactions_ready.send(sender=None, data=list(transactions))
+    signals.local_transactions_ready.send(sender=None, data=list(transactions))
 
 
 @receiver(signals.remote_blocks_received)
