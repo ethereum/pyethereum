@@ -221,3 +221,8 @@ def new_peer_received_handler(sender, peer, **kwargs):
 def remote_chain_requested_handler(sender, parents=[], count=1, **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_GetChain(parents, count)
+
+@receiver(signals.send_blocks)
+def send_blocks(sender, blocks=[], **kwargs):
+    for peer in peer_manager.connected_peers:
+        peer.send_Blocks(blocks)

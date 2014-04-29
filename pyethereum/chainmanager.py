@@ -145,6 +145,7 @@ class ChainManager(StoppableLoopThread):
                 time.sleep(1)
                 # create new block
                 self.add_block(block)
+                signals.send_blocks.send(blocks=[rlp.decode(block.serialize())]) #FIXME DE/ENCODE
                 return
 
         self._mining_nonce = nonce

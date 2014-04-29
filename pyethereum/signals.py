@@ -20,7 +20,7 @@ new_transactions_received = Signal(providing_args=["transactions"])
 new_blocks_received = Signal(providing_args=["blocks"])
 
 remote_chain_requested = Signal(providing_args=["parents", "count"])
-
+send_blocks = Signal(providing_args=["blocks"])
 
 _async_data_names = [
     'transactions',
