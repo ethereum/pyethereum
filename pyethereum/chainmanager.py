@@ -150,7 +150,7 @@ class ChainManager(StoppableLoopThread):
                 logger.debug('Nonce found %d %r', nonce, block.nonce)
                 # create new block
                 self.add_block(block)
-                signals.send_blocks.send(sender=self,
+                signals.send_local_blocks.send(sender=self,
                                          blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
                 return
 
@@ -197,15 +197,15 @@ class ChainManager(StoppableLoopThread):
         logger.debug("get transactions")
         return self.transactions
 
-    def get_chain(self, start=0, count=100):
-        "return 'count' blocks starting from head (or start if >0)"
-        logger.debug("get_chain: start:%d count%d", start, count)
+    def get_chain(self, start='', count=100):
+        "return 'count' blocks starting from head or start"
+        logger.debug("get_chain: start:%s count%d", start.encode('hex'), count)
         blocks = []
         block = self.head
-        assert not start or start > 0
-        if int(start):
-            while block.number > start:
-                block = block.get_parent()
+        if start:
+            if not start in self:
+                return []
+            block = self.get(start)
         for i in range(count):
             blocks.append(block)
             if block.is_genesis():
@@ -213,9 +213,61 @@ class ChainManager(StoppableLoopThread):
             block = block.get_parent()
         return blocks
 
+    def get_descendents(self, block, count=1):
+        assert block.hash in self
+        # FIXME inefficient implementation
+        res = []
+        cur = self.head
+        while cur != block:
+            res.append(cur)
+            if cur.has_parent():
+                cur = cur.get_parent()
+            else:
+                break
+        return res[:count]
 
 chain_manager = ChainManager()
 
+
+@receiver(signals.local_chain_requested)
+def handle_local_chain_requested(sender, blocks, count, **kwargs):
+    """
+    [0x14, Parent1, Parent2, ..., ParentN, Count]
+    Request the peer to send Count (to be interpreted as an integer) blocks 
+    in the current canonical block chain that are children of Parent1 
+    (to be interpreted as a SHA3 block hash). If Parent1 is not present in
+    the block chain, it should instead act as if the request were for Parent2 &c. 
+    through to ParentN. 
+    
+    If none of the parents are in the current 
+    canonical block chain, then NotInChain should be sent along with ParentN 
+    (i.e. the last Parent in the parents list). 
+
+    If the designated parent is the present block chain head,
+    an empty reply should be sent.
+
+    If no parents are passed, then reply need not be made.
+    """
+    logger.debug("local_chain_requested: %r %d", [b.encode('hex') for b in blocks], count)
+    res = []
+    for i, b in enumerate(blocks):
+        if b in chain_manager:
+            logger.debug("local_chain_requested: found: %s ",b.encode('hex'))
+            res = chain_manager.get_descendents(chain_manager.get(b), count=count)
+            res = [rlp.decode(b.serialize()) for b in res] # FIXME 
+            # if b == head: no descendents == no reply
+            with sender.lock:
+                logger.debug("local_chain_requested: found: %d ", len(res))
+                sender.send_Blocks(res)
+            return 
+    
+    logger.debug("local_chain_requested: no matches")
+    if len(blocks):
+        #  If none of the parents are in the current 
+        sender.send_NotInChain(blocks[-1])
+    else:
+        #If no parents are passed, then reply need not be made.
+        pass
 
 @receiver(signals.config_ready)
 def config_chainmanager(sender, **kwargs):
@@ -224,13 +276,16 @@ def config_chainmanager(sender, **kwargs):
 
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, **kwargs):
+    logger.debug("received new_peer_connected")
     # request transactions
     with sender.lock:
         sender.send_GetTransactions()
+        logger.debug("send get transactions")
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=30)]
     with sender.lock:
         sender.send_GetChain(blocks, count=30)
+        logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
 @receiver(signals.remote_transactions_received)
