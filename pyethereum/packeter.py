@@ -67,7 +67,8 @@ class Packeter(object):
     SYNCHRONIZATION_TOKEN = 0x22400891
     PROTOCOL_VERSION = 0x0c
     NETWORK_ID = 0
-    CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform, PROTOCOL_VERSION)
+    CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform,
+                                                       PROTOCOL_VERSION)
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
 
     def __init__(self):
@@ -217,6 +218,18 @@ class Packeter(object):
         return self.dump_packet(data)
 
     def dump_GetChain(self, parents=[], count=1):
+        """
+        [0x14, Parent1, Parent2, ..., ParentN, Count]
+        Request the peer to send Count (to be interpreted as an integer) blocks 
+        in the current canonical block chain that are children of Parent1 
+        (to be interpreted as a SHA3 block hash). If Parent1 is not present in 
+        the block chain, it should instead act as if the request were for 
+        Parent2 &c. through to ParentN. If the designated parent is the present 
+        block chain head, an empty reply should be sent. If none of the parents 
+        are in the current canonical block chain, then NotInChain should be 
+        sent along with ParentN (i.e. the last Parent in the parents list). 
+        If no parents are passed, then a reply need not be made.
+        """
         data = [self.cmd_map_by_name['GetChain']] + parents + [count]
         return self.dump_packet(data)
 
