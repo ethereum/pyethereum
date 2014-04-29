@@ -16,8 +16,8 @@ class ConfigHook(object):
             if section == 'network' and option == 'client_id':
                 return 'client id'
 
-            if section == 'wallet' and option == 'pub_key':
-                return 'this pub key'
+            if section == 'wallet' and option == 'coinbase':
+                return '0'*40
 
         def getint_side_effect(section, option):
             if section == 'network' and option == 'listen_port':
