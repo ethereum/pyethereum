@@ -48,6 +48,15 @@ def create_config():
     config.add_section('wallet')
     config.set('wallet', 'coinbase', '0' * 40)
 
+    try:
+        # read in optional config file (overwrite above)
+        with open('config.txt') as f:
+            opt_config = [i[:-1].split() for i in f.readlines()]
+        [config.set(*opt) for opt in opt_config]
+    except:
+        logger.debug('no config.txt file')
+
+
     usage = "usage: %prog [options]"
     parser = OptionParser(usage=usage,  version=Packeter.CLIENT_ID)
     parser.add_option(

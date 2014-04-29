@@ -3,7 +3,7 @@ import socket
 import logging
 
 from dispatch import receiver
-import netifaces
+import netifaces, urllib2
 
 from stoppable import StoppableLoopThread
 import signals
@@ -22,7 +22,11 @@ class PeerManager(StoppableLoopThread):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
         self._known_peers = set()  # (ip, port, node_id)
+        self._saved_peers = set()  # (ip, port, node_id)
         self.local_addresses = []  # [(ip, port)]
+
+	self.public_ip = urllib2.urlopen('http://ip.42.pl/raw').read()
+	self.load_saved_peers()
 
     def configure(self, config):
         self.config = config
@@ -34,11 +38,30 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
+    def load_saved_peers(self):
+	try:
+	    with self.lock:
+	        with open('peers.txt') as f:
+	            peers = [i[:-1].split() for i in f.readlines()]
+	        peers = [(ip, int(port), nid) for ip,port,nid in peers]
+	        map(self._saved_peers.add, peers)
+	        map(self._known_peers.add, peers)
+	except:
+            logger.debug('no peers.txt file')
+
+    def save_peer(self, ip, port, nid):
+	if not ip == self.public_ip and not (ip, port, nid) in self._saved_peers:
+	    with self.lock:
+	        with open('peers.txt', 'a') as f:
+	            f.write('%s %s %s\n'%(ip, port, nid))
+	    
     def add_known_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
-        with self.lock:
-            if ipn not in self._known_peers:
-                self._known_peers.add(ipn)
+	if not ip == self.public_ip:
+            with self.lock:
+                if ipn not in self._known_peers:
+                    self._known_peers.add(ipn)
+		    self.save_peer(*ipn)
 
     def get_known_peer_addresses(self):
         return set(self._known_peers).union(
