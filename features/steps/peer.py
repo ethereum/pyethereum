@@ -48,7 +48,7 @@ def step_impl(context):
             packeter.CLIENT_ID,
             packeter.config.getint('network', 'listen_port'),
             packeter.CAPABILITIES,
-            packeter.config.get('wallet', 'pub_key')
+            packeter.config.get('wallet', 'coinbase')
             ]
     context.packet = packeter.dump_packet(data)
 
@@ -62,7 +62,7 @@ def step_impl(context):
             packeter.CLIENT_ID,
             packeter.config.getint('network', 'listen_port'),
             packeter.CAPABILITIES,
-            packeter.config.get('wallet', 'pub_key')
+            packeter.config.get('wallet', 'coinbase')
             ]
     context.packet = packeter.dump_packet(data)
 
