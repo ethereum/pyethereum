@@ -154,9 +154,9 @@ def make_peers_response(peers):
 
 @app.get(base_url + '/connected_peers/')
 def connected_peers():
-    return response_async_data('connected_peers', make_peers_response)
+    return response_async_data('connected_peer_addresses', make_peers_response)
 
 
 @app.get(base_url + '/known_peers/')
 def known_peers():
-    return response_async_data('known_peers', make_peers_response)
+    return response_async_data('known_peer_addresses', make_peers_response)
