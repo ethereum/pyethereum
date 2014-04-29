@@ -119,7 +119,7 @@ class BlocksResponder(Responder):
 def blocks():
     logger.debug('blocks/')
     return BlocksResponder().respond(
-        chain_manager.get_chain(start=0, count=20))
+        chain_manager.get_chain(start='', count=20))
 
 
 @app.get(base_url + '/blocks/<blockhash>')
