@@ -140,9 +140,9 @@ def step_impl(context):
 
 @when(u'handler for a disconnect_requested signal is registered')  # noqa
 def step_impl(context):
-    from pyethereum.signals import disconnect_requested
+    from pyethereum.signals import peer_disconnect_requested
     context.disconnect_requested_handler = mock.MagicMock()
-    disconnect_requested.connect(context.disconnect_requested_handler)
+    peer_disconnect_requested.connect(context.disconnect_requested_handler)
 
 
 @when(u'peer.send_Disconnect is called')  # noqa
@@ -203,13 +203,12 @@ def step_impl(context):
 
 @given(u'a peers data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import peers_requested, peers_ready
-
+    from pyethereum.signals import known_peer_addresses_requested, known_peer_addresses_ready
     def peers_requested_handler(sender, req, **kwargs):
-        peers_ready.send(sender=None, data=context.peers_data)
+        known_peer_addresses_ready.send(sender=None, data=context.peers_data)
 
     context.peers_requested_handler = peers_requested_handler
-    peers_requested.connect(context.peers_requested_handler)
+    known_peer_addresses_requested.connect(context.peers_requested_handler)
 
 
 @when(u'peer.send_Peers is instrumented')  # noqa
@@ -243,8 +242,8 @@ def step_impl(context):
 @when(u'handler for a new_peer_received signal is registered')  # noqa
 def step_impl(context):
     context.new_peer_received_handler = mock.MagicMock()
-    from pyethereum.signals import new_peer_received
-    new_peer_received.connect(context.new_peer_received_handler)
+    from pyethereum.signals import peer_address_received
+    peer_address_received.connect(context.new_peer_received_handler)
 
 
 @then(u'the new_peer_received handler should be called once'  # noqa
@@ -285,14 +284,14 @@ def step_impl(context):
 
 @given(u'a transactions data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import (transactions_requested,
-                                    transactions_ready)
+    from pyethereum.signals import (local_transactions_requested,
+                                    local_transactions_ready)
 
     def handler(sender, req, **kwargs):
-        transactions_ready.send(sender=None, data=context.transactions_data)
+        local_transactions_ready.send(sender=None, data=context.transactions_data)
 
     context.transactions_requested_handler = handler
-    transactions_requested.connect(handler)
+    local_transactions_requested.connect(handler)
 
 
 @when(u'peer.send_Transactions is instrumented')  # noqa
@@ -329,8 +328,8 @@ def step_impl(context):
 @when(u'handler for a new_transactions_received signal is registered')  # noqa
 def step_impl(context):
     context.new_transactions_received_handler = mock.MagicMock()
-    from pyethereum.signals import new_transactions_received
-    new_transactions_received.connect(
+    from pyethereum.signals import remote_transactions_received
+    remote_transactions_received.connect(
         context.new_transactions_received_handler)
 
 
@@ -371,16 +370,16 @@ def step_impl(context):
 @when(u'handler for a new_blocks_received signal is registered')  # noqa
 def step_impl(context):
     context.new_blocks_received_handler = mock.MagicMock()
-    from pyethereum.signals import new_blocks_received
-    new_blocks_received.connect(context.new_blocks_received_handler)
+    from pyethereum.signals import remote_blocks_received
+    remote_blocks_received.connect(context.new_blocks_received_handler)
 
 
 @then(u'the new_blocks_received handler should be'  # noqa
 ' called once with the blocks data')
 def step_impl(context):
     context.new_blocks_received_handler = mock.MagicMock()
-    from pyethereum.signals import new_blocks_received
-    new_blocks_received.connect(
+    from pyethereum.signals import remote_blocks_received
+    remote_blocks_received.connect(
         context.new_blocks_received_handler)
 
 
@@ -408,14 +407,14 @@ def step_impl(context):
 
 @given(u'a chain data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import (blocks_requested,
-                                    blocks_ready)
+    from pyethereum.signals import (local_blocks_requested,
+                                    local_blocks_ready)
 
     def handler(sender, req, **kwargs):
-        blocks_ready.send(sender=None, data=context.blocks_data)
+        local_blocks_ready.send(sender=None, data=context.blocks_data)
 
     context.blocks_requested_handler = handler
-    blocks_requested.connect(handler)
+    local_blocks_requested.connect(handler)
 
 
 @when(u'peer.send_Blocks is instrumented')  # noqa

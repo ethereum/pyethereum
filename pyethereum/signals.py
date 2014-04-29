@@ -28,9 +28,9 @@ local_transactions_requested = Signal(providing_args=["uid", "req"])
 local_transactions_request_aborted = Signal(providing_args=["uid"])
 local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
 
-# local_blocks_requested = Signal(providing_args=["uid", "req"])
-# local_blocks_request_aborted = Signal(providing_args=["uid"])
-# local_blocks_ready = Signal(providing_args=["uid", "data", "error"])
+local_blocks_requested = Signal(providing_args=["uid", "req"])
+local_blocks_request_aborted = Signal(providing_args=["uid"])
+local_blocks_ready = Signal(providing_args=["uid", "data", "error"])
 
 known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
 known_peer_addresses_request_aborted = Signal(providing_args=["uid"])

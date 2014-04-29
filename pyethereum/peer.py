@@ -176,13 +176,13 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
-        signals.disconnect_requested.send(self)
+        signals.peer_disconnect_requested.send(self)
 
     def _recv_Disconnect(self, data):
         if len(data):
             reason = packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(self), reason))
-        signals.disconnect_requested.send(sender=self)
+        signals.peer_disconnect_requested.send(sender=self)
 
     def send_GetPeers(self):
         self.send_packet(packeter.dump_GetPeers())
