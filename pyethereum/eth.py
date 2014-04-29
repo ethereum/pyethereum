@@ -11,12 +11,12 @@ from common import make_pyethereum_avail
 make_pyethereum_avail()
 
 from pyethereum.utils import configure_logging
+from pyethereum.utils import data_dir
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
-
 
 
 logger = logging.getLogger(__name__)
@@ -42,11 +42,10 @@ def create_config():
     config.set('misc', 'verbosity', '1')
     config.set('misc', 'config_file', None)
     config.set('misc', 'logging', None)
+    config.set('misc', 'data_dir', data_dir.path)
 
     config.add_section('wallet')
-    # NODE_ID == pubkey, needed in order to work with Ethereum(++)
-    config.set(
-        'wallet', 'coinbase', '9ffc7b66e5066078ccb1dc5a3e6af3501ddd1485')
+    config.set('wallet', 'coinbase', '0' * 40)
 
     usage = "usage: %prog [options]"
     parser = OptionParser(usage=usage,  version=Packeter.CLIENT_ID)
@@ -56,6 +55,17 @@ def create_config():
         default=config.get('network', 'listen_port'),
         help="<port>  Listen on the given port for incoming"
         " connected (default: 30303).")
+    parser.add_option(
+        "-a", "--address",
+        dest="coinbase",
+        help="Set the coinbase (mining payout) address",
+        default=config.get('wallet', 'coinbase'))
+    parser.add_option(
+        "-d", "--data_dir",
+        dest="data_dir",
+        help="<path>  Load database from path (default: %s)" % config.get(
+            'misc', 'data_dir'),
+        default=config.get('misc', 'data_dir'))
     parser.add_option(
         "-r", "--remote",
         dest="remote_host",
@@ -96,9 +106,14 @@ def create_config():
         config.set('network', attr, getattr(
             options, attr) or config.get('network', attr))
     # set misc options
-    for attr in ('verbosity', 'config_file'):
+    for attr in ('verbosity', 'config_file', 'logging', 'data_dir'):
         config.set(
             'misc', attr, getattr(options, attr) or config.get('misc', attr))
+
+    # set wallet options
+    for attr in ('coinbase',):
+        config.set(
+            'wallet', attr, getattr(options, attr) or config.get('wallet', attr))
 
     if len(args) != 0:
         parser.error("wrong number of arguments")
@@ -107,14 +122,16 @@ def create_config():
     if config.get('misc', 'config_file'):
         config.read(config.get('misc', 'config_file'))
 
+    # set datadir
+    if config.get('misc', 'data_dir'):
+        data_dir.set(config.get('misc', 'data_dir'))
+
     # configure logging
-    loggerlevels = getattr(options, 'logging') or ''
     configure_logging(
-        loggerlevels, verbosity=config.getint('misc', 'verbosity'))
+        config.get('misc', 'logging') or '',
+        verbosity=config.getint('misc', 'verbosity'))
 
     return config
-
-
 
 
 def main():
