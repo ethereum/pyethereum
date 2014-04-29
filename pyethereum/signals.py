@@ -25,8 +25,8 @@ remote_chain_requested = Signal(providing_args=["parents", "count"])
 send_local_blocks = Signal(providing_args=["blocks"])
 
 local_transactions_requested = Signal(providing_args=["uid", "req"])
-# local_transactions_request_aborted = Signal(providing_args=["uid"])
-# local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
+local_transactions_request_aborted = Signal(providing_args=["uid"])
+local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
 
 # local_blocks_requested = Signal(providing_args=["uid", "req"])
 # local_blocks_request_aborted = Signal(providing_args=["uid"])
@@ -37,8 +37,8 @@ known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
 known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 
 connected_peer_addresses_requested = Signal(providing_args=["uid", "req"])
-# local_connected_peers_request_aborted = Signal(providing_args=["uid"])
-# local_connected_peers_ready = Signal(providing_args=["uid", "data", "error"])
+connected_peer_addresses_request_aborted = Signal(providing_args=["uid"])
+connected_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 
 # local_known_peers_requested = Signal(providing_args=["uid", "req"])
 # local_known_peers_request_aborted = Signal(providing_args=["uid"])
