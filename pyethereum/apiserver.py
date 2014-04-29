@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from bottle import run as bottle_run, request, response
+from bottle import run as bottle_run
 from bottle import Bottle
 from dispatch import receiver
 from marshmallow import Serializer, fields
@@ -27,6 +27,8 @@ class ApiServer(threading.Thread):
         self.port = config.getint('api', 'listen_port')
 
     def run(self):
+        global app
+        app = CorsMiddleware(app)
         bottle_run(app, server='waitress',
                    host=self.listen_host, port=self.port)
 
@@ -59,26 +61,33 @@ app = Bottle()
 app.config['autojson'] = True
 
 
-class EnableCors(object):
-    name = 'enable_cors'
-    api = 2
+# #######cors##############
+class CorsMiddleware:
+    HEADERS = [
+        ('Access-Control-Allow-Origin', '*'),
+        ('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'),
+        ('Access-Control-Allow-Headers',
+         'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token')
+    ]
 
-    def apply(self, fn, context):
-        def _enable_cors(*args, **kwargs):
-            # set CORS headers
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = \
-                'PUT, GET, POST, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = \
-                'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
+    def __init__(self, app):
+        self.app = app
 
-            if request.method != 'OPTIONS':
-                # actual request; reply with the actual response
-                return fn(*args, **kwargs)
+    def __call__(self, environ, start_response):
+        if environ["REQUEST_METHOD"] == "OPTIONS":
+            start_response('200 OK',
+                           CorsMiddleware.HEADERS + [('Content-Length', "0")])
 
-        return _enable_cors
+            return ""
+        else:
+            def my_start_response(status, headers, exc_info=None):
+                headers.extend(CorsMiddleware.HEADERS)
 
-app.install(EnableCors())
+                return start_response(status, headers, exc_info)
+            return self.app(environ, my_start_response)
+
+# #######cors end##########
+
 
 # ############ Blocks ######################
 
