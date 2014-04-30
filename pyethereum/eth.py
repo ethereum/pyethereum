@@ -35,7 +35,7 @@ def create_config():
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
     config.set('network', 'client_id', Packeter.CLIENT_ID)
-    config.set('network', 'id', sha3(str(uuid.uuid1())))
+    config.set('network', 'node_id', sha3(str(uuid.uuid1())))
 
     config.add_section('api')
     config.set('api', 'listen_host', '127.0.0.1')
