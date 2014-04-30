@@ -67,6 +67,7 @@ class ChainManager(StoppableLoopThread):
 
     def synchronize_blockchain(self):
         # FIXME: execute once, when connected to required num peers
+        logger.info('synchronize requested for head %r', self.head)
         signals.remote_chain_requested.send(
             sender=self, parents=[self.head.hash], count=30)
 
