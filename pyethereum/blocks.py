@@ -305,21 +305,40 @@ class Block(object):
 
     def get_parent(self):
         if self.number == 0:
-            raise IndexError('Genesis block has no parent')
+            raise KeyError('Genesis block has no parent')
         return get_block(self.prevhash)
 
     def has_parent(self):
         try:
             self.get_parent()
             return True
-        except IndexError:
+        except KeyError:
             return False
+
+    def chain_difficulty(self):
+            # calculate the summarized_difficulty (on the fly for now)
+        if self.hash == GENESIS_HASH:
+            return self.difficulty
+        else:
+            return self.difficulty + self.get_parent().chain_difficulty()
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
 
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __gt__(self, other):
+        return self.number > other.number
+
+    def __lt__(self, other):
+        return self.number < other.number
+
     def __hash__(self):
         return self.hash
+
+    def __repr__(self):
+        return '<Block(#%d %s %s)>' % (self.number, self.hex_hash()[:4], self.prevhash.encode('hex')[:4])
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
@@ -364,4 +383,4 @@ def genesis(initial_alloc={}):
 
 GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode(
     'hex')
-#assert GENESIS_HASH == genesis().hash # do not leave uncomment
+# assert GENESIS_HASH == genesis().hash # do not leave uncomment
