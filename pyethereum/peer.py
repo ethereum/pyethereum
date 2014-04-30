@@ -147,10 +147,11 @@ class Peer(StoppableLoopThread):
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        # TODO add to known peers list
+        # add to known peers list in handshake signal
         self.hello_received = True
         if len(data) == 6:
             self.node_id = data[5]
+            self.port = idec(data[3]) # replace connection port with listen port
 
         # reply with hello if not send
         if not self.hello_sent:

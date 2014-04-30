@@ -16,7 +16,7 @@ peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 peer_disconnect_requested = Signal(providing_args=[""])
 
 peer_address_received = Signal(providing_args=["peer"])
-peer_handshake_success = Signal(providing_args=["peer"])
+peer_handshake_success = Signal(providing_args=[""])
 
 remote_transactions_received = Signal(providing_args=["transactions"])
 remote_blocks_received = Signal(providing_args=["block_lst"])
