@@ -65,38 +65,6 @@ class ChainManager(StoppableLoopThread):
         self._update_head(genesis)
         self.blockchain.commit()
 
-    # Returns True if block is latest
-    def add_block(self, block):
-
-        def summarized_difficulty(block):
-            # calculate the summarized_difficulty (on the fly for now)
-            if block.hash == blocks.GENESIS_HASH:
-                return block.difficulty
-            else:
-                return block.difficulty + summarized_difficulty(block.get_parent())
-
-        # make sure we know the parent
-        if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
-            logger.debug('Missing parent for block %r' % block.hex_hash())
-            return False  # FIXME
-
-        # check PoW
-        if not len(block.nonce) == 32:
-            logger.debug('Nonce not set %r' % block.hex_hash())
-            return False
-        elif not block.is_genesis() and not block.check_proof_of_work(block.nonce):
-            logger.debug('Invalid nonce %r' % block.hex_hash())
-            return False
-
-        self._store_block(block)
-
-        # set to head if this makes the longest chain w/ most work
-        if summarized_difficulty(block) > summarized_difficulty(self.head):
-            self._update_head(block)
-            return True
-
-        return False
-
     def synchronize_blockchain(self):
         # FIXME: execute once, when connected to required num peers
         signals.remote_chain_requested.send(
@@ -151,42 +119,52 @@ class ChainManager(StoppableLoopThread):
                 # create new block
                 self.add_block(block)
                 signals.send_local_blocks.send(sender=self,
-                                         blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
+                                               blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
                 return
 
         self._mining_nonce = nonce
 
-    def recv_blocks(self, block_lst):
-        """
-        block_lst is rlp decoded data
-        """
+    def receive_chain(self, blocks):
         old_head = self.head
-
-        new_blocks = []
-        for data in block_lst:
-            block = blocks.Block.deserialize(rlp.encode(data))
-            if self.has_block(block.hash):
-                logger.debug('Known block %s', block.hex_hash())
+        # assuming chain order w/ newest block first
+        for block in blocks:
+            if block.hash in self:
+                logger.debug('Known %r', block)
             else:
-                logger.debug('New block %s', block.hex_hash())
-                new_blocks.append(block)
-
-        # no assumption about order of blocks revceived
-        while new_blocks:
-            could_append = False
-            for block in list(new_blocks):
-                if self.has_block(block.prevhash):
-                    logger.debug('Adding new block %s', block.hex_hash())
-                    self.add_block(block)
-                    new_blocks.remove(block)
-                    could_append = True
-            if not could_append:
-                logger.debug(
-                    'Discarding blocks %r', [b.hex_hash() for b in new_blocks])
-                break
+                if block.has_parent():
+                    # add block & set HEAD if it's longest chain
+                    success = self.add_block(block)
+                    if success:
+                        logger.debug('Added %r', block)
+                else:
+                    logger.debug('Orphant %r', block)
 
         if self.head != old_head:
             self.synchronize_blockchain()
+
+    # Returns True if block is latest
+    def add_block(self, block):
+
+        # make sure we know the parent
+        if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
+            logger.debug('Missing parent for block %r' % block.hex_hash())
+            return False  # FIXME
+
+        # check PoW
+        if not len(block.nonce) == 32:
+            logger.debug('Nonce not set %r' % block.hex_hash())
+            return False
+        elif not block.check_proof_of_work(block.nonce) and not block.is_genesis():
+            logger.debug('Invalid nonce %r' % block.hex_hash())
+            return False
+
+        self._store_block(block)
+        # set to head if this makes the longest chain w/ most work
+        if block.chain_difficulty() > self.head.chain_difficulty():
+            logger.debug('New Head %r', block)
+            self._update_head(block)
+
+        return True
 
     def add_transactions(self, transactions):
         logger.debug("add transactions %r" % transactions)
@@ -206,6 +184,8 @@ class ChainManager(StoppableLoopThread):
             if not start in self:
                 return []
             block = self.get(start)
+            if not self.in_main_branch(block):
+                return []
         for i in range(count):
             blocks.append(block)
             if block.is_genesis():
@@ -213,7 +193,13 @@ class ChainManager(StoppableLoopThread):
             block = block.get_parent()
         return blocks
 
+    def in_main_branch(self, block):
+        if block.is_genesis():
+            return True
+        return block == self.get_descendents(block.get_parent(), count=1)[0]
+
     def get_descendents(self, block, count=1):
+        logger.debug("get_descendents: %r ", block)
         assert block.hash in self
         # FIXME inefficient implementation
         res = []
@@ -224,6 +210,11 @@ class ChainManager(StoppableLoopThread):
                 cur = cur.get_parent()
             else:
                 break
+            if cur.number == block.number and cur != block:
+                # no descendents on main branch
+                logger.debug("no descendents on main branch for: %r ", block)
+                return []
+        res.reverse()
         return res[:count]
 
 chain_manager = ChainManager()
@@ -238,7 +229,7 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
     (to be interpreted as a SHA3 block hash). If Parent1 is not present in
     the block chain, it should instead act as if the request were for Parent2 &c. 
     through to ParentN. 
-    
+
     If none of the parents are in the current 
     canonical block chain, then NotInChain should be sent along with ParentN 
     (i.e. the last Parent in the parents list). 
@@ -248,26 +239,30 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
 
     If no parents are passed, then reply need not be made.
     """
-    logger.debug("local_chain_requested: %r %d", [b.encode('hex') for b in blocks], count)
+    logger.debug(
+        "local_chain_requested: %r %d", [b.encode('hex') for b in blocks], count)
     res = []
     for i, b in enumerate(blocks):
         if b in chain_manager:
-            logger.debug("local_chain_requested: found: %s ",b.encode('hex'))
-            res = chain_manager.get_descendents(chain_manager.get(b), count=count)
-            res = [rlp.decode(b.serialize()) for b in res] # FIXME 
-            # if b == head: no descendents == no reply
-            with sender.lock:
-                logger.debug("local_chain_requested: found: %d ", len(res))
-                sender.send_Blocks(res)
-            return 
-    
+            block = chain_manager.get(b)
+            logger.debug("local_chain_requested: found: %r", block)
+            res = chain_manager.get_descendents(block, count=count)
+            if res:
+                logger.debug("sending: found: %r ", res)
+                res = [rlp.decode(b.serialize()) for b in res]  # FIXME
+                # if b == head: no descendents == no reply
+                with sender.lock:
+                    sender.send_Blocks(res)
+                return
+
     logger.debug("local_chain_requested: no matches")
     if len(blocks):
-        #  If none of the parents are in the current 
+        #  If none of the parents are in the current
         sender.send_NotInChain(blocks[-1])
     else:
-        #If no parents are passed, then reply need not be made.
+        # If no parents are passed, then reply need not be made.
         pass
+
 
 @receiver(signals.config_ready)
 def config_chainmanager(sender, **kwargs):
@@ -300,7 +295,8 @@ def transactions_requested_handler(sender, req, **kwargs):
 
 
 @receiver(signals.remote_blocks_received)
-def remote_blocks_received_handler(sender, blocks, **kwargs):
-    logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in blocks])
+def remote_blocks_received_handler(sender, block_lst, **kwargs):
+    logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in block_lst])
     with chain_manager.lock:
-        chain_manager.recv_blocks(blocks)
+        chain_manager.receive_chain(
+            [blocks.Block.deserialize(rlp.encode(b)) for b in block_lst])
