@@ -4,6 +4,7 @@ from utils import big_endian_to_int as idec
 from utils import int_to_big_endian4 as ienc4
 from utils import int_to_big_endian as ienc
 from utils import recursive_int_to_big_endian
+from utils import sha3
 import dispatch
 import sys
 import signals
@@ -63,10 +64,12 @@ class Packeter(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
     PROTOCOL_VERSION = 0x0c
-    NETWORK_ID = 0
+    # is the node s Unique Identifier and is the 512-bit hash that serves to
+    # identify the node.
+    NETWORK_ID = sha3('set in config')
+    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform,
                                                        PROTOCOL_VERSION)
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
@@ -78,6 +81,7 @@ class Packeter(object):
         self.config = config
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
+        self.NETWORK_ID = self.config.get('network', 'id')
 
     @classmethod
     def load_packet(cls, packet):
