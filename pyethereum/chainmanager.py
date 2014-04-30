@@ -75,10 +75,11 @@ class ChainManager(StoppableLoopThread):
         pct_cpu = self.config.getint('misc', 'mining')
         if pct_cpu > 0:
             self.mine()
-            time.sleep((time.time() - ts) * (100. / pct_cpu - 1))
+            delay = (time.time() - ts) * (100. / pct_cpu - 1)
+            time.sleep(min(delay, 1.))
         else:
             time.sleep(.1)
-        # self.synchronize_blockchain()
+
 
     def mine(self, steps=1000):
         """
@@ -296,7 +297,7 @@ def transactions_requested_handler(sender, req, **kwargs):
 
 @receiver(signals.remote_blocks_received)
 def remote_blocks_received_handler(sender, block_lst, **kwargs):
-    logger.debug("received blocks: %r", [rlp_hash_hex(b) for b in block_lst])
+    block_lst = [blocks.Block.deserialize(rlp.encode(b)) for b in block_lst]
+    logger.debug("received blocks: %r", block_lst)
     with chain_manager.lock:
-        chain_manager.receive_chain(
-            [blocks.Block.deserialize(rlp.encode(b)) for b in block_lst])
+        chain_manager.receive_chain(block_lst)
