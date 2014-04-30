@@ -255,8 +255,12 @@ class Peer(StoppableLoopThread):
         pass
 
     def loop_body(self):
-        send_size = self._process_send()
-        recv_size = self._process_recv()
+        try:
+            send_size = self._process_send()
+            recv_size = self._process_recv()
+        except IOError:
+            self.stop()
+            return 
         # pause
         if not (send_size or recv_size):
             time.sleep(0.1)
