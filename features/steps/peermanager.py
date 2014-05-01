@@ -60,6 +60,10 @@ def step_impl(context):
         peer.node_id = node_id
         context.peer_manager.connected_peers.append(peer)
 
+@given(u'a Hello has been received from the peer')
+def step_impl(context):
+    for p in context.peer_manager.connected_peers:
+        p.hello_received = True
 
 @then(u'get_connected_peer_addresses should'  # noqa
 ' return the given peer addresses')
