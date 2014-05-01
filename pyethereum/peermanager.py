@@ -2,6 +2,7 @@ import time
 import socket
 import logging
 import json
+import os
 
 from dispatch import receiver
 import netifaces
@@ -36,8 +37,8 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
-    def load_saved_peers(self):
-        path = self.config.get('misc', 'data_dir')+'/peers.json'
+    def load_saved_peers(self, name='peers.json'):
+        path = self.config.get('misc', 'data_dir') + '/' + name
         try:
             with self.lock:
                 peers = set((i, p, "") for i, p in json.load(open(path)))
@@ -46,14 +47,20 @@ class PeerManager(StoppableLoopThread):
             return
         map(self._known_peers.add, peers)
 
-    def save_peers(self):
-        path = self.config.get('misc', 'data_dir')+'/peers.json'
+    def save_peer(self, ip, port, name='peers.json'):
+        path = self.config.get('misc', 'data_dir') + '/' + name
+        saved_peers = []
         try:
-            json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
+            if os.path.exists(path):
+                saved_peers = json.load(open(path))
+            if [ip, port] not in saved_peers:
+                saved_peers.append([ip, port])
+                json.dump(saved_peers, open(path, 'w'))
+                #json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
         except:
             logger.debug('could not write to peers.json')
 
-    def add_known_peer_address(self, ip, port, node_id, save=False):
+    def add_known_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
         if not node_id == self.node_id:
             with self.lock:
@@ -62,7 +69,7 @@ class PeerManager(StoppableLoopThread):
                     if (ip, port, "") in self._known_peers:
                         self._known_peers.remove((ip, port, ""))
                     self._known_peers.add(ipn)
-                    self.save_peers()
+                    self.save_peer(ip, port)
 
     def get_known_peer_addresses(self):
         return set(self._known_peers).union(

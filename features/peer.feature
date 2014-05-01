@@ -18,6 +18,8 @@ Feature: peer
     And the packet is received from peer
     And all data with the peer is processed
     Then peer.send_Hello should be called once
+    And the peer's port and node id should be reset to their correct values
+    And the peer should be added to peer_manager._known_peers if it is not already
 
   Scenario: receive two valid Hello packets
     Given a valid Hello packet

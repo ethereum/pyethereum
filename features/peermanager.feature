@@ -1,11 +1,36 @@
 @config @peermanager @wip
 Feature: peer manager
 
-  Scenario: add_peer
-    Given peer data of (connection, ip, port)
-    When add_peer is called with the given peer data
+  Scenario: load_saved_peers where peers_test.json exists
+    Given data_dir
+    And a peers_test.json file exists
+    And _known_peers is empty
+    When load_saved_peers is called
+    Then _known_peers should contain all peers in peers.json with blank node_ids
+
+  Scenario: load_saved_peers where peers_test.json does not exist
+    Given data_dir
+    And a peers_test.json file does not exist
+    And _known_peers is empty
+    When load_saved_peers is called
+    Then _known_peers should still be empty
+
+  Scenario: save_peer
+    Given peer data of ip, port
+    When save_peer is called with peer data
+    Then data_dir/peers.json should contain the peer data once
+
+  Scenario: add_peer from _known_peers
+    Given peer data of (connection, ip, port) from _known_peers
+    When add_peer is called with the given peer data 
     Then connected_peers should contain the peer with the peer data
 
+  Scenario: add_peer from peer_connection_accepted signal
+    Given peer data of (connection, ip, port) from a newly accepted connection
+    When add_peer is called with the given peer data
+    Then connected_peers should contain the peer with the peer data
+    But the peer's port should be the connection port, not the listen port
+    And _known_peers should not contain peer (until Hello is received)
 
   Scenario: _create_peer_sock
     When _create_peer_sock
