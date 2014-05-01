@@ -58,11 +58,9 @@ class PeerManager(StoppableLoopThread):
         if not node_id == self.node_id:
             with self.lock:
                 if ipn not in self._known_peers:
-                    # remove and readd since peers are saved and loaded without node id
-                    try:
+                    # remove and readd if peer was loaded (without node id)
+                    if (ip, port, "") in self._known_peers:
                         self._known_peers.remove((ip, port, ""))
-                    except:
-                        pass
                     self._known_peers.add(ipn)
                     self.save_peers()
 

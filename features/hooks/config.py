@@ -22,6 +22,9 @@ class ConfigHook(object):
             if section == 'wallet' and option == 'coinbase':
                 return '0'*40
 
+            if section == 'misc' and option == 'data_dir':
+                return 'data dir'
+
         def getint_side_effect(section, option):
             if section == 'network' and option == 'listen_port':
                 return 1234

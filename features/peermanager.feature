@@ -41,6 +41,7 @@ Feature: peer manager
   Scenario: get connected peer addresses
     Given connected peer addresses, with each item is (ip, port, node_id)
     And add the connected peer addresses to `connected_peers`
+    And a Hello has been received from the peer
     Then get_connected_peer_addresses should return the given peer addresses
 
   Scenario: add/get known peer address
