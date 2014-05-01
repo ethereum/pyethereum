@@ -4,6 +4,7 @@ import db
 import utils
 import time
 
+INITIAL_DIFFICULTY = 2 ** 22
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
 GASLIMIT_EMA_FACTOR = 1024
@@ -257,12 +258,22 @@ class Block(object):
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
 
+    def finalize(self):
+        self.delta_balance(self.coinbase, BLOCK_REWARD)
+
     def serialize_header_without_nonce(self):
+        return rlp.encode(self.list_header(exclude=['nonce']))
+
+    def list_header(self, exclude=[]):
+        self.state_root = self.state.root
+        self.tx_list_root = self.transactions.root
+        self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
-            if name != 'nonce':
+            # print name, typ, default , getattr(self, name)
+            if not name in exclude:
                 header.append(utils.encoders[typ](getattr(self, name)))
-        return rlp.encode(header)
+        return header
 
     def serialize(self):
         # Serialization method; should act as perfect inverse function of the
@@ -270,14 +281,7 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(self.transactions.get(utils.encode_int(i)))
-        self.state_root = self.state.root
-        self.tx_list_root = self.transactions.root
-        self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
-        header = []
-        for name, typ, default in block_structure:
-            # print name, typ, default , getattr(self, name)
-            header.append(utils.encoders[typ](getattr(self, name)))
-        return rlp.encode([header, txlist, self.uncles])
+        return rlp.encode([self.list_header(), txlist, self.uncles])
 
     def hex_serialize(self):
         return self.serialize().encode('hex')
@@ -317,7 +321,7 @@ class Block(object):
 
     def chain_difficulty(self):
             # calculate the summarized_difficulty (on the fly for now)
-        if self.hash == GENESIS_HASH:
+        if self.is_genesis():
             return self.difficulty
         else:
             return self.difficulty + self.get_parent().chain_difficulty()
@@ -375,7 +379,7 @@ def has_block(blockhash):
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash="\x00" * 32, coinbase="0" * 40,
-                  difficulty=2 ** 22, nonce=utils.sha3(chr(42)),
+                  difficulty=INITIAL_DIFFICULTY, nonce=utils.sha3(chr(42)),
                   gas_limit=10 ** 6)
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])

@@ -2,13 +2,13 @@ import logging
 import time
 import struct
 from dispatch import receiver
-
 from stoppable import StoppableLoopThread
 import signals
 from db import DB
 import utils
 import rlp
 import blocks
+import processblock
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,6 @@ class ChainManager(StoppableLoopThread):
         else:
             time.sleep(.1)
 
-
     def mine(self, steps=1000):
         """
         It is formally defined as PoW:
@@ -101,6 +100,7 @@ class ChainManager(StoppableLoopThread):
         nonce = self._mining_nonce
         block = blocks.Block.init_from_parent(
             self.head, coinbase=self.config.get('wallet', 'coinbase'))
+        block.finalize()  # FIXME?
         if nonce == 0:
             logger.debug('Mining #%d %s', block.number, block.hex_hash())
             logger.debug('Difficulty %s', block.difficulty)
@@ -117,7 +117,8 @@ class ChainManager(StoppableLoopThread):
                 block.nonce = nonce_bin_prefix + pack('>q', nonce)
                 assert block.check_proof_of_work(block.nonce) is True
                 assert len(block.nonce) == 32
-                logger.debug('Nonce found %d %r', nonce, block.nonce)
+                logger.debug(
+                    'Nonce found %d %r', nonce, block.nonce.encode('hex'))
                 # create new block
                 self.add_block(block)
                 signals.send_local_blocks.send(sender=self,
@@ -148,17 +149,26 @@ class ChainManager(StoppableLoopThread):
     def add_block(self, block):
 
         # make sure we know the parent
+        # if not block.has_parent() and not block.is_genesis():
         if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
-            logger.debug('Missing parent for block %r' % block.hex_hash())
+            logger.debug('Missing parent for block %r', block.hex_hash())
             return False  # FIXME
 
         # check PoW
         if not len(block.nonce) == 32:
-            logger.debug('Nonce not set %r' % block.hex_hash())
+            logger.debug('Nonce not set %r', block.hex_hash())
             return False
         elif not block.check_proof_of_work(block.nonce) and not block.is_genesis():
-            logger.debug('Invalid nonce %r' % block.hex_hash())
+            logger.debug('Invalid nonce %r', block.hex_hash())
             return False
+
+        if block.has_parent():
+            try:
+                processblock.verify(block, block.get_parent())
+            except AssertionError, e:
+                logger.debug('verification failed: %s', str(e))
+                processblock.verify(block, block.get_parent())
+                return False
 
         self._store_block(block)
         # set to head if this makes the longest chain w/ most work
