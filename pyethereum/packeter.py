@@ -82,6 +82,7 @@ class Packeter(object):
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
         self.NODE_ID = self.config.get('network', 'node_id')
+        print self.NODE_ID
 
     @classmethod
     def load_packet(cls, packet):
@@ -178,6 +179,7 @@ class Packeter(object):
                 self.CAPABILITIES,
                 self.NODE_ID
                 ]
+        print data
         return self.dump_packet(data)
 
     def dump_Ping(self):

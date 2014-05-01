@@ -16,6 +16,9 @@ class ConfigHook(object):
             if section == 'network' and option == 'client_id':
                 return 'client id'
 
+            if section == 'network' and option == 'node_id':
+                return 'node id'
+
             if section == 'wallet' and option == 'coinbase':
                 return '0'*40
 

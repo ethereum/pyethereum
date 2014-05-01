@@ -37,6 +37,8 @@ def create_config():
     config.set('network', 'client_id', Packeter.CLIENT_ID)
     config.set('network', 'node_id', sha3(str(uuid.uuid1())))
 
+    print "config!", config.get('network', 'node_id')
+
     config.add_section('api')
     config.set('api', 'listen_host', '127.0.0.1')
     config.set('api', 'listen_port', '30203')
