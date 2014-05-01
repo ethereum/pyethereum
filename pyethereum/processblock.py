@@ -26,23 +26,13 @@ GTXCOST = 500
 OUT_OF_GAS = -1
 
 
-def process(block, txs):
-    for tx in txs:
-        apply_tx(block, tx)
-    finalize(block)
-
-
-def finalize(block):
-    block.delta_balance(block.coinbase, block.reward)
-
-
 def verify(block, parent):
     assert block.timestamp >= parent.timestamp
     assert block.timestamp <= time.time() + 900
-    block2 = blocks.init_from_parent(parent,
-                                     block.coinbase,
-                                     block.extra_data,
-                                     block.timestamp)
+    block2 = blocks.Block.init_from_parent(parent,
+                                           block.coinbase,
+                                           block.extra_data,
+                                           block.timestamp)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
     for i in range(block.transaction_count):
@@ -52,9 +42,9 @@ def verify(block, parent):
         block2.apply_tx(tx)
         assert s == block2.state.root
         assert g == utils.encode_int(block2.gas_used)
-    finalize(block2)
+    block2.finalize()
     assert block2.state.root == block.state.root
-    assert block2.gas_consumed == block.gas_consumed
+    assert block2.gas_used == block.gas_used
     return True
 
 
