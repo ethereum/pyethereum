@@ -6,6 +6,7 @@ import utils
 import processblock
 import transactions
 
+# to add EMPTY_UNCLE_HASH / GENESIS_DEFAULTS ...
 
 INITIAL_DIFFICULTY = 2 ** 22
 BLOCK_REWARD = 10 ** 18
