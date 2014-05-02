@@ -16,8 +16,7 @@ blk = b.genesis({v: u.denoms.ether * 1})
 
 assert blk.hex_hash() == \
     b.Block.deserialize(blk.serialize()).hex_hash()
-assert blk.hex_hash() == \
-    b.Block.hex_deserialize(blk.hex_serialize()).hex_hash()
+
 
 # Give tx2 some money
 
@@ -27,17 +26,32 @@ startgas = 10000
 # nonce,gasprice,startgas,to,value,data,v,r,s
 tx = t.Transaction(0, gasprice, startgas, v2, u.denoms.finney * 10, '').sign(k)
 
+assert blk in set([blk])
+assert tx in set([tx])
 assert tx.hex_hash() == \
     t.Transaction.deserialize(tx.serialize()).hex_hash()
 assert tx.hex_hash() == \
     t.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
+assert tx in set([tx])
+
+assert not tx in blk.get_transactions()
 
 print("Balance of v1: ", blk.get_balance(v), v)
 success, res = pb.apply_tx(blk, tx)
+assert tx in blk.get_transactions()
 print("applied transaction", success, res)
 print("New balance of v1: ", blk.get_balance(v), v)
+assert blk.get_balance(v) == 988955000000000000L
 print("New balance of v2: ", blk.get_balance(v2), v2)
+assert blk.get_balance(v2) == 10000000000000000L
 print("New balance of coinbase: ", blk.get_balance(blk.coinbase), blk.coinbase)
+assert blk.get_balance(blk.coinbase) == 1045000000000000L
+print ('Transactions in block', blk, blk.get_transactions())
+
+
+assert blk.hex_hash() == \
+    b.Block.hex_deserialize(blk.hex_serialize()).hex_hash()
+
 
 assert blk.get_balance(v) == u.denoms.finney * 990
 assert blk.get_balance(v2) == u.denoms.finney * 10
