@@ -91,10 +91,7 @@ def apply_tx(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * (tx.startgas - gas))
         block.gas_used += tx.startgas - gas
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
-    tx_data = [tx.serialize(),
-               block.state.root,
-               utils.encode_int(block.gas_used)]
-    block.add_transaction_to_list(tx_data)
+    block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
     return success, output if success else ''
 
