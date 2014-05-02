@@ -10,25 +10,27 @@ logger = logging.getLogger(__name__)
 
 
 config_ready = Signal(providing_args=["config"])
-local_peer_server_address_set = Signal(providing_args=["ip", "port"])
 
+local_peer_server_address_set = Signal(providing_args=["ip", "port"])
+peer_address_received = Signal(providing_args=["peer"])
 peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
+peer_handshake_success = Signal(providing_args=["peer"])
 peer_disconnect_requested = Signal(providing_args=[""])
 
-peer_address_received = Signal(providing_args=["peer"])
-peer_handshake_success = Signal(providing_args=["peer"])
 
-remote_transactions_received = Signal(providing_args=["transactions"])
 remote_blocks_received = Signal(providing_args=["block_lst"])
-
 remote_chain_requested = Signal(providing_args=["parents", "count"])
+local_chain_requested = Signal(providing_args=["uid", "req"])
 send_local_blocks = Signal(providing_args=["blocks"])
 
+
+remote_transactions_received = Signal(providing_args=["transactions"])
 local_transactions_requested = Signal(providing_args=["uid", "req"])
 local_transactions_request_aborted = Signal(providing_args=["uid"])
 local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
+local_transaction_received = Signal(providing_args=["transaction"])
+send_local_transactions = Signal(providing_args=["transaction"])
 
-local_chain_requested = Signal(providing_args=["uid", "req"])
 
 known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
 known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
@@ -37,10 +39,6 @@ known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 connected_peer_addresses_requested = Signal(providing_args=["uid", "req"])
 connected_peer_addresses_request_aborted = Signal(providing_args=["uid"])
 connected_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
-
-# local_known_peers_requested = Signal(providing_args=["uid", "req"])
-# local_known_peers_request_aborted = Signal(providing_args=["uid"])
-# local_known_peers_ready = Signal(providing_args=["uid", "data", "error"])
 
 
 def request_data_async(name, req=None,

@@ -346,13 +346,25 @@ def new_peer_connected(sender, **kwargs):
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, **kwargs):
-    chain_manager.add_transactions(transactions)
+    "receives rlp.decoded serialized"
+    txl = [transactions.Transaction.deserialize(
+        rlp.encode(tx)) for tx in transactions]
+    logger.debug('remote_transactions_received: %r', txl)
+    for tx in txl:
+        chain_manager.add_transactions(tx)
+
+
+@receiver(signals.local_transaction_received)
+def local_transaction_received_handler(sender, transaction, **kwargs):
+    "receives transaction object"
+    logger.debug('local_transaction_received: %r', transaction)
+    chain_manager.add_transaction(transaction)
 
 
 @receiver(signals.local_transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
-    signals.local_transactions_ready.send(sender=None, data=list(transactions))
+    signals.local_transactions_ready.send(sender=None, data=transactions)
 
 
 @receiver(signals.remote_blocks_received)

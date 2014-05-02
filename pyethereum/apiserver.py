@@ -88,7 +88,10 @@ class CorsMiddleware:
 # ####### ##############
 
 # pretty print patch
+
+
 class Responder(hyp.responder.Responder):
+
     def respond(self, instances, meta=None, links=None, linked=None):
         if not isinstance(instances, list):
             instances = [instances]
@@ -141,7 +144,19 @@ def block(blockhash=None):
     if blockhash in chain_manager:
         return BlocksResponder().respond(chain_manager.get(blockhash))
     else:
-        return abort(404, 'No block with id %s' % blockhash)
+        return bottle.abort(404, 'No block with id %s' % blockhash)
+
+
+# ######## Transactions ############
+@app.put(base_url + '/transactions/')
+def transactions():
+    # request.json FIXME / post json encoded data? i.e. the representation of
+    # a tx
+    hex_data = bottle.request.body.read()
+    logger.debug('PUT transactions/ %s', hex_data)
+    tx = Transaction.hex_deserialize(hex_data)
+    signals.local_transaction_received.send(sender=None, transaction=tx)
+    return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
 
 
 # ######## Peers ###################
