@@ -63,7 +63,7 @@ class Transaction(object):
     def deserialize(cls, rlpdata):
         kargs = dict()
         args = rlp.decode(rlpdata)
-        assert len(args) in (len(tx_structure), len(tx_structure)-3)
+        assert len(args) in (len(tx_structure), len(tx_structure) - 3)
         # Deserialize all properties
         for i, (name, typ, default) in enumerate(tx_structure):
             if i < len(args):
@@ -97,6 +97,15 @@ class Transaction(object):
 
     def hex_hash(self):
         return self.hash.encode('hex')
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.hash == other.hash
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return '<Transaction(%s)>' % self.hex_hash()[:4]
 
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):
