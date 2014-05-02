@@ -171,7 +171,7 @@ def create_contract(block, tx, msg):
 
 def get_op_data(code, index):
     opcode = ord(code[index]) if index < len(code) else 0
-    if opcode < 96 or (opcode > 240 and opcode <= 255):
+    if opcode < 96 or (opcode >= 240 and opcode <= 255):
         if opcode in opcodes:
             return opcodes[opcode]
         else:
@@ -411,7 +411,14 @@ def apply_op(block, tx, msg, code, compustate):
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
         if debug:
             print("Sub-contract:", msg.to, value, gas, data)
-        create_contract(block, tx, Message(msg.to, '', value, gas, data))
+        addr, gas, code = create_contract(
+            block, tx, Message(msg.to, '', value, gas, data))
+        if debug:
+            print("Output of contract creation:", addr, code)
+        if addr:
+            stk.append(utils.coerce_to_int(addr))
+        else:
+            stk.append(0)
     elif op == 'CALL':
         if len(mem) < stackargs[3] + stackargs[4]:
             mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))
