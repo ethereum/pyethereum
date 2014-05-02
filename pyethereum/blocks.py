@@ -74,7 +74,6 @@ class Block(object):
         self.prevhash = prevhash
         self.uncles_hash = uncles_hash
         self.coinbase = coinbase
-        self.state_root = state_root
         self.tx_list_root = tx_list_root
         self.difficulty = difficulty
         self.number = number
@@ -94,7 +93,7 @@ class Block(object):
         for tx in transaction_list:
             self.add_transaction_to_list(tx)
 
-        self.state = trie.Trie(utils.get_db_path(), self.state_root)
+        self.state = trie.Trie(utils.get_db_path(), state_root)
 
         # Basic consistency verifications
         if len(self.state.root) == 32 and \
@@ -264,8 +263,11 @@ class Block(object):
     def serialize_header_without_nonce(self):
         return rlp.encode(self.list_header(exclude=['nonce']))
 
+    @property
+    def state_root(self):
+        return self.state.root
+
     def list_header(self, exclude=[]):
-        self.state_root = self.state.root
         self.tx_list_root = self.transactions.root
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
