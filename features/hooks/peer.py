@@ -7,7 +7,11 @@ class PeerHook(object):
     '''
     def before_feature(self, context, feature):
         from pyethereum.packeter import packeter
+        #import pyethereum.peermanager as PM
 
+        #context.peer_manager = PM.peer_manager
+        #context.peer_manager.configure(context.conf)
+        
         context.packeter = packeter
         packeter.configure(context.conf)
         context._connection = utils.mock_connection()

@@ -440,3 +440,45 @@ def step_impl(context):
 def step_impl(context):
     for peer in context.peer_manager.connected_peers:
         assert peer.send_GetPeers.call_count == 1
+
+
+@given(u'a peer in connected_peers')  # noqa
+def step_impl(context):
+    # a random peer with connection port and no id
+    context.peer_data = (utils.mock_connection(), '4.5.6.7', 55555)
+    context.peer = context.peer_manager._start_peer(*context.peer_data)
+    context.peer.node_id = ""
+
+    context.packeter.NODE_ID = 'this is a different node id'
+    context.packet = context.packeter.dump_Hello()
+
+@when(u'peer receives Hello')
+def step_impl(context):
+    from pyethereum.signals import peer_handshake_success
+    from pyethereum.utils import big_endian_to_int as idec
+    from pyethereum.peermanager import peer_handshake_success_handler
+
+    peer_handshake_success.disconnect(peer_handshake_success_handler)
+
+    def peer_handshake_success_handler(sender, **kwargs):
+        ipn = sender.ip, sender.port, sender.node_id
+        context.peer_manager.add_known_peer_address(*ipn)
+    peer_handshake_success.connect(peer_handshake_success_handler)
+
+    decoded_packet = context.packeter.load_packet(context.packet)[1][3]
+    context.peer._recv_Hello(decoded_packet)
+
+@then(u'the peers port and node id should be reset to their correct values')  # noqa
+def step_impl(context):
+    from pyethereum.utils import big_endian_to_int as idec
+    decoded_packet = context.packeter.load_packet(context.packet)[1][3]
+    port = idec(decoded_packet[3])
+    node_id = decoded_packet[5]
+    assert(context.peer.port == port)
+    assert(context.peer.node_id == node_id)
+
+@then(u'peer_manager._known_peers should contain the peer')  # noqa
+def step_impl(context):
+    i, p, n = context.peer.ip, context.peer.port, context.peer.node_id
+    assert((i, p, n) in context.peer_manager._known_peers)
+

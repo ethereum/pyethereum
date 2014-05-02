@@ -132,3 +132,12 @@ Feature: peer manager
     And for each connected peer, send_GetPeers is mocked
     And _connect_peers is called
     Then for each connected peer, send_GetPeers should be called
+
+
+
+
+  Scenario: receive a valid Hello packet and confirm listen port
+    Given a peer in connected_peers
+    When peer receives Hello
+    Then the peers port and node id should be reset to their correct values
+    And peer_manager._known_peers should contain the peer
