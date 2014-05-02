@@ -1,15 +1,14 @@
 import logging
 import threading
 import time
-from bottle import run as bottle_run
-from bottle import Bottle
-from bottle import abort
-from dispatch import receiver
+import bottle
 from marshmallow import Serializer, fields
-import hyp.responder 
+import hyp.responder
 from pyethereum.blocks import block_structure
 from pyethereum.chainmanager import chain_manager
-from pyethereum.signals import request_data_async, config_ready
+import pyethereum.dispatch as dispatch
+import pyethereum.signals as signals
+from pyethereum.transactions import Transaction
 
 logger = logging.getLogger(__name__)
 base_url = '/api/v0alpha'
@@ -30,7 +29,7 @@ class ApiServer(threading.Thread):
     def run(self):
         global app
         app = CorsMiddleware(app)
-        bottle_run(app, server='waitress',
+        bottle.run(app, server='waitress',
                    host=self.listen_host, port=self.port)
 
 
@@ -40,7 +39,7 @@ def response_async_data(name, make_response, req=None):
     def callback(data):
         state.update(res=make_response(data), ready=True)
 
-    request_data_async(name, req, callback)
+    signals.request_data_async(name, req, callback)
 
     for i in range(500):
         if state['ready']:
@@ -54,11 +53,11 @@ def response_async_data(name, make_response, req=None):
 api_server = ApiServer()
 
 
-@receiver(config_ready)
+@dispatch.receiver(signals.config_ready)
 def config_api_server(sender, **kwargs):
     api_server.configure(sender)
 
-app = Bottle()  # FIXME line 32?
+app = bottle.Bottle()  # FIXME line 32?
 app.config['autojson'] = True
 
 
@@ -78,7 +77,6 @@ class CorsMiddleware:
         if environ["REQUEST_METHOD"] == "OPTIONS":
             start_response('200 OK',
                            CorsMiddleware.HEADERS + [('Content-Length', "0")])
-
             return ""
         else:
             def my_start_response(status, headers, exc_info=None):
