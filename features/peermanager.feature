@@ -86,7 +86,7 @@ Feature: peer manager
   Scenario: get peer candidates
     When get_known_peer_addresses is mocked
     And  get_connected_peer_addresses is mocked
-    And local_address is local_address
+    And node_id is node_id
     And get_peer_candidates is called
     Then the result candidates should be right
 

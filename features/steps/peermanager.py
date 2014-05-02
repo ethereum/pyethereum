@@ -276,9 +276,9 @@ def step_impl(context):
         ]))
 
 
-@when(u'local_address is local_address')  # noqa
+@when(u'node_id is node_id')  # noqa
 def step_impl(context):
-    context.peer_manager.local_addresses = [('1.1.1.1', 1234)]
+    context.peer_manager.node_id = 'me'
 
 
 @when(u'get_peer_candidates is called')  # noqa
