@@ -35,7 +35,7 @@ def verify(block, parent):
                                            block.timestamp)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
-    block2.finalize() # this is the first potential state change
+    block2.finalize()  # this is the first potential state change
     for i in range(block.transaction_count):
         tx, s, g = block.transactions.get(utils.encode_int(i))
         tx = transactions.Transaction.deserialize(tx)
@@ -64,7 +64,7 @@ def apply_tx(block, tx):
         raise Exception("Trying to apply unsigned transaction!")
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
-        raise Exception("Invalid nonce! Sender %s tx %s" %
+        raise Exception("Invalid nonce! sender_acct:%s tx:%s" %
                         (acctnonce, tx.nonce))
     o = block.delta_balance(tx.sender, -tx.gasprice * tx.startgas)
     if not o:
@@ -72,8 +72,6 @@ def apply_tx(block, tx):
     block.increment_nonce(tx.sender)
     snapshot = block.snapshot()
     message_gas = tx.startgas - GTXDATA * len(tx.serialize()) - GTXCOST
-    if message_gas <= 0:
-        return False, ''  # OUT OF GAS (fail early)
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     if tx.to:
         result, gas, data = apply_msg(block, tx, message)
