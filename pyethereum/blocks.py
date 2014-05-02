@@ -74,7 +74,6 @@ class Block(object):
         self.prevhash = prevhash
         self.uncles_hash = uncles_hash
         self.coinbase = coinbase
-        self.tx_list_root = tx_list_root
         self.difficulty = difficulty
         self.number = number
         self.min_gas_price = min_gas_price
@@ -99,7 +98,7 @@ class Block(object):
         if len(self.state.root) == 32 and \
                 self.state.db.get(self.state.root) == '':
             raise Exception("State Merkle root not found in database!")
-        if self.tx_list_root != self.transactions.root:
+        if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
@@ -179,10 +178,12 @@ class Block(object):
         return True
 
     def add_transaction_to_list(self, tx_rlp):
-        self.transactions.update(utils.encode_int(self.transaction_count),
-                                 tx_rlp)
+        # tx_rlp =  [tx.serialize(), block.state_root, utils.encode_int(block.gas_used)]
+        self.transactions.update(utils.encode_int(self.transaction_count), tx_rlp)
         self.transaction_count += 1
-        self.tx_list_root = self.transactions.root
+
+    def apply_transaction(self, tx):
+        return processblock.apply_tx(self, tx)
 
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')
@@ -267,8 +268,11 @@ class Block(object):
     def state_root(self):
         return self.state.root
 
+    @property
+    def tx_list_root(self):
+        return self.transactions.root
+
     def list_header(self, exclude=[]):
-        self.tx_list_root = self.transactions.root
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
