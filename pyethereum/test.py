@@ -32,9 +32,12 @@ assert tx.hex_hash() == \
 assert tx.hex_hash() == \
     t.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
 
-pb.apply_tx(blk, tx)
-print("New balance of v1: ", blk.get_balance(v))
-print("New balance of v2: ", blk.get_balance(v2))
+print("Balance of v1: ", blk.get_balance(v), v)
+success, res = pb.apply_tx(blk, tx)
+print("applied transaction", success, res)
+print("New balance of v1: ", blk.get_balance(v), v)
+print("New balance of v2: ", blk.get_balance(v2), v2)
+print("New balance of coinbase: ", blk.get_balance(blk.coinbase), blk.coinbase)
 
 assert blk.get_balance(v) == u.denoms.finney * 990
 assert blk.get_balance(v2) == u.denoms.finney * 10
