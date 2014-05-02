@@ -291,4 +291,18 @@ def configure_logging(loggerlevels=':DEBUG', verbosity=1):
             propagate=True)
 
     logging.config.dictConfig(logconfig)
-    #logging.debug("logging set up like that: %r", logconfig)
+    # logging.debug("logging set up like that: %r", logconfig)
+
+
+class Denoms():
+    def __init__(self):
+        self.wei = 1
+        self.babbage = 10**3
+        self.lovelace = 10**6
+        self.shannon = 10**9
+        self.szabo = 10**12
+        self.finney = 10**15
+        self.ether = 10**18
+        self.turing = 2**256
+
+denoms = Denoms()

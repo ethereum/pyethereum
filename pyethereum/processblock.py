@@ -85,7 +85,9 @@ def apply_tx(block, tx):
     if tx.to:
         result, gas, data = apply_msg(block, tx, message)
     else:
-        result, gas = create_contract(block, tx, message)
+        result, gas, data = create_contract(block, tx, message)
+    if debug:
+        print('applied tx, result', result, 'gas', gas, 'data/code', ''.join(map(chr,data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -164,7 +166,6 @@ def create_contract(block, tx, msg):
     o = block.delta_balance(msg.sender, msg.value)
     if not o:
         return 0, msg.gas
-    block.set_code(recvaddr, msg.data)
     compustate = Compustate(gas=msg.gas)
     # Main loop
     while 1:
@@ -172,10 +173,10 @@ def create_contract(block, tx, msg):
         if o is not None:
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
-                return 0, 0
+                return 0, 0, []
             else:
                 block.set_code(recvaddr, ''.join(map(chr, o)))
-                return recvaddr, compustate.gas
+                return recvaddr, compustate.gas, o
 
 
 def get_op_data(code, index):
@@ -339,8 +340,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < stackargs[0] + stackargs[2]:
-            mem.extend([0] * (stackargs[0] + stackargs[2] - len(mem)))
+        if len(mem) < stackargs[1] + stackargs[2]:
+            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(msg.data):
                 mem[stackargs[1] + i] = ord(msg.data[stackargs[0] + i])
@@ -348,6 +349,14 @@ def apply_op(block, tx, msg, code, compustate):
                 mem[stackargs[1] + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
+    elif op == 'CODECOPY':
+        if len(mem) < stackargs[1] + stackargs[2]:
+            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
+        for i in range(stackargs[2]):
+            if stackargs[0] + i < len(code):
+                mem[stackargs[1] + i] = ord(code[stackargs[0] + i])
+            else:
+                mem[stackargs[1] + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':

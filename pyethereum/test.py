@@ -3,6 +3,7 @@ import processblock as pb
 import blocks as b
 import transactions as t
 import utils as u
+import sys
 
 k = u.sha3('cow')
 v = u.privtoaddr(k)
@@ -11,7 +12,7 @@ k2 = u.sha3('horse')
 v2 = u.privtoaddr(k2)
 
 print("Starting boring transfer test")
-blk = b.genesis({v: 10**18})
+blk = b.genesis({v: u.denoms.ether * 1})
 
 assert blk.hex_hash() == \
     b.Block.deserialize(blk.serialize()).hex_hash()
@@ -20,11 +21,11 @@ assert blk.hex_hash() == \
 
 # Give tx2 some money
 
-gasprice = 10**12
-startgas = 1000
+gasprice = 0
+startgas = 10000
 
 # nonce,gasprice,startgas,to,value,data,v,r,s
-tx = t.Transaction(0, gasprice, startgas, v2, 10**16, '').sign(k)
+tx = t.Transaction(0, gasprice, startgas, v2, u.denoms.finney * 10, '').sign(k)
 
 assert tx.hex_hash() == \
     t.Transaction.deserialize(tx.serialize()).hex_hash()
@@ -35,8 +36,11 @@ pb.apply_tx(blk, tx)
 print("New balance of v1: ", blk.get_balance(v))
 print("New balance of v2: ", blk.get_balance(v2))
 
+assert blk.get_balance(v) == u.denoms.finney * 990
+assert blk.get_balance(v2) == u.denoms.finney * 10
+
 print("Starting namecoin tests")
-blk = b.genesis({v: 10**18})
+blk = b.genesis({v: u.denoms.ether * 1})
 scode1 = '''
 if !contract.storage[msg.data[0]]:
     contract.storage[msg.data[0]] = msg.data[1]
@@ -45,27 +49,31 @@ else:
     return(0)
 '''
 code1 = serpent.compile(scode1)
-print("AST", serpent.rewrite(serpent.parse(scode1)))
-print("Assembly", serpent.compile_to_assembly(scode1))
-tx1 = t.contract(0, 0, gasprice, startgas, code1).sign(k)
+# print("AST", serpent.rewrite(serpent.parse(scode1)))
+# print("Assembly", serpent.compile_to_assembly(scode1))
+tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
 s, addr = pb.apply_tx(blk, tx1)
 snapshot = blk.snapshot()
-print("Contract address", addr.encode('hex'))
+print("Contract address", addr)
 tx2 = t.Transaction(1, gasprice, startgas, addr, 0, serpent.encode_datalist(['george', 45]))
 tx2.sign(k)
 s, o = pb.apply_tx(blk, tx2)
 print("Result of registering george:45: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
 tx3 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist(['george', 20])).sign(k)
 s, o = pb.apply_tx(blk, tx3)
 print("Result of registering george:20: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [0]
 tx4 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist(['harry', 60])).sign(k)
 s, o = pb.apply_tx(blk, tx4)
 print("Result of registering harry:60: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
 
 scode2 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
     contract.storage[0x%s] = 1000
+    return(1)
 elif msg.datasize == 1:
     addr = msg.data[0]
     return(contract.storage[addr])
@@ -82,28 +90,33 @@ else:
         return(0)
 ''' % v
 code2 = serpent.compile(scode2)
-print("AST", serpent.rewrite(serpent.parse(scode2)))
-print("Assembly", serpent.compile_to_assembly(scode2))
+# print("AST", serpent.rewrite(serpent.parse(scode2)))
+# print("Assembly", serpent.compile_to_assembly(scode2))
 print("Starting currency contract tests")
 blk = b.genesis({v: 10**18})
-tx4 = t.contract(0, 0, gasprice, startgas, code2).sign(k)
+tx4 = t.contract(0, gasprice, startgas, 0, code2).sign(k)
 s, addr = pb.apply_tx(blk, tx4)
-print("Contract address", addr.encode('hex'))
+print("Contract address", addr)
 tx5 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
 s, o = pb.apply_tx(blk, tx5)
-print("Initialization finished")
+print("Initialization finished: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
 tx6 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist([v2, 200])).sign(k)
 s, o = pb.apply_tx(blk, tx6)
 print("Result of sending v->v2 200: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
 tx7 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist([v2, 900])).sign(k)
 s, o = pb.apply_tx(blk, tx7)
 print("Result of sending v->v2 900: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [0]
 tx8 = t.Transaction(4, gasprice, startgas, addr, 0, serpent.encode_datalist([v])).sign(k)
 s, o = pb.apply_tx(blk, tx8)
 print("Result of querying v: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [800]
 tx9 = t.Transaction(5, gasprice, startgas, addr, 0, serpent.encode_datalist([v2])).sign(k)
 s, o = pb.apply_tx(blk, tx9)
 print("Result of querying v2: ", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [200]
 
 scode3 = '''
 if !contract.storage[1000]:
@@ -117,24 +130,28 @@ else:
     return(contract.storage[msg.data[0]])
 '''
 code3 = serpent.compile(scode3)
-print("AST", serpent.rewrite(serpent.parse(scode3)))
-print("Assembly", serpent.compile_to_assembly(scode3))
+# print("AST", serpent.rewrite(serpent.parse(scode3)))
+# print("Assembly", serpent.compile_to_assembly(scode3))
+print "Starting data feed tests"
 blk = b.genesis({v: 10**18, v2: 10**18})
-tx10 = t.contract(0, 0, gasprice, startgas, code3).sign(k)
+tx10 = t.contract(0, gasprice, startgas, 0, code3).sign(k)
 s, addr = pb.apply_tx(blk, tx10)
-print("Address:", addr.encode('hex'))
+print("Address:", addr)
 tx11 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
 s, o = pb.apply_tx(blk, tx11)
 print("Initialization complete", serpent.decode_datalist(o))
 tx12 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
 s, o = pb.apply_tx(blk, tx12)
-print("Balance", serpent.decode_datalist(o))
+print("Value at 500", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [0]
 tx13 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 726])).sign(k)
 s, o = pb.apply_tx(blk, tx13)
-print("Set balance to 500:726", serpent.decode_datalist(o))
+print("Set value at 500 to 726", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
 tx14 = t.Transaction(4, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
 s, o = pb.apply_tx(blk, tx14)
-print("Balance", serpent.decode_datalist(o))
+print("Value at 500", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [726]
 
 scode4 = '''
 if !contract.storage[1000]:
@@ -153,7 +170,7 @@ elif !contract.storage[1001]:
 else:
     othervalue = contract.storage[1004]
     ethvalue = othervalue / msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
-    if ethvalue >= contract.balance: 
+    if ethvalue >= contract.balance:
         send(contract.storage[1000],contract.balance,tx.gas-100)
         return(3)
     elif block.timestamp > contract.storage[1005]:
@@ -162,37 +179,47 @@ else:
         return(4)
     else:
         return(5)
-''' % (addr.encode('hex'), addr.encode('hex'))
+''' % (addr, addr)
 code4 = serpent.compile(scode4)
-print("AST", serpent.rewrite(serpent.parse(scode4)))
-print("Assembly", serpent.compile_to_assembly(scode4))
+# print("AST", serpent.rewrite(serpent.parse(scode4)))
+# print("Assembly", serpent.compile_to_assembly(scode4))
 # important: no new genesis block
-tx15 = t.contract(5, 0, gasprice, 2000, code4).sign(k)
+print "Starting hedge tests"
+tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
 s, addr2 = pb.apply_tx(blk, tx15)
-print("Address:", addr.encode('hex'))
-tx16 = t.Transaction(6, gasprice, 2000, addr2, 10**17, serpent.encode_datalist([500])).sign(k)
+print("Address:", addr2)
+tx16 = t.Transaction(6, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k)
 s, o = pb.apply_tx(blk, tx16)
 print("First participant added", serpent.decode_datalist(o))
-tx17 = t.Transaction(0, gasprice, 2000, addr2, 10**17, serpent.encode_datalist([500])).sign(k2)
+assert serpent.decode_datalist(o) == [1]
+tx17 = t.Transaction(0, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k2)
 s, o = pb.apply_tx(blk, tx17)
 print("Second participant added, USDvalue settled", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [2, 72600000000000000000L]
 snapshot = blk.snapshot()
-tx18 = t.Transaction(7, gasprice, 2000, addr2, 0, '').sign(k)
+tx18 = t.Transaction(7, gasprice, startgas, addr2, 0, '').sign(k)
 s, o = pb.apply_tx(blk, tx18)
 print("Attempting to cash out immediately", o if o == -1 else serpent.decode_datalist(o))
-tx19 = t.Transaction(8, gasprice, 2000, addr, 0, serpent.encode_datalist([500, 300])).sign(k)
+assert serpent.decode_datalist(o) == [5]
+tx19 = t.Transaction(8, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 300])).sign(k)
 s, o = pb.apply_tx(blk, tx19)
 print("Changing value to 300", serpent.decode_datalist(o))
-print(blk.to_dict())
-tx20 = t.Transaction(9, gasprice, 2000, addr2, 0, '').sign(k)
+assert serpent.decode_datalist(o) == [1]
+tx20 = t.Transaction(9, gasprice, startgas, addr2, 0, '').sign(k)
 print("Old balances", blk.get_balance(v), blk.get_balance(v2))
 s, o = pb.apply_tx(blk, tx20)
 print("Attempting to cash out with value drop", o if o == -1 else serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [3]
 print("New balances", blk.get_balance(v), blk.get_balance(v2))
 blk.revert(snapshot)
 blk.timestamp += 200000
-tx21 = t.Transaction(7, gasprice, 2000, addr2, 0, '').sign(k)
 print("Old balances", blk.get_balance(v), blk.get_balance(v2))
+tx21 = t.Transaction(7, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 1452])).sign(k)
 s, o = pb.apply_tx(blk, tx21)
-print("Attempting to cash out after expiry", o if o == -1 else serpent.decode_datalist(o))
+print("Changing value to 1452", serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [1]
+tx22 = t.Transaction(8, gasprice, 2000, addr2, 0, '').sign(k)
+s, o = pb.apply_tx(blk, tx22)
+print("Attempting to cash out after value increase and expiry", o if o == -1 else serpent.decode_datalist(o))
+assert serpent.decode_datalist(o) == [4]
 print("New balances", blk.get_balance(v), blk.get_balance(v2))
