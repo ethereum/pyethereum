@@ -8,11 +8,88 @@ from db import DB
 import utils
 import rlp
 import blocks
+import transactions
 import processblock
 
 logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
+
+
+class Miner():
+
+    """
+    Mines on the current head
+    Stores received transactions
+    """
+
+    def __init__(self, parent, coinbase):
+        self.nonce = 0
+        block = self.block = blocks.Block.init_from_parent(parent, coinbase)
+        block.finalize()  # order?
+        logger.debug('Mining #%d %s', block.number, block.hex_hash())
+        logger.debug('Difficulty %s', block.difficulty)
+
+    def add_transaction(self, transaction):
+        """
+        (1) The transaction signature is valid;
+        (2) the transaction nonce is valid (equivalent to the 
+            sender accounts current nonce);
+        (3) the gas limit is no smaller than the intrinsic gas,
+            g0 , used by the transaction;
+        (4) the sender account balance contains at least the cost, 
+            v0, required in up-front payment.
+        """
+        try:
+            success, res = self.block.apply_transaction(transaction)
+        except Exception, e:
+            logger.debug('rejected transaction %r: %s', transaction, e)
+            return False
+        if not success:
+            logger.debug('transaction %r not applied', transaction)
+        else:
+            logger.debug(
+                'transaction %r applied to %r res: %r', transaction, self.block, res)
+        return res
+
+    def get_transactions(self):
+        return self.block.get_transactions()
+
+    def mine(self, steps=1000):
+        """
+        It is formally defined as PoW:
+        PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
+        where: RLP(Hn) is the RLP encoding of the block header H,
+        not including the final nonce component; SHA3 is the SHA3 hash function accepting
+        an arbitrary length series of bytes and evaluating to a series of 32 bytes
+        (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
+        operator; BE(X) evaluates to the value equal to X when interpreted as a 
+        big-endian-encoded integer.
+        """
+
+        pack = struct.pack
+        sha3 = utils.sha3
+        beti = utils.big_endian_to_int
+        block = self.block
+
+        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
+        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
+
+        target = 2 ** 256 / block.difficulty
+
+        for nonce in range(self.nonce, self.nonce + steps):
+            h = sha3(sha3(prefix + pack('>q', nonce)))
+            l256 = beti(h)
+            if l256 < target:
+                block.nonce = nonce_bin_prefix + pack('>q', nonce)
+                assert block.check_proof_of_work(block.nonce) is True
+                logger.debug(
+                    'Nonce found %d %r', nonce, block)
+                assert block
+                return block
+
+        self.nonce = nonce
+        return False
 
 
 class ChainManager(StoppableLoopThread):
@@ -23,15 +100,16 @@ class ChainManager(StoppableLoopThread):
 
     def __init__(self):
         super(ChainManager, self).__init__()
-        self.transactions = set()
-        self._mining_nonce = 0
+        # initialized after configure
+        self.miner = None
+        self.blockchain = None
 
     def configure(self, config):
         self.config = config
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
-        logger.debug('Chain @ #%d %s' %
-                     (self.head.number, self.head.hex_hash()))
+        logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        self.new_miner()
 
     @property
     def head(self):
@@ -42,8 +120,8 @@ class ChainManager(StoppableLoopThread):
 
     def _update_head(self, block):
         self.blockchain.put('HEAD', block.hash)
-        self._mining_nonce = 0  # reset
         self.blockchain.commit()
+        self.new_miner()  # reset mining
 
     def get(self, blockhash):
         return blocks.get_block(blockhash)
@@ -81,51 +159,23 @@ class ChainManager(StoppableLoopThread):
         else:
             time.sleep(.1)
 
-    def mine(self, steps=1000):
-        """
-        It is formally defined as PoW:
-        PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
-        where: RLP(Hn) is the RLP encoding of the block header H,
-        not including the final nonce component; SHA3 is the SHA3 hash function accepting
-        an arbitrary length series of bytes and evaluating to a series of 32 bytes
-        (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
-        operator; BE(X) evaluates to the value equal to X when interpreted as a 
-        big-endian-encoded integer.
-        """
+    def new_miner(self):
+        "new miner is initialized if HEAD is updated"
+        miner = Miner(self.head, self.config.get('wallet', 'coinbase'))
+        if self.miner:
+            for tx in self.miner.get_transactions():
+                miner.add_transaction(tx)
+        self.miner = miner
 
-        pack = struct.pack
-        sha3 = utils.sha3
-        beti = utils.big_endian_to_int
-
-        nonce = self._mining_nonce
-        block = blocks.Block.init_from_parent(
-            self.head, coinbase=self.config.get('wallet', 'coinbase'))
-        block.finalize()  # FIXME?
-        if nonce == 0:
-            logger.debug('Mining #%d %s', block.number, block.hex_hash())
-            logger.debug('Difficulty %s', block.difficulty)
-
-        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
-        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
-
-        target = 2 ** 256 / block.difficulty
-
-        for nonce in range(nonce, nonce + steps):
-            h = sha3(sha3(prefix + pack('>q', nonce)))
-            l256 = beti(h)
-            if l256 < target:
-                block.nonce = nonce_bin_prefix + pack('>q', nonce)
-                assert block.check_proof_of_work(block.nonce) is True
-                assert len(block.nonce) == 32
-                logger.debug(
-                    'Nonce found %d %r', nonce, block.nonce.encode('hex'))
+    def mine(self):
+        with self.lock:
+            block = self.miner.mine()
+            if block:
                 # create new block
                 self.add_block(block)
+                time.sleep(5)
                 signals.send_local_blocks.send(sender=self,
                                                blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
-                return
-
-        self._mining_nonce = nonce
 
     def receive_chain(self, blocks):
         old_head = self.head
@@ -178,14 +228,13 @@ class ChainManager(StoppableLoopThread):
 
         return True
 
-    def add_transactions(self, transactions):
-        logger.debug("add transactions %r" % transactions)
-        for tx in transactions:
-            self.transactions.add(tx)
+    def add_transaction(self, transaction):
+        logger.debug("add transaction %r" % transaction)
+        self.miner.add_transaction(transaction)
 
     def get_transactions(self):
         logger.debug("get transactions")
-        return self.transactions
+        return self.miner.get_transactions()
 
     def get_chain(self, start='', count=100):
         "return 'count' blocks starting from head or start"
