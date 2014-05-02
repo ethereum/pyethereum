@@ -50,7 +50,7 @@ class Miner():
         else:
             logger.debug(
                 'transaction %r applied to %r res: %r', transaction, self.block, res)
-        return res
+        return success
 
     def get_transactions(self):
         return self.block.get_transactions()
@@ -85,7 +85,6 @@ class Miner():
                 assert block.check_proof_of_work(block.nonce) is True
                 logger.debug(
                     'Nonce found %d %r', nonce, block)
-                assert block
                 return block
 
         self.nonce = nonce
@@ -109,6 +108,7 @@ class ChainManager(StoppableLoopThread):
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        self.print_chain()
         self.new_miner()
 
     @property
@@ -280,6 +280,14 @@ class ChainManager(StoppableLoopThread):
                 return []
         res.reverse()
         return res[:count]
+
+    def print_chain(self):
+        num = self.head.number + 1
+        for b in reversed(self.get_chain(count=num)):
+            logger.debug(b)
+            for tx in b.get_transactions():
+                logger.debug('\t%r', tx)
+
 
 chain_manager = ChainManager()
 
