@@ -169,7 +169,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Pong())
 
     def _recv_Pong(self, data):
-        self.send_GetTransactions()  # FIXME
+        pass
 
     def send_Disconnect(self, reason=None):
         logger.info('disconnecting {0}, reason: {1}'.format(
