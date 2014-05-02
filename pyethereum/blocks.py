@@ -1,8 +1,11 @@
+import time
 import rlp
 import trie
 import db
 import utils
-import time
+import processblock
+import transactions
+
 
 INITIAL_DIFFICULTY = 2 ** 22
 BLOCK_REWARD = 10 ** 18
@@ -89,8 +92,9 @@ class Block(object):
         self.transaction_count = 0
 
         # Fill in nodes for transaction trie
-        for tx in transaction_list:
-            self.add_transaction_to_list(tx)
+        for tx_serialized, state_root, gas_used_encoded in transaction_list:
+            self._add_transaction_to_list(
+                tx_serialized, state_root, gas_used_encoded)
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
 
@@ -177,10 +181,28 @@ class Block(object):
         self.state.update(address, acct)
         return True
 
-    def add_transaction_to_list(self, tx_rlp):
-        # tx_rlp =  [tx.serialize(), block.state_root, utils.encode_int(block.gas_used)]
-        self.transactions.update(utils.encode_int(self.transaction_count), tx_rlp)
+    def _add_transaction_to_list(self, tx_serialized, state_root, gas_used_encoded):
+        # adds encoded data # FIXME: the constructor should get objects
+        data = [tx_serialized, state_root, gas_used_encoded]
+        self.transactions.update(
+            utils.encode_int(self.transaction_count), data)
         self.transaction_count += 1
+
+    def add_transaction_to_list(self, tx):
+        self._add_transaction_to_list(tx.serialize(),
+                                      self.state_root,
+                                      utils.encode_int(self.gas_used))
+
+    def _list_transactions(self):
+        # returns [[tx_serialized, state_root, gas_used_encoded],...]
+        txlist = []
+        for i in range(self.transaction_count):
+            txlist.append(self.transactions.get(utils.encode_int(i)))
+        return txlist
+
+    def get_transactions(self):
+        return [transactions.Transaction.deserialize(tx) for
+                tx, s, g in self._list_transactions()]
 
     def apply_transaction(self, tx):
         return processblock.apply_tx(self, tx)
@@ -284,10 +306,7 @@ class Block(object):
     def serialize(self):
         # Serialization method; should act as perfect inverse function of the
         # constructor assuming no verification failures
-        txlist = []
-        for i in range(self.transaction_count):
-            txlist.append(self.transactions.get(utils.encode_int(i)))
-        return rlp.encode([self.list_header(), txlist, self.uncles])
+        return rlp.encode([self.list_header(), self._list_transactions(), self.uncles])
 
     def hex_serialize(self):
         return self.serialize().encode('hex')
@@ -343,9 +362,6 @@ class Block(object):
 
     def __lt__(self, other):
         return self.number < other.number
-
-    def __hash__(self):
-        return self.hash
 
     def __repr__(self):
         return '<Block(#%d %s %s)>' % (self.number, self.hex_hash()[:4], self.prevhash.encode('hex')[:4])
