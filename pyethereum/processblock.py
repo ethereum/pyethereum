@@ -39,7 +39,7 @@ def verify(block, parent):
         tx, s, g = block.transactions.get(utils.encode_int(i))
         tx = transactions.Transaction.deserialize(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
-        block2.apply_tx(tx)
+        apply_tx(block2, tx)
         assert s == block2.state.root
         assert g == utils.encode_int(block2.gas_used)
     block2.finalize()
@@ -51,6 +51,7 @@ def verify(block, parent):
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data):
+        assert gas >= 0
         self.sender = sender
         self.to = to
         self.value = value
@@ -71,6 +72,8 @@ def apply_tx(block, tx):
     block.increment_nonce(tx.sender)
     snapshot = block.snapshot()
     message_gas = tx.startgas - GTXDATA * len(tx.serialize()) - GTXCOST
+    if message_gas <= 0:
+        return False, ''  # OUT OF GAS (fail early)
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     if tx.to:
         result, gas, data = apply_msg(block, tx, message)
