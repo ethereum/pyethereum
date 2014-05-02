@@ -33,11 +33,9 @@ def step_impl(context):
     packet = context.packeter.dump_Hello()
     assert context.sent_packets == [packet]
 
-
 @given(u'a valid Hello packet')  # noqa
 def step_impl(context):
     context.packet = context.packeter.dump_Hello()
-
 
 @given(u'a Hello packet with protocol version incompatible')  # noqa
 def step_impl(context):
