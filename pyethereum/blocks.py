@@ -85,23 +85,33 @@ class Block(object):
         self.timestamp = timestamp
         self.extra_data = extra_data
         self.nonce = nonce
-        self.transaction_list = transaction_list
         self.uncles = uncles
 
         self.transactions = trie.Trie(utils.get_db_path())
         self.transaction_count = 0
 
+        # replay changes to agree on state
+
+        # if not self.is_genesis():
+        #     self.state = trie.Trie(
+        #         utils.get_db_path(), self.get_parent().state_root)
+        #     self.finalize()
+        # else:
+        #     self.state = trie.Trie(utils.get_db_path(), state_root)
+
+        self.state = trie.Trie(utils.get_db_path(), state_root)
         # Fill in nodes for transaction trie
         for tx_serialized, state_root, gas_used_encoded in transaction_list:
             self._add_transaction_to_list(
                 tx_serialized, state_root, gas_used_encoded)
-
-        self.state = trie.Trie(utils.get_db_path(), state_root)
+        # for tx in self.get_transactions():
+        #     self.apply_transaction(tx)
 
         # Basic consistency verifications
         if len(self.state.root) == 32 and \
-                self.state.db.get(self.state.root) == '':
-            raise Exception("State Merkle root not found in database!")
+                not self.state.db.has_key(self.state.root):
+            raise Exception(
+                "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
