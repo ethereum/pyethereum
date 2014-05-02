@@ -19,7 +19,7 @@ peer_address_received = Signal(providing_args=["peer"])
 peer_handshake_success = Signal(providing_args=["peer"])
 
 remote_transactions_received = Signal(providing_args=["transactions"])
-remote_blocks_received = Signal(providing_args=["blocks"])
+remote_blocks_received = Signal(providing_args=["block_lst"])
 
 remote_chain_requested = Signal(providing_args=["parents", "count"])
 send_local_blocks = Signal(providing_args=["blocks"])

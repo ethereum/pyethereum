@@ -6,7 +6,7 @@ from bottle import Bottle
 from bottle import abort
 from dispatch import receiver
 from marshmallow import Serializer, fields
-from hyp.responder import Responder
+import hyp.responder 
 from pyethereum.blocks import block_structure
 from pyethereum.chainmanager import chain_manager
 from pyethereum.signals import request_data_async, config_ready
@@ -87,8 +87,22 @@ class CorsMiddleware:
                 return start_response(status, headers, exc_info)
             return self.app(environ, my_start_response)
 
-# #######cors end##########
+# ####### ##############
 
+# pretty print patch
+class Responder(hyp.responder.Responder):
+    def respond(self, instances, meta=None, links=None, linked=None):
+        if not isinstance(instances, list):
+            instances = [instances]
+        if linked is not None:
+            links = linked.keys()
+        document = {}
+        document['meta'] = self.build_meta(meta)
+        document['links'] = self.build_links(links)
+        document['linked'] = self.build_linked(linked)
+        document[self.root] = self.build_resources(instances, links)
+        [document.pop(key) for key in document.keys() if document[key] is None]
+        return hyp.responder.json.dumps(document, indent=0)
 
 # ############ Blocks ######################
 

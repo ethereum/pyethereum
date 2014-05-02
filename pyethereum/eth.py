@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import time
+import uuid
 import signal
 import ConfigParser
 from optparse import OptionParser
@@ -12,6 +13,7 @@ make_pyethereum_avail()
 
 from pyethereum.utils import configure_logging
 from pyethereum.utils import data_dir
+from pyethereum.utils import sha3
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
@@ -33,6 +35,7 @@ def create_config():
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
     config.set('network', 'client_id', Packeter.CLIENT_ID)
+    config.set('network', 'node_id', sha3(str(uuid.uuid1())))
 
     config.add_section('api')
     config.set('api', 'listen_host', '127.0.0.1')

@@ -4,6 +4,7 @@ from utils import big_endian_to_int as idec
 from utils import int_to_big_endian4 as ienc4
 from utils import int_to_big_endian as ienc
 from utils import recursive_int_to_big_endian
+from utils import sha3
 import dispatch
 import sys
 import signals
@@ -63,10 +64,12 @@ class Packeter(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     SYNCHRONIZATION_TOKEN = 0x22400891
     PROTOCOL_VERSION = 0x0c
+    # is the node s Unique Identifier and is the 512-bit hash that serves to
+    # identify the node.
     NETWORK_ID = 0
+    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform,
                                                        PROTOCOL_VERSION)
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
@@ -78,6 +81,7 @@ class Packeter(object):
         self.config = config
         self.CLIENT_ID = self.config.get('network', 'client_id') \
             or self.CLIENT_ID
+        self.NODE_ID = self.config.get('network', 'node_id')
 
     @classmethod
     def load_packet(cls, packet):
@@ -153,14 +157,14 @@ class Packeter(object):
         NETWORK_ID should be 0.
         CLIENT_ID Specifies the client software identity, as a human-readable
             string (e.g. "Ethereum(++)/1.0.0").
+        LISTEN_PORT specifies the port that the client is listening on
+            (on the interface that the present connection traverses).
+            If 0 it indicates the client is not listening.
         CAPABILITIES specifies the capabilities of the client as a set of
             flags; presently three bits are used:
             0x01 for peers discovery,
             0x02 for transaction relaying,
             0x04 for block-chain querying.
-        LISTEN_PORT specifies the port that the client is listening on
-            (on the interface that the present connection traverses).
-            If 0 it indicates the client is not listening.
         NODE_ID is optional and specifies a 512-bit hash, (potentially to be
             used as public key) that identifies this node.
         """
@@ -170,7 +174,7 @@ class Packeter(object):
                 self.CLIENT_ID,
                 self.config.getint('network', 'listen_port'),
                 self.CAPABILITIES,
-                self.config.get('wallet', 'coinbase')
+                self.NODE_ID
                 ]
         return self.dump_packet(data)
 

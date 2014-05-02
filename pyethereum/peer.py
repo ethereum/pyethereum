@@ -227,7 +227,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.remote_blocks_received.send(sender=self, blocks=data)
+        signals.remote_blocks_received.send(sender=self, block_lst=data)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))
@@ -245,7 +245,8 @@ class Peer(StoppableLoopThread):
         (i.e. the last Parent in the parents list). If no parents are passed, then 
         reply need not be made.
         """
-        signals.local_chain_requested.send(sender=self, blocks=data[:-1], count=idec(data[-1]))
+        signals.local_chain_requested.send(
+            sender=self, blocks=data[:-1], count=idec(data[-1]))
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))
@@ -254,8 +255,12 @@ class Peer(StoppableLoopThread):
         pass
 
     def loop_body(self):
-        send_size = self._process_send()
-        recv_size = self._process_recv()
+        try:
+            send_size = self._process_send()
+            recv_size = self._process_recv()
+        except IOError:
+            self.stop()
+            return 
         # pause
         if not (send_size or recv_size):
             time.sleep(0.1)
