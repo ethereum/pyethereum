@@ -144,7 +144,6 @@ class ChainManager(StoppableLoopThread):
         self.blockchain.commit()
 
     def synchronize_blockchain(self):
-        # FIXME: execute once, when connected to required num peers
         logger.info('synchronize requested for head %r', self.head)
         signals.remote_chain_requested.send(
             sender=self, parents=[self.head.hash], count=30)
@@ -175,7 +174,7 @@ class ChainManager(StoppableLoopThread):
                 self.add_block(block)
                 time.sleep(5)
                 signals.send_local_blocks.send(sender=self,
-                                               blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
+                                               blocks=[block])  # FIXME DE/ENCODE
 
     def receive_chain(self, blocks):
         old_head = self.head
@@ -230,10 +229,14 @@ class ChainManager(StoppableLoopThread):
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
-        self.miner.add_transaction(transaction)
+        res = self.miner.add_transaction(transaction)
+        if res:
+            logger.debug("broadcasting valid %r" % transaction)
+            signals.send_local_transactions.send(
+                sender=self, transactions=[transaction])
 
     def get_transactions(self):
-        logger.debug("get transactions")
+        logger.debug("get_transactions called")
         return self.miner.get_transactions()
 
     def get_chain(self, start='', count=100):
@@ -335,8 +338,8 @@ def new_peer_connected(sender, **kwargs):
     logger.debug("received new_peer_connected")
     # request transactions
     with sender.lock:
-        sender.send_GetTransactions()
         logger.debug("send get transactions")
+        sender.send_GetTransactions()
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=30)]
     with sender.lock:

@@ -6,6 +6,7 @@ from dispatch import receiver
 import netifaces
 
 from stoppable import StoppableLoopThread
+import rlp
 import signals
 from peer import Peer
 
@@ -212,5 +213,12 @@ def peer_address_received_handler(sender, peer, **kwargs):
 
 @receiver(signals.send_local_blocks)
 def send_blocks(sender, blocks=[], **kwargs):
+    blocks = [rlp.decode(b.serialize()) for b in blocks] # FIXME
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
+
+@receiver(signals.send_local_transactions)
+def send_transactions(sender, transactions=[], **kwargs):
+    transactions = [rlp.decode(t.serialize()) for t in transactions]
+    for peer in peer_manager.connected_peers:
+        peer.send_Transactions(transactions)
