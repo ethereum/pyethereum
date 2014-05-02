@@ -35,6 +35,7 @@ def verify(block, parent):
                                            block.timestamp)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
+    block2.finalize() # this is the first potential state change
     for i in range(block.transaction_count):
         tx, s, g = block.transactions.get(utils.encode_int(i))
         tx = transactions.Transaction.deserialize(tx)
@@ -42,7 +43,6 @@ def verify(block, parent):
         apply_tx(block2, tx)
         assert s == block2.state.root
         assert g == utils.encode_int(block2.gas_used)
-    block2.finalize()
     assert block2.state.root == block.state.root
     assert block2.gas_used == block.gas_used
     return True
