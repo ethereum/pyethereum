@@ -41,11 +41,8 @@ success, res = pb.apply_tx(blk, tx)
 assert tx in blk.get_transactions()
 print("applied transaction", success, res)
 print("New balance of v1: ", blk.get_balance(v), v)
-assert blk.get_balance(v) == 988955000000000000L
 print("New balance of v2: ", blk.get_balance(v2), v2)
-assert blk.get_balance(v2) == 10000000000000000L
 print("New balance of coinbase: ", blk.get_balance(blk.coinbase), blk.coinbase)
-assert blk.get_balance(blk.coinbase) == 1045000000000000L
 print ('Transactions in block', blk, blk.get_transactions())
 
 
