@@ -184,20 +184,6 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
 
 
-@receiver(signals.connected_peer_addresses_requested)
-def connected_peers_requested_handler(sender, req, **kwargs):
-    with peer_manager.lock:
-        peers = peer_manager.get_connected_peer_addresses()
-    signals.connected_peer_addresses_ready.send(None, data=peers)
-
-
-@receiver(signals.known_peer_addresses_requested)
-def known_peers_requested_handler(sender, req, **kwargs):
-    with peer_manager.lock:
-        peers = peer_manager.get_known_peer_addresses()
-    signals.known_peer_addresses_ready.send(None, data=peers)
-
-
 @receiver(signals.peer_disconnect_requested)
 def disconnect_requested_handler(sender, **kwargs):
     peer = sender

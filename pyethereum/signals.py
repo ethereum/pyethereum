@@ -32,15 +32,6 @@ local_transaction_received = Signal(providing_args=["transaction"])
 send_local_transactions = Signal(providing_args=["transaction"])
 
 
-known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
-known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
-known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
-
-connected_peer_addresses_requested = Signal(providing_args=["uid", "req"])
-connected_peer_addresses_request_aborted = Signal(providing_args=["uid"])
-connected_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
-
-
 def request_data_async(name, req=None,
                        success_callback=None, fail_callback=None,
                        timeout=5, sender=None):

@@ -1,17 +1,20 @@
 import logging
 import threading
-import time
 import bottle
 from marshmallow import Serializer, fields
 import hyp.responder
 from pyethereum.blocks import block_structure
 from pyethereum.chainmanager import chain_manager
+from pyethereum.peermanager import peer_manager
 import pyethereum.dispatch as dispatch
 import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 
 logger = logging.getLogger(__name__)
 base_url = '/api/v0alpha'
+
+app = bottle.Bottle()
+app.config['autojson'] = True
 
 
 class ApiServer(threading.Thread):
@@ -27,26 +30,9 @@ class ApiServer(threading.Thread):
         self.port = config.getint('api', 'listen_port')
 
     def run(self):
-        global app
-        app = CorsMiddleware(app)
-        bottle.run(app, server='waitress',
+        middleware = CorsMiddleware(app)
+        bottle.run(middleware, server='waitress',
                    host=self.listen_host, port=self.port)
-
-
-def response_async_data(name, make_response, req=None):
-    state = dict(res=None, ready=False)
-
-    def callback(data):
-        state.update(res=make_response(data), ready=True)
-
-    signals.request_data_async(name, req, callback)
-
-    for i in range(500):
-        if state['ready']:
-            return state['res']
-        time.sleep(0.01)
-    return Exception()
-
 
 # ###### create server ######
 
@@ -56,9 +42,6 @@ api_server = ApiServer()
 @dispatch.receiver(signals.config_ready)
 def config_api_server(sender, **kwargs):
     api_server.configure(sender)
-
-app = bottle.Bottle()  # FIXME line 32?
-app.config['autojson'] = True
 
 
 # #######cors##############
@@ -181,9 +164,9 @@ def make_peers_response(peers):
 
 @app.get(base_url + '/connected_peers/')
 def connected_peers():
-    return response_async_data('connected_peer_addresses', make_peers_response)
+    return make_peers_response(peer_manager.get_connected_peer_addresses())
 
 
 @app.get(base_url + '/known_peers/')
 def known_peers():
-    return response_async_data('known_peer_addresses', make_peers_response)
+    return make_peers_response(peer_manager.get_known_peer_addresses())
