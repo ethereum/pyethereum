@@ -33,11 +33,11 @@ class Miner():
     def add_transaction(self, transaction):
         """
         (1) The transaction signature is valid;
-        (2) the transaction nonce is valid (equivalent to the 
+        (2) the transaction nonce is valid (equivalent to the
             sender accounts current nonce);
         (3) the gas limit is no smaller than the intrinsic gas,
             g0 , used by the transaction;
-        (4) the sender account balance contains at least the cost, 
+        (4) the sender account balance contains at least the cost,
             v0, required in up-front payment.
         """
         try:
@@ -63,7 +63,7 @@ class Miner():
         not including the final nonce component; SHA3 is the SHA3 hash function accepting
         an arbitrary length series of bytes and evaluating to a series of 32 bytes
         (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
-        operator; BE(X) evaluates to the value equal to X when interpreted as a 
+        operator; BE(X) evaluates to the value equal to X when interpreted as a
         big-endian-encoded integer.
         """
 
@@ -296,15 +296,15 @@ chain_manager = ChainManager()
 def handle_local_chain_requested(sender, blocks, count, **kwargs):
     """
     [0x14, Parent1, Parent2, ..., ParentN, Count]
-    Request the peer to send Count (to be interpreted as an integer) blocks 
-    in the current canonical block chain that are children of Parent1 
+    Request the peer to send Count (to be interpreted as an integer) blocks
+    in the current canonical block chain that are children of Parent1
     (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-    the block chain, it should instead act as if the request were for Parent2 &c. 
-    through to ParentN. 
+    the block chain, it should instead act as if the request were for Parent2 &c.
+    through to ParentN.
 
-    If none of the parents are in the current 
-    canonical block chain, then NotInChain should be sent along with ParentN 
-    (i.e. the last Parent in the parents list). 
+    If none of the parents are in the current
+    canonical block chain, then NotInChain should be sent along with ParentN
+    (i.e. the last Parent in the parents list).
 
     If the designated parent is the present block chain head,
     an empty reply should be sent.

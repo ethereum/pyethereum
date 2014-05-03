@@ -1,9 +1,6 @@
 import logging
 import threading
 import bottle
-from marshmallow import Serializer, fields
-import hyp.responder
-from pyethereum.blocks import block_structure
 from pyethereum.chainmanager import chain_manager
 from pyethereum.peermanager import peer_manager
 import pyethereum.dispatch as dispatch
@@ -70,54 +67,21 @@ class CorsMiddleware:
 
 # ####### ##############
 
-# pretty print patch
 
-
-class Responder(hyp.responder.Responder):
-
-    def respond(self, instances, meta=None, links=None, linked=None):
-        if not isinstance(instances, list):
-            instances = [instances]
-        if linked is not None:
-            links = linked.keys()
-        document = {}
-        document['meta'] = self.build_meta(meta)
-        document['links'] = self.build_links(links)
-        document['linked'] = self.build_linked(linked)
-        document[self.root] = self.build_resources(instances, links)
-        [document.pop(key) for key in document.keys() if document[key] is None]
-        return hyp.responder.json.dumps(document, indent=0)
-
-# ############ Blocks ######################
-
-
-class Binary(fields.Raw):
-
-    def format(self, value):
-        return value.encode('hex')
-
-
-class BlockSerializer(Serializer):
-    blockhash = fields.Function(lambda o: o.hex_hash())
-    prevhash = Binary()
-    uncles_hash = Binary()
-    nonce = Binary()
-    tx_list_root = Binary()
-
-    class Meta:
-        fields = [name for name, typ, _ in block_structure] + ['blockhash']
-
-
-class BlocksResponder(Responder):
-    TYPE = 'blocks'
-    SERIALIZER = BlockSerializer
+def make_blocks_response(blocks):
+    objs = [dict(blockhash=x.hex_hash(),
+                 prevhash=x.prevhash.encode('hex'),
+                 uncles_hash=x.uncles_hash.encode('hex'),
+                 nonce=x.nonce.encode('hex'),
+                 tx_list_root=x.tx_list_root.encode('hex')
+                 ) for x in blocks]
+    return dict(blocks=objs)
 
 
 @app.get(base_url + '/blocks/')
 def blocks():
     logger.debug('blocks/')
-    return BlocksResponder().respond(
-        chain_manager.get_chain(start='', count=20))
+    return make_blocks_response(chain_manager.get_chain(start='', count=20))
 
 
 @app.get(base_url + '/blocks/<blockhash>')
@@ -125,7 +89,7 @@ def block(blockhash=None):
     logger.debug('blocks/%s', blockhash)
     blockhash = blockhash.decode('hex')
     if blockhash in chain_manager:
-        return BlocksResponder().respond(chain_manager.get(blockhash))
+        return make_blocks_response(chain_manager.get(blockhash))
     else:
         return bottle.abort(404, 'No block with id %s' % blockhash)
 
@@ -144,22 +108,10 @@ def transactions():
 
 # ######## Peers ###################
 
-
-class PeerSerializer(Serializer):
-    ip = fields.Function(lambda o: o['ip'])
-    port = fields.Function(lambda o: str(o['port']))
-    node_id = fields.Function(lambda o: o['node_id'].encode('hex'))
-
-
-class PeerResponder(Responder):
-    TYPE = 'peer'
-    SERIALIZER = PeerSerializer
-
-
 def make_peers_response(peers):
-    peers = [dict(ip=ip, port=port, node_id=node_id) for
-             (ip, port, node_id) in peers]
-    return PeerResponder().respond(peers)
+    objs = [dict(ip=ip, port=port, node_id=node_id.encode('hex'))
+             for (ip, port, node_id) in peers]
+    return dict(peers=objs)
 
 
 @app.get(base_url + '/connected_peers/')

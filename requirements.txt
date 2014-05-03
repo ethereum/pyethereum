@@ -4,4 +4,3 @@ pysha3
 netifaces
 bottle
 waitress
-hyp
