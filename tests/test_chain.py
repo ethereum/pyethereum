@@ -13,6 +13,7 @@ blocks.INITIAL_DIFFICULTY = 2 ** 16
 
 tempdir = tempfile.mktemp()
 
+
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
@@ -21,11 +22,13 @@ def accounts():
     v2 = utils.privtoaddr(k2)
     return k, v, k2, v2
 
+
 def mine_next_block(parent, coinbase=None):
     # advance one block
     m = chainmanager.Miner(parent, coinbase or parent.coinbase)
-    blk =  m.mine(steps=1000**2)
+    blk = m.mine(steps=1000 ** 2)
     return blk
+
 
 def set_db(name=''):
     if name:
@@ -34,25 +37,28 @@ def set_db(name=''):
         utils.data_dir.set(tempfile.mktemp())
 set_db()
 
+
 def db_store(blk):
     db = DB(utils.get_db_path())
     db.put(blk.hash, blk.serialize())
     db.commit()
 
+
 def test_db():
     db = DB(utils.get_db_path())
     assert 'test' not in db
+
 
 def test_block():
     set_db()
     blk = blocks.genesis()
     assert blk in set([blk])
-    
+
 
 def test_mine_block():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})    
+    blk = blocks.genesis({v: utils.denoms.ether * 1})
     db_store(blk)
     blk2 = mine_next_block(blk, coinbase=v)
     db_store(blk2)
@@ -66,13 +72,13 @@ def test_block_serialization_same_db():
     set_db()
     blk = blocks.genesis({v: utils.denoms.ether * 1})
     assert blk.hex_hash() == \
-        blocks.Block.deserialize(blk.serialize()).hex_hash()    
+        blocks.Block.deserialize(blk.serialize()).hex_hash()
     blk2 = mine_next_block(blk)
     assert blk.hex_hash() == \
         blocks.Block.deserialize(blk.serialize()).hex_hash()
     assert blk2.hex_hash() == \
         blocks.Block.deserialize(blk2.serialize()).hex_hash()
-    
+
 
 def test_block_serialization_other_db():
     # Merkel state root not found
@@ -83,7 +89,7 @@ def test_block_serialization_other_db():
     db_store(a_blk)
     a_blk2 = mine_next_block(a_blk)
     db_store(a_blk2)
-    
+
     # receive in other db
     set_db()
     b_blk = blocks.genesis({v: utils.denoms.ether * 1})
@@ -91,28 +97,28 @@ def test_block_serialization_other_db():
     b_blk2 = blocks.Block.deserialize(a_blk2.serialize())
     db_store(b_blk2)
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
-    
+
 
 def test_transaction():
-    k, v, k2, v2 = accounts()   
+    k, v, k2, v2 = accounts()
     set_db()
     blk = blocks.genesis({v: utils.denoms.ether * 1})
-    tx = transactions.Transaction(0, gasprice=0, startgas=10000, 
-                        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
-    assert not tx in blk.get_transactions() 
+    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
+                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    assert not tx in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
     assert tx in blk.get_transactions()
     assert blk.get_balance(v) == utils.denoms.finney * 990
     assert blk.get_balance(v2) == utils.denoms.finney * 10
 
+
 def test_transaction_serialization():
     k, v, k2, v2 = accounts()
-    tx = transactions.Transaction(0, gasprice=0, startgas=10000, 
-                            to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
+                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     assert tx in set([tx])
     assert tx.hex_hash() == \
         transactions.Transaction.deserialize(tx.serialize()).hex_hash()
     assert tx.hex_hash() == \
         transactions.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
     assert tx in set([tx])
-
