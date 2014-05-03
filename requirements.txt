@@ -1,6 +1,5 @@
 leveldb
 bitcoin
 pysha3
-netifaces
 bottle
 waitress
