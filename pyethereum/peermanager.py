@@ -3,7 +3,6 @@ import socket
 import logging
 
 from dispatch import receiver
-import netifaces
 
 from stoppable import StoppableLoopThread
 import rlp
@@ -23,10 +22,11 @@ class PeerManager(StoppableLoopThread):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
         self._known_peers = set()  # (ip, port, node_id)
-        self.local_addresses = []  # [(ip, port)]
+        self.local_node_id = ''
 
     def configure(self, config):
         self.config = config
+        self.local_node_id = config.get('network', 'node_id')
 
     def stop(self):
         with self.lock:
@@ -86,7 +86,7 @@ class PeerManager(StoppableLoopThread):
         candidates = self.get_known_peer_addresses().difference(
             self.get_connected_peer_addresses())
         candidates = [
-            ipn for ipn in candidates if ipn[:2] not in self.local_addresses]
+            ipn for ipn in candidates if ipn[2] != self.local_node_id]
         return candidates
 
     def _check_alive(self, peer):
@@ -160,23 +160,6 @@ peer_manager = PeerManager()
 @receiver(signals.config_ready)
 def config_peermanager(sender, **kwargs):
     peer_manager.configure(sender)
-
-
-@receiver(signals.local_peer_server_address_set)
-def local_peer_server_address_set_handler(sender, ip, port, **kwargs):
-    local_addresses = []
-    if ip == '0.0.0.0':
-        for interface in netifaces.interfaces():
-            ifaddresses = netifaces.ifaddresses(interface)
-            if netifaces.AF_INET in ifaddresses:
-                inets = ifaddresses[netifaces.AF_INET]
-                for inet in inets:
-                    local_addresses.append((inet['addr'], port))
-    else:
-        local_addresses = [(ip, port)]
-
-    with peer_manager.lock:
-        peer_manager.local_addresses.extend(local_addresses)
 
 
 @receiver(signals.peer_connection_accepted)
