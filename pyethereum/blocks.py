@@ -108,6 +108,10 @@ class Block(object):
         # for tx in self.get_transactions():
         #     self.apply_transaction(tx)
 
+
+        # make sure we are all on the same db
+        assert self.state.db.db == self.transactions.db.db
+
         # Basic consistency verifications
         if len(self.state.root) == 32 and \
                 not self.state.db.has_key(self.state.root):
@@ -346,7 +350,9 @@ class Block(object):
     def get_parent(self):
         if self.number == 0:
             raise KeyError('Genesis block has no parent')
-        return get_block(self.prevhash)
+        parent =  get_block(self.prevhash)
+        assert parent.state.db.db == self.state.db.db
+        return parent
 
     def has_parent(self):
         try:
