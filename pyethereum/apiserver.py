@@ -110,7 +110,7 @@ def transactions():
 
 def make_peers_response(peers):
     objs = [dict(ip=ip, port=port, node_id=node_id.encode('hex'))
-             for (ip, port, node_id) in peers]
+            for (ip, port, node_id) in peers]
     return dict(peers=objs)
 
 
