@@ -203,6 +203,14 @@ def send_blocks(sender, blocks=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
 
+
+@receiver(signals.known_peer_addresses_requested)
+def known_peers_requested_handler(sender, req, **kwargs):
+    with peer_manager.lock:
+        peers = peer_manager.get_known_peer_addresses()
+    signals.known_peer_addresses_ready.send(None, data=peers)
+
+
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]

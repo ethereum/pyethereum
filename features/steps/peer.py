@@ -203,7 +203,9 @@ def step_impl(context):
 
 @given(u'a peers data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import known_peer_addresses_requested, known_peer_addresses_ready
+    from pyethereum.signals import (known_peer_addresses_requested,
+                                    known_peer_addresses_ready)
+
     def peers_requested_handler(sender, req, **kwargs):
         known_peer_addresses_ready.send(sender=None, data=context.peers_data)
 
@@ -408,7 +410,8 @@ def step_impl(context):
 @given(u'a chain data provider')  # noqa
 def step_impl(context):
     from pyethereum.signals import (local_chain_requested)
-    def handler(sender, req, **kwargs):
+
+    def handler(sender, **kwargs):
         pass
 
     context.blocks_requested_handler = handler

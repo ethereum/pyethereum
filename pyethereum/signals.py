@@ -23,12 +23,16 @@ remote_chain_requested = Signal(providing_args=["parents", "count"])
 local_chain_requested = Signal(providing_args=["uid", "req"])
 send_local_blocks = Signal(providing_args=["blocks"])
 
+known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
+known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
+known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 
-remote_transactions_received = Signal(providing_args=["transactions"])
 local_transactions_requested = Signal(providing_args=["uid", "req"])
 local_transactions_request_aborted = Signal(providing_args=["uid"])
 local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
+
 local_transaction_received = Signal(providing_args=["transaction"])
+remote_transactions_received = Signal(providing_args=["transactions"])
 send_local_transactions = Signal(providing_args=["transaction"])
 
 
@@ -40,7 +44,7 @@ def request_data_async(name, req=None,
 
     data provider
         a handler for `{name}_requested` signal, which accept two
-        parameters: `req` and `uid`. When the data is ready,
+        parameters: `req` and `uid`. When the data is ready or error happened,
         it should send a `{name}_ready` signal. During the data
         producing process, it can optionally handle the
         `{name}_request_aborted` signal, and then abort the process

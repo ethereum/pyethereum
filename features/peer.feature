@@ -84,8 +84,8 @@ Feature: peer
     Given a GetPeers packet
     And peers data
     And a peers data provider
-    '''which handle peers_requested signal
-    and send peers_ready signal
+    '''which handle known_peers_addresses_requested signal
+    and send known_peers_addresses_ready signal
     '''
     When peer.send_Peers is instrumented
     And the packet is received from peer

@@ -1,4 +1,8 @@
+import uuid
+
 import mock
+
+from pyethereum.utils import sha3
 
 
 class ConfigHook(object):
@@ -15,6 +19,9 @@ class ConfigHook(object):
         def get_side_effect(section, option):
             if section == 'network' and option == 'client_id':
                 return 'client id'
+
+            if section == 'network' and option == 'node_id':
+                return sha3(str(uuid.uuid1()))
 
             if section == 'wallet' and option == 'coinbase':
                 return '0'*40
