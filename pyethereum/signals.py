@@ -25,8 +25,15 @@ peer_disconnect_requested = Signal(providing_args=["peer"])
 
 remote_blocks_received = Signal(providing_args=["block_lst"])
 remote_chain_requested = Signal(providing_args=["parents", "count"])
-local_chain_requested = Signal(providing_args=["uid", "req"])
+local_chain_requested = Signal(providing_args=["peer", "blocks", "count"])
 send_local_blocks = Signal(providing_args=["blocks"])
+
+local_transaction_received = Signal(providing_args=["transaction"])
+remote_transactions_received = Signal(providing_args=["transactions"])
+send_local_transactions = Signal(providing_args=["transaction"])
+
+
+# ####### start: async data request related signals ################
 
 known_peer_addresses_requested = Signal(providing_args=["uid", "req"])
 known_peer_addresses_request_aborted = Signal(providing_args=["uid"])
@@ -35,10 +42,6 @@ known_peer_addresses_ready = Signal(providing_args=["uid", "data", "error"])
 local_transactions_requested = Signal(providing_args=["uid", "req"])
 local_transactions_request_aborted = Signal(providing_args=["uid"])
 local_transactions_ready = Signal(providing_args=["uid", "data", "error"])
-
-local_transaction_received = Signal(providing_args=["transaction"])
-remote_transactions_received = Signal(providing_args=["transactions"])
-send_local_transactions = Signal(providing_args=["transaction"])
 
 
 def request_data_async(name, req=None,
@@ -131,3 +134,5 @@ def abort_data_request(name, uid):
     abort_signal = globals()["{}_request_aborted".format(name)]
     ready_signal.disconnect(dispatch_uid=uid)
     abort_signal.send(sender=None, uid=uid)
+
+# ####### end: async data request related signals ################

@@ -204,7 +204,7 @@ class Peer(StoppableLoopThread):
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
             signals.peer_address_received.send(
-                sender=None, address=[ip, port, pid])
+                sender=Peer, address=[ip, port, pid])
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')
@@ -221,13 +221,13 @@ class Peer(StoppableLoopThread):
     def _recv_Transactions(self, data):
         logger.info('received transactions #%d', len(data))
         signals.remote_transactions_received.send(
-            sender=self, transactions=data)
+            sender=Peer, transactions=data)
 
     def send_Blocks(self, blocks):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.remote_blocks_received.send(sender=self, block_lst=data)
+        signals.remote_blocks_received.send(sender=Peer, block_lst=data)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))
@@ -238,15 +238,15 @@ class Peer(StoppableLoopThread):
         Request the peer to send Count (to be interpreted as an integer) blocks
         in the current canonical block chain that are children of Parent1
         (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-        the block chain, it should instead act as if the request were for Parent2 &c.
-        through to ParentN. If the designated parent is the present block chain head,
-        an empty reply should be sent. If none of the parents are in the current
-        canonical block chain, then NotInChain should be sent along with ParentN
-        (i.e. the last Parent in the parents list). If no parents are passed, then
-        reply need not be made.
+        the block chain, it should instead act as if the request were for
+        Parent2 &c. through to ParentN. If the designated parent is the present
+        block chain head, an empty reply should be sent. If none of the parents
+        are in the current canonical block chain, then NotInChain should be
+        sent along with ParentN (i.e. the last Parent in the parents list).
+        If no parents are passed, then reply need not be made.
         """
         signals.local_chain_requested.send(
-            sender=self, blocks=data[:-1], count=idec(data[-1]))
+            sender=Peer, peer=self, blocks=data[:-1], count=idec(data[-1]))
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))

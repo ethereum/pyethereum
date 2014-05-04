@@ -148,7 +148,7 @@ class ChainManager(StoppableLoopThread):
     def synchronize_blockchain(self):
         logger.info('synchronize requested for head %r', self.head)
         signals.remote_chain_requested.send(
-            sender=self, parents=[self.head.hash], count=30)
+            sender=Peer, parents=[self.head.hash], count=30)
 
     def loop_body(self):
         ts = time.time()
@@ -176,7 +176,7 @@ class ChainManager(StoppableLoopThread):
                 self.add_block(block)
                 time.sleep(5)
                 signals.send_local_blocks.send(
-                    sender=self, blocks=[block])  # FIXME DE/ENCODE
+                    sender=None, blocks=[block])  # FIXME DE/ENCODE
 
     def receive_chain(self, blocks):
         old_head = self.head
@@ -236,7 +236,7 @@ class ChainManager(StoppableLoopThread):
         if res:
             logger.debug("broadcasting valid %r" % transaction)
             signals.send_local_transactions.send(
-                sender=self, transactions=[transaction])
+                sender=None, transactions=[transaction])
 
     def get_transactions(self):
         logger.debug("get_transactions called")
@@ -296,7 +296,7 @@ chain_manager = ChainManager()
 
 
 @receiver(signals.local_chain_requested)
-def handle_local_chain_requested(sender, blocks, count, **kwargs):
+def handle_local_chain_requested(sender, peer, blocks, count, **kwargs):
     """
     [0x14, Parent1, Parent2, ..., ParentN, Count]
     Request the peer to send Count (to be interpreted as an integer) blocks
@@ -327,14 +327,14 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
                 logger.debug("sending: found: %r ", res)
                 res = [rlp.decode(b.serialize()) for b in res]  # FIXME
                 # if b == head: no descendents == no reply
-                with sender.lock:
-                    sender.send_Blocks(res)
+                with peer.lock:
+                    peer.send_Blocks(res)
                 return
 
     logger.debug("local_chain_requested: no matches")
     if len(blocks):
         #  If none of the parents are in the current
-        sender.send_NotInChain(blocks[-1])
+        peer.send_NotInChain(blocks[-1])
     else:
         # If no parents are passed, then reply need not be made.
         pass
