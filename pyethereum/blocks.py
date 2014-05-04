@@ -8,23 +8,28 @@ import transactions
 
 # to add EMPTY_UNCLE_HASH / GENESIS_DEFAULTS ...
 
+GENESIS_PREVHASH = "\x00" * 32
+GENESIS_COINBASE = "0" * 40
+GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_GAS_LIMIT = 10 ** 6
 INITIAL_DIFFICULTY = 2 ** 22
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
 GASLIMIT_EMA_FACTOR = 1024
+INITIAL_MIN_GAS_PRICE = 10 ** 15
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 
 block_structure = [
     ["prevhash", "bin", ""],
     ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
-    ["coinbase", "addr", "0" * 40],
+    ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", ''],
     ["tx_list_root", "trie_root", ''],
-    ["difficulty", "int", 2 ** 23],
+    ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-    ["min_gas_price", "int", 10 ** 15],
-    ["gas_limit", "int", 10 ** 6],
+    ["min_gas_price", "int", INITIAL_MIN_GAS_PRICE],
+    ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
@@ -417,9 +422,9 @@ def has_block(blockhash):
 
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11
-    block = Block(prevhash="\x00" * 32, coinbase="0" * 40,
-                  difficulty=INITIAL_DIFFICULTY, nonce=utils.sha3(chr(42)),
-                  gas_limit=10 ** 6)
+    block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
+                  difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
+                  gas_limit=GENESIS_GAS_LIMIT)
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
