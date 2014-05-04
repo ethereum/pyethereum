@@ -140,7 +140,11 @@ Feature: peer manager
     And peer_manager._known_peers should contain the peer
 
   Scenario: receive a list of peers from another peer
-        Given a peer in connected_peers
-        When _recv_Peers is called
-        Then all received peers should be added to _known_peers and saved to peers_test.json
+    Given a peer in connected_peers
+    When _recv_Peers is called
+    Then all received peers should be added to _known_peers and saved to peers_test.json
 
+  Scenario: peer has incompatible protocol version
+    Given a known connected peer with incompatible protocol version
+    When send_Disconnect is called with reason "Incompatible"
+    Then peer should be removed from _known_peers

@@ -39,7 +39,7 @@ class PeerManager(StoppableLoopThread):
         path = os.path.join(self.config.get('misc', 'data_dir'), name)
         if os.path.exists(path):
                 peers = set((i, p, "") for i, p in json.load(open(path)))
-                self._known_peers = self._known_peers.union(peers)
+                self._known_peers.update(peers)
         else:
             logger.debug('no peers.json file')
 
@@ -207,9 +207,15 @@ def known_peers_requested_handler(sender, req, **kwargs):
 
 
 @receiver(signals.peer_disconnect_requested)
-def disconnect_requested_handler(sender, **kwargs):
+def disconnect_requested_handler(sender, forget=False, **kwargs):
     peer = sender
     peer_manager.remove_peer(peer)
+    if forget:
+        ipn = (peer.ip, peer.port, peer.node_id)
+        if ipn in self._known_peers:
+            self._known_peers.remove(ipn)
+            self.save_peers()
+
 
 
 @receiver(signals.peer_address_received)

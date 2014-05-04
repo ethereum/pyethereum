@@ -178,7 +178,8 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
-        signals.peer_disconnect_requested.send(self)
+        forget = True if reason and 'Incompatible' in reason else False
+        signals.peer_disconnect_requested.send(self, forget=forget)
 
     def _recv_Disconnect(self, data):
         if len(data):

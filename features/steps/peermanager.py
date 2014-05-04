@@ -507,4 +507,39 @@ def step_impl(context):
         assert((ip, port) in saved_peers)
         assert((ip, port, nodeid) in context.peer_manager._known_peers)
 
+@given(u'a known connected peer with incompatible protocol version')
+def step_impl(context):
+    context.peer_data = (utils.mock_connection(), '4.5.6.7', 55555)
+    context.peer = context.peer_manager.add_peer(*context.peer_data)
+    context.ipn = (context.peer.ip, context.peer.port, context.peer.node_id)
+    context.peer_manager._known_peers.add(context.ipn)
+    context.peer_protocol_version = 0xff
+
+@when(u'send_Disconnect is called with reason "Incompatible"')
+def step_impl(context):
+    from pyethereum.signals import peer_disconnect_requested
+    from pyethereum.peermanager import disconnect_requested_handler
+
+    peer_disconnect_requested.disconnect(disconnect_requested_handler)
+
+    def disconnect_requested_handler(sender, forget=False, **kwargs):
+        peer = sender
+        context.peer_manager.remove_peer(peer)
+        if forget:
+            ipn = (peer.ip, peer.port, peer.node_id)
+            if ipn in context.peer_manager._known_peers:
+                context.peer_manager._known_peers.remove(ipn)
+                context.peer_manager.save_peers()
+
+    peer_disconnect_requested.connect(disconnect_requested_handler)
+    context.peer.send_Disconnect(                                          
+            reason='Incompatible network protocols'
+            'expected:{0:#04x} received:{1:#04x}'.format(
+                context.packeter.PROTOCOL_VERSION, context.peer_protocol_version))
+
+@then(u'peer should be removed from _known_peers')
+def step_impl(context):
+    ipn = (context.peer.ip, context.peer.port, context.peer.node_id)
+    assert(ipn not in context.peer_manager._known_peers)
+
 

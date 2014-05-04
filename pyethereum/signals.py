@@ -13,7 +13,7 @@ config_ready = Signal(providing_args=["config"])
 local_peer_server_address_set = Signal(providing_args=["ip", "port"])
 
 peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
-peer_disconnect_requested = Signal(providing_args=[""])
+peer_disconnect_requested = Signal(providing_args=["forget"])
 
 peer_address_received = Signal(providing_args=["peer", "done"])
 peer_handshake_success = Signal(providing_args=[""])
