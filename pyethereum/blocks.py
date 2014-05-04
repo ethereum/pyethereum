@@ -385,19 +385,19 @@ class Block(object):
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
-                         now=int(time.time())):
+                         timestamp=int(time.time())):
         return Block(
             prevhash=parent.hash,
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
             tx_list_root='',
-            difficulty=calc_difficulty(parent, now),
+            difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
             min_gas_price=0,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
-            timestamp=now,
+            timestamp=timestamp,
             extra_data=extra_data,
             nonce='',
             transaction_list=[],
