@@ -15,10 +15,10 @@ Feature: peer manager
     When load_saved_peers is called
     Then _known_peers should still be empty
 
-  Scenario: save_peer
-    Given peer data of ip, port
-    When save_peer is called with peer data
-    Then data_dir/peers.json should contain the peer data once
+  Scenario: save_peers
+    Given peer data of (ip, port, node_id) in _known_peers
+    When save_peers is called
+    Then data_dir/peers_test.json should contain all peers in _known_peers
 
   Scenario: add_peer from _known_peers
     Given peer data of (connection, ip, port) from _known_peers
@@ -133,11 +133,14 @@ Feature: peer manager
     And _connect_peers is called
     Then for each connected peer, send_GetPeers should be called
 
-
-
-
   Scenario: receive a valid Hello packet and confirm listen port
     Given a peer in connected_peers
-    When peer receives Hello
+    When Hello is received from the peer
     Then the peers port and node id should be reset to their correct values
     And peer_manager._known_peers should contain the peer
+
+  Scenario: receive a list of peers from another peer
+        Given a peer in connected_peers
+        When _recv_Peers is called
+        Then all received peers should be added to _known_peers and saved to peers_test.json
+

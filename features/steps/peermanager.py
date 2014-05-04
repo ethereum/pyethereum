@@ -2,6 +2,7 @@ import utils
 import mock
 import os
 import json
+from pyethereum.utils import big_endian_to_int as idec
 
 @given(u'data_dir')
 def step_impl(context):
@@ -11,7 +12,7 @@ def step_impl(context):
 @given(u'a peers_test.json file exists')
 def step_impl(context):
     peers = set([('12.13.14.15', 2002), ('14.15.16.17', 3003)])
-    context.path = context.data_dir + '/' + 'peers_test.json'
+    context.path = os.path.join(context.data_dir, 'peers_test.json')
     json.dump(list(peers), open(context.path, 'w'))
 
 @given(u'_known_peers is empty')
@@ -31,28 +32,28 @@ def step_impl(context):
 
 @given(u'a peers_test.json file does not exist')
 def step_impl(context):
-    context.path = context.peer_manager.config.get('misc', 'data_dir') + '/' + 'peers_test.json'
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
     assert (not os.path.exists(context.path))
 
 @then(u'_known_peers should still be empty')
 def step_impl(context):
     assert (len(context.peer_manager._known_peers) == 0)
 
-@given(u'peer data of ip, port')
+@given(u'peer data of (ip, port, node_id) in _known_peers')
 def step_impl(context):
-    context.new_peer = ('11.12.13.14', 1001)
+    context.peer_manager._known_peers = set([('12.13.14.15', 2002, "him"), ('14.15.16.17', 3003, "her")])
 
-@when(u'save_peer is called with peer data')
+@when(u'save_peers is called')
 def step_impl(context):
-    context.peer_manager.save_peer(*context.new_peer, name='peers_test.json')
+    context.peer_manager.save_peers(file_name='peers_test.json')
 
-@then(u'data_dir/peers.json should contain the peer data once')
+@then(u'data_dir/peers_test.json should contain all peers in _known_peers')
 def step_impl(context):
-    context.path = context.peer_manager.config.get('misc', 'data_dir') + '/' + 'peers_test.json'
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
     peers = [(i, p) for i, p in json.load(open(context.path))]
-    assert(context.new_peer in peers)
-    peers.remove(context.new_peer)
-    assert(context.new_peer not in peers)
+    os.remove(context.path)
+    for ip, port, nodeid in context.peer_manager._known_peers:
+        assert((ip, port) in peers)
 
 @given(u'peer data of (connection, ip, port) from _known_peers')
 def step_impl(context):
@@ -278,7 +279,7 @@ def step_impl(context):
 
 @when(u'node_id is node_id')  # noqa
 def step_impl(context):
-    context.peer_manager.node_id = 'me'
+    context.peer_manager.local_node_id = 'me'
 
 
 @when(u'get_peer_candidates is called')  # noqa
@@ -291,9 +292,7 @@ def step_impl(context):
     right = set([
         ('1.168.1.1', 1234, 'he'),
     ])
-
     assert right == set(context.res)
-
 
 @given(u'a mock stopped peer')  # noqa
 def step_impl(context):
@@ -450,12 +449,10 @@ def step_impl(context):
     context.peer.node_id = ""
 
     context.packeter.NODE_ID = 'this is a different node id'
-    context.packet = context.packeter.dump_Hello()
 
-@when(u'peer receives Hello')
+@when(u'Hello is received from the peer')
 def step_impl(context):
     from pyethereum.signals import peer_handshake_success
-    from pyethereum.utils import big_endian_to_int as idec
     from pyethereum.peermanager import peer_handshake_success_handler
 
     peer_handshake_success.disconnect(peer_handshake_success_handler)
@@ -465,6 +462,7 @@ def step_impl(context):
         context.peer_manager.add_known_peer_address(*ipn)
     peer_handshake_success.connect(peer_handshake_success_handler)
 
+    context.packet = context.packeter.dump_Hello()
     decoded_packet = context.packeter.load_packet(context.packet)[1][3]
     context.peer._recv_Hello(decoded_packet)
 
@@ -481,4 +479,32 @@ def step_impl(context):
 def step_impl(context):
     i, p, n = context.peer.ip, context.peer.port, context.peer.node_id
     assert((i, p, n) in context.peer_manager._known_peers)
+
+@when(u'_recv_Peers is called')
+def step_impl(context):
+    from pyethereum.signals import peer_address_received
+    from pyethereum.peermanager import peer_address_received_handler
+
+    peer_address_received.disconnect(peer_address_received_handler)
+
+    def peer_address_received_handler(sender, peer, done, **kwargs):
+        context.peer_manager.add_known_peer_address(*peer)
+        if done:
+            context.peer_manager.save_peers(file_name="peers_test.json")
+    peer_address_received.connect(peer_address_received_handler)
+
+    context.peers_to_send = [('9.8.7.6', 3000, 'him'), ('10.9.8.7', 4000, 'her'), ('12.11.10.9', 5000, 'she')]
+    context.packet = context.packeter.dump_Peers(context.peers_to_send)
+    decoded_packet = context.packeter.load_packet(context.packet)[1][3]
+    context.peer._recv_Peers(decoded_packet)
+
+@then(u'all received peers should be added to _known_peers and saved to peers_test.json')
+def step_impl(context):
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
+    saved_peers = [(i, p) for i, p in json.load(open(context.path))]
+    os.remove(context.path)
+    for ip, port, nodeid in context.peers_to_send:
+        assert((ip, port) in saved_peers)
+        assert((ip, port, nodeid) in context.peer_manager._known_peers)
+
 
