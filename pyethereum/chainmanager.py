@@ -341,8 +341,8 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
 
 
 @receiver(signals.config_ready)
-def config_chainmanager(sender, **kwargs):
-    chain_manager.configure(sender)
+def config_chainmanager(sender, config, **kwargs):
+    chain_manager.configure(config)
 
 
 @receiver(signals.peer_handshake_success)

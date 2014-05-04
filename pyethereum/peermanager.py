@@ -158,8 +158,8 @@ peer_manager = PeerManager()
 
 
 @receiver(signals.config_ready)
-def config_peermanager(sender, **kwargs):
-    peer_manager.configure(sender)
+def config_peermanager(sender, config, **kwargs):
+    peer_manager.configure(config)
 
 
 @receiver(signals.peer_connection_accepted)

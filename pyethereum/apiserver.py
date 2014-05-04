@@ -40,8 +40,8 @@ api_server = ApiServer()
 
 
 @dispatch.receiver(signals.config_ready)
-def config_api_server(sender, **kwargs):
-    api_server.configure(sender)
+def config_api_server(sender, config, **kwargs):
+    api_server.configure(config)
 
 
 # #######cors##############

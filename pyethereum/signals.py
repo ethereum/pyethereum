@@ -8,6 +8,11 @@ from dispatch import Signal
 
 logger = logging.getLogger(__name__)
 
+'''
+.. note::
+    *sender* is used by *receiver* to specify to accept signal from which
+    source, so it should not be used to ship data
+'''
 
 config_ready = Signal(providing_args=["config"])
 

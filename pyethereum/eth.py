@@ -145,7 +145,7 @@ def create_config():
 
 def main():
     config = create_config()
-    config_ready.send(sender=config)
+    config_ready.send(sender=None, config=config)
 
     # import after logger config is ready
     from pyethereum.chainmanager import chain_manager

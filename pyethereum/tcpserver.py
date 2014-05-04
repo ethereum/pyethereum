@@ -54,5 +54,5 @@ tcp_server = TcpServer()
 
 
 @receiver(signals.config_ready)
-def config_tcp_server(sender, **kwargs):
-    tcp_server.configure(sender)
+def config_tcp_server(sender, config, **kwargs):
+    tcp_server.configure(config)
