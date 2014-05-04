@@ -59,10 +59,13 @@ def test_db():
     assert 'test' not in db
 
 
-def test_block():
+def test_genesis():
+    k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis()
+    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    db_store(blk)
     assert blk in set([blk])
+    assert blk == blocks.Block.deserialize(blk.serialize())
 
 
 def test_mine_block():
@@ -106,30 +109,53 @@ def test_block_serialization_same_db():
 
 
 def test_block_serialization_other_db():
-    # Merkel state root not found
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = blocks.genesis({v: utils.denoms.ether * 1})
+    a_blk = blocks.genesis()
     db_store(a_blk)
     a_blk2 = mine_next_block(a_blk)
     db_store(a_blk2)
 
     # receive in other db
     set_db()
-    b_blk = blocks.genesis({v: utils.denoms.ether * 1})
+    b_blk = blocks.genesis()
+    assert b_blk == a_blk
     db_store(b_blk)
-    b_blk2 = blocks.Block.deserialize(a_blk2.serialize())
+    b_blk2 = b_blk.deserialize(a_blk2.serialize())
+    assert a_blk2.hex_hash() == b_blk2.hex_hash()
     db_store(b_blk2)
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
+
+
+def test_block_serialization_with_transaction_other_db():
+    #k, v, k2, v2 = accounts()
+    # mine two blocks
+    set_db()
+    a_blk = blocks.genesis()
+    db_store(a_blk)
+    tx = get_transaction()
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx in a_blk2.get_transactions()
+    db_store(a_blk2)
+    # receive in other db
+    set_db()
+    b_blk = blocks.genesis()
+    assert b_blk == a_blk
+    db_store(b_blk)
+    b_blk2 = b_blk.deserialize(a_blk2.serialize())
+    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert tx in b_blk2.get_transactions()
+    db_store(b_blk2)
+    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert tx in b_blk2.get_transactions()
 
 
 def test_transaction():
     k, v, k2, v2 = accounts()
     set_db()
     blk = blocks.genesis({v: utils.denoms.ether * 1})
-    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
-                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    tx = get_transaction()
     assert not tx in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
     assert tx in blk.get_transactions()
