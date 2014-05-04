@@ -12,7 +12,7 @@ GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
 GENESIS_GAS_LIMIT = 10 ** 6
-INITIAL_DIFFICULTY = 2 ** 22
+INITIAL_DIFFICULTY = 2 ** 22  # 2 ** 16 for testing
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
 GASLIMIT_EMA_FACTOR = 1024
@@ -93,13 +93,15 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
 
-        # we don't support init with transactions at this point
-        assert not transaction_list
-
         self.transactions = trie.Trie(utils.get_db_path())
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
+
+        # we support init with transactions only if state is known
+        if transaction_list:
+            assert len(self.state.root) == 32 and \
+                self.state.db.has_key(self.state.root)
 
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
@@ -145,7 +147,7 @@ class Block(object):
             return Block(**kargs)
         elif kargs['prevhash'] == GENESIS_PREVHASH:
             return Block(**kargs)
-        else: # no state, need to replay
+        else:  # no state, need to replay
             parent = get_block(kargs['prevhash'])
             return parent.deserialize_child(rlpdata)
 
