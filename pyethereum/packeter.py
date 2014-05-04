@@ -4,7 +4,6 @@ from utils import big_endian_to_int as idec
 from utils import int_to_big_endian4 as ienc4
 from utils import int_to_big_endian as ienc
 from utils import recursive_int_to_big_endian
-from utils import sha3
 import dispatch
 import sys
 import signals
@@ -216,9 +215,10 @@ class Packeter(object):
     def dump_GetTransactions(self):
         """
         [0x12, [nonce, receiving_address, value, ... ], ... ]
-        Specify (a) transaction(s) that the peer should make sure is included on
-        its transaction queue. The items in the list (following the first item 0x12)
-        are transactions in the format described in the main Ethereum specification.
+        Specify (a) transaction(s) that the peer should make sure is included
+        on its transaction queue. The items in the list (following the first
+        item 0x12) are transactions in the format described in the main
+        Ethereum specification.
         """
         data = [self.cmd_map_by_name['GetTransactions']]
         return self.dump_packet(data)
