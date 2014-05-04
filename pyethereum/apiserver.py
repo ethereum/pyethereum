@@ -6,6 +6,7 @@ import bottle
 from pyethereum.chainmanager import chain_manager
 from pyethereum.peermanager import peer_manager
 import pyethereum.dispatch as dispatch
+from pyethereum.blocks import block_structure
 import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 
@@ -71,12 +72,14 @@ class CorsMiddleware:
 
 
 def make_blocks_response(blocks):
-    objs = [dict(blockhash=x.hex_hash(),
-                 prevhash=x.prevhash.encode('hex'),
-                 uncles_hash=x.uncles_hash.encode('hex'),
-                 nonce=x.nonce.encode('hex'),
-                 tx_list_root=x.tx_list_root.encode('hex')
-                 ) for x in blocks]
+    objs = []
+    for block in blocks:
+        obj = block.to_dict()
+        for item_name, item_type, _ in block_structure:
+            if item_type in ["bin", "trie_root"]:
+                obj[item_name] = obj[item_name].encode('hex')
+        objs.append(obj)
+
     return dict(blocks=objs)
 
 
