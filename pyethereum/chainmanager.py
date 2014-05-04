@@ -9,6 +9,7 @@ import utils
 import rlp
 import blocks
 import processblock
+from transactions import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ class ChainManager(StoppableLoopThread):
 
     def synchronize_blockchain(self):
         logger.info('synchronize requested for head %r', self.head)
+
         signals.remote_chain_requested.send(
             sender=None, parents=[self.head.hash], count=30)
 
@@ -362,11 +364,10 @@ def new_peer_connected(sender, **kwargs):
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, **kwargs):
     "receives rlp.decoded serialized"
-    txl = [transactions.Transaction.deserialize(
-        rlp.encode(tx)) for tx in transactions]
+    txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
     logger.debug('remote_transactions_received: %r', txl)
     for tx in txl:
-        chain_manager.add_transactions(tx)
+        chain_manager.add_transaction(tx)
 
 
 @receiver(signals.local_transaction_received)
