@@ -148,7 +148,7 @@ class ChainManager(StoppableLoopThread):
     def synchronize_blockchain(self):
         logger.info('synchronize requested for head %r', self.head)
         signals.remote_chain_requested.send(
-            sender=Peer, parents=[self.head.hash], count=30)
+            sender=None, parents=[self.head.hash], count=30)
 
     def loop_body(self):
         ts = time.time()
