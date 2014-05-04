@@ -23,11 +23,21 @@ def accounts():
     return k, v, k2, v2
 
 
-def mine_next_block(parent, coinbase=None):
+def mine_next_block(parent, coinbase=None, transactions=[]):
     # advance one block
     m = chainmanager.Miner(parent, coinbase or parent.coinbase)
+    for tx in transactions:
+        m.add_transaction(tx)
     blk = m.mine(steps=1000 ** 2)
     return blk
+
+
+@pytest.fixture(scope="module")
+def get_transaction():
+    k, v, k2, v2 = accounts()
+    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
+                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    return tx
 
 
 def set_db(name=''):
@@ -63,6 +73,21 @@ def test_mine_block():
     blk2 = mine_next_block(blk, coinbase=v)
     db_store(blk2)
     assert blk2.get_balance(v) == blocks.BLOCK_REWARD + blk.get_balance(v)
+    assert blk.state.db.db == blk2.state.db.db
+    assert blk2.get_parent() == blk
+
+
+def test_mine_block_with_transaction():
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    tx = get_transaction()
+    blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
+    db_store(blk2)
+    assert tx.gasprice == 0
+    assert blk2.get_balance(
+        v) == blocks.BLOCK_REWARD + blk.get_balance(v) - tx.value
     assert blk.state.db.db == blk2.state.db.db
     assert blk2.get_parent() == blk
 
@@ -114,8 +139,7 @@ def test_transaction():
 
 def test_transaction_serialization():
     k, v, k2, v2 = accounts()
-    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
-                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    tx = get_transaction()
     assert tx in set([tx])
     assert tx.hex_hash() == \
         transactions.Transaction.deserialize(tx.serialize()).hex_hash()
