@@ -168,21 +168,20 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
 
 
 @receiver(signals.peer_disconnect_requested)
-def disconnect_requested_handler(sender, **kwargs):
-    peer = sender
+def disconnect_requested_handler(sender, peer, **kwargs):
     peer_manager.remove_peer(peer)
 
 
 @receiver(signals.peer_address_received)
-def peer_address_received_handler(sender, peer, **kwargs):
-    ''' peer should be (ip, port, node_id)
+def peer_address_received_handler(sender, address, **kwargs):
+    ''' address should be (ip, port, node_id)
     '''
-    peer_manager.add_known_peer_address(*peer)
+    peer_manager.add_known_peer_address(*address)
 
 
 @receiver(signals.send_local_blocks)
 def send_blocks(sender, blocks=[], **kwargs):
-    blocks = [rlp.decode(b.serialize()) for b in blocks] # FIXME
+    blocks = [rlp.decode(b.serialize()) for b in blocks]  # FIXME
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
 

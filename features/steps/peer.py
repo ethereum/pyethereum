@@ -255,7 +255,7 @@ def step_impl(context):
     assert len(call_args_list) == len(context.peers_data)
     pairs = zip(call_args_list, context.peers_data)
     for call, peer in pairs:
-        assert call[1]['peer'] == peer
+        assert call[1]['address'] == peer
 
 
 @when(u'peer.send_GetTransactions is called')  # noqa

@@ -45,7 +45,7 @@ class TcpServer(StoppableLoopThread):
             traceback.print_exc(file=sys.stdout)
             time.sleep(0.1)
             return
-        signals.peer_connection_accepted.send(sender=self,
+        signals.peer_connection_accepted.send(sender=None,
                                               connection=connection,
                                               ip=ip,
                                               port=port)

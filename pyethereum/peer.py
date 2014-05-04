@@ -177,7 +177,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
-        signals.peer_disconnect_requested.send(self)
+        signals.peer_disconnect_requested.send(Peer, peer=self)
 
     def _recv_Disconnect(self, data):
         if len(data):
@@ -204,7 +204,7 @@ class Peer(StoppableLoopThread):
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
             signals.peer_address_received.send(
-                sender=self, peer=[ip, port, pid])
+                sender=None, address=[ip, port, pid])
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')
@@ -235,14 +235,14 @@ class Peer(StoppableLoopThread):
     def _recv_GetChain(self, data):
         """
         [0x14, Parent1, Parent2, ..., ParentN, Count]
-        Request the peer to send Count (to be interpreted as an integer) blocks 
-        in the current canonical block chain that are children of Parent1 
+        Request the peer to send Count (to be interpreted as an integer) blocks
+        in the current canonical block chain that are children of Parent1
         (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-        the block chain, it should instead act as if the request were for Parent2 &c. 
+        the block chain, it should instead act as if the request were for Parent2 &c.
         through to ParentN. If the designated parent is the present block chain head,
-        an empty reply should be sent. If none of the parents are in the current 
-        canonical block chain, then NotInChain should be sent along with ParentN 
-        (i.e. the last Parent in the parents list). If no parents are passed, then 
+        an empty reply should be sent. If none of the parents are in the current
+        canonical block chain, then NotInChain should be sent along with ParentN
+        (i.e. the last Parent in the parents list). If no parents are passed, then
         reply need not be made.
         """
         signals.local_chain_requested.send(
@@ -260,7 +260,7 @@ class Peer(StoppableLoopThread):
             recv_size = self._process_recv()
         except IOError:
             self.stop()
-            return 
+            return
         # pause
         if not (send_size or recv_size):
             time.sleep(0.1)

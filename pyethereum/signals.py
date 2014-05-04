@@ -11,15 +11,16 @@ logger = logging.getLogger(__name__)
 '''
 .. note::
     *sender* is used by *receiver* to specify to accept signal from which
-    source, so it should not be used to ship data
+    source, so it should not be used to carry data
 '''
 
 config_ready = Signal(providing_args=["config"])
 
-peer_address_received = Signal(providing_args=["peer"])
 peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
+
+peer_address_received = Signal(providing_args=["address"])
 peer_handshake_success = Signal(providing_args=["peer"])
-peer_disconnect_requested = Signal(providing_args=[""])
+peer_disconnect_requested = Signal(providing_args=["peer"])
 
 
 remote_blocks_received = Signal(providing_args=["block_lst"])
