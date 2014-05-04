@@ -8,23 +8,28 @@ import transactions
 
 # to add EMPTY_UNCLE_HASH / GENESIS_DEFAULTS ...
 
+GENESIS_PREVHASH = "\x00" * 32
+GENESIS_COINBASE = "0" * 40
+GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_GAS_LIMIT = 10 ** 6
 INITIAL_DIFFICULTY = 2 ** 22
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
 GASLIMIT_EMA_FACTOR = 1024
+INITIAL_MIN_GAS_PRICE = 10 ** 15
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 
 block_structure = [
     ["prevhash", "bin", ""],
     ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
-    ["coinbase", "addr", "0" * 40],
+    ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", ''],
     ["tx_list_root", "trie_root", ''],
-    ["difficulty", "int", 2 ** 23],
+    ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-    ["min_gas_price", "int", 10 ** 15],
-    ["gas_limit", "int", 10 ** 6],
+    ["min_gas_price", "int", INITIAL_MIN_GAS_PRICE],
+    ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
@@ -88,26 +93,13 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
 
+        # we don't support init with transactions at this point
+        assert not transaction_list
+
         self.transactions = trie.Trie(utils.get_db_path())
         self.transaction_count = 0
 
-        # replay changes to agree on state
-
-        # if not self.is_genesis():
-        #     self.state = trie.Trie(
-        #         utils.get_db_path(), self.get_parent().state_root)
-        #     self.finalize()
-        # else:
-        #     self.state = trie.Trie(utils.get_db_path(), state_root)
-
         self.state = trie.Trie(utils.get_db_path(), state_root)
-        # Fill in nodes for transaction trie
-        for tx_serialized, state_root, gas_used_encoded in transaction_list:
-            self._add_transaction_to_list(
-                tx_serialized, state_root, gas_used_encoded)
-        # for tx in self.get_transactions():
-        #     self.apply_transaction(tx)
-
 
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
@@ -125,7 +117,6 @@ class Block(object):
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
-
         if not self.is_genesis() and self.nonce and not self.check_proof_of_work(self.nonce):
             raise Exception("PoW check failed")
 
@@ -147,7 +138,56 @@ class Block(object):
         # Deserialize all properties
         for i, (name, typ, default) in enumerate(block_structure):
             kargs[name] = utils.decoders[typ](header_args[i])
-        return Block(**kargs)
+
+        # if we don't have the state we need to replay transactions
+        _db = db.DB(utils.get_db_path())
+        if len(kargs['state_root']) == 32 and _db.has_key(kargs['state_root']):
+            return Block(**kargs)
+        elif kargs['prevhash'] == GENESIS_PREVHASH:
+            return Block(**kargs)
+        else: # no state, need to replay
+            parent = get_block(kargs['prevhash'])
+            return parent.deserialize_child(rlpdata)
+
+    def deserialize_child(self, rlpdata):
+        """
+        deserialization w/ replaying transactions
+        """
+        header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        assert len(header_args) == len(block_structure)
+        kargs = dict(transaction_list=transaction_list, uncles=uncles)
+        # Deserialize all properties
+        for i, (name, typ, default) in enumerate(block_structure):
+            kargs[name] = utils.decoders[typ](header_args[i])
+
+        block = Block.init_from_parent(self, kargs['coinbase'],
+                                       extra_data=kargs['extra_data'],
+                                       timestamp=kargs['timestamp'])
+        block.finalize()  # this is the first potential state change
+        # replay transactions
+        for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
+            tx = transactions.Transaction.deserialize(tx_serialized)
+            processblock.apply_tx(block, tx)
+            assert _state_root == block.state.root
+            assert utils.decode_int(_gas_used_encoded) == block.gas_used
+
+        # checks
+        assert block.prevhash == self.hash
+        assert block.state.root == kargs['state_root']
+        assert block.tx_list_root == kargs['tx_list_root']
+        assert block.gas_used == kargs['gas_used']
+        assert block.gas_limit == kargs['gas_limit']
+        assert block.timestamp == kargs['timestamp']
+        assert block.difficulty == kargs['difficulty']
+        assert block.number == kargs['number']
+        assert block.extra_data == kargs['extra_data']
+        assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
+
+        block.uncles_hash = kargs['uncles_hash']
+        block.nonce = kargs['nonce']
+        block.min_gas_price = kargs['min_gas_price']
+
+        return block
 
     @classmethod
     def hex_deserialize(cls, hexrlpdata):
@@ -204,6 +244,7 @@ class Block(object):
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
+        # used by processblocks apply_tx only. not atomic!
         self._add_transaction_to_list(tx.serialize(),
                                       self.state_root,
                                       utils.encode_int(self.gas_used))
@@ -350,7 +391,7 @@ class Block(object):
     def get_parent(self):
         if self.number == 0:
             raise KeyError('Genesis block has no parent')
-        parent =  get_block(self.prevhash)
+        parent = get_block(self.prevhash)
         assert parent.state.db.db == self.state.db.db
         return parent
 
@@ -385,19 +426,19 @@ class Block(object):
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
-                         now=int(time.time())):
+                         timestamp=int(time.time())):
         return Block(
             prevhash=parent.hash,
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
             tx_list_root='',
-            difficulty=calc_difficulty(parent, now),
+            difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
             min_gas_price=0,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
-            timestamp=now,
+            timestamp=timestamp,
             extra_data=extra_data,
             nonce='',
             transaction_list=[],
@@ -417,9 +458,9 @@ def has_block(blockhash):
 
 def genesis(initial_alloc={}):
     # https://ethereum.etherpad.mozilla.org/11
-    block = Block(prevhash="\x00" * 32, coinbase="0" * 40,
-                  difficulty=INITIAL_DIFFICULTY, nonce=utils.sha3(chr(42)),
-                  gas_limit=10 ** 6)
+    block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
+                  difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
+                  gas_limit=GENESIS_GAS_LIMIT)
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
