@@ -8,7 +8,6 @@ from db import DB
 import utils
 import rlp
 import blocks
-import transactions
 import processblock
 
 logger = logging.getLogger(__name__)
@@ -49,7 +48,8 @@ class Miner():
             logger.debug('transaction %r not applied', transaction)
         else:
             logger.debug(
-                'transaction %r applied to %r res: %r', transaction, self.block, res)
+                'transaction %r applied to %r res: %r',
+                transaction, self.block, res)
         return success
 
     def get_transactions(self):
@@ -57,14 +57,16 @@ class Miner():
 
     def mine(self, steps=1000):
         """
-        It is formally defined as PoW:
-        PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
-        where: RLP(Hn) is the RLP encoding of the block header H,
-        not including the final nonce component; SHA3 is the SHA3 hash function accepting
-        an arbitrary length series of bytes and evaluating to a series of 32 bytes
-        (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
-        operator; BE(X) evaluates to the value equal to X when interpreted as a
-        big-endian-encoded integer.
+        It is formally defined as PoW: PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
+        where:
+        RLP(Hn) is the RLP encoding of the block header H, not including the
+            final nonce component;
+        SHA3 is the SHA3 hash function accepting an arbitrary length series of
+            bytes and evaluating to a series of 32 bytes (i.e. 256-bit);
+        n is the nonce, a series of 32 bytes;
+        o is the series concatenation operator;
+        BE(X) evaluates to the value equal to X when interpreted as a
+            big-endian-encoded integer.
         """
 
         pack = struct.pack
@@ -113,7 +115,7 @@ class ChainManager(StoppableLoopThread):
 
     @property
     def head(self):
-        if not 'HEAD' in self.blockchain:
+        if 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
         return blocks.Block.deserialize(self.blockchain.get(ptr))
@@ -173,8 +175,8 @@ class ChainManager(StoppableLoopThread):
                 # create new block
                 self.add_block(block)
                 time.sleep(5)
-                signals.send_local_blocks.send(sender=self,
-                                               blocks=[block])  # FIXME DE/ENCODE
+                signals.send_local_blocks.send(
+                    sender=self, blocks=[block])  # FIXME DE/ENCODE
 
     def receive_chain(self, blocks):
         old_head = self.head
@@ -207,7 +209,8 @@ class ChainManager(StoppableLoopThread):
         if not len(block.nonce) == 32:
             logger.debug('Nonce not set %r', block.hex_hash())
             return False
-        elif not block.check_proof_of_work(block.nonce) and not block.is_genesis():
+        elif not block.check_proof_of_work(block.nonce) and\
+                not block.is_genesis():
             logger.debug('Invalid nonce %r', block.hex_hash())
             return False
 
@@ -245,7 +248,7 @@ class ChainManager(StoppableLoopThread):
         blocks = []
         block = self.head
         if start:
-            if not start in self:
+            if start not in self:
                 return []
             block = self.get(start)
             if not self.in_main_branch(block):
@@ -299,8 +302,8 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
     Request the peer to send Count (to be interpreted as an integer) blocks
     in the current canonical block chain that are children of Parent1
     (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-    the block chain, it should instead act as if the request were for Parent2 &c.
-    through to ParentN.
+    the block chain, it should instead act as if the request were for Parent2
+    &c.  through to ParentN.
 
     If none of the parents are in the current
     canonical block chain, then NotInChain should be sent along with ParentN
@@ -312,7 +315,8 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
     If no parents are passed, then reply need not be made.
     """
     logger.debug(
-        "local_chain_requested: %r %d", [b.encode('hex') for b in blocks], count)
+        "local_chain_requested: %r %d",
+        [b.encode('hex') for b in blocks], count)
     res = []
     for i, b in enumerate(blocks):
         if b in chain_manager:
