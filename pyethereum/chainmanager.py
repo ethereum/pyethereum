@@ -111,7 +111,7 @@ class ChainManager(StoppableLoopThread):
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
-        self.print_chain()
+        self.log_chain()
         self.new_miner()
 
     @property
@@ -286,7 +286,7 @@ class ChainManager(StoppableLoopThread):
         res.reverse()
         return res[:count]
 
-    def print_chain(self):
+    def log_chain(self):
         num = self.head.number + 1
         for b in reversed(self.get_chain(count=num)):
             logger.debug(b)
