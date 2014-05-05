@@ -111,19 +111,31 @@ def transactions():
     return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
 
 
-# ######## Peers ###################
+# ######## Accounts ############
+@app.get(base_url + '/accounts/')
+def accounts():
+    logger.debug('accounts')
+    pass
 
+
+@app.get(base_url + '/accounts/<address>')
+def account(address=None):
+    logger.debug('account/%s', address)
+    pass
+
+
+# ######## Peers ###################
 def make_peers_response(peers):
     objs = [dict(ip=ip, port=port, node_id=node_id.encode('hex'))
             for (ip, port, node_id) in peers]
     return dict(peers=objs)
 
 
-@app.get(base_url + '/connected_peers/')
+@app.get(base_url + '/peers/connected')
 def connected_peers():
     return make_peers_response(peer_manager.get_connected_peer_addresses())
 
 
-@app.get(base_url + '/known_peers/')
+@app.get(base_url + '/peers/known')
 def known_peers():
     return make_peers_response(peer_manager.get_known_peer_addresses())
