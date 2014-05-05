@@ -179,8 +179,6 @@ def main():
     # loop
     while not peer_manager.stopped():
         time.sleep(0.1)
-        if len(peer_manager.get_connected_peer_addresses()) > 2:
-            chain_manager.bootstrap_blockchain()
 
     logger.info('exiting')
 

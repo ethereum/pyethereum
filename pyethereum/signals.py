@@ -24,7 +24,7 @@ peer_handshake_success = Signal(providing_args=["peer"])
 peer_disconnect_requested = Signal(providing_args=["peer"])
 
 
-remote_blocks_received = Signal(providing_args=["block_lst"])
+remote_blocks_received = Signal(providing_args=["block_lst", "peer"])
 remote_chain_requested = Signal(providing_args=["parents", "count"])
 local_chain_requested = Signal(providing_args=["peer", "blocks", "count"])
 send_local_blocks = Signal(providing_args=["blocks"])

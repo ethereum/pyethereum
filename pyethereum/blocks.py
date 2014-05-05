@@ -63,6 +63,9 @@ def calc_gaslimit(parent):
     return (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
 
 
+class UnknownParentException(Exception):
+    pass
+
 class Block(object):
 
     def __init__(self,
@@ -154,7 +157,10 @@ class Block(object):
         elif kargs['prevhash'] == GENESIS_PREVHASH:
             return Block(**kargs)
         else:  # no state, need to replay
-            parent = get_block(kargs['prevhash'])
+            try:
+                parent = get_block(kargs['prevhash'])
+            except KeyError:
+                raise UnknownParentException(kargs['prevhash'].encode('hex'))
             return parent.deserialize_child(rlpdata)
 
     def deserialize_child(self, rlpdata):
@@ -398,8 +404,11 @@ class Block(object):
 
     def get_parent(self):
         if self.number == 0:
-            raise KeyError('Genesis block has no parent')
-        parent = get_block(self.prevhash)
+            raise UnknownParentException('Genesis block has no parent')
+        try:
+            parent = get_block(self.prevhash)
+        except KeyError:
+            raise UnknownParentException(self.prevhash.encode('hex'))
         assert parent.state.db.db == self.state.db.db
         return parent
 
@@ -407,7 +416,7 @@ class Block(object):
         try:
             self.get_parent()
             return True
-        except KeyError:
+        except UnknownParentException:
             return False
 
     def chain_difficulty(self):

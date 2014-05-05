@@ -237,11 +237,12 @@ class ChainManager(StoppableLoopThread):
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
-        res = self.miner.add_transaction(transaction)
-        if res:
-            logger.debug("broadcasting valid %r" % transaction)
-            signals.send_local_transactions.send(
-                sender=None, transactions=[transaction])
+        with self.lock:
+            res = self.miner.add_transaction(transaction)
+            if res:
+                logger.debug("broadcasting valid %r" % transaction)
+                signals.send_local_transactions.send(
+                    sender=None, transactions=[transaction])
 
     def get_transactions(self):
         logger.debug("get_transactions called")
@@ -351,16 +352,16 @@ def config_chainmanager(sender, config, **kwargs):
 
 
 @receiver(signals.peer_handshake_success)
-def new_peer_connected(sender, **kwargs):
+def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
     # request transactions
-    with sender.lock:
+    with peer.lock:
         logger.debug("send get transactions")
-        sender.send_GetTransactions()
+        peer.send_GetTransactions()
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=30)]
-    with sender.lock:
-        sender.send_GetChain(blocks, count=30)
+    with peer.lock:
+        peer.send_GetChain(blocks, count=30)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
@@ -383,12 +384,37 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
 @receiver(signals.local_transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
+    transactions = [rlp.decode(x.serialize()) for x in transactions]
     signals.local_transactions_ready.send(sender=None, data=transactions)
 
 
 @receiver(signals.remote_blocks_received)
-def remote_blocks_received_handler(sender, block_lst, **kwargs):
-    block_lst = [blocks.Block.deserialize(rlp.encode(b)) for b in block_lst]
-    logger.debug("received blocks: %r", block_lst)
-    with chain_manager.lock:
-        chain_manager.receive_chain(block_lst)
+def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
+    logger.debug("received %d remote blocks", len(block_lst))
+
+    old_head = chain_manager.head
+    # assuming chain order w/ newest block first
+    for block_data in reversed(block_lst):
+        try:
+            block = blocks.Block.deserialize(rlp.encode(block_data))
+        except blocks.UnknownParentException:
+            # no way to ask peers for older parts of chain
+            bhash = utils.sha3(rlp.encode(block_data)).encode('hex')[:4]
+            phash = block_data[0][0].encode('hex')[:4]
+            number = utils.decode_int(block_data[0][6])
+            logger.debug('Block(#%d %s %s) with unknown parent, requesting ...',
+                         number, bhash, phash.encode('hex')[:4])
+            chain_manager.synchronize_blockchain()
+            break
+        if block.hash in chain_manager:
+            logger.debug('Known %r', block)
+        else:
+            if block.has_parent():
+                # add block & set HEAD if it's longest chain
+                success = chain_manager.add_block(block)
+                if success:
+                    logger.debug('Added %r', block)
+            else:
+                logger.debug('Orphant %r', block)
+    if chain_manager.head != old_head:
+        chain_manager.synchronize_blockchain()
