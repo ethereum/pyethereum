@@ -482,16 +482,16 @@ def step_impl(context):
 
 @when(u'_recv_Peers is called')
 def step_impl(context):
-    from pyethereum.signals import peer_address_received
-    from pyethereum.peermanager import peer_address_received_handler
+    from pyethereum.signals import peer_addresses_received
+    from pyethereum.peermanager import peer_addresses_received_handler
 
-    peer_address_received.disconnect(peer_address_received_handler)
+    peer_addresses_received.disconnect(peer_addresses_received_handler)
 
-    def peer_address_received_handler(sender, peer, done, **kwargs):
-        context.peer_manager.add_known_peer_address(*peer)
-        if done:
-            context.peer_manager.save_peers(file_name="peers_test.json")
-    peer_address_received.connect(peer_address_received_handler)
+    def peer_addresses_received_handler(sender, peers, **kwargs):
+        for peer in peers:
+            context.peer_manager.add_known_peer_address(*peer)
+        context.peer_manager.save_peers(file_name="peers_test.json")
+    peer_addresses_received.connect(peer_addresses_received_handler)
 
     context.peers_to_send = [('9.8.7.6', 3000, 'him'), ('10.9.8.7', 4000, 'her'), ('12.11.10.9', 5000, 'she')]
     context.packet = context.packeter.dump_Peers(context.peers_to_send)

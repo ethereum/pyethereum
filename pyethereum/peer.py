@@ -200,13 +200,15 @@ class Peer(StoppableLoopThread):
             self.send_packet(packet)
 
     def _recv_Peers(self, data):
+        peers = []
         for ip, port, pid in data:
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
-            signals.peer_address_received.send(
-                sender=self, peer=[ip, port, pid], done= pid==data[-1][2])
+            peers.append([ip, port, pid])
+        signals.peer_addresses_received.send(
+                sender=self, peers=peers)
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')

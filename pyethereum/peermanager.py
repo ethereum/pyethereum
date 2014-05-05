@@ -218,13 +218,13 @@ def disconnect_requested_handler(sender, forget=False, **kwargs):
 
 
 
-@receiver(signals.peer_address_received)
-def peer_address_received_handler(sender, peer, done, **kwargs):
+@receiver(signals.peer_addresses_received)
+def peer_addresses_received_handler(sender, peers, **kwargs):
     ''' peer should be (ip, port, node_id)
     '''
-    peer_manager.add_known_peer_address(*peer)
-    if done:
-        peer_manager.save_peers()
+    for peer in peers:
+        peer_manager.add_known_peer_address(*peer)
+    peer_manager.save_peers()
 
 
 @receiver(signals.send_local_blocks)
