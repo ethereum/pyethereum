@@ -93,7 +93,7 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
 
-        self.transactions = trie.Trie(utils.get_db_path())
+        self.transactions = trie.Trie(utils.get_db_path(), tx_list_root)
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
@@ -102,7 +102,7 @@ class Block(object):
         if transaction_list:
             assert len(self.state.root) == 32 and \
                 self.state.db.has_key(self.state.root)
-
+        
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
 
@@ -113,6 +113,10 @@ class Block(object):
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
+        if len(self.transactions.root) == 32 and \
+                not self.transactions.db.has_key(self.transactions.root):
+            raise Exception(
+                "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
         if len(self.extra_data) > 1024:
