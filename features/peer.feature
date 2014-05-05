@@ -168,7 +168,6 @@ Feature: peer
     When peer.send_Blocks is instrumented
     And the packet is received from peer
     And all data with the peer is processed
-    Then peer.send_Blocks should be called once with the blocks data
 
   Scenario: send NotInChain to peer
     When peer.send_NotInChain is called

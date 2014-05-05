@@ -7,12 +7,11 @@ import processblock
 import transactions
 
 # to add EMPTY_UNCLE_HASH / GENESIS_DEFAULTS ...
-
+INITIAL_DIFFICULTY = 2 ** 22  # 2 ** 16 for testing
 GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
 GENESIS_GAS_LIMIT = 10 ** 6
-INITIAL_DIFFICULTY = 2 ** 22  # 2 ** 16 for testing
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
 GASLIMIT_EMA_FACTOR = 1024
@@ -98,11 +97,14 @@ class Block(object):
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
 
-        # we support init with transactions only if state is known
         if transaction_list:
+            # support init with transactions only if state is known
             assert len(self.state.root) == 32 and \
                 self.state.db.has_key(self.state.root)
-        
+            for tx_serialized, state_root, gas_used_encoded in transaction_list:
+                self._add_transaction_to_list(
+                    tx_serialized, state_root, gas_used_encoded)
+
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
 
