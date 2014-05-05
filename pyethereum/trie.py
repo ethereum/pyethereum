@@ -5,20 +5,6 @@ import rlp
 from utils import sha3
 from db import DB
 
-import random
-
-
-def debug(s):
-    def deb(f):
-        def inner(*args,**kwargs):
-            i = random.randrange(1000000)
-            print s, i, 'start', args
-            x = f(*args,**kwargs)
-            print s, i, 'end', x
-            return x
-        return inner
-    return deb
-
 
 def bin_to_nibbles(s):
     """convert string s to nibbles (half-bytes)
