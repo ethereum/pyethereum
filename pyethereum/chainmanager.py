@@ -42,6 +42,7 @@ class Miner():
         """
         try:
             success, res = self.block.apply_transaction(transaction)
+            assert transaction in self.block.get_transactions()
         except Exception, e:
             logger.debug('rejected transaction %r: %s', transaction, e)
             return False
@@ -86,6 +87,7 @@ class Miner():
             if l256 < target:
                 block.nonce = nonce_bin_prefix + pack('>q', nonce)
                 assert block.check_proof_of_work(block.nonce) is True
+                assert block.get_parent()
                 logger.debug(
                     'Nonce found %d %r', nonce, block)
                 return block
@@ -119,9 +121,10 @@ class ChainManager(StoppableLoopThread):
         if 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
-        return blocks.Block.deserialize(self.blockchain.get(ptr))
+        return blocks.get_block(ptr)
 
     def _update_head(self, block):
+        bh = block.hash
         self.blockchain.put('HEAD', block.hash)
         self.blockchain.commit()
         self.new_miner()  # reset mining
@@ -138,6 +141,7 @@ class ChainManager(StoppableLoopThread):
     def _store_block(self, block):
         self.blockchain.put(block.hash, block.serialize())
         self.blockchain.commit()
+        assert block == blocks.get_block(block.hash)
 
     def _initialize_blockchain(self):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
@@ -194,7 +198,6 @@ class ChainManager(StoppableLoopThread):
                         logger.debug('Added %r', block)
                 else:
                     logger.debug('Orphant %r', block)
-
         if self.head != old_head:
             self.synchronize_blockchain()
 
