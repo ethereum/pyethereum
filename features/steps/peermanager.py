@@ -191,7 +191,7 @@ def step_impl(context):
         return_value=set([
             ('192.168.1.1', 1234, 'it'),
             ('1.168.1.1', 1234, 'he'),
-            ('1.1.1.1', 1234, 'me'),
+            ('1.1.1.1', 1234, context.conf.get('network', 'node_id')),
         ]))
 
 
@@ -202,11 +202,6 @@ def step_impl(context):
             ('192.168.1.1', 1234, 'it'),
             ('9.168.1.1', 1234, 'she'),
         ]))
-
-
-@when(u'local_address is local_address')  # noqa
-def step_impl(context):
-    context.peer_manager.local_addresses = [('1.1.1.1', 1234)]
 
 
 @when(u'get_peer_candidates is called')  # noqa

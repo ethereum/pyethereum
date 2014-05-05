@@ -35,7 +35,7 @@ def create_config():
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
     config.set('network', 'client_id', Packeter.CLIENT_ID)
-    config.set('network', 'node_id', sha3(str(uuid.uuid1())))
+    config.set('network', 'node_id', sha3(str(uuid.uuid1())).encode('hex'))
 
     config.add_section('api')
     config.set('api', 'listen_host', '127.0.0.1')
@@ -145,7 +145,7 @@ def create_config():
 
 def main():
     config = create_config()
-    config_ready.send(sender=config)
+    config_ready.send(sender=None, config=config)
 
     # import after logger config is ready
     from pyethereum.chainmanager import chain_manager
@@ -179,8 +179,6 @@ def main():
     # loop
     while not peer_manager.stopped():
         time.sleep(0.1)
-        if len(peer_manager.get_connected_peer_addresses()) > 2:
-            chain_manager.bootstrap_blockchain()
 
     logger.info('exiting')
 
