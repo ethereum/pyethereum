@@ -7,6 +7,8 @@ import os
 import sys
 import errno
 import rlp
+from rlp import big_endian_to_int, int_to_big_endian
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,28 +63,9 @@ def coerce_to_bytes(x):
         return x
 
 
-def int_to_big_endian(integer):
-    '''convert a integer to big endian binary string'''
-    # 0 is a special case, treated same as ''
-    if integer == 0:
-        return ''
-    s = '%x' % integer
-    if len(s) & 1:
-        s = '0' + s
-    return s.decode('hex')
-
-
 def int_to_big_endian4(integer):
     ''' 4 bytes big endian integer'''
     return struct.pack('>I', integer)
-
-
-def big_endian_to_int(string):
-    '''convert a big endian binary string to integer'''
-    # '' is a special case, treated same as 0
-    string = string or '\x00'
-    s = string.encode('hex')
-    return long(s, 16)
 
 
 def recursive_int_to_big_endian(item):
@@ -291,4 +274,18 @@ def configure_logging(loggerlevels=':DEBUG', verbosity=1):
             propagate=True)
 
     logging.config.dictConfig(logconfig)
-    #logging.debug("logging set up like that: %r", logconfig)
+    # logging.debug("logging set up like that: %r", logconfig)
+
+
+class Denoms():
+    def __init__(self):
+        self.wei = 1
+        self.babbage = 10**3
+        self.lovelace = 10**6
+        self.shannon = 10**9
+        self.szabo = 10**12
+        self.finney = 10**15
+        self.ether = 10**18
+        self.turing = 2**256
+
+denoms = Denoms()

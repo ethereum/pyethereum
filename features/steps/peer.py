@@ -201,7 +201,9 @@ def step_impl(context):
 
 @given(u'a peers data provider')  # noqa
 def step_impl(context):
-    from pyethereum.signals import known_peer_addresses_requested, known_peer_addresses_ready
+    from pyethereum.signals import (known_peer_addresses_requested,
+                                    known_peer_addresses_ready)
+
     def peers_requested_handler(sender, req, **kwargs):
         known_peer_addresses_ready.send(sender=None, data=context.peers_data)
 
@@ -248,12 +250,12 @@ def step_impl(context):
 ' with all peers')
 def step_impl(context):
     call_args = context.new_peer_received_handler.call_args_list[0]
-    call_peers = call_args[1]['peers']
+    call_peers = call_args[1]['addresses']
     assert len(call_peers) == len(context.peers_data)
     pairs = zip(call_peers, context.peers_data)
     for call, peer in pairs:
         assert call == peer
-
+        #assert call[1]['address'] == peer
 
 @when(u'peer.send_GetTransactions is called')  # noqa
 def step_impl(context):
@@ -407,7 +409,8 @@ def step_impl(context):
 @given(u'a chain data provider')  # noqa
 def step_impl(context):
     from pyethereum.signals import (local_chain_requested)
-    def handler(sender, req, **kwargs):
+
+    def handler(sender, **kwargs):
         pass
 
     context.blocks_requested_handler = handler
@@ -417,12 +420,6 @@ def step_impl(context):
 @when(u'peer.send_Blocks is instrumented')  # noqa
 def step_impl(context):
     context.peer.send_Blocks = instrument(context.peer.send_Blocks)
-
-
-@then(u'peer.send_Blocks should be called once with the blocks data')  # noqa
-def step_impl(context):
-    assert context.peer.send_Blocks.call_count == 1
-    assert context.peer.send_Blocks.call_args[0][0] == context.blocks_data
 
 
 @when(u'peer.send_NotInChain is called')  # noqa

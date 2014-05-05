@@ -264,7 +264,7 @@ def step_impl(context):
         return_value=set([
             ('192.168.1.1', 1234, 'it'),
             ('1.168.1.1', 1234, 'he'),
-            ('1.1.1.1', 1234, 'me'),
+            ('1.1.1.1', 1234, context.conf.get('network', 'node_id')),
         ]))
 
 
@@ -275,12 +275,6 @@ def step_impl(context):
             ('192.168.1.1', 1234, 'it'),
             ('9.168.1.1', 1234, 'she'),
         ]))
-
-
-@when(u'node_id is node_id')  # noqa
-def step_impl(context):
-    context.peer_manager.local_node_id = 'me'
-
 
 @when(u'get_peer_candidates is called')  # noqa
 def step_impl(context):
@@ -453,12 +447,12 @@ def step_impl(context):
 @when(u'Hello is received from the peer')
 def step_impl(context):
     from pyethereum.signals import peer_handshake_success
-    from pyethereum.peermanager import peer_handshake_success_handler
+    from pyethereum.peermanager import new_peer_connected
 
-    peer_handshake_success.disconnect(peer_handshake_success_handler)
+    peer_handshake_success.disconnect(new_peer_connected)
 
-    def peer_handshake_success_handler(sender, **kwargs):
-        ipn = sender.ip, sender.port, sender.node_id
+    def peer_handshake_success_handler(sender, peer, **kwargs):
+        ipn = peer.ip, peer.port, peer.node_id
         context.peer_manager.add_known_peer_address(*ipn)
     peer_handshake_success.connect(peer_handshake_success_handler)
 
@@ -487,9 +481,9 @@ def step_impl(context):
 
     peer_addresses_received.disconnect(peer_addresses_received_handler)
 
-    def peer_addresses_received_handler(sender, peers, **kwargs):
-        for peer in peers:
-            context.peer_manager.add_known_peer_address(*peer)
+    def peer_addresses_received_handler(sender, addresses, **kwargs):
+        for address in addresses:
+            context.peer_manager.add_known_peer_address(*address)
         context.peer_manager.save_peers(file_name="peers_test.json")
     peer_addresses_received.connect(peer_addresses_received_handler)
 
@@ -522,8 +516,7 @@ def step_impl(context):
 
     peer_disconnect_requested.disconnect(disconnect_requested_handler)
 
-    def disconnect_requested_handler(sender, forget=False, **kwargs):
-        peer = sender
+    def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
         context.peer_manager.remove_peer(peer)
         if forget:
             ipn = (peer.ip, peer.port, peer.node_id)

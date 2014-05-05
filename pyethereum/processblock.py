@@ -26,41 +26,32 @@ GTXCOST = 500
 OUT_OF_GAS = -1
 
 
-def process(block, txs):
-    for tx in txs:
-        apply_tx(block, tx)
-    finalize(block)
-
-
-def finalize(block):
-    block.delta_balance(block.coinbase, block.reward)
-
-
 def verify(block, parent):
     assert block.timestamp >= parent.timestamp
     assert block.timestamp <= time.time() + 900
-    block2 = blocks.init_from_parent(parent,
-                                     block.coinbase,
-                                     block.extra_data,
-                                     block.timestamp)
+    block2 = blocks.Block.init_from_parent(parent,
+                                           block.coinbase,
+                                           block.extra_data,
+                                           block.timestamp)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
+    block2.finalize()  # this is the first potential state change
     for i in range(block.transaction_count):
         tx, s, g = block.transactions.get(utils.encode_int(i))
         tx = transactions.Transaction.deserialize(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
-        block2.apply_tx(tx)
+        apply_tx(block2, tx)
         assert s == block2.state.root
         assert g == utils.encode_int(block2.gas_used)
-    finalize(block2)
     assert block2.state.root == block.state.root
-    assert block2.gas_consumed == block.gas_consumed
+    assert block2.gas_used == block.gas_used
     return True
 
 
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data):
+        assert gas >= 0
         self.sender = sender
         self.to = to
         self.value = value
@@ -73,7 +64,7 @@ def apply_tx(block, tx):
         raise Exception("Trying to apply unsigned transaction!")
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
-        raise Exception("Invalid nonce! Sender %s tx %s" %
+        raise Exception("Invalid nonce! sender_acct:%s tx:%s" %
                         (acctnonce, tx.nonce))
     o = block.delta_balance(tx.sender, -tx.gasprice * tx.startgas)
     if not o:
@@ -85,7 +76,9 @@ def apply_tx(block, tx):
     if tx.to:
         result, gas, data = apply_msg(block, tx, message)
     else:
-        result, gas = create_contract(block, tx, message)
+        result, gas, data = create_contract(block, tx, message)
+    if debug:
+        print('applied tx, result', result, 'gas', gas, 'data/code', ''.join(map(chr,data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -96,10 +89,7 @@ def apply_tx(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * (tx.startgas - gas))
         block.gas_used += tx.startgas - gas
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
-    tx_data = [tx.serialize(),
-               block.state.root,
-               utils.encode_int(block.gas_used)]
-    block.add_transaction_to_list(tx_data)
+    block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
     return success, output if success else ''
 
@@ -164,7 +154,6 @@ def create_contract(block, tx, msg):
     o = block.delta_balance(msg.sender, msg.value)
     if not o:
         return 0, msg.gas
-    block.set_code(recvaddr, msg.data)
     compustate = Compustate(gas=msg.gas)
     # Main loop
     while 1:
@@ -172,15 +161,15 @@ def create_contract(block, tx, msg):
         if o is not None:
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
-                return 0, 0
+                return 0, 0, []
             else:
                 block.set_code(recvaddr, ''.join(map(chr, o)))
-                return recvaddr, compustate.gas
+                return recvaddr, compustate.gas, o
 
 
 def get_op_data(code, index):
     opcode = ord(code[index]) if index < len(code) else 0
-    if opcode < 96 or (opcode > 240 and opcode <= 255):
+    if opcode < 96 or (opcode >= 240 and opcode <= 255):
         if opcode in opcodes:
             return opcodes[opcode]
         else:
@@ -339,8 +328,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < stackargs[0] + stackargs[2]:
-            mem.extend([0] * (stackargs[0] + stackargs[2] - len(mem)))
+        if len(mem) < stackargs[1] + stackargs[2]:
+            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(msg.data):
                 mem[stackargs[1] + i] = ord(msg.data[stackargs[0] + i])
@@ -348,6 +337,14 @@ def apply_op(block, tx, msg, code, compustate):
                 mem[stackargs[1] + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
+    elif op == 'CODECOPY':
+        if len(mem) < stackargs[1] + stackargs[2]:
+            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
+        for i in range(stackargs[2]):
+            if stackargs[0] + i < len(code):
+                mem[stackargs[1] + i] = ord(code[stackargs[0] + i])
+            else:
+                mem[stackargs[1] + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
@@ -412,7 +409,14 @@ def apply_op(block, tx, msg, code, compustate):
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
         if debug:
             print("Sub-contract:", msg.to, value, gas, data)
-        create_contract(block, tx, Message(msg.to, '', value, gas, data))
+        addr, gas, code = create_contract(
+            block, tx, Message(msg.to, '', value, gas, data))
+        if debug:
+            print("Output of contract creation:", addr, code)
+        if addr:
+            stk.append(utils.coerce_to_int(addr))
+        else:
+            stk.append(0)
     elif op == 'CALL':
         if len(mem) < stackargs[3] + stackargs[4]:
             mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))

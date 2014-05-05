@@ -6,6 +6,7 @@ databases = {}
 class DB(object):
 
     def __init__(self, dbfile):
+        self.dbfile = dbfile
         if dbfile not in databases:
             databases[dbfile] = leveldb.LevelDB(dbfile)
         self.db = databases[dbfile]

@@ -2,17 +2,98 @@ import logging
 import time
 import struct
 from dispatch import receiver
-
 from stoppable import StoppableLoopThread
 import signals
 from db import DB
 import utils
 import rlp
 import blocks
+import processblock
+from transactions import Transaction
 
 logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
+
+
+class Miner():
+
+    """
+    Mines on the current head
+    Stores received transactions
+    """
+
+    def __init__(self, parent, coinbase):
+        self.nonce = 0
+        block = self.block = blocks.Block.init_from_parent(parent, coinbase)
+        block.finalize()  # order?
+        logger.debug('Mining #%d %s', block.number, block.hex_hash())
+        logger.debug('Difficulty %s', block.difficulty)
+
+    def add_transaction(self, transaction):
+        """
+        (1) The transaction signature is valid;
+        (2) the transaction nonce is valid (equivalent to the
+            sender accounts current nonce);
+        (3) the gas limit is no smaller than the intrinsic gas,
+            g0 , used by the transaction;
+        (4) the sender account balance contains at least the cost,
+            v0, required in up-front payment.
+        """
+        try:
+            success, res = self.block.apply_transaction(transaction)
+            assert transaction in self.block.get_transactions()
+        except Exception, e:
+            logger.debug('rejected transaction %r: %s', transaction, e)
+            return False
+        if not success:
+            logger.debug('transaction %r not applied', transaction)
+        else:
+            logger.debug(
+                'transaction %r applied to %r res: %r',
+                transaction, self.block, res)
+        return success
+
+    def get_transactions(self):
+        return self.block.get_transactions()
+
+    def mine(self, steps=1000):
+        """
+        It is formally defined as PoW: PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
+        where:
+        RLP(Hn) is the RLP encoding of the block header H, not including the
+            final nonce component;
+        SHA3 is the SHA3 hash function accepting an arbitrary length series of
+            bytes and evaluating to a series of 32 bytes (i.e. 256-bit);
+        n is the nonce, a series of 32 bytes;
+        o is the series concatenation operator;
+        BE(X) evaluates to the value equal to X when interpreted as a
+            big-endian-encoded integer.
+        """
+
+        pack = struct.pack
+        sha3 = utils.sha3
+        beti = utils.big_endian_to_int
+        block = self.block
+
+        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
+        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
+
+        target = 2 ** 256 / block.difficulty
+
+        for nonce in range(self.nonce, self.nonce + steps):
+            h = sha3(sha3(prefix + pack('>q', nonce)))
+            l256 = beti(h)
+            if l256 < target:
+                block.nonce = nonce_bin_prefix + pack('>q', nonce)
+                assert block.check_proof_of_work(block.nonce) is True
+                assert block.get_parent()
+                logger.debug(
+                    'Nonce found %d %r', nonce, block)
+                return block
+
+        self.nonce = nonce
+        return False
 
 
 class ChainManager(StoppableLoopThread):
@@ -23,27 +104,30 @@ class ChainManager(StoppableLoopThread):
 
     def __init__(self):
         super(ChainManager, self).__init__()
-        self.transactions = set()
-        self._mining_nonce = 0
+        # initialized after configure
+        self.miner = None
+        self.blockchain = None
 
     def configure(self, config):
         self.config = config
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
-        logger.debug('Chain @ #%d %s' %
-                     (self.head.number, self.head.hex_hash()))
+        logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        self.log_chain()
+        self.new_miner()
 
     @property
     def head(self):
-        if not 'HEAD' in self.blockchain:
+        if 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
-        return blocks.Block.deserialize(self.blockchain.get(ptr))
+        return blocks.get_block(ptr)
 
     def _update_head(self, block):
+        bh = block.hash
         self.blockchain.put('HEAD', block.hash)
-        self._mining_nonce = 0  # reset
         self.blockchain.commit()
+        self.new_miner()  # reset mining
 
     def get(self, blockhash):
         return blocks.get_block(blockhash)
@@ -57,6 +141,7 @@ class ChainManager(StoppableLoopThread):
     def _store_block(self, block):
         self.blockchain.put(block.hash, block.serialize())
         self.blockchain.commit()
+        assert block == blocks.get_block(block.hash)
 
     def _initialize_blockchain(self):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
@@ -66,10 +151,10 @@ class ChainManager(StoppableLoopThread):
         self.blockchain.commit()
 
     def synchronize_blockchain(self):
-        # FIXME: execute once, when connected to required num peers
         logger.info('synchronize requested for head %r', self.head)
+
         signals.remote_chain_requested.send(
-            sender=self, parents=[self.head.hash], count=30)
+            sender=None, parents=[self.head.hash], count=30)
 
     def loop_body(self):
         ts = time.time()
@@ -81,50 +166,23 @@ class ChainManager(StoppableLoopThread):
         else:
             time.sleep(.1)
 
+    def new_miner(self):
+        "new miner is initialized if HEAD is updated"
+        miner = Miner(self.head, self.config.get('wallet', 'coinbase'))
+        if self.miner:
+            for tx in self.miner.get_transactions():
+                miner.add_transaction(tx)
+        self.miner = miner
 
-    def mine(self, steps=1000):
-        """
-        It is formally defined as PoW:
-        PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
-        where: RLP(Hn) is the RLP encoding of the block header H,
-        not including the final nonce component; SHA3 is the SHA3 hash function accepting
-        an arbitrary length series of bytes and evaluating to a series of 32 bytes
-        (i.e. 256-bit); n is the nonce, a series of 32 bytes; o is the series concatenation
-        operator; BE(X) evaluates to the value equal to X when interpreted as a 
-        big-endian-encoded integer.
-        """
-
-        pack = struct.pack
-        sha3 = utils.sha3
-        beti = utils.big_endian_to_int
-
-        nonce = self._mining_nonce
-        block = blocks.Block.init_from_parent(
-            self.head, coinbase=self.config.get('wallet', 'coinbase'))
-        if nonce == 0:
-            logger.debug('Mining #%d %s', block.number, block.hex_hash())
-            logger.debug('Difficulty %s', block.difficulty)
-
-        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
-        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
-
-        target = 2 ** 256 / block.difficulty
-
-        for nonce in range(nonce, nonce + steps):
-            h = sha3(sha3(prefix + pack('>q', nonce)))
-            l256 = beti(h)
-            if l256 < target:
-                block.nonce = nonce_bin_prefix + pack('>q', nonce)
-                assert block.check_proof_of_work(block.nonce) is True
-                assert len(block.nonce) == 32
-                logger.debug('Nonce found %d %r', nonce, block.nonce)
+    def mine(self):
+        with self.lock:
+            block = self.miner.mine()
+            if block:
                 # create new block
                 self.add_block(block)
-                signals.send_local_blocks.send(sender=self,
-                                               blocks=[rlp.decode(block.serialize())])  # FIXME DE/ENCODE
-                return
-
-        self._mining_nonce = nonce
+                logger.debug("broadcasting new %r" % block)
+                signals.send_local_blocks.send(
+                    sender=None, blocks=[block])  # FIXME DE/ENCODE
 
     def receive_chain(self, blocks):
         old_head = self.head
@@ -140,7 +198,6 @@ class ChainManager(StoppableLoopThread):
                         logger.debug('Added %r', block)
                 else:
                     logger.debug('Orphant %r', block)
-
         if self.head != old_head:
             self.synchronize_blockchain()
 
@@ -148,17 +205,27 @@ class ChainManager(StoppableLoopThread):
     def add_block(self, block):
 
         # make sure we know the parent
+        # if not block.has_parent() and not block.is_genesis():
         if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
-            logger.debug('Missing parent for block %r' % block.hex_hash())
+            logger.debug('Missing parent for block %r', block.hex_hash())
             return False  # FIXME
 
         # check PoW
         if not len(block.nonce) == 32:
-            logger.debug('Nonce not set %r' % block.hex_hash())
+            logger.debug('Nonce not set %r', block.hex_hash())
             return False
-        elif not block.check_proof_of_work(block.nonce) and not block.is_genesis():
-            logger.debug('Invalid nonce %r' % block.hex_hash())
+        elif not block.check_proof_of_work(block.nonce) and\
+                not block.is_genesis():
+            logger.debug('Invalid nonce %r', block.hex_hash())
             return False
+
+        if block.has_parent():
+            try:
+                processblock.verify(block, block.get_parent())
+            except AssertionError, e:
+                logger.debug('verification failed: %s', str(e))
+                processblock.verify(block, block.get_parent())
+                return False
 
         self._store_block(block)
         # set to head if this makes the longest chain w/ most work
@@ -168,14 +235,18 @@ class ChainManager(StoppableLoopThread):
 
         return True
 
-    def add_transactions(self, transactions):
-        logger.debug("add transactions %r" % transactions)
-        for tx in transactions:
-            self.transactions.add(tx)
+    def add_transaction(self, transaction):
+        logger.debug("add transaction %r" % transaction)
+        with self.lock:
+            res = self.miner.add_transaction(transaction)
+            if res:
+                logger.debug("broadcasting valid %r" % transaction)
+                signals.send_local_transactions.send(
+                    sender=None, transactions=[transaction])
 
     def get_transactions(self):
-        logger.debug("get transactions")
-        return self.transactions
+        logger.debug("get_transactions called")
+        return self.miner.get_transactions()
 
     def get_chain(self, start='', count=100):
         "return 'count' blocks starting from head or start"
@@ -183,7 +254,7 @@ class ChainManager(StoppableLoopThread):
         blocks = []
         block = self.head
         if start:
-            if not start in self:
+            if start not in self:
                 return []
             block = self.get(start)
             if not self.in_main_branch(block):
@@ -219,22 +290,30 @@ class ChainManager(StoppableLoopThread):
         res.reverse()
         return res[:count]
 
+    def log_chain(self):
+        num = self.head.number + 1
+        for b in reversed(self.get_chain(count=num)):
+            logger.debug(b)
+            for tx in b.get_transactions():
+                logger.debug('\t%r', tx)
+
+
 chain_manager = ChainManager()
 
 
 @receiver(signals.local_chain_requested)
-def handle_local_chain_requested(sender, blocks, count, **kwargs):
+def handle_local_chain_requested(sender, peer, blocks, count, **kwargs):
     """
     [0x14, Parent1, Parent2, ..., ParentN, Count]
-    Request the peer to send Count (to be interpreted as an integer) blocks 
-    in the current canonical block chain that are children of Parent1 
+    Request the peer to send Count (to be interpreted as an integer) blocks
+    in the current canonical block chain that are children of Parent1
     (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-    the block chain, it should instead act as if the request were for Parent2 &c. 
-    through to ParentN. 
+    the block chain, it should instead act as if the request were for Parent2
+    &c.  through to ParentN.
 
-    If none of the parents are in the current 
-    canonical block chain, then NotInChain should be sent along with ParentN 
-    (i.e. the last Parent in the parents list). 
+    If none of the parents are in the current
+    canonical block chain, then NotInChain should be sent along with ParentN
+    (i.e. the last Parent in the parents list).
 
     If the designated parent is the present block chain head,
     an empty reply should be sent.
@@ -242,7 +321,8 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
     If no parents are passed, then reply need not be made.
     """
     logger.debug(
-        "local_chain_requested: %r %d", [b.encode('hex') for b in blocks], count)
+        "local_chain_requested: %r %d",
+        [b.encode('hex') for b in blocks], count)
     res = []
     for i, b in enumerate(blocks):
         if b in chain_manager:
@@ -253,52 +333,88 @@ def handle_local_chain_requested(sender, blocks, count, **kwargs):
                 logger.debug("sending: found: %r ", res)
                 res = [rlp.decode(b.serialize()) for b in res]  # FIXME
                 # if b == head: no descendents == no reply
-                with sender.lock:
-                    sender.send_Blocks(res)
+                with peer.lock:
+                    peer.send_Blocks(res)
                 return
 
     logger.debug("local_chain_requested: no matches")
     if len(blocks):
         #  If none of the parents are in the current
-        sender.send_NotInChain(blocks[-1])
+        peer.send_NotInChain(blocks[-1])
     else:
         # If no parents are passed, then reply need not be made.
         pass
 
 
 @receiver(signals.config_ready)
-def config_chainmanager(sender, **kwargs):
-    chain_manager.configure(sender)
+def config_chainmanager(sender, config, **kwargs):
+    chain_manager.configure(config)
 
 
 @receiver(signals.peer_handshake_success)
-def new_peer_connected(sender, **kwargs):
+def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
     # request transactions
-    with sender.lock:
-        sender.send_GetTransactions()
+    with peer.lock:
         logger.debug("send get transactions")
+        peer.send_GetTransactions()
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=30)]
-    with sender.lock:
-        sender.send_GetChain(blocks, count=30)
+    with peer.lock:
+        peer.send_GetChain(blocks, count=30)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, **kwargs):
-    chain_manager.add_transactions(transactions)
+    "receives rlp.decoded serialized"
+    txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
+    logger.debug('remote_transactions_received: %r', txl)
+    for tx in txl:
+        chain_manager.add_transaction(tx)
+
+
+@receiver(signals.local_transaction_received)
+def local_transaction_received_handler(sender, transaction, **kwargs):
+    "receives transaction object"
+    logger.debug('local_transaction_received: %r', transaction)
+    chain_manager.add_transaction(transaction)
 
 
 @receiver(signals.local_transactions_requested)
 def transactions_requested_handler(sender, req, **kwargs):
     transactions = chain_manager.get_transactions()
-    signals.local_transactions_ready.send(sender=None, data=list(transactions))
+    transactions = [rlp.decode(x.serialize()) for x in transactions]
+    signals.local_transactions_ready.send(sender=None, data=transactions)
 
 
 @receiver(signals.remote_blocks_received)
-def remote_blocks_received_handler(sender, block_lst, **kwargs):
-    block_lst = [blocks.Block.deserialize(rlp.encode(b)) for b in block_lst]
-    logger.debug("received blocks: %r", block_lst)
-    with chain_manager.lock:
-        chain_manager.receive_chain(block_lst)
+def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
+    logger.debug("received %d remote blocks", len(block_lst))
+
+    old_head = chain_manager.head
+    # assuming chain order w/ newest block first
+    for block_data in reversed(block_lst):
+        try:
+            block = blocks.Block.deserialize(rlp.encode(block_data))
+        except blocks.UnknownParentException:
+            # no way to ask peers for older parts of chain
+            bhash = utils.sha3(rlp.encode(block_data)).encode('hex')[:4]
+            phash = block_data[0][0].encode('hex')[:4]
+            number = utils.decode_int(block_data[0][6])
+            logger.debug('Block(#%d %s %s) with unknown parent, requesting ...',
+                         number, bhash, phash.encode('hex')[:4])
+            chain_manager.synchronize_blockchain()
+            break
+        if block.hash in chain_manager:
+            logger.debug('Known %r', block)
+        else:
+            if block.has_parent():
+                # add block & set HEAD if it's longest chain
+                success = chain_manager.add_block(block)
+                if success:
+                    logger.debug('Added %r', block)
+            else:
+                logger.debug('Orphant %r', block)
+    if chain_manager.head != old_head:
+        chain_manager.synchronize_blockchain()
