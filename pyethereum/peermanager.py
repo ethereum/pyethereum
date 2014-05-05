@@ -198,3 +198,8 @@ def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]
     for peer in peer_manager.connected_peers:
         peer.send_Transactions(transactions)
+
+@receiver(signals.remote_chain_requested)
+def request_remote_chain(sender, parents=[], count=1, **kwargs):
+    for peer in peer_manager.connected_peers:
+        peer.send_GetChain(parents, count)

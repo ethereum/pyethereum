@@ -176,7 +176,7 @@ class ChainManager(StoppableLoopThread):
             if block:
                 # create new block
                 self.add_block(block)
-                time.sleep(5)
+                logger.debug("broadcasting new %r" % block)
                 signals.send_local_blocks.send(
                     sender=None, blocks=[block])  # FIXME DE/ENCODE
 
