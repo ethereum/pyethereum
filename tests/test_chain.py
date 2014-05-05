@@ -52,6 +52,7 @@ def db_store(blk):
     db = DB(utils.get_db_path())
     db.put(blk.hash, blk.serialize())
     db.commit()
+    assert blocks.get_block(blk.hash) == blk
 
 
 def test_db():
@@ -88,11 +89,14 @@ def test_mine_block_with_transaction():
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
     db_store(blk2)
+    assert blocks.get_block(blk2.hash) == blk2
     assert tx.gasprice == 0
     assert blk2.get_balance(
         v) == blocks.BLOCK_REWARD + blk.get_balance(v) - tx.value
     assert blk.state.db.db == blk2.state.db.db
     assert blk2.get_parent() == blk
+    assert tx in blk2.get_transactions()
+    assert not tx in blk.get_transactions()
 
 
 def test_block_serialization_same_db():
@@ -101,6 +105,7 @@ def test_block_serialization_same_db():
     blk = blocks.genesis({v: utils.denoms.ether * 1})
     assert blk.hex_hash() == \
         blocks.Block.deserialize(blk.serialize()).hex_hash()
+    db_store(blk)
     blk2 = mine_next_block(blk)
     assert blk.hex_hash() == \
         blocks.Block.deserialize(blk.serialize()).hex_hash()
