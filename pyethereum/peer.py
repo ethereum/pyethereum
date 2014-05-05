@@ -147,7 +147,6 @@ class Peer(StoppableLoopThread):
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        # TODO add to known peers list
         self.hello_received = True
         if len(data) == 6:
             self.node_id = data[5]

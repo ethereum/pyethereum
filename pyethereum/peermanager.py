@@ -199,7 +199,15 @@ def send_transactions(sender, transactions=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Transactions(transactions)
 
+
 @receiver(signals.remote_chain_requested)
 def request_remote_chain(sender, parents=[], count=1, **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_GetChain(parents, count)
+
+
+@receiver(signals.peer_handshake_success)
+def new_peer_connected(sender, peer, **kwargs):
+    logger.debug("received new_peer_connected")
+    with peer_manager.lock:
+        peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)
