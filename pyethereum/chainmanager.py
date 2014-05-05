@@ -352,16 +352,16 @@ def config_chainmanager(sender, config, **kwargs):
 
 
 @receiver(signals.peer_handshake_success)
-def new_peer_connected(sender, **kwargs):
+def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
     # request transactions
-    with sender.lock:
+    with peer.lock:
         logger.debug("send get transactions")
-        sender.send_GetTransactions()
+        peer.send_GetTransactions()
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=30)]
-    with sender.lock:
-        sender.send_GetChain(blocks, count=30)
+    with peer.lock:
+        peer.send_GetChain(blocks, count=30)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
