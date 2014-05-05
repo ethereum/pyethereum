@@ -237,11 +237,12 @@ class ChainManager(StoppableLoopThread):
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
-        res = self.miner.add_transaction(transaction)
-        if res:
-            logger.debug("broadcasting valid %r" % transaction)
-            signals.send_local_transactions.send(
-                sender=None, transactions=[transaction])
+        with self.lock:
+            res = self.miner.add_transaction(transaction)
+            if res:
+                logger.debug("broadcasting valid %r" % transaction)
+                signals.send_local_transactions.send(
+                    sender=None, transactions=[transaction])
 
     def get_transactions(self):
         logger.debug("get_transactions called")
