@@ -423,12 +423,6 @@ def step_impl(context):
     context.peer.send_Blocks = instrument(context.peer.send_Blocks)
 
 
-@then(u'peer.send_Blocks should be called once with the blocks data')  # noqa
-def step_impl(context):
-    assert context.peer.send_Blocks.call_count == 1
-    assert context.peer.send_Blocks.call_args[0][0] == context.blocks_data
-
-
 @when(u'peer.send_NotInChain is called')  # noqa
 def step_impl(context):
     context.peer.send_NotInChain('some hash')
