@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 '''
 .. note::
-    *sender* is used by *receiver* to specify to accept signal from which
-    source, so it should not be used to carry data
+    *sender* is used by *receiver* to specify which source to accept signal
+    from, usually it's some *class name*.
+    if you want to carry a instance arg, don't use it.
 '''
 
 config_ready = Signal(providing_args=["config"])
