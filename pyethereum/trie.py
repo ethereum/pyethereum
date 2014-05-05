@@ -354,13 +354,13 @@ class Trie(object):
         '''if value is also a key-value node, merge its key to key
         '''
         if not value_is_node:
-            return key, value, value_is_node, False
+            return key, value, value_is_node
         (value_node_type, value_content) = self._inspect_node(value)
         if is_key_value_type(value_node_type):
             key.extend(value_content[0])
             return (key, value_content[1],
-                    value_node_type == NODE_TYPE_INNER_KEY_VALUE, True)
-        return key, value, value_is_node, False
+                    value_node_type == NODE_TYPE_INNER_KEY_VALUE)
+        return key, value, value_is_node
 
     def _normalize_node(self, node, is_node):
         '''
@@ -374,11 +374,13 @@ class Trie(object):
         # for NODE_TYPE_LEAF_KEY_VALUE, no need to normalize
 
         if node_type == NODE_TYPE_INNER_KEY_VALUE:
-            key, value, value_is_node, squished = self._normalize_pair(
+            key, value, value_is_node = self._normalize_pair(
                 content[0][:], content[1], True)
             if not key:
                 return value, value_is_node
-            if key == content[0] and not squished:
+            if key == content[0] and value == content[1]:
+                # note: if the subkey is blank, then the normalized pair
+                # will have same key but with different value
                 return node, is_node
             return self._update(BLANK_NODE, True, key, value, value_is_node)
 
@@ -411,10 +413,10 @@ class Trie(object):
         merge (key2, value2) to (key1, value1)
         key1 and key2 has no common prefix
         '''
-        key1, value1, value1_is_node, squished = self._normalize_pair(
+        key1, value1, value1_is_node = self._normalize_pair(
             key1, value1, value1_is_node)
 
-        key2, value2, value2_is_node, squished = self._normalize_pair(
+        key2, value2, value2_is_node = self._normalize_pair(
             key2, value2, value2_is_node)
 
         diverge_node = [BLANK_NODE] * 17
