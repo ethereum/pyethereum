@@ -236,3 +236,7 @@ Feature: trie tree manipulate
       | in                                                                          | root                                                               |
       | {u'do': u'verb', u'horse': u'stallion', u'doge': u'coin', u'dog': u'puppy'} | "5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84" |
 
+    Examples: replacement
+      | in                                                                          | root                                                               |
+      | [['foo', 'bar'], ['food', 'bat'], ['food', 'bass']]                         | "17beaa1648bafa633cda809c90c04af50fc8aed3cb40d16efbddee6fdf63c4c3" |
+

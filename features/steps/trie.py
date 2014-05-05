@@ -99,7 +99,11 @@ def step_impl(context, input_dict):
 
 @when(u'build trie tree from the input')  # noqa
 def step_impl(context):
-    for key, value in context.input_dict.iteritems():
+    if isinstance(context.input_dict, dict):
+        dic = context.input_dict.iteritems()
+    else:
+        dic = context.input_dict
+    for key, value in dic:
         context.trie.update(key, value)
 
 
