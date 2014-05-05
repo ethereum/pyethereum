@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 config_ready = Signal(providing_args=["config"])
 
 peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
+peer_disconnect_requested = Signal(providing_args=["peer", "forget"])
 
-peer_address_received = Signal(providing_args=["address"])
+peer_addresses_received = Signal(providing_args=["addresses"])
 peer_handshake_success = Signal(providing_args=["peer"])
-peer_disconnect_requested = Signal(providing_args=["peer"])
 
 
 remote_blocks_received = Signal(providing_args=["block_lst", "peer"])

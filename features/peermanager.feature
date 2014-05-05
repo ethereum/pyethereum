@@ -1,11 +1,36 @@
 @config @peermanager @wip
 Feature: peer manager
 
-  Scenario: add_peer
-    Given peer data of (connection, ip, port)
-    When add_peer is called with the given peer data
+  Scenario: load_saved_peers where peers_test.json exists
+    Given data_dir
+    And a peers_test.json file exists
+    And _known_peers is empty
+    When load_saved_peers is called
+    Then _known_peers should contain all peers in peers.json with blank node_ids
+
+  Scenario: load_saved_peers where peers_test.json does not exist
+    Given data_dir
+    And a peers_test.json file does not exist
+    And _known_peers is empty
+    When load_saved_peers is called
+    Then _known_peers should still be empty
+
+  Scenario: save_peers
+    Given peer data of (ip, port, node_id) in _known_peers
+    When save_peers is called
+    Then data_dir/peers_test.json should contain all peers in _known_peers
+
+  Scenario: add_peer from _known_peers
+    Given peer data of (connection, ip, port) from _known_peers
+    When add_peer is called with the given peer data 
     Then connected_peers should contain the peer with the peer data
 
+  Scenario: add_peer from peer_connection_accepted signal
+    Given peer data of (connection, ip, port) from a newly accepted connection
+    When add_peer is called with the given peer data
+    Then connected_peers should contain the peer with the peer data
+    But the peer's port should be the connection port, not the listen port
+    And _known_peers should not contain peer (until Hello is received)
 
   Scenario: _create_peer_sock
     When _create_peer_sock
@@ -41,6 +66,7 @@ Feature: peer manager
   Scenario: get connected peer addresses
     Given connected peer addresses, with each item is (ip, port, node_id)
     And add the connected peer addresses to `connected_peers`
+    And a Hello has been received from the peer
     Then get_connected_peer_addresses should return the given peer addresses
 
   Scenario: add/get known peer address
@@ -105,3 +131,19 @@ Feature: peer manager
     And for each connected peer, send_GetPeers is mocked
     And _connect_peers is called
     Then for each connected peer, send_GetPeers should be called
+
+  Scenario: receive a valid Hello packet and confirm listen port
+    Given a peer in connected_peers
+    When Hello is received from the peer
+    Then the peers port and node id should be reset to their correct values
+    And peer_manager._known_peers should contain the peer
+
+  Scenario: receive a list of peers from another peer
+    Given a peer in connected_peers
+    When _recv_Peers is called
+    Then all received peers should be added to _known_peers and saved to peers_test.json
+
+  Scenario: peer has incompatible protocol version
+    Given a known connected peer with incompatible protocol version
+    When send_Disconnect is called with reason "Incompatible"
+    Then peer should be removed from _known_peers

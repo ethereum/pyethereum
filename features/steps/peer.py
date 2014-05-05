@@ -33,11 +33,9 @@ def step_impl(context):
     packet = context.packeter.dump_Hello()
     assert context.sent_packets == [packet]
 
-
 @given(u'a valid Hello packet')  # noqa
 def step_impl(context):
     context.packet = context.packeter.dump_Hello()
-
 
 @given(u'a Hello packet with protocol version incompatible')  # noqa
 def step_impl(context):
@@ -241,22 +239,23 @@ def step_impl(context):
     context.packet = context.packeter.dump_Peers(context.peers_data)
 
 
-@when(u'handler for a new_peer_received signal is registered')  # noqa
+@when(u'handler for new_peers_received signal is registered')  # noqa
 def step_impl(context):
     context.new_peer_received_handler = mock.MagicMock()
-    from pyethereum.signals import peer_address_received
-    peer_address_received.connect(context.new_peer_received_handler)
+    from pyethereum.signals import peer_addresses_received
+    peer_addresses_received.connect(context.new_peer_received_handler)
 
 
-@then(u'the new_peer_received handler should be called once'  # noqa
-' for each peer')
+@then(u'the new_peers_received handler should be called once'  # noqa
+' with all peers')
 def step_impl(context):
-    call_args_list = context.new_peer_received_handler.call_args_list
-    assert len(call_args_list) == len(context.peers_data)
-    pairs = zip(call_args_list, context.peers_data)
+    call_args = context.new_peer_received_handler.call_args_list[0]
+    call_peers = call_args[1]['addresses']
+    assert len(call_peers) == len(context.peers_data)
+    pairs = zip(call_peers, context.peers_data)
     for call, peer in pairs:
-        assert call[1]['address'] == peer
-
+        assert call == peer
+        #assert call[1]['address'] == peer
 
 @when(u'peer.send_GetTransactions is called')  # noqa
 def step_impl(context):

@@ -1,6 +1,8 @@
 import time
 import socket
 import logging
+import json
+import os
 
 from dispatch import receiver
 
@@ -35,11 +37,27 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
+    def load_saved_peers(self, name='peers.json'):
+        path = os.path.join(self.config.get('misc', 'data_dir'), name)
+        if os.path.exists(path):
+                peers = set((i, p, "") for i, p in json.load(open(path)))
+                self._known_peers.update(peers)
+        else:
+            logger.debug('no peers.json file')
+
+    def save_peers(self, file_name='peers.json'):
+        path = os.path.join(self.config.get('misc', 'data_dir'), file_name)
+        json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
+
     def add_known_peer_address(self, ip, port, node_id):
         ipn = (ip, port, node_id)
-        with self.lock:
-            if ipn not in self._known_peers:
-                self._known_peers.add(ipn)
+        if not node_id in (self.local_node_id, ""):
+            with self.lock:
+                if ipn not in self._known_peers:
+                    # remove and readd if peer was loaded (without node id)
+                    if (ip, port, "") in self._known_peers:
+                        self._known_peers.remove((ip, port, ""))
+                    self._known_peers.add(ipn)
 
     def get_known_peer_addresses(self):
         return set(self._known_peers).union(
@@ -48,7 +66,7 @@ class PeerManager(StoppableLoopThread):
     def get_connected_peer_addresses(self):
         "get peers, we connected and have a port"
         return set((p.ip, p.port, p.node_id) for p in self.connected_peers
-                   if p.port)
+                   if p.hello_received)
 
     def remove_peer(self, peer):
         if not peer.stopped():
@@ -86,7 +104,7 @@ class PeerManager(StoppableLoopThread):
         candidates = self.get_known_peer_addresses().difference(
             self.get_connected_peer_addresses())
         candidates = [
-            ipn for ipn in candidates if ipn[2] != self.local_node_id]
+            ipn for ipn in candidates if ipn[2] != self.local_node_id ]
         return candidates
 
     def _check_alive(self, peer):
@@ -137,6 +155,9 @@ class PeerManager(StoppableLoopThread):
             self._check_alive(peer)
         self._connect_peers()
 
+        if len(self._known_peers) == 0: 
+            self.load_saved_peers()
+
         for i in range(100):
             if not self.stopped():
                 time.sleep(.1)
@@ -147,7 +168,10 @@ class PeerManager(StoppableLoopThread):
         return peer
 
     def add_peer(self, connection, ip, port):
-        # FIXME: should check existance first
+        # check existance first
+        for peer in self.connected_peers:
+            if (ip, port) == (peer.ip, peer.port):
+                return peer
         connection.settimeout(1)
         peer = self._start_peer(connection, ip, port)
         with self.lock:
@@ -161,23 +185,9 @@ peer_manager = PeerManager()
 def config_peermanager(sender, config, **kwargs):
     peer_manager.configure(config)
 
-
 @receiver(signals.peer_connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
-
-
-@receiver(signals.peer_disconnect_requested)
-def disconnect_requested_handler(sender, peer, **kwargs):
-    peer_manager.remove_peer(peer)
-
-
-@receiver(signals.peer_address_received)
-def peer_address_received_handler(sender, address, **kwargs):
-    ''' address should be (ip, port, node_id)
-    '''
-    peer_manager.add_known_peer_address(*address)
-
 
 @receiver(signals.send_local_blocks)
 def send_blocks(sender, blocks=[], **kwargs):
@@ -185,13 +195,28 @@ def send_blocks(sender, blocks=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
 
-
 @receiver(signals.known_peer_addresses_requested)
 def known_peers_requested_handler(sender, req, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_known_peer_addresses()
     signals.known_peer_addresses_ready.send(None, data=peers)
 
+@receiver(signals.peer_disconnect_requested)
+def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
+    peer_manager.remove_peer(peer)
+    if forget:
+        ipn = (peer.ip, peer.port, peer.node_id)
+        if ipn in self._known_peers:
+            self._known_peers.remove(ipn)
+            self.save_peers()
+
+@receiver(signals.peer_addresses_received)
+def peer_addresses_received_handler(sender, peers, **kwargs):
+    ''' peer should be (ip, port, node_id)
+    '''
+    for peer in peers:
+        peer_manager.add_known_peer_address(*peer)
+    peer_manager.save_peers()
 
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
@@ -204,7 +229,6 @@ def send_transactions(sender, transactions=[], **kwargs):
 def request_remote_chain(sender, parents=[], count=1, **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_GetChain(parents, count)
-
 
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):

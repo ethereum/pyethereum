@@ -147,9 +147,11 @@ class Peer(StoppableLoopThread):
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
+        # add to known peers list in handshake signal
         self.hello_received = True
         if len(data) == 6:
             self.node_id = data[5]
+            self.port = idec(data[3]) # replace connection port with listen port
 
         # reply with hello if not send
         if not self.hello_sent:
@@ -176,7 +178,9 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Disconnect())
         # end connection
         time.sleep(2)
-        signals.peer_disconnect_requested.send(Peer, peer=self)
+
+        forget = True if reason and 'Incompatible' in reason else False
+        signals.peer_disconnect_requested.send(Peer, peer=self, forget=forget)
 
     def _recv_Disconnect(self, data):
         if len(data):
@@ -197,13 +201,15 @@ class Peer(StoppableLoopThread):
             self.send_packet(packet)
 
     def _recv_Peers(self, data):
+        addresses = []
         for ip, port, pid in data:
             assert isinstance(ip, list)
             ip = '.'.join(str(ord(b or '\x00')) for b in ip)
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
-            signals.peer_address_received.send(
-                sender=Peer, address=[ip, port, pid])
+            addresses.append([ip, port, pid])
+        signals.peer_addresses_received.send(
+                sender=Peer, addresses=addresses)
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')

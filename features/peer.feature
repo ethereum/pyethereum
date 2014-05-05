@@ -101,10 +101,10 @@ Feature: peer
   Scenario: receive a Peers packet
     Given peers data
     And a Peers packet with the peers data
-    When handler for a new_peer_received signal is registered
+    When handler for new_peers_received signal is registered
     And the packet is received from peer
     And all data with the peer is processed
-    Then the new_peer_received handler should be called once for each peer
+    Then the new_peers_received handler should be called once with all peers
 
   Scenario: send GetTransactions to peer
     When peer.send_GetTransactions is called
