@@ -156,7 +156,7 @@ class Peer(StoppableLoopThread):
         if not self.hello_sent:
             self.send_Hello()
 
-        signals.peer_handshake_success.send(sender=self)
+        signals.peer_handshake_success.send(sender=Peer, peer=self)
 
     def send_Ping(self):
         self.send_packet(packeter.dump_Ping())
@@ -183,7 +183,7 @@ class Peer(StoppableLoopThread):
         if len(data):
             reason = packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(self), reason))
-        signals.peer_disconnect_requested.send(sender=self)
+        signals.peer_disconnect_requested.send(sender=Peer)
 
     def send_GetPeers(self):
         self.send_packet(packeter.dump_GetPeers())
@@ -227,7 +227,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.remote_blocks_received.send(sender=Peer, block_lst=data)
+        signals.remote_blocks_received.send(sender=Peer, peer=self, block_lst=data)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))
