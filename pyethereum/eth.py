@@ -151,6 +151,12 @@ def main():
     from pyethereum.chainmanager import chain_manager
 
     try:
+        import pyethereum.monkeypatch
+        logger.info("Loaded your customizations from monkeypatch.py")
+    except ImportError, e:
+        pass
+
+    try:
         tcp_server.start()
     except IOError as e:
         logger.error("Could not start TCP server: \"{0}\"".format(str(e)))
