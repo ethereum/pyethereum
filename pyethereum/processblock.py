@@ -293,14 +293,14 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append(2 ** 256 - stackargs[0])
     elif op == 'LT':
         stk.append(1 if stackargs[0] < stackargs[1] else 0)
+    elif op == 'GT':
+        stk.append(1 if stackargs[0] > stackargs[1] else 0)
     elif op == 'SLT':
         if stackargs[0] >= 2 ** 255:
             stackargs[0] -= 2 ** 256
         if stackargs[1] >= 2 ** 255:
             stackargs[1] -= 2 ** 256
         stk.append(1 if stackargs[0] < stackargs[1] else 0)
-    elif op == 'GT':
-        stk.append(1 if stackargs[0] > stackargs[1] else 0)
     elif op == 'SGT':
         if stackargs[0] >= 2 ** 255:
             stackargs[0] -= 2 ** 256
