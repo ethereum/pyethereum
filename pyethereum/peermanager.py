@@ -37,16 +37,14 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
-    def load_saved_peers(self, name='peers.json'):
-        path = os.path.join(self.config.get('misc', 'data_dir'), name)
+    def load_saved_peers(self):
+        path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         if os.path.exists(path):
-                peers = set((i, p, "") for i, p in json.load(open(path)))
-                self._known_peers.update(peers)
-        else:
-            logger.debug('no peers.json file')
+            peers = set((i, p, "") for i, p in json.load(open(path)))
+            self._known_peers.update(peers)
 
-    def save_peers(self, file_name='peers.json'):
-        path = os.path.join(self.config.get('misc', 'data_dir'), file_name)
+    def save_peers(self):
+        path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):
@@ -104,7 +102,7 @@ class PeerManager(StoppableLoopThread):
         candidates = self.get_known_peer_addresses().difference(
             self.get_connected_peer_addresses())
         candidates = [
-            ipn for ipn in candidates if ipn[2] != self.local_node_id ]
+            ipn for ipn in candidates if ipn[2] != self.local_node_id]
         return candidates
 
     def _check_alive(self, peer):
