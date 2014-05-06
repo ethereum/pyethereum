@@ -337,9 +337,9 @@ def handle_local_chain_requested(sender, peer, blocks, count, **kwargs):
                     peer.send_Blocks(res)
                 return
 
-    logger.debug("local_chain_requested: no matches")
     if len(blocks):
         #  If none of the parents are in the current
+        logger.debug("Sending NotInChain: %r", blocks[-1].encode('hex')[:4])
         peer.send_NotInChain(blocks[-1])
     else:
         # If no parents are passed, then reply need not be made.
