@@ -145,8 +145,14 @@ def create_config():
 
 def main():
     config = create_config()
-    config_ready.send(sender=None, config=config)
 
+    try:
+        import pyethereum.monkeypatch
+        logger.info("Loaded your customizations from monkeypatch.py")
+    except ImportError, e:
+        pass
+
+    config_ready.send(sender=None, config=config)
     # import after logger config is ready
     from pyethereum.chainmanager import chain_manager
 

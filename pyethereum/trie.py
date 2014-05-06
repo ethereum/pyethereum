@@ -364,7 +364,9 @@ class Trie(object):
                 content[0][:], content[1], True)
             if not key:
                 return value, value_is_node
-            if key == content[0]:
+            if key == content[0] and value == content[1]:
+                # note: if the subkey is blank, then the normalized pair
+                # will have same key but with different value
                 return node, is_node
             return self._update(BLANK_NODE, True, key, value, value_is_node)
 

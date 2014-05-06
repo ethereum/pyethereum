@@ -1,5 +1,6 @@
 import logging
 import threading
+import json
 
 import bottle
 
@@ -68,9 +69,16 @@ class CorsMiddleware:
                 return start_response(status, headers, exc_info)
             return self.app(environ, my_start_response)
 
-# ####### ##############
+
+# ######### Utilities ########
+def load_json_req():
+    json_body = bottle.request.json
+    if not json_body:
+        json_body = json.load(bottle.request.body)
+    return json_body
 
 
+# ######## Blocks ############
 def make_blocks_response(blocks):
     objs = []
     for block in blocks:

@@ -140,8 +140,8 @@ class Peer(StoppableLoopThread):
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols'
-                'expected:{0:#04x} received:{1:#04x}'.format(
+                reason='Incompatible network protocols.'
+                ' Expected:{0:#04x} received:{1:#04x}'.format(
                     packeter.PROTOCOL_VERSION, peer_protocol_version))
 
         if idec(data[1]) != packeter.NETWORK_ID:
@@ -192,8 +192,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetPeers())
 
     def _recv_GetPeers(self, data):
-        signals.request_data_async(
-            'known_peer_addresses', data, self.send_Peers)
+        signals.getpeers_received.send(sender=Peer, peer=self)
 
     def send_Peers(self, peers):
         packet = packeter.dump_Peers(peers)
@@ -208,8 +207,7 @@ class Peer(StoppableLoopThread):
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
             addresses.append([ip, port, pid])
-        signals.peer_addresses_received.send(
-                sender=Peer, addresses=addresses)
+        signals.peer_addresses_received.send(sender=Peer, addresses=addresses)
 
     def send_GetTransactions(self):
         logger.info('asking for transactions')
@@ -217,8 +215,7 @@ class Peer(StoppableLoopThread):
 
     def _recv_GetTransactions(self, data):
         logger.info('asking for transactions')
-        signals.request_data_async('local_transactions', data,
-                                   self.send_Transactions)
+        signals.gettransactions_received.send(sender=Peer, peer=self)
 
     def send_Transactions(self, transactions):
         self.send_packet(packeter.dump_Transactions(transactions))
@@ -232,7 +229,8 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
-        signals.remote_blocks_received.send(sender=Peer, peer=self, block_lst=data)
+        signals.remote_blocks_received.send(
+            sender=Peer, peer=self, block_lst=data)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))

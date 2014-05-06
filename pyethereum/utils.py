@@ -7,10 +7,24 @@ import os
 import sys
 import errno
 import rlp
+import random
 from rlp import big_endian_to_int, int_to_big_endian
 
 
 logger = logging.getLogger(__name__)
+
+
+# decorator
+def debug(label):
+    def deb(f):
+        def inner(*args, **kwargs):
+            i = random.randrange(1000000)
+            print label, i, 'start', args
+            x = f(*args, **kwargs)
+            print label, i, 'end', x
+            return x
+        return inner
+    return deb
 
 
 def sha3(seed):

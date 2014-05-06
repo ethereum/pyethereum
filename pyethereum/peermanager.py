@@ -37,16 +37,14 @@ class PeerManager(StoppableLoopThread):
                     peer.stop()
         super(PeerManager, self).stop()
 
-    def load_saved_peers(self, name='peers.json'):
-        path = os.path.join(self.config.get('misc', 'data_dir'), name)
+    def load_saved_peers(self):
+        path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         if os.path.exists(path):
-                peers = set((i, p, "") for i, p in json.load(open(path)))
-                self._known_peers.update(peers)
-        else:
-            logger.debug('no peers.json file')
+            peers = set((i, p, "") for i, p in json.load(open(path)))
+            self._known_peers.update(peers)
 
-    def save_peers(self, file_name='peers.json'):
-        path = os.path.join(self.config.get('misc', 'data_dir'), file_name)
+    def save_peers(self):
+        path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):
@@ -104,7 +102,7 @@ class PeerManager(StoppableLoopThread):
         candidates = self.get_known_peer_addresses().difference(
             self.get_connected_peer_addresses())
         candidates = [
-            ipn for ipn in candidates if ipn[2] != self.local_node_id ]
+            ipn for ipn in candidates if ipn[2] != self.local_node_id]
         return candidates
 
     def _check_alive(self, peer):
@@ -155,7 +153,7 @@ class PeerManager(StoppableLoopThread):
             self._check_alive(peer)
         self._connect_peers()
 
-        if len(self._known_peers) == 0: 
+        if len(self._known_peers) == 0:
             self.load_saved_peers()
 
         for i in range(100):
@@ -185,9 +183,11 @@ peer_manager = PeerManager()
 def config_peermanager(sender, config, **kwargs):
     peer_manager.configure(config)
 
+
 @receiver(signals.peer_connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
+
 
 @receiver(signals.send_local_blocks)
 def send_blocks(sender, blocks=[], **kwargs):
@@ -195,28 +195,32 @@ def send_blocks(sender, blocks=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
 
-@receiver(signals.known_peer_addresses_requested)
-def known_peers_requested_handler(sender, req, **kwargs):
+
+@receiver(signals.getpeers_received)
+def getaddress_received_handler(sender, peer, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_known_peer_addresses()
-    signals.known_peer_addresses_ready.send(None, data=peers)
+    peer.send_Peers(peers)
+
 
 @receiver(signals.peer_disconnect_requested)
 def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
     peer_manager.remove_peer(peer)
     if forget:
         ipn = (peer.ip, peer.port, peer.node_id)
-        if ipn in self._known_peers:
-            self._known_peers.remove(ipn)
-            self.save_peers()
+        if ipn in peer_manager._known_peers:
+            peer_manager._known_peers.remove(ipn)
+            peer_manager.save_peers()
+
 
 @receiver(signals.peer_addresses_received)
-def peer_addresses_received_handler(sender, peers, **kwargs):
-    ''' peer should be (ip, port, node_id)
+def peer_addresses_received_handler(sender, addresses, **kwargs):
+    ''' addresses should be (ip, port, node_id)
     '''
-    for peer in peers:
-        peer_manager.add_known_peer_address(*peer)
+    for address in addresses:
+        peer_manager.add_known_peer_address(*address)
     peer_manager.save_peers()
+
 
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
@@ -230,8 +234,8 @@ def request_remote_chain(sender, parents=[], count=1, **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_GetChain(parents, count)
 
+
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
-    with peer_manager.lock:
-        peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)
+    peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)
