@@ -149,6 +149,7 @@ def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = utils.encode_int(block.get_nonce(msg.sender))
     recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    msg.to = recvaddr
     # Transfer value, instaquit if not enough
     block.delta_balance(recvaddr, msg.value)
     o = block.delta_balance(msg.sender, msg.value)
