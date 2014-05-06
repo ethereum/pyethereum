@@ -1,16 +1,16 @@
 @config @peermanager @wip
 Feature: peer manager
 
-  Scenario: load_saved_peers where peers_test.json exists
+  Scenario: load_saved_peers where peers.json exists
     Given data_dir
-    And a peers_test.json file exists
+    And a peers.json file exists
     And _known_peers is empty
     When load_saved_peers is called
     Then _known_peers should contain all peers in peers.json with blank node_ids
 
-  Scenario: load_saved_peers where peers_test.json does not exist
+  Scenario: load_saved_peers where peers.json does not exist
     Given data_dir
-    And a peers_test.json file does not exist
+    And a peers.json file does not exist
     And _known_peers is empty
     When load_saved_peers is called
     Then _known_peers should still be empty
@@ -18,7 +18,7 @@ Feature: peer manager
   Scenario: save_peers
     Given peer data of (ip, port, node_id) in _known_peers
     When save_peers is called
-    Then data_dir/peers_test.json should contain all peers in _known_peers
+    Then data_dir/peers.json should contain all peers in _known_peers
 
   Scenario: add_peer from _known_peers
     Given peer data of (connection, ip, port) from _known_peers
@@ -141,7 +141,7 @@ Feature: peer manager
   Scenario: receive a list of peers from another peer
     Given a peer in connected_peers
     When _recv_Peers is called
-    Then all received peers should be added to _known_peers and saved to peers_test.json
+    Then all received peers should be added to _known_peers and saved to peers.json
 
   Scenario: peer has incompatible protocol version
     Given a known connected peer with incompatible protocol version
