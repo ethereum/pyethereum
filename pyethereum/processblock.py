@@ -181,37 +181,42 @@ def get_op_data(code, index):
         return 'INVALID', 0, 0
 
 
+def ceil32(x):
+    return x if x % 32 == 0 else x + 32 - (x % 32)
+
+
 def calcfee(block, tx, msg, compustate, op):
     stk, mem = compustate.stack, compustate.memory
     if op == 'SHA3':
-        m_extend = max(0, stk[-1] + stk[-2] - len(mem))
-        return GSHA3 + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
+        return GSHA3 + m_extend / 32 * GMEMORY
     elif op == 'SLOAD':
         return GSLOAD
     elif op == 'SSTORE':
         return GSSTORE
     elif op == 'MLOAD':
-        m_extend = max(0, stk[-1] + 32 - len(mem))
-        return GSTEP + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + 32) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'MSTORE':
-        m_extend = max(0, stk[-1] + 32 - len(mem))
-        return GSTEP + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + 32) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'MSTORE8':
-        m_extend = max(0, stk[-1] + 1 - len(mem))
-        return GSTEP + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + 1) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'CALL':
-        m_extend = max(
-            0, stk[-4] + stk[-5] - len(mem), stk[-6] + stk[-7] - len(mem))
-        return GCALL + stk[-1] + m_extend * GMEMORY
+        m_extend = max(0,
+                       ceil32(stk[-4] + stk[-5]) - len(mem),
+                       ceil32(stk[-6] + stk[-7]) - len(mem))
+        return GCALL + stk[-1] + m_extend / 32 * GMEMORY
     elif op == 'CREATE':
-        m_extend = max(0, stk[-3] + stk[-4] - len(mem))
-        return GCREATE + stk[-2] + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-3] + stk[-4]) - len(mem))
+        return GCREATE + stk[-2] + m_extend / 32 * GMEMORY
     elif op == 'RETURN':
-        m_extend = max(0, stk[-1] + stk[-2] - len(mem))
-        return GSTEP + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'CALLDATACOPY':
-        m_extend = max(0, stk[-1] + stk[-3] - len(mem))
-        return GSTEP + m_extend * GMEMORY
+        m_extend = max(0, ceil32(stk[-1] + stk[-3]) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'STOP' or op == 'INVALID':
         return GSTOP
     else:
@@ -288,7 +293,19 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append(2 ** 256 - stackargs[0])
     elif op == 'LT':
         stk.append(1 if stackargs[0] < stackargs[1] else 0)
+    elif op == 'SLT':
+        if stackargs[0] >= 2 ** 255:
+            stackargs[0] -= 2 ** 256
+        if stackargs[1] >= 2 ** 255:
+            stackargs[1] -= 2 ** 256
+        stk.append(1 if stackargs[0] < stackargs[1] else 0)
     elif op == 'GT':
+        stk.append(1 if stackargs[0] > stackargs[1] else 0)
+    elif op == 'SGT':
+        if stackargs[0] >= 2 ** 255:
+            stackargs[0] -= 2 ** 256
+        if stackargs[1] >= 2 ** 255:
+            stackargs[1] -= 2 ** 256
         stk.append(1 if stackargs[0] > stackargs[1] else 0)
     elif op == 'EQ':
         stk.append(1 if stackargs[0] == stackargs[1] else 0)
@@ -306,8 +323,8 @@ def apply_op(block, tx, msg, code, compustate):
         else:
             stk.append((stackargs[1] / 256 ** stackargs[0]) % 256)
     elif op == 'SHA3':
-        if len(mem) < stackargs[0] + stackargs[1]:
-            mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
+            mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
         stk.append(rlp.decode(utils.sha3(data), 256))
     elif op == 'ADDRESS':
@@ -329,8 +346,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < stackargs[1] + stackargs[2]:
-            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
+        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
+            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(msg.data):
                 mem[stackargs[1] + i] = ord(msg.data[stackargs[0] + i])
@@ -339,8 +356,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
-        if len(mem) < stackargs[1] + stackargs[2]:
-            mem.extend([0] * (stackargs[1] + stackargs[2] - len(mem)))
+        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
+            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(code):
                 mem[stackargs[1] + i] = ord(code[stackargs[0] + i])
@@ -367,20 +384,20 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append(stackargs[0])
         stk.append(stackargs[1])
     elif op == 'MLOAD':
-        if len(mem) < stackargs[0] + 32:
-            mem.extend([0] * (stackargs[0] + 32 - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + 32):
+            mem.extend([0] * (ceil32(stackargs[0] + 32) - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + 32]))
         stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
-        if len(mem) < stackargs[0] + 32:
-            mem.extend([0] * (stackargs[0] + 32 - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + 32):
+            mem.extend([0] * (ceil32(stackargs[0] + 32) - len(mem)))
         v = stackargs[1]
         for i in range(31, -1, -1):
             mem[stackargs[0] + i] = v % 256
             v /= 256
     elif op == 'MSTORE8':
-        if len(mem) < stackargs[0] + 1:
-            mem.extend([0] * (stackargs[0] + 1 - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + 1):
+            mem.extend([0] * (ceil32(stackargs[0] + 1) - len(mem)))
         mem[stackargs[0]] = stackargs[1] % 256
     elif op == 'SLOAD':
         stk.append(block.get_storage_data(msg.to, stackargs[0]))
@@ -403,8 +420,8 @@ def apply_op(block, tx, msg, code, compustate):
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
         stk.append(utils.big_endian_to_int(dat))
     elif op == 'CREATE':
-        if len(mem) < stackargs[2] + stackargs[3]:
-            mem.extend([0] * (stackargs[2] + stackargs[3] - len(mem)))
+        if len(mem) < ceil32(stackargs[2] + stackargs[3]):
+            mem.extend([0] * (ceil32(stackargs[2] + stackargs[3]) - len(mem)))
         gas = stackargs[0]
         value = stackargs[1]
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
@@ -419,10 +436,10 @@ def apply_op(block, tx, msg, code, compustate):
         else:
             stk.append(0)
     elif op == 'CALL':
-        if len(mem) < stackargs[3] + stackargs[4]:
-            mem.extend([0] * (stackargs[3] + stackargs[4] - len(mem)))
-        if len(mem) < stackargs[5] + stackargs[6]:
-            mem.extend([0] * (stackargs[5] + stackargs[6] - len(mem)))
+        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+            mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
+        if len(mem) < ceil32(stackargs[5] + stackargs[6]):
+            mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
         gas = stackargs[0]
         to = utils.encode_int(stackargs[1])
         to = (('\x00' * (32 - len(to))) + to)[12:]
@@ -446,8 +463,8 @@ def apply_op(block, tx, msg, code, compustate):
             for i in range(len(data)):
                 mem[stackargs[5] + i] = data[i]
     elif op == 'RETURN':
-        if len(mem) < stackargs[0] + stackargs[1]:
-            mem.extend([0] * (stackargs[0] + stackargs[1] - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
+            mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
