@@ -216,11 +216,11 @@ def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
 
 
 @receiver(signals.peer_addresses_received)
-def peer_addresses_received_handler(sender, peers, **kwargs):
-    ''' peer should be (ip, port, node_id)
+def peer_addresses_received_handler(sender, addresses, **kwargs):
+    ''' addresses should be (ip, port, node_id)
     '''
-    for peer in peers:
-        peer_manager.add_known_peer_address(*peer)
+    for address in addresses:
+        peer_manager.add_known_peer_address(*address)
     peer_manager.save_peers()
 
 
@@ -240,5 +240,4 @@ def request_remote_chain(sender, parents=[], count=1, **kwargs):
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
-    with peer_manager.lock:
-        peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)
+    peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)

@@ -140,8 +140,8 @@ class Peer(StoppableLoopThread):
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols'
-                'expected:{0:#04x} received:{1:#04x}'.format(
+                reason='Incompatible network protocols.'
+                ' Expected:{0:#04x} received:{1:#04x}'.format(
                     packeter.PROTOCOL_VERSION, peer_protocol_version))
 
         if idec(data[1]) != packeter.NETWORK_ID:
