@@ -381,11 +381,11 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
     chain_manager.add_transaction(transaction)
 
 
-@receiver(signals.local_transactions_requested)
-def transactions_requested_handler(sender, req, **kwargs):
+@receiver(signals.gettransactions_received)
+def gettransactions_received_handler(sender, peer, **kwargs):
     transactions = chain_manager.get_transactions()
     transactions = [rlp.decode(x.serialize()) for x in transactions]
-    signals.local_transactions_ready.send(sender=None, data=transactions)
+    peer.send_Transactions(transactions)
 
 
 @receiver(signals.remote_blocks_received)

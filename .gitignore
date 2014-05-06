@@ -19,3 +19,4 @@ logging.conf
 .*.log
 .coverage
 /statedb/
+peers.json
