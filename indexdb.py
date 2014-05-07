@@ -16,13 +16,14 @@ class LevelNode(object):
     def __init__(self, db, key, value=None, parent=None):
         self.key = key
         self.value = value
-        self.value_hash_saved = self.compute_hash(value)\
-            if value is not None else None
+        self.value_hash_saved = self.compute_hash(value)
         self.parent = parent
         self.db = db
 
     @classmethod
     def compute_hash(cls, value):
+        if value is None:
+            return None
         return utils.sha3(rlp.encode(value))
 
     @classmethod
@@ -32,40 +33,44 @@ class LevelNode(object):
     def set_sanity(self):
         self.value_hash_saved = self.value
 
-    def save_util_root(self):
-        if self.value is None:
-            if self.value_hash_saved is None:
-                return
-            else:
-                self.db.delete(self.key)
-                if self.parent:
-                    self.parent.value.remove(self.key)
-                    self.parent.save_util_root()
-                    self.set_sanity()
-        else:
-            new_hash = self.compute_hash(self.value)
-            if self.value_hash_saved == new_hash:
-                return
-
-            if not self.parent:
-                # root node
-                self.db.put(self.key, rlp.encode(self.value))
-                self.db.commit()
-                self.set_sanity()
-                return
-
-            self.db.put(new_hash, rlp.encode(self.value))
-
-            # update parent value
-            if self.value_hash_saved is None:
-                # newly created
-                self.parent.value.append(new_hash)
-            else:
-                # modified
-                self.parent.value[self.parent.value.index(self.key)] = self.key
-
+    def delete(self):
+        # delete this node
+        self.db.delete(self.key)
+        if self.parent:
+            self.parent.value.remove(self.key)
             self.parent.save_util_root()
             self.set_sanity()
+
+    def save_util_root(self):
+        new_hash = self.compute_hash(self.value)
+
+        # not changed
+        if self.value_hash_saved == new_hash:
+            return
+
+        if self.value_hash_saved and new_hash is None:
+            self.delete()
+
+        # self is already root node
+        if not self.parent:
+            self.db.put(self.key, rlp.encode(self.value))
+            self.db.commit()
+            self.set_sanity()
+            return
+
+        # self is intermediate node
+        self.db.put(new_hash, rlp.encode(self.value))
+
+        # update parent value
+        if self.value_hash_saved is None:
+            # newly created
+            self.parent.value.append(new_hash)
+        else:
+            # modified
+            self.parent.value[self.parent.value.index(self.key)] = self.key
+
+        self.parent.save_util_root()
+        self.set_sanity()
 
     def __len__(self):
         self.value.__len__()
