@@ -167,5 +167,7 @@ class AccountTxIndex(object):
             page_node = self.get_page_node(account_node, len(account_node)-1)
         for tx in txs:
             if len(page_node) >= self.pagenation:
+                page_node.save_util_root()
                 page_node = self.create_page_node(account_node)
             page_node.append(tx)
+        page_node.save_util_root()
