@@ -9,10 +9,10 @@ def step_impl(context):
     context.data_dir = context.peer_manager.config.get('misc', 'data_dir')
     assert(not context.data_dir == None)
 
-@given(u'a peers_test.json file exists')
+@given(u'a peers.json file exists')
 def step_impl(context):
     peers = set([('12.13.14.15', 2002), ('14.15.16.17', 3003)])
-    context.path = os.path.join(context.data_dir, 'peers_test.json')
+    context.path = os.path.join(context.data_dir, 'peers.json')
     json.dump(list(peers), open(context.path, 'w'))
 
 @given(u'_known_peers is empty')
@@ -21,7 +21,7 @@ def step_impl(context):
 
 @when(u'load_saved_peers is called')
 def step_impl(context):
-    context.peer_manager.load_saved_peers(name='peers_test.json')
+    context.peer_manager.load_saved_peers()
 
 @then(u'_known_peers should contain all peers in peers.json with blank node_ids')
 def step_impl(context):
@@ -30,9 +30,9 @@ def step_impl(context):
     for i,p in peers:
         assert((i, p, "") in context.peer_manager._known_peers)
 
-@given(u'a peers_test.json file does not exist')
+@given(u'a peers.json file does not exist')
 def step_impl(context):
-    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers.json')
     assert (not os.path.exists(context.path))
 
 @then(u'_known_peers should still be empty')
@@ -45,11 +45,11 @@ def step_impl(context):
 
 @when(u'save_peers is called')
 def step_impl(context):
-    context.peer_manager.save_peers(file_name='peers_test.json')
+    context.peer_manager.save_peers()
 
-@then(u'data_dir/peers_test.json should contain all peers in _known_peers')
+@then(u'data_dir/peers.json should contain all peers in _known_peers')
 def step_impl(context):
-    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers.json')
     peers = [(i, p) for i, p in json.load(open(context.path))]
     os.remove(context.path)
     for ip, port, nodeid in context.peer_manager._known_peers:
@@ -484,7 +484,7 @@ def step_impl(context):
     def peer_addresses_received_handler(sender, addresses, **kwargs):
         for address in addresses:
             context.peer_manager.add_known_peer_address(*address)
-        context.peer_manager.save_peers(file_name="peers_test.json")
+        context.peer_manager.save_peers()
     peer_addresses_received.connect(peer_addresses_received_handler)
 
     context.peers_to_send = [('9.8.7.6', 3000, 'him'), ('10.9.8.7', 4000, 'her'), ('12.11.10.9', 5000, 'she')]
@@ -492,9 +492,9 @@ def step_impl(context):
     decoded_packet = context.packeter.load_packet(context.packet)[1][3]
     context.peer._recv_Peers(decoded_packet)
 
-@then(u'all received peers should be added to _known_peers and saved to peers_test.json')
+@then(u'all received peers should be added to _known_peers and saved to peers.json')
 def step_impl(context):
-    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers_test.json')
+    context.path = os.path.join(context.peer_manager.config.get('misc', 'data_dir'), 'peers.json')
     saved_peers = [(i, p) for i, p in json.load(open(context.path))]
     os.remove(context.path)
     for ip, port, nodeid in context.peers_to_send:

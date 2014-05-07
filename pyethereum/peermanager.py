@@ -57,6 +57,9 @@ class PeerManager(StoppableLoopThread):
                         self._known_peers.remove((ip, port, ""))
                     self._known_peers.add(ipn)
 
+    def remove_known_peer_address(self, ip, port, node_id):
+        self._known_peers.remove((ip, port, node_id))
+
     def get_known_peer_addresses(self):
         return set(self._known_peers).union(
             self.get_connected_peer_addresses())
@@ -141,7 +144,7 @@ class PeerManager(StoppableLoopThread):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
                 # don't use this node again in case of connect error > remove
-                self._known_peers.remove((ip, port, node_id))
+                self.remove_known_peer_address(ip, port, node_id)
             else:
                 for peer in list(self.connected_peers):
                     with peer.lock:
@@ -209,7 +212,7 @@ def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
     if forget:
         ipn = (peer.ip, peer.port, peer.node_id)
         if ipn in peer_manager._known_peers:
-            peer_manager._known_peers.remove(ipn)
+            peer_manager.remove_known_peer_address(*ipn)
             peer_manager.save_peers()
 
 
