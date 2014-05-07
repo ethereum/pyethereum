@@ -1,6 +1,6 @@
 import uuid
-
 import mock
+import tempfile
 
 from pyethereum.utils import sha3
 
@@ -16,6 +16,7 @@ class ConfigHook(object):
         '''
         context.conf = conf = mock.MagicMock()
         node_id = sha3(str(uuid.uuid1())).encode('hex')
+        tempdir = tempfile.mkdtemp()
 
         def get_side_effect(section, option):
             if section == 'network' and option == 'client_id':
@@ -28,7 +29,7 @@ class ConfigHook(object):
                 return '0'*40
 
             if section == 'misc' and option == 'data_dir':
-                return '.'
+                return tempdir
 
         def getint_side_effect(section, option):
             if section == 'network' and option == 'listen_port':
