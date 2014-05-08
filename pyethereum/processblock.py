@@ -69,7 +69,8 @@ def apply_tx(block, tx):
     o = block.delta_balance(tx.sender, -tx.gasprice * tx.startgas)
     if not o:
         raise Exception("Insufficient balance to pay fee!")
-    block.increment_nonce(tx.sender)
+    if tx.to:
+        block.increment_nonce(tx.sender)
     snapshot = block.snapshot()
     message_gas = tx.startgas - GTXDATA * len(tx.serialize()) - GTXCOST
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
@@ -150,6 +151,7 @@ def create_contract(block, tx, msg):
     nonce = utils.encode_int(block.get_nonce(msg.sender))
     recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
     msg.to = recvaddr
+    block.increment_nonce(msg.sender)
     # Transfer value, instaquit if not enough
     block.delta_balance(recvaddr, msg.value)
     o = block.delta_balance(msg.sender, msg.value)
