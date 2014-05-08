@@ -118,3 +118,65 @@ else:
     s, o = pb.apply_tx(blk, tx14)
     assert serpent.decode_datalist(o) == [726]
     return blk, addr
+
+def test_hedge():
+    k, v, k2, v2 = accounts()    
+    blk, addr = test_data_feeds()
+    scode4 = '''
+if !contract.storage[1000]:
+    contract.storage[1000] = msg.sender
+    contract.storage[1002] = msg.value
+    contract.storage[1003] = msg.data[0]
+    return(1)
+elif !contract.storage[1001]:
+    ethvalue = contract.storage[1002]
+    if msg.value >= ethvalue:
+        contract.storage[1001] = msg.sender
+    othervalue = ethvalue * msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    contract.storage[1004] = othervalue
+    contract.storage[1005] = block.timestamp + 86400
+    return([2,othervalue],2)
+else:
+    othervalue = contract.storage[1004]
+    ethvalue = othervalue / msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    if ethvalue >= contract.balance:
+        send(contract.storage[1000],contract.balance,tx.gas-100)
+        return(3)
+    elif block.timestamp > contract.storage[1005]:
+        send(contract.storage[1001],contract.balance - ethvalue,tx.gas-100)
+        send(contract.storage[1000],ethvalue,tx.gas-100)
+        return(4)
+    else:
+        return(5)
+''' % (addr, addr)
+    code4 = serpent.compile(scode4)
+    # print("AST", serpent.rewrite(serpent.parse(scode4)))
+    # print("Assembly", serpent.compile_to_assembly(scode4))
+    # important: no new genesis block
+    tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
+    s, addr2 = pb.apply_tx(blk, tx15)
+    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k)
+    s, o = pb.apply_tx(blk, tx16)
+    assert serpent.decode_datalist(o) == [1]
+    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k2)
+    s, o = pb.apply_tx(blk, tx17)
+    assert serpent.decode_datalist(o) == [2, 72600000000000000000L]
+    snapshot = blk.snapshot()
+    tx18 = t.Transaction(7, gasprice, startgas, addr2, 0, '').sign(k)
+    s, o = pb.apply_tx(blk, tx18)
+    assert serpent.decode_datalist(o) == [5]
+    tx19 = t.Transaction(8, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 300])).sign(k)
+    s, o = pb.apply_tx(blk, tx19)
+    assert serpent.decode_datalist(o) == [1]
+    tx20 = t.Transaction(9, gasprice, startgas, addr2, 0, '').sign(k)
+    s, o = pb.apply_tx(blk, tx20)
+    assert serpent.decode_datalist(o) == [3]
+    blk.revert(snapshot)
+    blk.timestamp += 200000
+    tx21 = t.Transaction(7, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 1452])).sign(k)
+    s, o = pb.apply_tx(blk, tx21)
+    assert serpent.decode_datalist(o) == [1]
+    tx22 = t.Transaction(8, gasprice, 2000, addr2, 0, '').sign(k)
+    s, o = pb.apply_tx(blk, tx22)
+    assert serpent.decode_datalist(o) == [4]
+    
