@@ -85,3 +85,36 @@ else:
     tx9 = t.Transaction(5, gasprice, startgas, addr, 0, serpent.encode_datalist([v2])).sign(k)
     s, o = pb.apply_tx(blk, tx9)
     assert serpent.decode_datalist(o) == [200]
+
+
+def test_data_feeds():
+    k, v, k2, v2 = accounts()    
+    scode3 = '''
+if !contract.storage[1000]:
+    contract.storage[1000] = 1
+    contract.storage[1001] = msg.sender
+    return(0)
+elif msg.sender == contract.storage[1001] and msg.datasize == 2:
+    contract.storage[msg.data[0]] = msg.data[1]
+    return(1)
+else:
+    return(contract.storage[msg.data[0]])
+'''
+    code3 = serpent.compile(scode3)
+    # print("AST", serpent.rewrite(serpent.parse(scode3)))
+    # print("Assembly", serpent.compile_to_assembly(scode3))
+    blk = b.genesis({v: 10**18, v2: 10**18})
+    tx10 = t.contract(0, gasprice, startgas, 0, code3).sign(k)
+    s, addr = pb.apply_tx(blk, tx10)
+    tx11 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
+    s, o = pb.apply_tx(blk, tx11)
+    tx12 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
+    s, o = pb.apply_tx(blk, tx12)
+    assert serpent.decode_datalist(o) == [0]
+    tx13 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 726])).sign(k)
+    s, o = pb.apply_tx(blk, tx13)
+    assert serpent.decode_datalist(o) == [1]
+    tx14 = t.Transaction(4, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
+    s, o = pb.apply_tx(blk, tx14)
+    assert serpent.decode_datalist(o) == [726]
+    return blk, addr
