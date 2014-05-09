@@ -27,6 +27,8 @@ OUT_OF_GAS = -1
 
 
 def verify(block, parent):
+    if block.timestamp < parent.timestamp:
+        print block.timestamp, parent.timestamp
     assert block.timestamp >= parent.timestamp
     assert block.timestamp <= time.time() + 900
     block2 = blocks.Block.init_from_parent(parent,

@@ -247,6 +247,10 @@ def get_db_path():
     return os.path.join(data_dir.path, 'statedb')
 
 
+def get_index_path():
+    return os.path.join(data_dir.path, 'indexdb')
+
+
 def configure_logging(loggerlevels=':DEBUG', verbosity=1):
     logconfig = dict(
         version=1,
