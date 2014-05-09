@@ -6,8 +6,8 @@ import utils
 import processblock
 import transactions
 
-# to add EMPTY_UNCLE_HASH / GENESIS_DEFAULTS ...
-INITIAL_DIFFICULTY = 2 ** 22  # 2 ** 16 for testing
+
+INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
@@ -65,6 +65,7 @@ def calc_gaslimit(parent):
 
 class UnknownParentException(Exception):
     pass
+
 
 class Block(object):
 

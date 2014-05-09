@@ -201,14 +201,12 @@ class ChainManager(StoppableLoopThread):
         if self.head != old_head:
             self.synchronize_blockchain()
 
-    # Returns True if block is latest
     def add_block(self, block):
-
+        "returns True if block was added sucessfully"
         # make sure we know the parent
-        # if not block.has_parent() and not block.is_genesis():
-        if not block.has_parent() and block.hash != blocks.GENESIS_HASH:
+        if not block.has_parent() and not block.is_genesis():
             logger.debug('Missing parent for block %r', block.hex_hash())
-            return False  # FIXME
+            return False
 
         # check PoW
         if not len(block.nonce) == 32:
@@ -232,7 +230,6 @@ class ChainManager(StoppableLoopThread):
         if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
             self._update_head(block)
-
         return True
 
     def add_transaction(self, transaction):
