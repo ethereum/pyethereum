@@ -206,7 +206,7 @@ class Packeter(object):
         '''
         data = [self.cmd_map_by_name['Peers']]
         for ip, port, pid in peers:
-            ip = list((ienc(int(x)) for x in ip.split('.')))
+            ip = ''.join(chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)
 

@@ -195,15 +195,15 @@ class Peer(StoppableLoopThread):
         signals.getpeers_received.send(sender=Peer, peer=self)
 
     def send_Peers(self, peers):
-        packet = packeter.dump_Peers(peers)
-        if packet:
+        if peers:
+            packet = packeter.dump_Peers(peers)
             self.send_packet(packet)
 
     def _recv_Peers(self, data):
         addresses = []
         for ip, port, pid in data:
-            assert isinstance(ip, list)
-            ip = '.'.join(str(ord(b or '\x00')) for b in ip)
+            assert len(ip) == 4
+            ip = '.'.join(str(ord(b)) for b in ip)
             port = idec(port)
             logger.debug('received peer address: {0}:{1}'.format(ip, port))
             addresses.append([ip, port, pid])
