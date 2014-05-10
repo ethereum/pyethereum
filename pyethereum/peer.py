@@ -186,7 +186,10 @@ class Peer(StoppableLoopThread):
         if len(data):
             reason = packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(self), reason))
-        signals.peer_disconnect_requested.send(sender=Peer)
+            forget = bool(reason in ('Bad protocol',
+                                     'Incompatible network protocols', 'Wrong genesis block'))
+            signals.peer_disconnect_requested.send(
+                sender=Peer, peer=self, forget=forget)
 
     def send_GetPeers(self):
         self.send_packet(packeter.dump_GetPeers())
