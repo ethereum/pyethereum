@@ -482,7 +482,3 @@ def genesis(initial_alloc={}):
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
-
-GENESIS_HASH = '58894fda9e380223879b664bed0bdfafa7a393bea5075ab68f5dcc66b42c7687'.decode(
-    'hex')
-# assert GENESIS_HASH == genesis().hash # do not leave uncomment
