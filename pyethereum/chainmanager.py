@@ -164,7 +164,7 @@ class ChainManager(StoppableLoopThread):
             delay = (time.time() - ts) * (100. / pct_cpu - 1)
             time.sleep(min(delay, 1.))
         else:
-            time.sleep(.1)
+            time.sleep(.01)
 
     def new_miner(self):
         "new miner is initialized if HEAD is updated"

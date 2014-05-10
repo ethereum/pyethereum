@@ -43,7 +43,7 @@ class TcpServer(StoppableLoopThread):
             connection, (ip, port) = self.sock.accept()
         except IOError:
             traceback.print_exc(file=sys.stdout)
-            time.sleep(0.1)
+            time.sleep(0.01)
             return
         signals.peer_connection_accepted.send(sender=None,
                                               connection=connection,
