@@ -64,11 +64,11 @@ class Packeter(object):
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 0x0c
+    PROTOCOL_VERSION = 0x0f
+
     # is the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
     NETWORK_ID = 0
-    # as sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
     CLIENT_ID = 'Ethereum(py)/0.5.1/%s/Protocol:%d' % (sys.platform,
                                                        PROTOCOL_VERSION)
     CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
