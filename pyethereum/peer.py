@@ -133,10 +133,8 @@ class Peer(StoppableLoopThread):
 
     def _recv_Hello(self, data):
         # check compatibility
-        peer_protocol_version = idec(data[0])
-
-        logger.debug('received Hello protocol_version:{0:#04x}'.format(
-                     peer_protocol_version))
+        client_id, peer_protocol_version = data[2], idec(data[0])
+        logger.debug('received Hello %s V:%r',client_id, peer_protocol_version)
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
