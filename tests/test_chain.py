@@ -78,10 +78,49 @@ def test_genesis():
     assert blk == blocks.Block.deserialize(blk.serialize())
 
 
+def test_genesis_hash():
+    PoC5 = "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
+    current = PoC5
+    genesis = blocks.genesis()
+
+    # https://github.com/ethereum/cpp-ethereum/blob/34fe65370ee29d85441df0f2acdcfdd324076898/libethereum/BlockInfo.cpp#L64
+    # h256() << sha3EmptyList << h160() << stateRoot << h256() <<
+    # c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string() <<
+    # sha3(bytes(1, 42));
+
+    h256 = "\x00" * 32
+    block_structure = [
+        ["prevhash", "bin", h256],  # h256()
+        ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
+        ["coinbase", "addr", "0" * 40],  # h160()
+        ["state_root", "trie_root", ''],  # stateRoot
+        ["tx_list_root", "trie_root", ''],  # h256()
+        ["difficulty", "int", 2 ** 22],  # c_genesisDifficulty
+        ["number", "int", 0],  # 0
+        ["min_gas_price", "int", 0],  # 0
+        ["gas_limit", "int", 1000000],  # 1000000
+        ["gas_used", "int", 0],  # 0
+        ["timestamp", "int", 0],  # 0
+        ["extra_data", "bin", ""],  # ""
+        ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
+    ]
+
+    header = []
+    for name, typ, genesis_default in block_structure:
+        # print name, typ, default , getattr(self, name)
+        assert getattr(genesis, name) == genesis_default
+        header.append(utils.encoders[typ](getattr(genesis, name)))
+
+    # test coinbase h160
+    assert len(header[2]) == 160 / 8
+
+    assert genesis.hex_hash() == current
+
+
 def test_mine_block():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = mkgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     blk2 = mine_next_block(blk, coinbase=v)
     db_store(blk2)
