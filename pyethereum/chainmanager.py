@@ -154,7 +154,7 @@ class ChainManager(StoppableLoopThread):
         logger.info('synchronize requested for head %r', self.head)
 
         signals.remote_chain_requested.send(
-            sender=None, parents=[self.head.hash], count=30)
+            sender=None, parents=[self.head.hash], count=256)
 
     def loop_body(self):
         ts = time.time()
@@ -356,7 +356,7 @@ def new_peer_connected(sender, peer, **kwargs):
         logger.debug("send get transactions")
         peer.send_GetTransactions()
     # request chain
-    blocks = [b.hash for b in chain_manager.get_chain(count=30)]
+    blocks = [b.hash for b in chain_manager.get_chain(count=256)]
     with peer.lock:
         peer.send_GetChain(blocks, count=30)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
