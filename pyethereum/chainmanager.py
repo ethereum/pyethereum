@@ -411,6 +411,9 @@ def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
                 success = chain_manager.add_block(block)
                 if success:
                     logger.debug('Added %r', block)
+            elif block.prevhash == blocks.GENESIS_PREVHASH:
+                logger.debug('Incompatible Genesis %r', block)
+                peer.send_Disconnect(reason='Wrong genesis block')
             else:
                 logger.debug('Orphant %r', block)
     if chain_manager.head != old_head:

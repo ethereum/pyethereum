@@ -173,11 +173,11 @@ class Peer(StoppableLoopThread):
     def send_Disconnect(self, reason=None):
         logger.info('disconnecting {0}, reason: {1}'.format(
             str(self), reason or ''))
-        self.send_packet(packeter.dump_Disconnect())
+        self.send_packet(packeter.dump_Disconnect(reason=reason))
         # end connection
         time.sleep(2)
-
-        forget = True if reason and 'Incompatible' in reason else False
+        forget = bool(reason in ('Bad protocol',
+                                'Incompatible network protocols', 'Wrong genesis block'))
         signals.peer_disconnect_requested.send(Peer, peer=self, forget=forget)
 
     def _recv_Disconnect(self, data):
