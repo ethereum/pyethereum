@@ -6,10 +6,9 @@ import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
+import pyethereum.rlp as rlp
 from pyethereum.db import DB as DB
 import pyethereum.chainmanager as chainmanager
-
-blocks.INITIAL_DIFFICULTY = 2 ** 16
 
 tempdir = tempfile.mktemp()
 
@@ -21,6 +20,16 @@ def accounts():
     k2 = utils.sha3('horse')
     v2 = utils.privtoaddr(k2)
     return k, v, k2, v2
+
+
+@pytest.fixture(scope="module")
+def mkgenesis(*args, **kargs):
+    "set INITIAL_DIFFICULTY to a value that is quickly minable"
+    tmp = blocks.INITIAL_DIFFICULTY
+    blocks.INITIAL_DIFFICULTY = 2 ** 16
+    g = blocks.genesis(*args, **kargs)
+    blocks.INITIAL_DIFFICULTY = tmp
+    return g
 
 
 def mine_next_block(parent, coinbase=None, transactions=[]):
@@ -84,7 +93,7 @@ def test_mine_block():
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = mkgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
@@ -102,7 +111,7 @@ def test_mine_block_with_transaction():
 def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = mkgenesis({v: utils.denoms.ether * 1})
     assert blk.hex_hash() == \
         blocks.Block.deserialize(blk.serialize()).hex_hash()
     db_store(blk)
@@ -117,14 +126,14 @@ def test_block_serialization_other_db():
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = blocks.genesis()
+    a_blk = mkgenesis()
     db_store(a_blk)
     a_blk2 = mine_next_block(a_blk)
     db_store(a_blk2)
 
     # receive in other db
     set_db()
-    b_blk = blocks.genesis()
+    b_blk = mkgenesis()
     assert b_blk == a_blk
     db_store(b_blk)
     b_blk2 = b_blk.deserialize(a_blk2.serialize())
@@ -137,7 +146,7 @@ def test_block_serialization_with_transaction_other_db():
     #k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = blocks.genesis()
+    a_blk = mkgenesis()
     db_store(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
@@ -145,7 +154,7 @@ def test_block_serialization_with_transaction_other_db():
     db_store(a_blk2)
     # receive in other db
     set_db()
-    b_blk = blocks.genesis()
+    b_blk = mkgenesis()
     assert b_blk == a_blk
     db_store(b_blk)
     b_blk2 = b_blk.deserialize(a_blk2.serialize())
@@ -159,7 +168,7 @@ def test_block_serialization_with_transaction_other_db():
 def test_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = mkgenesis({v: utils.denoms.ether * 1})
     tx = get_transaction()
     assert not tx in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
