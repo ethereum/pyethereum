@@ -525,10 +525,7 @@ def step_impl(context):
                 context.peer_manager.save_peers()
 
     peer_disconnect_requested.connect(disconnect_requested_handler)
-    context.peer.send_Disconnect(                                          
-            reason='Incompatible network protocols'
-            'expected:{0:#04x} received:{1:#04x}'.format(
-                context.packeter.PROTOCOL_VERSION, context.peer_protocol_version))
+    context.peer.send_Disconnect(reason='Incompatible network protocols')
 
 @then(u'peer should be removed from _known_peers')
 def step_impl(context):

@@ -188,8 +188,6 @@ class Packeter(object):
         return self.dump_packet(data)
 
     def dump_Disconnect(self, reason=None):
-        assert not reason or reason in self.disconnect_reasons_map
-
         data = [self.cmd_map_by_name['Disconnect']]
         if reason:
             data.append(self.disconnect_reasons_map[reason])
