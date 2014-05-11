@@ -25,10 +25,16 @@ class DB(object):
         for k in self.uncommitted:
             batch.Put(k, self.uncommitted[k])
         self.db.Write(batch, sync=True)
+        self.uncommitted = {}
 
     def delete(self, key):
-        return self.db.Delete(key)
-
+        if key in self.uncommitted:
+            del self.uncommitted[key]
+            if self.has_key(key):
+                self.db.Delete(key)
+        else:
+            self.db.Delete(key)
+            
     def has_key(self, key):
         try:
             self.get(key)
