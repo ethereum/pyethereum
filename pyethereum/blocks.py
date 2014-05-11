@@ -27,7 +27,7 @@ block_structure = [
     ["tx_list_root", "trie_root", ''],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-    ["min_gas_price", "int", INITIAL_MIN_GAS_PRICE],
+    ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
@@ -133,8 +133,8 @@ class Block(object):
             raise Exception("PoW check failed")
 
     def is_genesis(self):
-        return self.prevhash == "\x00" * 32 and \
-            self.nonce == utils.sha3(chr(42))  # safe assumption?
+        return self.prevhash == GENESIS_PREVHASH and \
+            self.nonce == GENESIS_NONCE
 
     def check_proof_of_work(self, nonce):
         prefix = self.serialize_header_without_nonce()
