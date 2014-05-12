@@ -11,6 +11,7 @@ INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_TX_LIST_ROOT = "\x00" * 32
 GENESIS_GAS_LIMIT = 10 ** 6
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
@@ -18,6 +19,12 @@ GASLIMIT_EMA_FACTOR = 1024
 GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
+
+GENESIS_INITIAL_ALLOC = \
+    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
+     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
+     "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,
+     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
 
 block_structure = [
     ["prevhash", "bin", ""],
@@ -474,11 +481,13 @@ def has_block(blockhash):
     return db.DB(utils.get_db_path()).has_key(blockhash)
 
 
-def genesis(initial_alloc={}):
+def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
+                  tx_list_root=GENESIS_TX_LIST_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
+    block.transaction_list.root = GENESIS_TX_LIST_ROOT
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
