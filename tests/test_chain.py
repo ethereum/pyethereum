@@ -79,22 +79,50 @@ def test_genesis():
 
 
 def test_genesis_hash():
-    PoC5 = "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
-    current = PoC5
-    genesis = blocks.genesis()
+    CPP_PoC5_GENESIS_HEX_HASH = "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
 
-    # https://github.com/ethereum/cpp-ethereum/blob/34fe65370ee29d85441df0f2acdcfdd324076898/libethereum/BlockInfo.cpp#L64
-    # h256() << sha3EmptyList << h160() << stateRoot << h256() <<
-    # c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string() <<
-    # sha3(bytes(1, 42));
+    set_db()
+    genesis = blocks.genesis()
+    """
+    cpp: https://github.com/ethereum/cpp-ethereum/libethereum/BlockInfo.cpp#L64
+    h256() << sha3EmptyList << h160() << stateRoot << h256() << c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string() << sha3(bytes(1, 42));
+
+    PoC5 etherpad:
+    Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...), B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0), P(0) << B() << B32(sha3(B(42))) )
+
+    YP (outdated):
+    The genesis block is 9 items, and is specified thus:
+        0256 , SHA3(RLP())), 0160 , 0256 , 0256 , 2**22 , 0, (), SHA3(42), (), ()
+    Where 0256 refers to the parent and state and transaction root hashes, 
+    a 256-bit hash which is all zeroes; 
+    0160 refers to the coinbase address, a 160-bit hash which is all zeroes; 
+    2*22 refers to the difficulty; 
+    0 refers to the timestamp (the Unix epoch); 
+    () refers to the extradata 
+    and the sequences of both uncles 
+    and transactions, all empty. 
+    SHA3(42) refers to the SHA3 hash of a byte array of length one whose first 
+    and only byte is of value 42. 
+    SHA3(RLP()) values refer to the hashes of the transaction and uncle lists in RLP,
+    both empty.
+
+    The proof-of-concept series include a development premine, making the state root hash some value other than 0256.
+    The latest documentation should be consulted for the value of the state root.
+    """
 
     h256 = "\x00" * 32
-    block_structure = [
+    genesis.transactions.root = h256
+
+    # state root based on transactions
+    sr = 'b873e7cbeda6698357ee565bc3a055e8dbdb29011a1cb06e38fa1c23041d0800'.decode(
+        'hex')
+
+    genisi_block_defaults = [
         ["prevhash", "bin", h256],  # h256()
         ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
         ["coinbase", "addr", "0" * 40],  # h160()
-        ["state_root", "trie_root", ''],  # stateRoot
-        ["tx_list_root", "trie_root", ''],  # h256()
+        ["state_root", "trie_root", sr],  # stateRoot
+        ["tx_list_root", "trie_root", h256],  # h256()
         ["difficulty", "int", 2 ** 22],  # c_genesisDifficulty
         ["number", "int", 0],  # 0
         ["min_gas_price", "int", 0],  # 0
@@ -105,16 +133,14 @@ def test_genesis_hash():
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    header = []
-    for name, typ, genesis_default in block_structure:
-        # print name, typ, default , getattr(self, name)
+    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
+        assert genesis.get_balance(k) == v
+
+    for name, typ, genesis_default in genisi_block_defaults:
+        # print name, repr(getattr(genesis, name)),  repr(genesis_default)
         assert getattr(genesis, name) == genesis_default
-        header.append(utils.encoders[typ](getattr(genesis, name)))
 
-    # test coinbase h160
-    assert len(header[2]) == 160 / 8
-
-    assert genesis.hex_hash() == current
+    assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
 
 
 def test_mine_block():
