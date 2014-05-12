@@ -259,6 +259,8 @@ def test_transaction():
     k, v, k2, v2 = accounts()
     set_db()
     blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    blk = mine_next_block(blk)
     tx = get_transaction()
     assert not tx in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
