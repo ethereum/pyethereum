@@ -245,7 +245,7 @@ class ChainManager(StoppableLoopThread):
         logger.debug("get_transactions called")
         return self.miner.get_transactions()
 
-    def get_chain(self, start='', count=100):
+    def get_chain(self, start='', count=256):
         "return 'count' blocks starting from head or start"
         logger.debug("get_chain: start:%s count%d", start.encode('hex'), count)
         blocks = []
@@ -358,7 +358,7 @@ def new_peer_connected(sender, peer, **kwargs):
     # request chain
     blocks = [b.hash for b in chain_manager.get_chain(count=256)]
     with peer.lock:
-        peer.send_GetChain(blocks, count=30)
+        peer.send_GetChain(blocks, count=256)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
