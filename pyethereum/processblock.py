@@ -330,7 +330,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
-        stk.append(rlp.decode(utils.sha3(data), 256))
+        stk.append(utils.sha3(data))
     elif op == 'ADDRESS':
         stk.append(msg.to)
     elif op == 'BALANCE':
@@ -396,6 +396,8 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + 32):
             mem.extend([0] * (ceil32(stackargs[0] + 32) - len(mem)))
         v = stackargs[1]
+        if isinstance(v, str):
+            v = int(v.encode('hex'), 16)
         for i in range(31, -1, -1):
             mem[stackargs[0] + i] = v % 256
             v /= 256
