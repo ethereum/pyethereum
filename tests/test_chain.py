@@ -77,6 +77,23 @@ def test_genesis():
     assert blk in set([blk])
     assert blk == blocks.Block.deserialize(blk.serialize())
 
+def test_genesis_state_root():
+    """
+    https://ethereum.etherpad.mozilla.org/12
+    { poc-3 & above:
+    8a40bfaa73256b60764c1bf40675a99083efb075 (G)
+    e6716f9544a56c530d868e4bfbacb172315bdead (J)
+    1e12515ce3e0f817a4ddef9ca55788a1d66bd2df (V)
+    1a26338f0d905e295fccb71fa9ea849ffa12aaf4 (A)
+    }
+    State root: 2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d
+    Genesis hash: 69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
+    """    
+    sr = '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'.decode(
+        'hex')
+    set_db()
+    genesis = blocks.genesis()
+    assert genesis.state_root == sr
 
 def test_genesis_hash():
     CPP_PoC5_GENESIS_HEX_HASH = "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
@@ -87,8 +104,18 @@ def test_genesis_hash():
     cpp: https://github.com/ethereum/cpp-ethereum/libethereum/BlockInfo.cpp#L64
     h256() << sha3EmptyList << h160() << stateRoot << h256() << c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string() << sha3(bytes(1, 42));
 
-    PoC5 etherpad:
+    PoC5 etherpad: https://ethereum.etherpad.mozilla.org/11
     Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...), B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0), P(0) << B() << B32(sha3(B(42))) )
+
+    https://ethereum.etherpad.mozilla.org/12
+    { poc-3 & above:
+    8a40bfaa73256b60764c1bf40675a99083efb075 (G)
+    e6716f9544a56c530d868e4bfbacb172315bdead (J)
+    1e12515ce3e0f817a4ddef9ca55788a1d66bd2df (V)
+    1a26338f0d905e295fccb71fa9ea849ffa12aaf4 (A)
+    }
+    State root: 2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d
+    Genesis hash: 69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
 
     YP (outdated):
     The genesis block is 9 items, and is specified thus:
@@ -111,10 +138,8 @@ def test_genesis_hash():
     """
 
     h256 = "\x00" * 32
-    genesis.transactions.root = h256
-
     # state root based on transactions
-    sr = 'b873e7cbeda6698357ee565bc3a055e8dbdb29011a1cb06e38fa1c23041d0800'.decode(
+    sr = '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'.decode(
         'hex')
 
     genisi_block_defaults = [
