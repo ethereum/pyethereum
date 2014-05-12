@@ -126,7 +126,7 @@ class Block(object):
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if len(self.transactions.root) == 32 and \
+        if len(self.transactions.root) == 32 and not self.is_genesis() and\
                 not self.transactions.db.has_key(self.transactions.root):
             raise Exception(
                 "Transactions root not found in database! %r" % self)
@@ -484,10 +484,9 @@ def has_block(blockhash):
 def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
-                  tx_list_root=GENESIS_TX_LIST_ROOT,
+                tx_list_root=GENESIS_TX_LIST_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
-    block.transaction_list.root = GENESIS_TX_LIST_ROOT
     for addr in initial_alloc:
         block.set_balance(addr, initial_alloc[addr])
     return block
