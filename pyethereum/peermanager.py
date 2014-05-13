@@ -33,11 +33,10 @@ class PeerManager(StoppableLoopThread):
         self.config = config
         self.local_node_id = config.get('network', 'node_id')
 
-    def set_local_address(self, ip, port, node_id):
+    def set_local_address(self, ip, port):
         with self.lock:
             self.local_ip = ip
             self.local_port = port
-            self.local_node_id = node_id
 
     def stop(self):
         with self.lock:

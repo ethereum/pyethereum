@@ -12,6 +12,16 @@ import signals
 logger = logging.getLogger(__name__)
 
 
+def get_public_ip():
+    try:
+        # for python3
+        from urllib.request import urlopen
+    except ImportError:
+        # for python2
+        from urllib import urlopen
+    return urlopen('http://icanhazip.com/').read().strip()
+
+
 def upnp_add(port):
     '''
     :param port: local port
@@ -112,6 +122,20 @@ class TcpServer(StoppableLoopThread):
                 self.upnpc, self.external_ip, self.external_port = upnp_res
         except Exception as e:
             logger.debug('upnp failed: %s', e)
+
+        if not self.external_ip:
+            try:
+                self.external_ip = get_public_ip()
+                self.external_port = self.port
+            except Exception as e:
+                logger.debug('can\'t get public ip')
+
+        if self.external_ip:
+            signals.p2p_address_ready.send(sender=None,
+                                           ip=self.external_ip,
+                                           port=self.external_port)
+            logger.info('my public address is %s:%s',
+                        self.external_ip, self.external_port)
 
         super(TcpServer, self).pre_loop()
 
