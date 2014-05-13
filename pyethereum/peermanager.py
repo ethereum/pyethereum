@@ -199,7 +199,7 @@ def config_peermanager(sender, config, **kwargs):
 
 
 @receiver(signals.p2p_address_ready)
-def p2p_address_ready_handler(sender, ip, port):
+def p2p_address_ready_handler(sender, ip, port, **kwargs):
     peer_manager.set_local_address(ip, port)
 
 
