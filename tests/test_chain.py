@@ -7,10 +7,17 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
+import pyethereum.trie as trie
 from pyethereum.db import DB as DB
 import pyethereum.chainmanager as chainmanager
 
 tempdir = tempfile.mktemp()
+
+# https://ethereum.etherpad.mozilla.org/12
+CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
+    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
+CPP_PoC5_GENESIS_HEX_HASH = \
+    "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
 
 
 @pytest.fixture(scope="module")
@@ -77,27 +84,37 @@ def test_genesis():
     assert blk in set([blk])
     assert blk == blocks.Block.deserialize(blk.serialize())
 
-def test_genesis_state_root():
+
+def test_trie_state_root():
     """
-    https://ethereum.etherpad.mozilla.org/12
-    { poc-3 & above:
-    8a40bfaa73256b60764c1bf40675a99083efb075 (G)
-    e6716f9544a56c530d868e4bfbacb172315bdead (J)
-    1e12515ce3e0f817a4ddef9ca55788a1d66bd2df (V)
-    1a26338f0d905e295fccb71fa9ea849ffa12aaf4 (A)
-    }
-    State root: 2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d
-    Genesis hash: 69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
-    """    
-    sr = '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'.decode(
-        'hex')
+    test to track down the difference of the genesis state root 
+    between the py and cpp versions
+    """
+    def _set_acct_item(state, address, param, value):
+        if len(address) == 40:
+            address = address.decode('hex')
+        acct = state.get(address) or ['', '', '', '']
+        encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
+        acct[blocks.acct_structure_rev[param][0]] = encoder(value)
+        state.update(address, acct)
+
+    state = trie.Trie(tempfile.mktemp(), '')
+    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
+        _set_acct_item(state, k, 'balance', v)
+    assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+
+
+def test_genesis_state_root():
+    # https://ethereum.etherpad.mozilla.org/12
     set_db()
     genesis = blocks.genesis()
-    assert genesis.state_root == sr
+    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
+        assert genesis.get_balance(k) == v
+    assert genesis.state_root.encode(
+        'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+
 
 def test_genesis_hash():
-    CPP_PoC5_GENESIS_HEX_HASH = "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
-
     set_db()
     genesis = blocks.genesis()
     """
@@ -107,41 +124,29 @@ def test_genesis_hash():
     PoC5 etherpad: https://ethereum.etherpad.mozilla.org/11
     Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...), B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0), P(0) << B() << B32(sha3(B(42))) )
 
-    https://ethereum.etherpad.mozilla.org/12
-    { poc-3 & above:
-    8a40bfaa73256b60764c1bf40675a99083efb075 (G)
-    e6716f9544a56c530d868e4bfbacb172315bdead (J)
-    1e12515ce3e0f817a4ddef9ca55788a1d66bd2df (V)
-    1a26338f0d905e295fccb71fa9ea849ffa12aaf4 (A)
-    }
-    State root: 2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d
     Genesis hash: 69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
 
-    YP (outdated):
-    The genesis block is 9 items, and is specified thus:
-        0256 , SHA3(RLP())), 0160 , 0256 , 0256 , 2**22 , 0, (), SHA3(42), (), ()
+    YP: https://raw.githubusercontent.com/ethereum/latexpaper/master/Paper.tex
+    0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (), SHA3(42), (), ()
+
     Where 0256 refers to the parent and state and transaction root hashes, 
     a 256-bit hash which is all zeroes; 
-    0160 refers to the coinbase address, a 160-bit hash which is all zeroes; 
-    2*22 refers to the difficulty; 
+    0160 refers to the coinbase address, 
+    a 160-bit hash which is all zeroes; 
+    2**22 refers to the difficulty; 
     0 refers to the timestamp (the Unix epoch); 
-    () refers to the extradata 
-    and the sequences of both uncles 
-    and transactions, all empty. 
-    SHA3(42) refers to the SHA3 hash of a byte array of length one whose first 
+    () refers to the extradata and the sequences of both uncles and transactions, all empty. 
+    SHA3(42) refers to the SHA3 hash of a byte array of length one whose first
     and only byte is of value 42. 
-    SHA3(RLP()) values refer to the hashes of the transaction and uncle lists in RLP,
+    SHA3RLP() values refer to the hashes of the transaction and uncle lists in RLP, 
     both empty.
-
-    The proof-of-concept series include a development premine, making the state root hash some value other than 0256.
-    The latest documentation should be consulted for the value of the state root.
+    The proof-of-concept series include a development premine, making the state root 
+    hash some value stateRoot. The latest documentation should be consulted for 
+    the value of the state root.
     """
 
     h256 = "\x00" * 32
-    # state root based on transactions
-    sr = '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'.decode(
-        'hex')
-
+    sr = CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH.decode('hex')
     genisi_block_defaults = [
         ["prevhash", "bin", h256],  # h256()
         ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
@@ -158,13 +163,9 @@ def test_genesis_hash():
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
-        assert genesis.get_balance(k) == v
-
     for name, typ, genesis_default in genisi_block_defaults:
         # print name, repr(getattr(genesis, name)),  repr(genesis_default)
         assert getattr(genesis, name) == genesis_default
-
     assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
 
 
@@ -259,6 +260,8 @@ def test_transaction():
     k, v, k2, v2 = accounts()
     set_db()
     blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    blk = mine_next_block(blk)
     tx = get_transaction()
     assert not tx in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
