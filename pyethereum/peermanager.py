@@ -24,11 +24,19 @@ class PeerManager(StoppableLoopThread):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
         self._known_peers = set()  # (ip, port, node_id)
+
+        self.local_ip = ''
+        self.local_port = ''
         self.local_node_id = ''
 
     def configure(self, config):
         self.config = config
         self.local_node_id = config.get('network', 'node_id')
+
+    def set_local_address(self, ip, port):
+        with self.lock:
+            self.local_ip = ip
+            self.local_port = port
 
     def stop(self):
         with self.lock:
@@ -48,8 +56,10 @@ class PeerManager(StoppableLoopThread):
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):
+        if not ip or not port or not node_id:
+            return
         ipn = (ip, port, node_id)
-        if not node_id in (self.local_node_id, ""):
+        if node_id not in (self.local_node_id, ""):
             with self.lock:
                 if ipn not in self._known_peers:
                     # remove and readd if peer was loaded (without node id)
@@ -187,6 +197,11 @@ def config_peermanager(sender, config, **kwargs):
     peer_manager.configure(config)
 
 
+@receiver(signals.p2p_address_ready)
+def p2p_address_ready_handler(sender, ip, port, **kwargs):
+    peer_manager.set_local_address(ip, port)
+
+
 @receiver(signals.peer_connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
@@ -203,6 +218,9 @@ def send_blocks(sender, blocks=[], **kwargs):
 def getaddress_received_handler(sender, peer, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_known_peer_addresses()
+        peers.add((peer_manager.local_ip,
+                  peer_manager.local_port,
+                  peer_manager.local_node_id))
     peer.send_Peers(peers)
 
 

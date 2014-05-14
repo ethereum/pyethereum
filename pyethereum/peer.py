@@ -138,9 +138,7 @@ class Peer(StoppableLoopThread):
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
-                reason='Incompatible network protocols.'
-                ' Expected:{0:#04x} received:{1:#04x}'.format(
-                    packeter.PROTOCOL_VERSION, peer_protocol_version))
+                reason='Incompatible network protocols')
 
         if idec(data[1]) != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
@@ -170,23 +168,27 @@ class Peer(StoppableLoopThread):
     def _recv_Pong(self, data):
         pass
 
+    reasons_to_forget = ('Bad protocol',
+                        'Incompatible network protocols', 
+                        'Wrong genesis block')
+    
     def send_Disconnect(self, reason=None):
         logger.info('disconnecting {0}, reason: {1}'.format(
             str(self), reason or ''))
         self.send_packet(packeter.dump_Disconnect(reason=reason))
         # end connection
         time.sleep(2)
-        forget = bool(reason in ('Bad protocol',
-                                'Incompatible network protocols', 'Wrong genesis block'))
+        forget = reason in self.reasons_to_forget
         signals.peer_disconnect_requested.send(Peer, peer=self, forget=forget)
 
     def _recv_Disconnect(self, data):
         if len(data):
             reason = packeter.disconnect_reasons_map_by_id[idec(data[0])]
             logger.info('{0} sent disconnect, {1} '.format(repr(self), reason))
-            forget = bool(reason in ('Bad protocol',
-                                     'Incompatible network protocols', 'Wrong genesis block'))
-            signals.peer_disconnect_requested.send(
+            forget = reason in self.reasons_to_forget
+        else:
+            forget = None
+        signals.peer_disconnect_requested.send(
                 sender=Peer, peer=self, forget=forget)
 
     def send_GetPeers(self):

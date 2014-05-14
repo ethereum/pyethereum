@@ -10,6 +10,8 @@ from dispatch import Signal
 
 config_ready = Signal(providing_args=["config"])
 
+p2p_address_ready = Signal(providing_args=["ip", "port"])
+
 peer_connection_accepted = Signal(providing_args=["connection", "ip", "port"])
 peer_disconnect_requested = Signal(providing_args=["peer", "forget"])
 

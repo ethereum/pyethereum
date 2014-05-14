@@ -1,5 +1,6 @@
 leveldb
 bitcoin
 pysha3
+miniupnpc
 bottle
 waitress

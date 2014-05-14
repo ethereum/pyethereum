@@ -11,6 +11,7 @@ INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_TX_LIST_ROOT = ""  # \x00" * 32
 GENESIS_GAS_LIMIT = 10 ** 6
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
@@ -18,6 +19,12 @@ GASLIMIT_EMA_FACTOR = 1024
 GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
+
+GENESIS_INITIAL_ALLOC = \
+    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
+     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
+     "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,
+     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
 
 block_structure = [
     ["prevhash", "bin", ""],
@@ -40,15 +47,23 @@ for i, (name, typ, default) in enumerate(block_structure):
     block_structure_rev[name] = [i, typ, default]
 
 acct_structure = [
-    ["nonce", "int", 0],
     ["balance", "int", 0],
-    ["code", "bin", ""],
+    ["nonce", "int", 0],
     ["storage", "trie_root", ""],
+    ["code", "bin", ""],
 ]
 
 acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
+
+# account defaults as described in the YP
+account_defaults_yp = [utils.encode_int(0),
+                       utils.encode_int(0),
+                       '\x00' * 32,
+                       utils.sha3('')]
+
+account_defaults = ['', '', '', '']
 
 
 def calc_difficulty(parent, timestamp):
@@ -119,7 +134,7 @@ class Block(object):
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if len(self.transactions.root) == 32 and \
+        if len(self.transactions.root) == 32 and not self.is_genesis() and\
                 not self.transactions.db.has_key(self.transactions.root):
             raise Exception(
                 "Transactions root not found in database! %r" % self)
@@ -216,7 +231,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address) or account_defaults
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
 
@@ -229,7 +244,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address) or account_defaults
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, acct)
@@ -474,9 +489,10 @@ def has_block(blockhash):
     return db.DB(utils.get_db_path()).has_key(blockhash)
 
 
-def genesis(initial_alloc={}):
+def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
+                  tx_list_root=GENESIS_TX_LIST_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
     for addr in initial_alloc:
