@@ -99,12 +99,12 @@ def test_trie_state_root():
     def _set_acct_item(state, address, param, value):
         if len(address) == 40:
             address = address.decode('hex')
-        acct = state.get(address) or ['', '', '', '']
+        acct = state.get(address) or blocks.account_defaults_yp
         encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
         acct[blocks.acct_structure_rev[param][0]] = encoder(value)
         state.update(address, acct)
 
-    state = trie.Trie(tempfile.mktemp(), '')
+    state = trie.Trie(tempfile.mktemp(), '') # FIXME: init w/ 'x00'*32
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
         _set_acct_item(state, k, 'balance', v)
     assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH

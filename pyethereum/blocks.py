@@ -11,7 +11,7 @@ INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = "\x00" * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
-GENESIS_TX_LIST_ROOT = "" # \x00" * 32
+GENESIS_TX_LIST_ROOT = ""  # \x00" * 32
 GENESIS_GAS_LIMIT = 10 ** 6
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
@@ -58,12 +58,13 @@ for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
 # account defaults as described in the YP
-account_defaults = [utils.encode_int(0),
-                    utils.encode_int(0),
-                    '\x00' * 32,
-                    utils.sha3('')]
+account_defaults_yp = [utils.encode_int(0),
+                       utils.encode_int(0),
+                       '\x00' * 32,
+                       utils.sha3('')]
 
-account_defaults = ['','','','']
+account_defaults = ['', '', '', '']
+
 
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
@@ -491,7 +492,7 @@ def has_block(blockhash):
 def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
-                tx_list_root=GENESIS_TX_LIST_ROOT,
+                  tx_list_root=GENESIS_TX_LIST_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
     for addr in initial_alloc:
