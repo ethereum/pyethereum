@@ -57,6 +57,13 @@ acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
+# account defaults as described in the YP
+account_defaults = [utils.encode_int(0),
+                    utils.encode_int(0),
+                    '\x00' * 32,
+                    utils.sha3('')]
+
+account_defaults = ['','','','']
 
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
@@ -223,7 +230,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address) or account_defaults
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
 
@@ -236,7 +243,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address) or account_defaults
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, acct)
