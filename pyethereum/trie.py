@@ -145,19 +145,19 @@ class Trie(object):
 
     @property
     def root(self):
-        if self._root == BLANK_NODE:
+        if self.root_node == BLANK_NODE:
             return BLANK_ROOT
-        return self._root
+        return self.root_node
 
     @root.setter
     def root(self, value):
-        self._root = value if value and value != BLANK_ROOT else BLANK_NODE
+        self.root_node = value if value and value != BLANK_ROOT else BLANK_NODE
 
     def clear(self):
         ''' clear all tree data
         '''
         # FIXME: remove saved (hash, value) from database
-        self._root = BLANK_NODE
+        self.root_node = BLANK_NODE
 
     def _inspect_node(self, node):
         ''' get node type and content
@@ -445,14 +445,14 @@ class Trie(object):
         ''' .. note:: value_is_node should be true, or the key will be updated
         with a blank value
         '''
-        self._root, _ = self._update(
-            self._root,
+        self.root_node, _ = self._update(
+            self.root_node,
             True,
             bin_to_nibbles(str(key)),
             BLANK_NODE,
             value_is_node=True)
         self.db.commit()
-        return self._rlp_decode(self._root)
+        return self._rlp_decode(self.root_node)
 
     def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -518,7 +518,7 @@ class Trie(object):
             return res
 
     def to_dict(self, as_hex=False):
-        d = self._to_dict(self._root, True)
+        d = self._to_dict(self.root_node, True)
         res = {}
         for key_str, value in d.iteritems():
             nibbles = [int(x) for x in key_str.split('+')]
@@ -527,11 +527,11 @@ class Trie(object):
         return res
 
     def get(self, key):
-        rlp_value, _ = self._get(self._root, True, bin_to_nibbles(str(key)))
+        rlp_value, _ = self._get(self.root_node, True, bin_to_nibbles(str(key)))
         return self._rlp_decode(rlp_value) if rlp_value is not None else None
 
     def get_size(self):
-        return self._get_size(self._root, True)
+        return self._get_size(self.root_node, True)
 
     def update(self, key, value):
         '''
@@ -544,14 +544,14 @@ class Trie(object):
         if len(key) > 32:
             raise Exception("Max key length is 32")
 
-        self._root, _ = self._update(
-            self._root,
+        self.root_node, _ = self._update(
+            self.root_node,
             True,
             bin_to_nibbles(str(key)),
             self._rlp_encode(value),
             value_is_node=False)
         self.db.commit()
-        return self._rlp_decode(self._root)
+        return self._rlp_decode(self.root_node)
 
 if __name__ == "__main__":
     import sys
