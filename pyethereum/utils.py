@@ -5,8 +5,8 @@ from bitcoin import privtopub
 import struct
 import os
 import sys
-import errno
 import rlp
+import db
 import random
 from rlp import big_endian_to_int, int_to_big_endian
 
@@ -101,7 +101,7 @@ def decode_bin(v):
     '''decodes a bytearray from serialization'''
     if not isinstance(v, (str, unicode)):
         raise Exception("Value must be binary, not RLP array")
-    return v
+    return dbget(v)
 
 
 def decode_addr(v):
@@ -132,7 +132,9 @@ def decode_root(root):
 
 def encode_bin(v):
     '''encodes a bytearray into serialization'''
-    return v
+    key = sha3(v)
+    dbput(key, v)
+    return key
 
 
 def encode_root(v):
@@ -249,6 +251,16 @@ def get_db_path():
 
 def get_index_path():
     return os.path.join(data_dir.path, 'indexdb')
+
+
+def dbput(key, value):
+    database = db.DB(get_db_path())
+    return database.put(key, value)
+
+
+def dbget(key):
+    database = db.DB(get_db_path())
+    return database.get(key)
 
 
 def configure_logging(loggerlevels=':DEBUG', verbosity=1):

@@ -23,7 +23,7 @@ def step_impl(context):
 
 @then(u'root will be blank')  # noqa
 def step_impl(context):
-    assert context.trie.root == ''
+    assert context.trie.root == trie.BLANK_ROOT
 
 
 @given(u'pairs with keys: {keys:Py}')  # noqa
