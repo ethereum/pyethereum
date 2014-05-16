@@ -94,6 +94,13 @@ def recursive_int_to_big_endian(item):
         return res
     return item
 
+
+def rlp_encode(item):
+    '''
+    item can be nested string/integer/list of string/integer
+    '''
+    return rlp.encode(recursive_int_to_big_endian(item))
+
 # Format encoders/decoders for bin, addr, int
 
 
