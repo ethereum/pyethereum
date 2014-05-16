@@ -100,7 +100,7 @@ def test_trie_state_root():
     def _set_acct_item(state, address, param, value):
         if len(address) == 40:
             address = address.decode('hex')
-        acct = state.get(address) or blocks.get_blank_acct()
+        acct = state.get(address) or blocks.mk_blank_acct()
         encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
         acct[blocks.acct_structure_rev[param][0]] = encoder(value)
         state.update(address, acct)
