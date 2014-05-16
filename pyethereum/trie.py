@@ -128,7 +128,7 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF_KEY_VALUE,
                          NODE_TYPE_INNER_KEY_VALUE]
 
-BLANK_NODE = ''
+BLANK = ''
 BLANK_ROOT = chr(0) * 32
 
 
@@ -145,19 +145,19 @@ class Trie(object):
 
     @property
     def root(self):
-        if self.root_node == BLANK_NODE:
+        if self.root_node == BLANK:
             return BLANK_ROOT
         return self.root_node
 
     @root.setter
     def root(self, value):
-        self.root_node = value if value and value != BLANK_ROOT else BLANK_NODE
+        self.root_node = value if value and value != BLANK_ROOT else BLANK
 
     def clear(self):
         ''' clear all tree data
         '''
         # FIXME: remove saved (hash, value) from database
-        self.root_node = BLANK_NODE
+        self.root_node = BLANK
 
     def _inspect_node(self, node):
         ''' get node type and content
@@ -170,7 +170,7 @@ class Trie(object):
         content = self._rlp_decode(node)
 
         if not content:
-            return (NODE_TYPE_BLANK, BLANK_NODE)
+            return (NODE_TYPE_BLANK, BLANK)
 
         if len(content) == 2:
             nibbles = unpack_to_nibbles(content[0])
@@ -263,7 +263,7 @@ class Trie(object):
                 new_node = [''] * 17
                 new_node[-1] = node
                 new_node[key[0]] = self._update(
-                    BLANK_NODE, True, key[1:], value, value_is_node)
+                    BLANK, True, key[1:], value, value_is_node)
                 return self._normalize_node(
                     self._rlp_encode(new_node), True)
 
@@ -278,8 +278,8 @@ class Trie(object):
                     True)
             # a inner node
             else:
-                if value == BLANK_NODE:
-                    return BLANK_NODE, True
+                if value == BLANK:
+                    return BLANK, True
 
                 return self._normalize_node(
                     self._rlp_encode([pack_nibbles(key), value]), True)
@@ -335,7 +335,7 @@ class Trie(object):
 
         # create node for key postfix
         post_curr_key_node, is_node = self._update(
-            BLANK_NODE, True,
+            BLANK, True,
             curr_key[prefix_length:], curr_val, curr_val_is_node)
 
         post_curr_key_node, is_node = self._update(
@@ -344,7 +344,7 @@ class Trie(object):
 
         # create node for key prefix
         return self._update(
-            BLANK_NODE, True,
+            BLANK, True,
             curr_key[:prefix_length], post_curr_key_node, is_node)
 
     def _normalize_pair(self, key, value, value_is_node):
@@ -379,13 +379,13 @@ class Trie(object):
                 # note: if the subkey is blank, then the normalized pair
                 # will have same key but with different value
                 return node, is_node
-            return self._update(BLANK_NODE, True, key, value, value_is_node)
+            return self._update(BLANK, True, key, value, value_is_node)
 
         if is_diverge_type(node_type):
             not_blank_slots_count = sum(1 for x in range(17) if content[x])
 
             if not not_blank_slots_count:
-                return BLANK_NODE, True
+                return BLANK, True
 
             if not_blank_slots_count > 1:
                 return node, True
@@ -394,7 +394,7 @@ class Trie(object):
 
             # convert to a key value node
             if content[-1]:
-                return self._update(BLANK_NODE, True, [], content[-1], False)
+                return self._update(BLANK, True, [], content[-1], False)
 
             index = [i for i, item in enumerate(content) if item][0]
 
@@ -416,7 +416,7 @@ class Trie(object):
         key2, value2, value2_is_node = self._normalize_pair(
             key2, value2, value2_is_node)
 
-        diverge_node = [BLANK_NODE] * 17
+        diverge_node = [BLANK] * 17
 
         if not key1:
             diverge_node[-1] = value1
@@ -449,7 +449,7 @@ class Trie(object):
             self.root_node,
             True,
             bin_to_nibbles(str(key)),
-            BLANK_NODE,
+            BLANK,
             value_is_node=True)
         self.db.commit()
         return self._rlp_decode(self.root_node)
