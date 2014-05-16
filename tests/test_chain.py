@@ -110,7 +110,7 @@ def test_trie_state_root_nodep():
     state = trie.Trie(tempfile.mktemp())
     for address, value in GENESIS_INITIAL_ALLOC.items():
         acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
-        state.update(address.decode('hex'), acct)
+        state.update(address.decode('hex'), rlp.encode(acct))
     assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 @pytest.mark.state_root
@@ -129,7 +129,7 @@ def test_trie_state_root():
         acct = state.get(address) or blocks.mk_blank_acct()
         encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
         acct[blocks.acct_structure_rev[param][0]] = encoder(value)
-        state.update(address, acct)
+        state.update(address, rlp.encode(acct))
 
     state = trie.Trie(tempfile.mktemp())
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():

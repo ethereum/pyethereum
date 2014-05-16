@@ -45,9 +45,9 @@ def step_impl(context):
         assert context.trie.get(key) == str(value)
 
 
-@then(u'get by the key: {key:Py} will return None')  # noqa
+@then(u'get by the key: {key:Py} will return BLANK')  # noqa
 def step_impl(context, key):
-    assert context.trie.get(key) is None
+    assert context.trie.get(key) == ''
 
 
 @then(u'tree has no change if key does not exist')  # noqa

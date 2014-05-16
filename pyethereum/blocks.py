@@ -246,7 +246,7 @@ class Block(object):
         acct = self.state.get(address) or mk_blank_acct()
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
-        self.state.update(address, acct)
+        self.state.update(address, rlp.encode(acct))
 
     # _delta_item(bin or hex, int, int) -> success/fail
     def _delta_item(self, address, param, value):
@@ -262,7 +262,7 @@ class Block(object):
         if utils.decode_int(acct[index]) + value < 0:
             return False
         acct[index] = utils.encode_int(utils.decode_int(acct[index]) + value)
-        self.state.update(address, acct)
+        self.state.update(address, rlp.encode(acct))
         return True
 
     def _add_transaction_to_list(self, tx_serialized,
@@ -270,7 +270,7 @@ class Block(object):
         # adds encoded data # FIXME: the constructor should get objects
         data = [tx_serialized, state_root, gas_used_encoded]
         self.transactions.update(
-            utils.encode_int(self.transaction_count), data)
+            utils.encode_int(self.transaction_count), rlp.encode(data))
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
