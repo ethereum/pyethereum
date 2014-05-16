@@ -87,6 +87,26 @@ def test_genesis():
     assert blk == blocks.Block.deserialize(blk.serialize())
 
 
+@pytest.mark.state_root_nodep
+def test_trie_state_root_nodep():
+    BLANK_ROOT = chr(0) * 32
+    CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
+    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
+    GENESIS_INITIAL_ALLOC = \
+        {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
+         "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
+         "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,
+         "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
+    EMPTYSHA3 = utils.sha3('')
+    assert EMPTYSHA3.encode('hex') == \
+    'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+    state = trie.Trie(tempfile.mktemp())
+    for address, value in GENESIS_INITIAL_ALLOC.items():
+        acct = [utils.encode_int(2**200), utils.encode_int(0),
+                BLANK_ROOT, EMPTYSHA3]
+        state.update(address.decode('hex'), acct)
+    assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+
 @pytest.mark.state_root
 def test_trie_state_root():
     """
