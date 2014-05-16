@@ -52,10 +52,12 @@ acct_structure = [
     ["code", "bin", ""],
 ]
 
-BLANK_ACCT = [utils.encode_int(0),
-              utils.encode_int(0),
-              trie.BLANK_ROOT,
-              utils.sha3('')]
+
+def get_blank_acct():
+    return [utils.encode_int(0),
+            utils.encode_int(0),
+            trie.BLANK_ROOT,
+            utils.sha3('')]
 
 acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
@@ -228,7 +230,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or BLANK_ACCT
+        acct = self.state.get(address) or get_blank_acct()
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
 
@@ -241,7 +243,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or BLANK_ACCT
+        acct = self.state.get(address) or get_blank_acct()
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, acct)
@@ -255,7 +257,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or BLANK_ACCT
+        acct = self.state.get(address) or get_blank_acct()
         index = acct_structure_rev[param][0]
         if utils.decode_int(acct[index]) + value < 0:
             return False
@@ -346,7 +348,7 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        acct = self.state.get(address.decode('hex')) or BLANK_ACCT
+        acct = self.state.get(address.decode('hex')) or get_blank_acct()
         return self._account_to_dict(acct)
 
     # Revert computation
