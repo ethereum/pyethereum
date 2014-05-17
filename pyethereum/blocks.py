@@ -29,8 +29,8 @@ block_structure = [
     ["prevhash", "bin", ""],
     ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
     ["coinbase", "addr", GENESIS_COINBASE],
-    ["state_root", "trie_root", ''],
-    ["tx_list_root", "trie_root", ''],
+    ["state_root", "trie_root", trie.BLANK_ROOT],
+    ["tx_list_root", "trie_root", trie.BLANK_ROOT],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
     ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
@@ -49,15 +49,9 @@ acct_structure = [
     ["balance", "int", 0],
     ["nonce", "int", 0],
     ["storage", "trie_root", trie.BLANK_ROOT],
-    ["code", "bin", ""],
+    ["code", "hash", ""],
 ]
 
-
-def mk_blank_acct():
-    return [utils.encode_int(0),
-            utils.encode_int(0),
-            trie.BLANK_ROOT,
-            utils.sha3('')]
 
 acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
@@ -86,8 +80,8 @@ class Block(object):
                  prevhash='',
                  uncles_hash=block_structure_rev['uncles_hash'][2],
                  coinbase=block_structure_rev['coinbase'][2],
-                 state_root='',
-                 tx_list_root='',
+                 state_root=trie.BLANK_ROOT,
+                 tx_list_root=trie.BLANK_ROOT,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
                  min_gas_price=block_structure_rev['min_gas_price'][2],
@@ -127,13 +121,12 @@ class Block(object):
         assert self.state.db.db == self.transactions.db.db
 
         # Basic consistency verifications
-        if len(self.state.root) == 32 and self.state.root in self.state.db:
+        if not self.state.root_valid():
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if len(self.transactions.root) == 32 and not self.is_genesis() and\
-                self.transactions.root in self.transactions.db:
+        if not self.transactions.root_valid():
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
@@ -230,9 +223,18 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+
+        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
+
+    def mk_blank_acct(self):
+        codehash = utils.sha3('')
+        self.state.db.put(codehash, '')
+        return [utils.encode_int(0),
+                utils.encode_int(0),
+                trie.BLANK_ROOT,
+                codehash]
 
     # _set_acct_item(bin or hex, int, bin)
     def _set_acct_item(self, address, param, value):
@@ -243,7 +245,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, rlp.encode(acct))
@@ -257,7 +259,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
         index = acct_structure_rev[param][0]
         if utils.decode_int(acct[index]) + value < 0:
             return False
@@ -283,7 +285,8 @@ class Block(object):
         # returns [[tx_serialized, state_root, gas_used_encoded],...]
         txlist = []
         for i in range(self.transaction_count):
-            txlist.append(self.transactions.get(utils.encode_int(i)))
+            txlist.append(rlp.decode(
+                self.transactions.get(utils.encode_int(i))))
         return txlist
 
     def get_transactions(self):
@@ -309,13 +312,10 @@ class Block(object):
         return self._delta_item(address, 'balance', value)
 
     def get_code(self, address):
-        codehash = self._get_acct_item(address, 'code')
-        return self.state.db.get(codehash) if codehash else ''
+        return self._get_acct_item(address, 'code')
 
     def set_code(self, address, value):
-        self.state.db.put(utils.sha3(value), value)
-        self.state.db.commit()
-        self._set_acct_item(address, 'code', utils.sha3(value))
+        self._set_acct_item(address, 'code', value)
 
     def get_storage(self, address):
         storage_root = self._get_acct_item(address, 'storage')
@@ -348,7 +348,8 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        acct = self.state.get(address.decode('hex')) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address.decode('hex')))\
+            or self.mk_blank_acct()
         return self._account_to_dict(acct)
 
     # Revert computation
@@ -469,7 +470,7 @@ class Block(object):
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
             state_root=parent.state.root,
-            tx_list_root='',
+            tx_list_root=trie.BLANK_ROOT,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
             min_gas_price=0,
@@ -499,6 +500,7 @@ def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
                   tx_list_root=trie.BLANK_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
-    for addr in initial_alloc:
-        block.set_balance(addr, initial_alloc[addr])
+    for addr, balance in initial_alloc.iteritems():
+        block.set_balance(addr, balance)
+    block.state.db.commit()
     return block

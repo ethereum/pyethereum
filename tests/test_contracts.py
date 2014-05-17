@@ -1,6 +1,5 @@
-import sys
 import pytest
-import pyethereum.serpent as serpent
+import serpent
 import pyethereum.processblock as pb
 import pyethereum.blocks as b
 import pyethereum.transactions as t
@@ -9,6 +8,7 @@ import pyethereum.utils as u
 
 gasprice = 0
 startgas = 10000
+
 
 @pytest.fixture(scope="module")
 def accounts():
@@ -20,7 +20,7 @@ def accounts():
 
 
 def test_namecoin():
-    k, v, k2, v2 = accounts()    
+    k, v, k2, v2 = accounts()
     blk = b.genesis({v: u.denoms.ether * 1})
     scode1 = '''
 if !contract.storage[msg.data[0]]:
@@ -33,19 +33,24 @@ else:
     tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
     s, addr = pb.apply_tx(blk, tx1)
     snapshot = blk.snapshot()
-    tx2 = t.Transaction(1, gasprice, startgas, addr, 0, serpent.encode_datalist(['george', 45]))
+    tx2 = t.Transaction(1, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist(['george', 45]))
     tx2.sign(k)
     s, o = pb.apply_tx(blk, tx2)
     assert serpent.decode_datalist(o) == [1]
-    tx3 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist(['george', 20])).sign(k)
+    tx3 = t.Transaction(2, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist(['george', 20])).sign(k)
     s, o = pb.apply_tx(blk, tx3)
     assert serpent.decode_datalist(o) == [0]
-    tx4 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist(['harry', 60])).sign(k)
+    tx4 = t.Transaction(3, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist(['harry', 60])).sign(k)
     s, o = pb.apply_tx(blk, tx4)
     assert serpent.decode_datalist(o) == [1]
+    blk.revert(snapshot)
+
 
 def test_currency():
-    k, v, k2, v2 = accounts()    
+    k, v, k2, v2 = accounts()
     scode2 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
@@ -73,22 +78,26 @@ else:
     tx5 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
     s, o = pb.apply_tx(blk, tx5)
     assert serpent.decode_datalist(o) == [1]
-    tx6 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist([v2, 200])).sign(k)
+    tx6 = t.Transaction(2, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist([v2, 200])).sign(k)
     s, o = pb.apply_tx(blk, tx6)
     assert serpent.decode_datalist(o) == [1]
-    tx7 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist([v2, 900])).sign(k)
+    tx7 = t.Transaction(3, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist([v2, 900])).sign(k)
     s, o = pb.apply_tx(blk, tx7)
     assert serpent.decode_datalist(o) == [0]
-    tx8 = t.Transaction(4, gasprice, startgas, addr, 0, serpent.encode_datalist([v])).sign(k)
+    tx8 = t.Transaction(4, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist([v])).sign(k)
     s, o = pb.apply_tx(blk, tx8)
     assert serpent.decode_datalist(o) == [800]
-    tx9 = t.Transaction(5, gasprice, startgas, addr, 0, serpent.encode_datalist([v2])).sign(k)
+    tx9 = t.Transaction(5, gasprice, startgas, addr, 0,
+                        serpent.encode_datalist([v2])).sign(k)
     s, o = pb.apply_tx(blk, tx9)
     assert serpent.decode_datalist(o) == [200]
 
 
 def test_data_feeds():
-    k, v, k2, v2 = accounts()    
+    k, v, k2, v2 = accounts()
     scode3 = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
@@ -108,19 +117,23 @@ else:
     s, addr = pb.apply_tx(blk, tx10)
     tx11 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
     s, o = pb.apply_tx(blk, tx11)
-    tx12 = t.Transaction(2, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
+    tx12 = t.Transaction(2, gasprice, startgas, addr, 0,
+                         serpent.encode_datalist([500])).sign(k)
     s, o = pb.apply_tx(blk, tx12)
     assert serpent.decode_datalist(o) == [0]
-    tx13 = t.Transaction(3, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 726])).sign(k)
+    tx13 = t.Transaction(3, gasprice, startgas, addr, 0,
+                         serpent.encode_datalist([500, 726])).sign(k)
     s, o = pb.apply_tx(blk, tx13)
     assert serpent.decode_datalist(o) == [1]
-    tx14 = t.Transaction(4, gasprice, startgas, addr, 0, serpent.encode_datalist([500])).sign(k)
+    tx14 = t.Transaction(4, gasprice, startgas, addr, 0,
+                         serpent.encode_datalist([500])).sign(k)
     s, o = pb.apply_tx(blk, tx14)
     assert serpent.decode_datalist(o) == [726]
     return blk, addr
 
+
 def test_hedge():
-    k, v, k2, v2 = accounts()    
+    k, v, k2, v2 = accounts()
     blk, addr = test_data_feeds()
     scode4 = '''
 if !contract.storage[1000]:
@@ -155,17 +168,20 @@ else:
     # important: no new genesis block
     tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
     s, addr2 = pb.apply_tx(blk, tx15)
-    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k)
+    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10**17,
+                         serpent.encode_datalist([500])).sign(k)
     s, o = pb.apply_tx(blk, tx16)
     assert serpent.decode_datalist(o) == [1]
-    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10**17, serpent.encode_datalist([500])).sign(k2)
+    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10**17,
+                         serpent.encode_datalist([500])).sign(k2)
     s, o = pb.apply_tx(blk, tx17)
     assert serpent.decode_datalist(o) == [2, 72600000000000000000L]
     snapshot = blk.snapshot()
     tx18 = t.Transaction(7, gasprice, startgas, addr2, 0, '').sign(k)
     s, o = pb.apply_tx(blk, tx18)
     assert serpent.decode_datalist(o) == [5]
-    tx19 = t.Transaction(8, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 300])).sign(k)
+    tx19 = t.Transaction(8, gasprice, startgas, addr, 0,
+                         serpent.encode_datalist([500, 300])).sign(k)
     s, o = pb.apply_tx(blk, tx19)
     assert serpent.decode_datalist(o) == [1]
     tx20 = t.Transaction(9, gasprice, startgas, addr2, 0, '').sign(k)
@@ -173,10 +189,10 @@ else:
     assert serpent.decode_datalist(o) == [3]
     blk.revert(snapshot)
     blk.timestamp += 200000
-    tx21 = t.Transaction(7, gasprice, startgas, addr, 0, serpent.encode_datalist([500, 1452])).sign(k)
+    tx21 = t.Transaction(7, gasprice, startgas, addr, 0,
+                         serpent.encode_datalist([500, 1452])).sign(k)
     s, o = pb.apply_tx(blk, tx21)
     assert serpent.decode_datalist(o) == [1]
     tx22 = t.Transaction(8, gasprice, 2000, addr2, 0, '').sign(k)
     s, o = pb.apply_tx(blk, tx22)
     assert serpent.decode_datalist(o) == [4]
-    

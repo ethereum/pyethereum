@@ -104,11 +104,16 @@ def rlp_encode(item):
 # Format encoders/decoders for bin, addr, int
 
 
+def decode_hash(v):
+    '''decodes a bytearray from hash'''
+    return db_get(v)
+
+
 def decode_bin(v):
     '''decodes a bytearray from serialization'''
     if not isinstance(v, (str, unicode)):
         raise Exception("Value must be binary, not RLP array")
-    return dbget(v)
+    return v
 
 
 def decode_addr(v):
@@ -137,11 +142,16 @@ def decode_root(root):
     return root
 
 
+def encode_hash(v):
+    '''encodes a bytearray into hash'''
+    k = sha3(v)
+    db_put(k, v)
+    return k
+
+
 def encode_bin(v):
     '''encodes a bytearray into serialization'''
-    key = sha3(v)
-    dbput(key, v)
-    return key
+    return v
 
 
 def encode_root(v):
@@ -163,6 +173,7 @@ def encode_int(v):
     return int_to_big_endian(v)
 
 decoders = {
+    "hash": decode_hash,
     "bin": decode_bin,
     "addr": decode_addr,
     "int": decode_int,
@@ -170,6 +181,7 @@ decoders = {
 }
 
 encoders = {
+    "hash": encode_hash,
     "bin": encode_bin,
     "addr": encode_addr,
     "int": encode_int,
@@ -260,12 +272,14 @@ def get_index_path():
     return os.path.join(data_dir.path, 'indexdb')
 
 
-def dbput(key, value):
+def db_put(key, value):
     database = db.DB(get_db_path())
-    return database.put(key, value)
+    res = database.put(key, value)
+    database.commit()
+    return res
 
 
-def dbget(key):
+def db_get(key):
     database = db.DB(get_db_path())
     return database.get(key)
 

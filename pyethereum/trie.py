@@ -145,9 +145,14 @@ class Trie(object):
 
     @property
     def root(self):
+        '''always a 32 bytes string
+        '''
         if self.root_node == BLANK:
             return BLANK_ROOT
-        return self.root_node
+        if isinstance(self.root_node, (str, unicode)) and\
+                len(self.root_node) == 32:
+            return self.root_node
+        return sha3(rlp.encode(self.root_node))
 
     @root.setter
     def root(self, value):
@@ -556,6 +561,14 @@ class Trie(object):
             value_is_node=False)
         self.db.commit()
         return self._rlp_decode(self.root_node)
+
+    def root_valid(self):
+        if self.root == BLANK_ROOT:
+            return True
+        if isinstance(self.root_node, (str, unicode)) and\
+                len(self.root_node) == 32:
+            return self.root in self.db
+        return True
 
 if __name__ == "__main__":
     import sys

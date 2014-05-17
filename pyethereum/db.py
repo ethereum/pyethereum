@@ -22,20 +22,20 @@ class DB(object):
 
     def commit(self):
         batch = leveldb.WriteBatch()
-        for k in self.uncommitted:
-            batch.Put(k, self.uncommitted[k])
+        for k, v in self.uncommitted.iteritems():
+            batch.Put(k, v)
         self.db.Write(batch, sync=True)
         self.uncommitted = {}
 
     def delete(self, key):
         if key in self.uncommitted:
             del self.uncommitted[key]
-            if self.has_key(key):
+            if key not in self:
                 self.db.Delete(key)
         else:
             self.db.Delete(key)
-            
-    def has_key(self, key):
+
+    def _has_key(self, key):
         try:
             self.get(key)
             return True
@@ -43,4 +43,4 @@ class DB(object):
             return False
 
     def __contains__(self, key):
-        return self.has_key(key)
+        return self._has_key(key)
