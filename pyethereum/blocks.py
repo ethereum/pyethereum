@@ -127,13 +127,14 @@ class Block(object):
         assert self.state.db.db == self.transactions.db.db
 
         # Basic consistency verifications
-        if len(self.state.root) == 32 and self.state.root in self.state.db:
+        if len(self.state.root) == 32 and not self.is_genesis() and\
+                self.state.root not in self.state.db:
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
         if len(self.transactions.root) == 32 and not self.is_genesis() and\
-                self.transactions.root in self.transactions.db:
+                self.transactions.root not in self.transactions.db:
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
@@ -499,6 +500,7 @@ def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
                   tx_list_root=trie.BLANK_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
-    for addr in initial_alloc:
-        block.set_balance(addr, initial_alloc[addr])
+    for addr, balance in initial_alloc.iteritems():
+        block.set_balance(addr, balance)
+    block.state.db.commit()
     return block

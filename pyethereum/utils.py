@@ -108,7 +108,7 @@ def decode_bin(v):
     '''decodes a bytearray from serialization'''
     if not isinstance(v, (str, unicode)):
         raise Exception("Value must be binary, not RLP array")
-    return dbget(v)
+    return v
 
 
 def decode_addr(v):
@@ -139,9 +139,7 @@ def decode_root(root):
 
 def encode_bin(v):
     '''encodes a bytearray into serialization'''
-    key = sha3(v)
-    dbput(key, v)
-    return key
+    return v
 
 
 def encode_root(v):
@@ -262,7 +260,9 @@ def get_index_path():
 
 def dbput(key, value):
     database = db.DB(get_db_path())
-    return database.put(key, value)
+    res = database.put(key, value)
+    database.commit()
+    return res
 
 
 def dbget(key):
