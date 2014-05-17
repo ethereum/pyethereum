@@ -109,6 +109,4 @@ def step_impl(context):
 
 @then(u'the hash of the tree root is {root_hash:Py}')  # noqa
 def step_impl(context, root_hash):
-    t = context.trie
-    rlp_root = rlp.encode(t._rlp_decode(t.root))
-    assert trie.sha3(rlp_root).encode('hex') == root_hash
+    assert context.trie.root.encode('hex') == root_hash

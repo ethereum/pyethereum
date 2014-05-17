@@ -127,14 +127,12 @@ class Block(object):
         assert self.state.db.db == self.transactions.db.db
 
         # Basic consistency verifications
-        if len(self.state.root) == 32 and not self.is_genesis() and\
-                self.state.root not in self.state.db:
+        if not self.state.root_valid():
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
-        if len(self.transactions.root) == 32 and not self.is_genesis() and\
-                self.transactions.root not in self.transactions.db:
+        if not self.transactions.root_valid():
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
