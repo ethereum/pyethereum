@@ -39,7 +39,7 @@ def verify(block, parent):
     assert block2.gas_limit == block.gas_limit
     block2.finalize()  # this is the first potential state change
     for i in range(block.transaction_count):
-        tx, s, g = block.transactions.get(utils.encode_int(i))
+        tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
         tx = transactions.Transaction.deserialize(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
         apply_tx(block2, tx)

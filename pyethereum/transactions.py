@@ -1,4 +1,3 @@
-import re
 import rlp
 from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
