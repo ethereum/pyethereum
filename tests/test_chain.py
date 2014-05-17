@@ -18,7 +18,7 @@ CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
 CPP_PoC5_GENESIS_HEX_HASH = \
     "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
 
-CPP_PoC5_GENESIS_HEX = "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a02f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817da00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"
+CPP_PoC5_GENESIS_HEX = "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a02f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817da00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
 
 
 @pytest.fixture(scope="module")
@@ -87,16 +87,17 @@ def test_genesis():
     assert blk == blocks.Block.deserialize(blk.serialize())
 
 
-@pytest.mark.state_root_nodep
 def test_trie_state_root_nodep():
     def int_to_big_endian(integer):
-        if integer == 0: return ''
+        if integer == 0:
+            return ''
         s = '%x' % integer
-        if len(s) & 1: s = '0' + s
+        if len(s) & 1:
+            s = '0' + s
         return s.decode('hex')
     BLANK_ROOT = chr(0) * 32
     CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
+        '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
     GENESIS_INITIAL_ALLOC = \
         {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
          "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
@@ -104,36 +105,13 @@ def test_trie_state_root_nodep():
          "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
     EMPTYSHA3 = utils.sha3('')
     assert EMPTYSHA3.encode('hex') == \
-    'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+        'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
     ZERO_ENC = int_to_big_endian(0)
     assert ZERO_ENC == ''
     state = trie.Trie(tempfile.mktemp())
     for address, value in GENESIS_INITIAL_ALLOC.items():
         acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
-    assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
-
-@pytest.mark.state_root
-def test_trie_state_root():
-    """
-    test to track down the difference of the genesis state root
-    between the py and cpp versions
-
-    in cpp:
-    https://github.com/ethereum/cpp-ethereum/blob/8503a71f4418ae3d4260270a927348a985e29d44/libethereum/State.cpp#L256
-    s = AddressState(0, 0, h256(), EmptySHA3);
-    """
-    def _set_acct_item(state, address, param, value):
-        if len(address) == 40:
-            address = address.decode('hex')
-        acct = state.get(address) or blocks.mk_blank_acct()
-        encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
-        acct[blocks.acct_structure_rev[param][0]] = encoder(value)
-        state.update(address, rlp.encode(acct))
-
-    state = trie.Trie(tempfile.mktemp())
-    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
-        _set_acct_item(state, k, 'balance', v)
     assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
@@ -152,15 +130,21 @@ def test_genesis_hash():
     genesis = blocks.genesis()
     """
     cpp: https://github.com/ethereum/cpp-ethereum/libethereum/BlockInfo.cpp#L64
-    h256() << sha3EmptyList << h160() << stateRoot << h256() << c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string() << sha3(bytes(1, 42));
+    h256() << sha3EmptyList << h160() << stateRoot << h256()
+    << c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string()
+    << sha3(bytes(1, 42));
 
     PoC5 etherpad: https://ethereum.etherpad.mozilla.org/11
-    Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...), B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0), P(0) << B() << B32(sha3(B(42))) )
+    Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...),
+    B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0),
+    P(0) << B() << B32(sha3(B(42))) )
 
-    Genesis hash: 69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
+    Genesis hash:
+    69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
 
     YP: https://raw.githubusercontent.com/ethereum/latexpaper/master/Paper.tex
-    0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (), SHA3(42), (), ()
+    0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (),
+    SHA3(42), (), ()
 
     Where 0256 refers to the parent and state and transaction root hashes,
     a 256-bit hash which is all zeroes;
@@ -168,14 +152,16 @@ def test_genesis_hash():
     a 160-bit hash which is all zeroes;
     2**22 refers to the difficulty;
     0 refers to the timestamp (the Unix epoch);
-    () refers to the extradata and the sequences of both uncles and transactions, all empty.
+    () refers to the extradata and the sequences of both uncles and
+    transactions, all empty.
     SHA3(42) refers to the SHA3 hash of a byte array of length one whose first
     and only byte is of value 42.
-    SHA3RLP() values refer to the hashes of the transaction and uncle lists in RLP,
+    SHA3RLP() values refer to the hashes of the transaction and uncle lists
+    in RLP
     both empty.
-    The proof-of-concept series include a development premine, making the state root
-    hash some value stateRoot. The latest documentation should be consulted for
-    the value of the state root.
+    The proof-of-concept series include a development premine, making the state
+    root hash some value stateRoot. The latest documentation should be
+    consulted for the value of the state root.
     """
 
     h256 = "\x00" * 32
@@ -233,7 +219,7 @@ def test_mine_block_with_transaction():
     assert blk.state.db.db == blk2.state.db.db
     assert blk2.get_parent() == blk
     assert tx in blk2.get_transactions()
-    assert not tx in blk.get_transactions()
+    assert tx not in blk.get_transactions()
 
 
 def test_block_serialization_same_db():
@@ -271,7 +257,7 @@ def test_block_serialization_other_db():
 
 
 def test_block_serialization_with_transaction_other_db():
-    #k, v, k2, v2 = accounts()
+    # k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
     a_blk = mkgenesis()
@@ -300,7 +286,7 @@ def test_transaction():
     db_store(blk)
     blk = mine_next_block(blk)
     tx = get_transaction()
-    assert not tx in blk.get_transactions()
+    assert tx not in blk.get_transactions()
     success, res = processblock.apply_tx(blk, tx)
     assert tx in blk.get_transactions()
     assert blk.get_balance(v) == utils.denoms.finney * 990
