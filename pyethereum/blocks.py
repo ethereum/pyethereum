@@ -8,10 +8,9 @@ import transactions
 
 
 INITIAL_DIFFICULTY = 2 ** 22
-GENESIS_PREVHASH = "\x00" * 32
+GENESIS_PREVHASH = trie.BLANK_ROOT
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
-GENESIS_TX_LIST_ROOT = ""  # \x00" * 32
 GENESIS_GAS_LIMIT = 10 ** 6
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
@@ -49,21 +48,20 @@ for i, (name, typ, default) in enumerate(block_structure):
 acct_structure = [
     ["balance", "int", 0],
     ["nonce", "int", 0],
-    ["storage", "trie_root", ""],
+    ["storage", "trie_root", trie.BLANK_ROOT],
     ["code", "bin", ""],
 ]
+
+
+def mk_blank_acct():
+    return [utils.encode_int(0),
+            utils.encode_int(0),
+            trie.BLANK_ROOT,
+            utils.sha3('')]
 
 acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
-
-# account defaults as described in the YP
-account_defaults_yp = [utils.encode_int(0),
-                       utils.encode_int(0),
-                       '\x00' * 32,
-                       utils.sha3('')]
-
-account_defaults = ['', '', '', '']
 
 
 def calc_difficulty(parent, timestamp):
@@ -119,8 +117,9 @@ class Block(object):
         if transaction_list:
             # support init with transactions only if state is known
             assert len(self.state.root) == 32 and \
-                self.state.db.has_key(self.state.root)
-            for tx_serialized, state_root, gas_used_encoded in transaction_list:
+                self.state.root in self.state.db
+            for tx_serialized, state_root, gas_used_encoded \
+                    in transaction_list:
                 self._add_transaction_to_list(
                     tx_serialized, state_root, gas_used_encoded)
 
@@ -128,14 +127,13 @@ class Block(object):
         assert self.state.db.db == self.transactions.db.db
 
         # Basic consistency verifications
-        if len(self.state.root) == 32 and \
-                not self.state.db.has_key(self.state.root):
+        if len(self.state.root) == 32 and self.state.root in self.state.db:
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
         if tx_list_root != self.transactions.root:
             raise Exception("Transaction list root hash does not match!")
         if len(self.transactions.root) == 32 and not self.is_genesis() and\
-                not self.transactions.db.has_key(self.transactions.root):
+                self.transactions.root in self.transactions.db:
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
@@ -144,7 +142,8 @@ class Block(object):
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
-        if not self.is_genesis() and self.nonce and not self.check_proof_of_work(self.nonce):
+        if not self.is_genesis() and self.nonce and\
+                not self.check_proof_of_work(self.nonce):
             raise Exception("PoW check failed")
 
     def is_genesis(self):
@@ -168,7 +167,7 @@ class Block(object):
 
         # if we don't have the state we need to replay transactions
         _db = db.DB(utils.get_db_path())
-        if len(kargs['state_root']) == 32 and _db.has_key(kargs['state_root']):
+        if len(kargs['state_root']) == 32 and kargs['state_root'] in _db:
             return Block(**kargs)
         elif kargs['prevhash'] == GENESIS_PREVHASH:
             return Block(**kargs)
@@ -231,7 +230,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or account_defaults
+        acct = self.state.get(address) or mk_blank_acct()
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
 
@@ -244,10 +243,10 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or account_defaults
+        acct = self.state.get(address) or mk_blank_acct()
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
-        self.state.update(address, acct)
+        self.state.update(address, rlp.encode(acct))
 
     # _delta_item(bin or hex, int, int) -> success/fail
     def _delta_item(self, address, param, value):
@@ -258,19 +257,20 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or ['', '', '', '']
+        acct = self.state.get(address) or mk_blank_acct()
         index = acct_structure_rev[param][0]
         if utils.decode_int(acct[index]) + value < 0:
             return False
         acct[index] = utils.encode_int(utils.decode_int(acct[index]) + value)
-        self.state.update(address, acct)
+        self.state.update(address, rlp.encode(acct))
         return True
 
-    def _add_transaction_to_list(self, tx_serialized, state_root, gas_used_encoded):
+    def _add_transaction_to_list(self, tx_serialized,
+                                 state_root, gas_used_encoded):
         # adds encoded data # FIXME: the constructor should get objects
         data = [tx_serialized, state_root, gas_used_encoded]
         self.transactions.update(
-            utils.encode_int(self.transaction_count), data)
+            utils.encode_int(self.transaction_count), rlp.encode(data))
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
@@ -348,7 +348,7 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        acct = self.state.get(address.decode('hex')) or ['', '', '', '']
+        acct = self.state.get(address.decode('hex')) or mk_blank_acct()
         return self._account_to_dict(acct)
 
     # Revert computation
@@ -385,14 +385,16 @@ class Block(object):
         header = []
         for name, typ, default in block_structure:
             # print name, typ, default , getattr(self, name)
-            if not name in exclude:
+            if name not in exclude:
                 header.append(utils.encoders[typ](getattr(self, name)))
         return header
 
     def serialize(self):
         # Serialization method; should act as perfect inverse function of the
         # constructor assuming no verification failures
-        return rlp.encode([self.list_header(), self._list_transactions(), self.uncles])
+        return rlp.encode([self.list_header(),
+                           self._list_transactions(),
+                           self.uncles])
 
     def hex_serialize(self):
         return self.serialize().encode('hex')
@@ -455,7 +457,9 @@ class Block(object):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s %s)>' % (self.number, self.hex_hash()[:4], self.prevhash.encode('hex')[:4])
+        return '<Block(#%d %s %s)>' % (self.number,
+                                       self.hex_hash()[:4],
+                                       self.prevhash.encode('hex')[:4])
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
@@ -486,13 +490,13 @@ def get_block(blockhash):
 
 
 def has_block(blockhash):
-    return db.DB(utils.get_db_path()).has_key(blockhash)
+    return blockhash in db.DB(utils.get_db_path())
 
 
 def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
-                  tx_list_root=GENESIS_TX_LIST_ROOT,
+                  tx_list_root=trie.BLANK_ROOT,
                   difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
     for addr in initial_alloc:

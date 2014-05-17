@@ -1,4 +1,3 @@
-import sys
 import os
 import pytest
 import tempfile
@@ -53,8 +52,9 @@ def mine_next_block(parent, coinbase=None, transactions=[]):
 @pytest.fixture(scope="module")
 def get_transaction():
     k, v, k2, v2 = accounts()
-    tx = transactions.Transaction(0, gasprice=0, startgas=10000,
-                                  to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+    tx = transactions.Transaction(
+        0, gasprice=0, startgas=10000,
+        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
 
@@ -87,9 +87,36 @@ def test_genesis():
     assert blk == blocks.Block.deserialize(blk.serialize())
 
 
+@pytest.mark.state_root_nodep
+def test_trie_state_root_nodep():
+    def int_to_big_endian(integer):
+        if integer == 0: return ''
+        s = '%x' % integer
+        if len(s) & 1: s = '0' + s
+        return s.decode('hex')
+    BLANK_ROOT = chr(0) * 32
+    CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
+    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
+    GENESIS_INITIAL_ALLOC = \
+        {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
+         "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
+         "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,
+         "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
+    EMPTYSHA3 = utils.sha3('')
+    assert EMPTYSHA3.encode('hex') == \
+    'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+    ZERO_ENC = int_to_big_endian(0)
+    assert ZERO_ENC == ''
+    state = trie.Trie(tempfile.mktemp())
+    for address, value in GENESIS_INITIAL_ALLOC.items():
+        acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
+        state.update(address.decode('hex'), rlp.encode(acct))
+    assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+
+@pytest.mark.state_root
 def test_trie_state_root():
     """
-    test to track down the difference of the genesis state root 
+    test to track down the difference of the genesis state root
     between the py and cpp versions
 
     in cpp:
@@ -99,12 +126,12 @@ def test_trie_state_root():
     def _set_acct_item(state, address, param, value):
         if len(address) == 40:
             address = address.decode('hex')
-        acct = state.get(address) or blocks.account_defaults_yp
+        acct = state.get(address) or blocks.mk_blank_acct()
         encoder = utils.encoders[blocks.acct_structure_rev[param][1]]
         acct[blocks.acct_structure_rev[param][0]] = encoder(value)
-        state.update(address, acct)
+        state.update(address, rlp.encode(acct))
 
-    state = trie.Trie(tempfile.mktemp(), '') # FIXME: init w/ 'x00'*32
+    state = trie.Trie(tempfile.mktemp())
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
         _set_acct_item(state, k, 'balance', v)
     assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
@@ -135,19 +162,19 @@ def test_genesis_hash():
     YP: https://raw.githubusercontent.com/ethereum/latexpaper/master/Paper.tex
     0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (), SHA3(42), (), ()
 
-    Where 0256 refers to the parent and state and transaction root hashes, 
-    a 256-bit hash which is all zeroes; 
-    0160 refers to the coinbase address, 
-    a 160-bit hash which is all zeroes; 
-    2**22 refers to the difficulty; 
-    0 refers to the timestamp (the Unix epoch); 
-    () refers to the extradata and the sequences of both uncles and transactions, all empty. 
+    Where 0256 refers to the parent and state and transaction root hashes,
+    a 256-bit hash which is all zeroes;
+    0160 refers to the coinbase address,
+    a 160-bit hash which is all zeroes;
+    2**22 refers to the difficulty;
+    0 refers to the timestamp (the Unix epoch);
+    () refers to the extradata and the sequences of both uncles and transactions, all empty.
     SHA3(42) refers to the SHA3 hash of a byte array of length one whose first
-    and only byte is of value 42. 
-    SHA3RLP() values refer to the hashes of the transaction and uncle lists in RLP, 
+    and only byte is of value 42.
+    SHA3RLP() values refer to the hashes of the transaction and uncle lists in RLP,
     both empty.
-    The proof-of-concept series include a development premine, making the state root 
-    hash some value stateRoot. The latest documentation should be consulted for 
+    The proof-of-concept series include a development premine, making the state root
+    hash some value stateRoot. The latest documentation should be consulted for
     the value of the state root.
     """
 

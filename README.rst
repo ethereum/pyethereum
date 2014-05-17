@@ -13,7 +13,15 @@ Install
 =========
 Python2.7 is required.
 
-pip install -r requirements.txt
+``pip install -r requirements.txt``
+
+That will try to install the requirements in your current environment.
+
+NOTE: If you have not setup a `virtualenv <https://pypi.python.org/pypi/virtualenv>`_
+this will most likely try to install dependencies globally and might require more
+privileges.
+
+In case you want to avoid messing with your global environment, you can use buildout:
 
 
 Buildout(optional)

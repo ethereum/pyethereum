@@ -3,7 +3,6 @@ import processblock
 import transactions
 import blocks
 import utils
-import trie
 
 
 def sha3(x):
@@ -92,8 +91,3 @@ def getstate(blockdata, address=None):
 def account_to_dict(blockdata, address):
     block = blocks.Block.hex_deserialize(blockdata)
     return block.account_to_dict(address)
-
-
-def dbget(x):
-    db = trie.DB(utils.get_db_path())
-    return db.get(x.decode('hex'))

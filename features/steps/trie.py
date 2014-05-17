@@ -23,7 +23,7 @@ def step_impl(context):
 
 @then(u'root will be blank')  # noqa
 def step_impl(context):
-    assert context.trie.root == ''
+    assert context.trie.root == trie.BLANK_ROOT
 
 
 @given(u'pairs with keys: {keys:Py}')  # noqa
@@ -45,9 +45,9 @@ def step_impl(context):
         assert context.trie.get(key) == str(value)
 
 
-@then(u'get by the key: {key:Py} will return None')  # noqa
+@then(u'get by the key: {key:Py} will return BLANK')  # noqa
 def step_impl(context, key):
-    assert context.trie.get(key) is None
+    assert context.trie.get(key) == ''
 
 
 @then(u'tree has no change if key does not exist')  # noqa

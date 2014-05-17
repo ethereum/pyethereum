@@ -128,12 +128,13 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF_KEY_VALUE,
                          NODE_TYPE_INNER_KEY_VALUE]
 
-BLANK_NODE = ''
+BLANK = ''
+BLANK_ROOT = chr(0) * 32
 
 
 class Trie(object):
 
-    def __init__(self, dbfile, root=BLANK_NODE):
+    def __init__(self, dbfile, root=BLANK_ROOT):
         '''
         :param dbfile: key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
@@ -142,11 +143,21 @@ class Trie(object):
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
 
+    @property
+    def root(self):
+        if self.root_node == BLANK:
+            return BLANK_ROOT
+        return self.root_node
+
+    @root.setter
+    def root(self, value):
+        self.root_node = value if value and value != BLANK_ROOT else BLANK
+
     def clear(self):
         ''' clear all tree data
         '''
         # FIXME: remove saved (hash, value) from database
-        self.root = BLANK_NODE
+        self.root_node = BLANK
 
     def _inspect_node(self, node):
         ''' get node type and content
@@ -159,7 +170,7 @@ class Trie(object):
         content = self._rlp_decode(node)
 
         if not content:
-            return (NODE_TYPE_BLANK, BLANK_NODE)
+            return (NODE_TYPE_BLANK, BLANK)
 
         if len(content) == 2:
             nibbles = unpack_to_nibbles(content[0])
@@ -178,23 +189,24 @@ class Trie(object):
         :param node: node or hash
         :param is_node: node is a node or a value
         :param key: nibble list without terminator
-        :return: None if does not exist, otherwise value or hash
-        is_node denote whether the node is a node or a value
+        :return:
+            BLANK if does not exist, otherwise value or hash
+            is_node denote whether the node is a node or a value
         """
         if not is_node:
             if not key:
                 return node, False
-            return None, False
+            return BLANK, False
 
         node_type, content = self._inspect_node(node)
 
         if node_type == NODE_TYPE_BLANK:
-            return None, False
+            return BLANK, False
 
         if is_diverge_type(node_type):
             # already reach the expected node
             if not key:
-                return content[-1] if content[-1] else None, False
+                return content[-1] if content[-1] else BLANK, False
             return self._get(content[key[0]], True, key[1:])
 
         # key value node
@@ -204,14 +216,14 @@ class Trie(object):
                 return curr_val, True
             # not found
             else:
-                return None, True
+                return BLANK, True
 
         if node_type == NODE_TYPE_INNER_KEY_VALUE:
             # traverse child nodes
             if starts_with(key, curr_key):
                 return self._get(curr_val, True, key[len(curr_key):])
             else:
-                return None, True
+                return BLANK, True
 
     def _rlp_encode(self, node):
         rlpnode = rlp.encode(node)
@@ -252,7 +264,7 @@ class Trie(object):
                 new_node = [''] * 17
                 new_node[-1] = node
                 new_node[key[0]] = self._update(
-                    BLANK_NODE, True, key[1:], value, value_is_node)
+                    BLANK, True, key[1:], value, value_is_node)
                 return self._normalize_node(
                     self._rlp_encode(new_node), True)
 
@@ -267,8 +279,8 @@ class Trie(object):
                     True)
             # a inner node
             else:
-                if value == BLANK_NODE:
-                    return BLANK_NODE, True
+                if value == BLANK:
+                    return BLANK, True
 
                 return self._normalize_node(
                     self._rlp_encode([pack_nibbles(key), value]), True)
@@ -324,7 +336,7 @@ class Trie(object):
 
         # create node for key postfix
         post_curr_key_node, is_node = self._update(
-            BLANK_NODE, True,
+            BLANK, True,
             curr_key[prefix_length:], curr_val, curr_val_is_node)
 
         post_curr_key_node, is_node = self._update(
@@ -333,7 +345,7 @@ class Trie(object):
 
         # create node for key prefix
         return self._update(
-            BLANK_NODE, True,
+            BLANK, True,
             curr_key[:prefix_length], post_curr_key_node, is_node)
 
     def _normalize_pair(self, key, value, value_is_node):
@@ -368,13 +380,13 @@ class Trie(object):
                 # note: if the subkey is blank, then the normalized pair
                 # will have same key but with different value
                 return node, is_node
-            return self._update(BLANK_NODE, True, key, value, value_is_node)
+            return self._update(BLANK, True, key, value, value_is_node)
 
         if is_diverge_type(node_type):
             not_blank_slots_count = sum(1 for x in range(17) if content[x])
 
             if not not_blank_slots_count:
-                return BLANK_NODE, True
+                return BLANK, True
 
             if not_blank_slots_count > 1:
                 return node, True
@@ -383,7 +395,7 @@ class Trie(object):
 
             # convert to a key value node
             if content[-1]:
-                return self._update(BLANK_NODE, True, [], content[-1], False)
+                return self._update(BLANK, True, [], content[-1], False)
 
             index = [i for i, item in enumerate(content) if item][0]
 
@@ -405,7 +417,7 @@ class Trie(object):
         key2, value2, value2_is_node = self._normalize_pair(
             key2, value2, value2_is_node)
 
-        diverge_node = [BLANK_NODE] * 17
+        diverge_node = [BLANK] * 17
 
         if not key1:
             diverge_node[-1] = value1
@@ -434,14 +446,14 @@ class Trie(object):
         ''' .. note:: value_is_node should be true, or the key will be updated
         with a blank value
         '''
-        self.root, _ = self._update(
-            self.root,
+        self.root_node, _ = self._update(
+            self.root_node,
             True,
             bin_to_nibbles(str(key)),
-            BLANK_NODE,
+            BLANK,
             value_is_node=True)
         self.db.commit()
-        return self._rlp_decode(self.root)
+        return self._rlp_decode(self.root_node)
 
     def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -474,7 +486,7 @@ class Trie(object):
             Here key is in full form, rather than key of the individual node
         '''
         if not is_node:
-            return {'': self._rlp_decode(node)}
+            return {'': node}
 
         (node_type, content) = self._inspect_node(node)
 
@@ -503,11 +515,11 @@ class Trie(object):
                     res[full_key] = sub_value
 
             if content[-1]:
-                res[str(NIBBLE_TERMINATOR)] = self._rlp_decode(content[-1])
+                res[str(NIBBLE_TERMINATOR)] = content[-1]
             return res
 
     def to_dict(self, as_hex=False):
-        d = self._to_dict(self.root, True)
+        d = self._to_dict(self.root_node, True)
         res = {}
         for key_str, value in d.iteritems():
             nibbles = [int(x) for x in key_str.split('+')]
@@ -516,31 +528,34 @@ class Trie(object):
         return res
 
     def get(self, key):
-        rlp_value, _ = self._get(self.root, True, bin_to_nibbles(str(key)))
-        return self._rlp_decode(rlp_value) if rlp_value is not None else None
+        value, _ = self._get(self.root_node, True, bin_to_nibbles(str(key)))
+        return value
 
     def get_size(self):
-        return self._get_size(self.root, True)
+        return self._get_size(self.root_node, True)
 
     def update(self, key, value):
         '''
         :param key: a string with length of [0, 32]
-        :value: a string or list
+        :value: a string
         '''
         if not isinstance(key, (str, unicode)):
-            raise Exception("Key must be strings")
+            raise Exception("Key must be string")
 
         if len(key) > 32:
             raise Exception("Max key length is 32")
 
-        self.root, _ = self._update(
-            self.root,
+        if not isinstance(value, (str, unicode)):
+            raise Exception("Value must be string")
+
+        self.root_node, _ = self._update(
+            self.root_node,
             True,
             bin_to_nibbles(str(key)),
-            self._rlp_encode(value),
+            value,
             value_is_node=False)
         self.db.commit()
-        return self._rlp_decode(self.root)
+        return self._rlp_decode(self.root_node)
 
 if __name__ == "__main__":
     import sys

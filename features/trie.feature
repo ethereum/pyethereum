@@ -88,7 +88,7 @@ Feature: trie tree manipulate
     When clear trie tree
     And insert pairs
     Then for each pair, get with key will return the correct value
-    And get by the key: <key> will return None
+    And get by the key: <key> will return BLANK
 
     Examples: key not existing
       | key    |
@@ -102,7 +102,7 @@ Feature: trie tree manipulate
     And insert pairs
     And delete by the key: <key>
     Then for each pair, get with key will return the correct value
-    And get by the key: <key> will return None
+    And get by the key: <key> will return BLANK
     And tree has no change if key does not exist
 
     Examples: basic
