@@ -231,7 +231,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address)) or mk_blank_acct()
         decoder = utils.decoders[acct_structure_rev[param][1]]
         return decoder(acct[acct_structure_rev[param][0]])
 
@@ -244,7 +244,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address)) or mk_blank_acct()
         encoder = utils.encoders[acct_structure_rev[param][1]]
         acct[acct_structure_rev[param][0]] = encoder(value)
         self.state.update(address, rlp.encode(acct))
@@ -258,7 +258,7 @@ class Block(object):
         '''
         if len(address) == 40:
             address = address.decode('hex')
-        acct = self.state.get(address) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address)) or mk_blank_acct()
         index = acct_structure_rev[param][0]
         if utils.decode_int(acct[index]) + value < 0:
             return False
@@ -349,7 +349,8 @@ class Block(object):
         return med_dict
 
     def account_to_dict(self, address):
-        acct = self.state.get(address.decode('hex')) or mk_blank_acct()
+        acct = rlp.decode(self.state.get(address.decode('hex')))\
+            or mk_blank_acct()
         return self._account_to_dict(acct)
 
     # Revert computation

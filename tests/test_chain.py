@@ -115,6 +115,7 @@ def test_trie_state_root_nodep():
     assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
+@pytest.mark.wip
 def test_genesis_state_root():
     # https://ethereum.etherpad.mozilla.org/12
     set_db()
