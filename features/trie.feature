@@ -216,6 +216,10 @@ Feature: trie tree manipulate
       | in                       | root                                                               |
       | {u'a': u'A', u'b': u'B'} | "300eab197a9d9e437aaeb9b0d7bd77d57e8d4e3eeca0b1e6a3fe28a84e2cd70c" |
 
+    Examples: long value
+      | in                                                            | root                                                               |
+      | {u'A': u'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'} | "d23786fb4a010da3ce639d66d5e904a11dbc02746d1ce25029e53290cabf28ab" |
+
     Examples: basic1
       | in                 | root                                                               |
       | {u'test': u'test'} | "85d106d4edff3b7a4889e91251d0a87d7c17a1dda648ebdba8c6060825be23b8" |
