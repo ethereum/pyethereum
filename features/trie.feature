@@ -99,11 +99,14 @@ Feature: trie tree manipulate
   Scenario Outline: delete node
     Given pairs with keys: <keys>
     When clear trie tree
-    And insert pairs
+    And insert pairs except key: <key>
+    And record hash as old hash
+    And insert pair with key: <key>
     And delete by the key: <key>
-    Then for each pair, get with key will return the correct value
+    And record hash as new hash
+    Then for keys except <key>, get with key will return the correct value
+    And old hash is the same with new hash
     And get by the key: <key> will return BLANK
-    And tree has no change if key does not exist
 
     Examples: basic
       | key  | keys   |
@@ -204,7 +207,6 @@ Feature: trie tree manipulate
     Examples: rewriting
       | keys                                 |
       | ["\x03\xe8", "\x03\xe9", "\x03\xe8"] |
-
 
   Scenario Outline: conform to fixture
     Given input dictionary: <in>

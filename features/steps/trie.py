@@ -3,7 +3,6 @@ from .utils import parse_py
 
 import random
 from pyethereum import trie
-from pyethereum import rlp
 
 register_type(Py=parse_py)
 
@@ -23,7 +22,7 @@ def step_impl(context):
 
 @then(u'root will be blank')  # noqa
 def step_impl(context):
-    assert context.trie.root == trie.BLANK_ROOT
+    assert context.trie.root_hash == trie.BLANK_ROOT
 
 
 @given(u'pairs with keys: {keys:Py}')  # noqa
@@ -50,24 +49,48 @@ def step_impl(context, key):
     assert context.trie.get(key) == ''
 
 
-@then(u'tree has no change if key does not exist')  # noqa
+@when(u'insert pairs except key: {key:Py}')  # noqa
+def step_impl(context, key):
+    context.pairs = []
+    for k, v in context.pairs:
+        if k != key:
+            v = gen_random_value()
+            context.trie.update(key, v)
+            context.pairs.add((k, v))
+
+
+@when(u'record hash as old hash')  # noqa
 def step_impl(context):
-    if not context.key_exisits:
-        assert context.trie.root == context.original_root
+    context.old_hash = context.trie.root_hash
+
+
+@when(u'insert pair with key: {key:Py}')  # noqa
+def step_impl(context, key):
+    v = gen_random_value()
+    context.trie.update(key, v)
+
+
+@when(u'record hash as new hash')  # noqa
+def step_impl(context):
+    context.new_hash = context.trie.root_hash
+
+
+@then(u'for keys except {key:Py}, get with key will'  # noqa
+      ' return the correct value')
+def step_impl(context, key):
+    for k, v in context.pairs:
+        if k != key:
+            assert context.trie.get(k) == v
+
+
+@then(u'old hash is the same with new hash')  # noqa
+def step_impl(context):
+    assert context.old_hash == context.new_hash
 
 
 @when(u'delete by the key: {key:Py}')  # noqa
 def step_impl(context, key):
-    new_pairs = []
-    context.key_exisits = False
-    for (k, v) in context.pairs:
-        if k == key:
-            context.trie.delete(k)
-            context.key_exisits = True
-        else:
-            new_pairs.append((k, v))
-    context.original_root = context.trie.root
-    context.pairs = new_pairs
+    context.trie.delete(key)
 
 
 @when(u'update by the key: {key:Py}')  # noqa
@@ -83,7 +106,7 @@ def step_impl(context, key):
 
 @then(u'get size will return the correct number')  # noqa
 def step_impl(context):
-    assert context.trie.get_size() == len(context.pairs)
+    assert len(context.trie) == len(context.pairs)
 
 
 @then(u'to_dict will return the correct dict')  # noqa
@@ -109,4 +132,4 @@ def step_impl(context):
 
 @then(u'the hash of the tree root is {root_hash:Py}')  # noqa
 def step_impl(context, root_hash):
-    assert context.trie.root.encode('hex') == root_hash
+    assert context.trie.root_hash.encode('hex') == root_hash

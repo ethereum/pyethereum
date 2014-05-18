@@ -43,9 +43,9 @@ def verify(block, parent):
         tx = transactions.Transaction.deserialize(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
         apply_tx(block2, tx)
-        assert s == block2.state.root
+        assert s == block2.state.root_hash
         assert g == utils.encode_int(block2.gas_used)
-    assert block2.state.root == block.state.root
+    assert block2.state.root_hash == block.state.root_hash
     assert block2.gas_used == block.gas_used
     return True
 

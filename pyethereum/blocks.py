@@ -110,8 +110,8 @@ class Block(object):
 
         if transaction_list:
             # support init with transactions only if state is known
-            assert len(self.state.root) == 32 and \
-                self.state.root in self.state.db
+            assert len(self.state.root_hash) == 32 and \
+                self.state.root_hash in self.state.db
             for tx_serialized, state_root, gas_used_encoded \
                     in transaction_list:
                 self._add_transaction_to_list(
@@ -121,12 +121,12 @@ class Block(object):
         assert self.state.db.db == self.transactions.db.db
 
         # Basic consistency verifications
-        if not self.state.root_valid():
+        if not self.state.root_hash_valid():
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
-        if tx_list_root != self.transactions.root:
+        if tx_list_root != self.transactions.root_hash:
             raise Exception("Transaction list root hash does not match!")
-        if not self.transactions.root_valid():
+        if not self.transactions.root_hash_valid():
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
@@ -190,12 +190,12 @@ class Block(object):
         for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
             tx = transactions.Transaction.deserialize(tx_serialized)
             processblock.apply_tx(block, tx)
-            assert _state_root == block.state.root
+            assert _state_root == block.state.root_hash
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
 
         # checks
         assert block.prevhash == self.hash
-        assert block.state.root == kargs['state_root']
+        assert block.state.root_hash == kargs['state_root']
         assert block.tx_list_root == kargs['tx_list_root']
         assert block.gas_used == kargs['gas_used']
         assert block.gas_limit == kargs['gas_limit']
@@ -332,7 +332,7 @@ class Block(object):
             t.update(utils.coerce_to_bytes(index), utils.encode_int(val))
         else:
             t.delete(utils.coerce_to_bytes(index))
-        self._set_acct_item(address, 'storage', t.root)
+        self._set_acct_item(address, 'storage', t.root_hash)
 
     def _account_to_dict(self, acct):
         med_dict = {}
@@ -351,14 +351,14 @@ class Block(object):
     # Revert computation
     def snapshot(self):
         return {
-            'state': self.state.root,
+            'state': self.state.root_hash,
             'gas': self.gas_used,
             'txs': self.transactions,
             'txcount': self.transaction_count,
         }
 
     def revert(self, mysnapshot):
-        self.state.root = mysnapshot['state']
+        self.state.root_hash = mysnapshot['state']
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
@@ -371,11 +371,11 @@ class Block(object):
 
     @property
     def state_root(self):
-        return self.state.root
+        return self.state.root_hash
 
     @property
     def tx_list_root(self):
-        return self.transactions.root
+        return self.transactions.root_hash
 
     def list_header(self, exclude=[]):
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
@@ -465,7 +465,7 @@ class Block(object):
             prevhash=parent.hash,
             uncles_hash=utils.sha3(rlp.encode([])),
             coinbase=coinbase,
-            state_root=parent.state.root,
+            state_root=parent.state.root_hash,
             tx_list_root=trie.BLANK_ROOT,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,

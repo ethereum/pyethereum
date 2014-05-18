@@ -112,7 +112,7 @@ def test_trie_state_root_nodep():
     for address, value in GENESIS_INITIAL_ALLOC.items():
         acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
-    assert state.root.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+    assert state.root_hash.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
 def test_genesis_state_root():

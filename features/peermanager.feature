@@ -1,4 +1,4 @@
-@config @peermanager @wip
+@config @peermanager
 Feature: peer manager
 
   Scenario: load_saved_peers where peers.json exists
@@ -22,7 +22,7 @@ Feature: peer manager
 
   Scenario: add_peer from _known_peers
     Given peer data of (connection, ip, port) from _known_peers
-    When add_peer is called with the given peer data 
+    When add_peer is called with the given peer data
     Then connected_peers should contain the peer with the peer data
 
   Scenario: add_peer from peer_connection_accepted signal

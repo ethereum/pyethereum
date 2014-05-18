@@ -2,7 +2,7 @@
 
 import os
 import rlp
-from utils import sha3
+import utils
 from db import DB
 
 
@@ -41,12 +41,14 @@ NIBBLE_TERMINATOR = 16
 
 
 def with_terminator(nibbles):
+    nibbles = nibbles[:]
     if not nibbles or nibbles[-1] != NIBBLE_TERMINATOR:
         nibbles.append(NIBBLE_TERMINATOR)
     return nibbles
 
 
 def without_terminator(nibbles):
+    nibbles = nibbles[:]
     if nibbles and nibbles[-1] == NIBBLE_TERMINATOR:
         del nibbles[-1]
     return nibbles
@@ -54,10 +56,9 @@ def without_terminator(nibbles):
 
 def adapt_terminator(nibbles, has_terminator):
     if has_terminator:
-        with_terminator(nibbles)
+        return with_terminator(nibbles)
     else:
-        without_terminator(nibbles)
-    return nibbles
+        return without_terminator(nibbles)
 
 
 def pack_nibbles(nibbles):
@@ -114,14 +115,8 @@ def starts_with(full, part):
     NODE_TYPE_BLANK,
     NODE_TYPE_LEAF_KEY_VALUE,
     NODE_TYPE_INNER_KEY_VALUE,
-    NODE_TYPE_DIVERGE_WITH_VALUE,
-    NODE_TYPE_DIVERGE_WITHOUT_VALUE
-) = tuple(range(5))
-
-
-def is_diverge_type(node_type):
-    return node_type in [NODE_TYPE_DIVERGE_WITH_VALUE,
-                         NODE_TYPE_DIVERGE_WITHOUT_VALUE]
+    NODE_TYPE_DIVERGE
+) = tuple(range(4))
 
 
 def is_key_value_type(node_type):
@@ -134,184 +129,141 @@ BLANK_ROOT = chr(0) * 32
 
 class Trie(object):
 
-    def __init__(self, dbfile, root=BLANK_ROOT):
-        '''
+    def __init__(self, dbfile, root_hash=BLANK_ROOT):
+        '''it also present a dictionary like interface
+
         :param dbfile: key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
-        self.root = root
+        self.root_hash = root_hash
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
+        self.root_node = self._mk_root_node(self.root_hash)
 
     def clear(self):
         ''' clear all tree data
         '''
         # FIXME: remove saved (hash, value) from database
-        self.root = BLANK_ROOT
+        self.root_hash = BLANK_ROOT
+        self.root_node = self._mk_root_node(self.root_hash)
 
-    def _inspect_node(self, node):
-        ''' get node type and content
+    def _mk_root_hash(self, root_node):
+        if root_node == BLANK:
+            return BLANK_ROOT
+        assert isinstance(root_node, list)
+        val = rlp.encode(root_node)
+        key = utils.sha3(val)
+        self.db.put(key, val)
+        return key
 
-        :param node: node or hash
-        :return: (NODE_TYPE_*, content), content is the decoded node,
-        unless a key-value node, which will result a (key, value)
-        with key is nibbles without the terminator
-        '''
-        content = self._rlp_decode(node)
+    def _mk_root_node(self, root_hash):
+        if root_hash == BLANK_ROOT:
+            return BLANK
+        assert isinstance(root_hash, (str, unicode))
+        assert len(self.root_hash) == 32
+        return self._decode_to_node(root_hash)
 
-        if not content:
-            return (NODE_TYPE_BLANK, BLANK)
-
-        if len(content) == 2:
-            nibbles = unpack_to_nibbles(content[0])
-            has_terminator = (nibbles and nibbles[-1] == NIBBLE_TERMINATOR)
-            content = (without_terminator(nibbles), content[1])
-            return (NODE_TYPE_LEAF_KEY_VALUE, content) if has_terminator\
-                else (NODE_TYPE_INNER_KEY_VALUE, content)
-
-        if len(content) == 17:
-            return (NODE_TYPE_DIVERGE_WITH_VALUE, content) if content[-1]\
-                else (NODE_TYPE_DIVERGE_WITHOUT_VALUE, content)
-
-    def _get(self, node, is_node, key):
-        """ get value inside a node
-
-        :param node: node or hash
-        :param is_node: node is a node or a value
-        :param key: nibble list without terminator
-        :return:
-            BLANK if does not exist, otherwise value or hash
-            is_node denote whether the node is a node or a value
-        """
-        if not is_node:
-            if not key:
-                return node, False
-            return BLANK, False
-
-        node_type, content = self._inspect_node(node)
-
-        if node_type == NODE_TYPE_BLANK:
-            return BLANK, False
-
-        if is_diverge_type(node_type):
-            # already reach the expected node
-            if not key:
-                return content[-1] if content[-1] else BLANK, False
-            return self._get(content[key[0]], True, key[1:])
-
-        # key value node
-        (curr_key, curr_val) = content
-        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
-            if key == curr_key:
-                return curr_val, True
-            # not found
-            else:
-                return BLANK, True
-
-        if node_type == NODE_TYPE_INNER_KEY_VALUE:
-            # traverse child nodes
-            if starts_with(key, curr_key):
-                return self._get(curr_val, True, key[len(curr_key):])
-            else:
-                return BLANK, True
-
-    def _rlp_encode(self, node):
+    def _encode_node(self, node):
+        if node == BLANK:
+            return BLANK
+        assert isinstance(node, list)
         rlpnode = rlp.encode(node)
         if len(rlpnode) < 32:
             return node
 
-        hashkey = sha3(rlpnode)
+        hashkey = utils.sha3(rlpnode)
         self.db.put(hashkey, rlpnode)
         return hashkey
 
-    def _rlp_decode(self, node):
-        if not isinstance(node, (str, unicode)):
-            return node
-        elif len(node) == 0:
-            return node
-        elif len(node) < 32:
-            return node
-        else:
-            return rlp.decode(self.db.get(node))
+    def _decode_to_node(self, encoded):
+        if encoded == BLANK:
+            return BLANK
+        if isinstance(encoded, list):
+            return encoded
+        return rlp.decode(self.db.get(encoded))
 
-    def _update(self, node, is_node, key, value, value_is_node):
+    def _get_node_type(self, node):
+        ''' get node type and content
+
+        :param node: node in form of list, or BLANK
+        :return: node type
+        '''
+        if node == BLANK:
+            return NODE_TYPE_BLANK
+
+        if len(node) == 2:
+            nibbles = unpack_to_nibbles(node[0])
+            has_terminator = (nibbles and nibbles[-1] == NIBBLE_TERMINATOR)
+            return NODE_TYPE_LEAF_KEY_VALUE if has_terminator\
+                else NODE_TYPE_INNER_KEY_VALUE
+        if len(node) == 17:
+            return NODE_TYPE_DIVERGE
+
+    def _get(self, node, key):
+        """ get value inside a node
+
+        :param node: node in form of list, or BLANK
+        :param key: nibble list without terminator
+        :return:
+            BLANK if does not exist, otherwise value or hash
+        """
+        node_type = self._get_node_type(node)
+        if node_type == NODE_TYPE_BLANK:
+            return BLANK
+
+        if node_type == NODE_TYPE_DIVERGE:
+            # already reach the expected node
+            if not key:
+                return node[-1]
+            sub_node = self._decode_to_node(node[key[0]])
+            return self._get(sub_node, key[1:])
+
+        # key value node
+        curr_key = without_terminator(unpack_to_nibbles(node[0]))
+        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+            return node[1] if key == curr_key else BLANK
+
+        if node_type == NODE_TYPE_INNER_KEY_VALUE:
+            # traverse child nodes
+            if starts_with(key, curr_key):
+                sub_node = self._decode_to_node(node[1])
+                return self._get(sub_node, key[len(curr_key):])
+            else:
+                return BLANK
+
+    def _update(self, node, key, value):
         """ update item inside a node
 
-        :param node: node or hash
-        :param is_node: node is a node or a value
+        :param node: node in form of list, or BLANK
         :param key: nibble list without terminator
-        :param value: node or hash, a blank node means to delete it
-        :param value_is_node: value is leaf or intermediate node
-        :return: (node, is_node) where `node` is the updated normalized node
-        or hash, `is_node` denote whether the node is a node or a value
+            .. note:: key may be []
+        :param value: value string
+        :return: new node
         """
-        # FIXME: delete unused data from db
-        if not is_node:
-            if not key:
-                return value, value_is_node
-            else:
-                # a new diverge node
-                new_node = [''] * 17
-                new_node[-1] = node
-                new_node[key[0]] = self._update(
-                    BLANK, True, key[1:], value, value_is_node)
-                return self._normalize_node(
-                    self._rlp_encode(new_node), True)
-
-        # node is a node, rather than a value
-        (node_type, content) = self._inspect_node(node)
+        assert value != BLANK
+        node_type = self._get_node_type(node)
 
         if node_type == NODE_TYPE_BLANK:
-            if not value_is_node:
-                return self._normalize_node(
-                    self._rlp_encode(
-                        [pack_nibbles(with_terminator(key)), value]),
-                    True)
-            # a inner node
+            return [pack_nibbles(with_terminator(key)), value]
+
+        elif node_type == NODE_TYPE_DIVERGE:
+            if not key:
+                node[-1] = value
             else:
-                if value == BLANK:
-                    return BLANK, True
-
-                return self._normalize_node(
-                    self._rlp_encode([pack_nibbles(key), value]), True)
-
-        elif is_diverge_type(node_type):
-            return self._update_diverge_node(node_type, content, key,
-                                             value, value_is_node)
+                node[key[0]] = self._encode_node(
+                    self._update(
+                        self._decode_to_node(node[key[0]]),
+                        key[1:], value)
+                )
+            return node
 
         elif is_key_value_type(node_type):
-            return self._update_kv_node(node_type, content, key,
-                                        value, value_is_node)
+            return self._update_kv_node(node, key, value)
 
-    def _update_diverge_node(self, node_type, content,
-                             key, value, value_is_node):
-        if key:
-            content[key[0]], slot_is_node = self._update(
-                content[key[0]], True, key[1:], value, value_is_node)
-        else:
-            content[-1] = value
-
-        return self._normalize_node(
-            self._rlp_encode(content), True)
-
-    def _update_kv_node(self, node_type, content, key, value, value_is_node):
-
-        '''when the current node is a (key, value) node
-
-        :param content: an  (key, value) tuple
-        :param key: nibble list without terminator, must not be blank
-        :param value: node or hash
-        :return: the updated node or hash
-
-        .. note::
-
-            (key, value, value_is_node) has already normalized,
-            content itself as a valid node should already be normalized too
-        '''
-        curr_key, curr_val = content
-        curr_val_is_node = node_type != NODE_TYPE_LEAF_KEY_VALUE
-
-        without_terminator(curr_key)
+    def _update_kv_node(self, node, key, value):
+        node_type = self._get_node_type(node)
+        curr_key = without_terminator(unpack_to_nibbles(node[0]))
+        is_inner = node_type == NODE_TYPE_INNER_KEY_VALUE
 
         # find longest common prefix
         prefix_length = 0
@@ -320,230 +272,287 @@ class Trie(object):
                 break
             prefix_length = i + 1
 
-        if not prefix_length:
-            return self._merge_two_pairs(curr_key, curr_val, curr_val_is_node,
-                                         key, value, value_is_node)
+        remain_key = key[prefix_length:]
+        remain_curr_key = curr_key[prefix_length:]
 
-        # create node for key postfix
-        post_curr_key_node, is_node = self._update(
-            BLANK, True,
-            curr_key[prefix_length:], curr_val, curr_val_is_node)
+        if remain_key == [] == remain_curr_key:
+            if not is_inner:
+                return [node[0], value]
+            new_node = self._update(self._decode_to_node(node[1]),
+                                    remain_key, value)
 
-        post_curr_key_node, is_node = self._update(
-            post_curr_key_node, is_node,
-            key[prefix_length:], value, value_is_node)
-
-        # create node for key prefix
-        return self._update(
-            BLANK, True,
-            curr_key[:prefix_length], post_curr_key_node, is_node)
-
-    def _normalize_pair(self, key, value, value_is_node):
-        '''if value is also a key-value node, merge its key to key
-        '''
-        if not value_is_node:
-            return key, value, value_is_node
-        (value_node_type, value_content) = self._inspect_node(value)
-        if is_key_value_type(value_node_type):
-            key.extend(value_content[0])
-            return (key, value_content[1],
-                    value_node_type == NODE_TYPE_INNER_KEY_VALUE)
-        return key, value, value_is_node
-
-    def _normalize_node(self, node, is_node):
-        '''
-        :return: (normalized_node, is_node)
-        '''
-        if not is_node:
-            return node, is_node
-
-        (node_type, content) = self._inspect_node(node)
-
-        # for NODE_TYPE_LEAF_KEY_VALUE, no need to normalize
-
-        if node_type == NODE_TYPE_INNER_KEY_VALUE:
-            key, value, value_is_node = self._normalize_pair(
-                content[0][:], content[1], True)
-            if not key:
-                return value, value_is_node
-            if key == content[0] and value == content[1]:
-                # note: if the subkey is blank, then the normalized pair
-                # will have same key but with different value
-                return node, is_node
-            return self._update(BLANK, True, key, value, value_is_node)
-
-        if is_diverge_type(node_type):
-            not_blank_slots_count = sum(1 for x in range(17) if content[x])
-
-            if not not_blank_slots_count:
-                return BLANK, True
-
-            if not_blank_slots_count > 1:
-                return node, True
-
-            # only one slot/value is not blank
-
-            # convert to a key value node
-            if content[-1]:
-                return self._update(BLANK, True, [], content[-1], False)
-
-            index = [i for i, item in enumerate(content) if item][0]
-
-            return self._update(
-                [], True, [index], content[index], value_is_node=True)
-
-        return node, True
-
-    def _merge_two_pairs(self,
-                         key1, value1, value1_is_node,
-                         key2, value2, value2_is_node):
-        '''
-        merge (key2, value2) to (key1, value1)
-        key1 and key2 has no common prefix
-        '''
-        key1, value1, value1_is_node = self._normalize_pair(
-            key1, value1, value1_is_node)
-
-        key2, value2, value2_is_node = self._normalize_pair(
-            key2, value2, value2_is_node)
-
-        diverge_node = [BLANK] * 17
-
-        if not key1:
-            diverge_node[-1] = value1
+        elif remain_curr_key == []:
+            if is_inner:
+                new_node = self._update(self._decode_to_node(node[1]),
+                                        remain_key, value)
+            else:
+                new_node = [BLANK] * 17
+                new_node[-1] = node[1]
+                new_node[remain_key[0]] = self._encode_node([
+                    pack_nibbles(with_terminator(remain_key[1:])),
+                    value
+                ])
         else:
-            diverge_node[key1[0]] = self._update(
-                [], True, key1[1:], value1, value1_is_node)[0]
-        if not key2:
-            diverge_node[-1] = value2
-        else:
-            diverge_node[key2[0]] = self._update(
-                [], True, key2[1:], value2, value2_is_node)[0]
+            new_node = [BLANK] * 17
+            if len(remain_curr_key) == 1 and is_inner:
+                new_node[remain_curr_key[0]] = node[1]
+            else:
+                new_node[remain_curr_key[0]] = self._encode_node([
+                    pack_nibbles(
+                        adapt_terminator(remain_curr_key[1:], not is_inner)
+                    ),
+                    node[1]
+                ])
 
-        return self._normalize_node(
-            self._rlp_encode(diverge_node), True)
+            if remain_key == []:
+                new_node[-1] = value
+            else:
+                new_node[remain_key[0]] = self._encode_node([
+                    pack_nibbles(with_terminator(remain_key[1:])), value
+                ])
+
+        if prefix_length:
+            # create node for key prefix
+            return [pack_nibbles(curr_key[:prefix_length]),
+                    self._encode_node(new_node)]
+        else:
+            return new_node
+
+    def _delete_node_storage(self, node):
+        '''delete storage
+        :param node: node in form of list, or BLANK
+        '''
+        assert isinstance(node, list)
+        encoded = self._encode_node(node)
+        if len(encoded) < 32:
+            return
+        self.db.delete(encoded)
+
+    def _delete(self, node, key):
+        """ update item inside a node
+
+        :param node: node in form of list, or BLANK
+        :param key: nibble list without terminator
+            .. note:: key may be []
+        :return: new node
+            if this node is changed to a new node, it's parent will take the
+            responsibility to *store* the new node storage, and delete the old
+            node storage
+        """
+        node_type = self._get_node_type(node)
+        if node_type == NODE_TYPE_BLANK:
+            return BLANK
+
+        if node_type == NODE_TYPE_DIVERGE:
+            self._delete_diverge_node(node, key)
+
+        if is_key_value_type(node_type):
+            return self._delete_kv_node(node, key)
+
+    def _normalize_diverge_node(self, node):
+        '''node should have only one item changed
+        '''
+        not_blank_items_count = sum(1 for x in range(17) if node[x])
+        assert not_blank_items_count >= 1
+
+        if not_blank_items_count > 1:
+            return node
+
+        # now only one item is not blank
+        not_blank_index = [i for i, item in enumerate(node) if item][0]
+
+        # the value item is not blank
+        if not_blank_index == 16:
+            return [pack_nibbles(with_terminator([])), node[16]]
+
+        # normal item is not blank
+        sub_node = self._decode_to_node(node[not_blank_index])
+        sub_node_type = self._get_node_type(sub_node)
+
+        if is_key_value_type(sub_node_type):
+            # collape subnode to this node, not this node will have same
+            # terminator with the new sub node, and value does not change
+            new_key = [not_blank_index] + \
+                unpack_to_nibbles(sub_node[0])
+            return [pack_nibbles(new_key), sub_node[1]]
+        if sub_node_type == NODE_TYPE_DIVERGE:
+            return [pack_nibbles([not_blank_index]), sub_node]
+        assert False
+
+    def _delete_diverge_node(self, node, key):
+        # already reach the expected node
+        if not key:
+            node[-1] = BLANK
+            return self._normalize_diverge_node(node)
+
+        old_sub_node = self._decode_to_node(node[key[0]])
+        new_sub_node = self._delete(old_sub_node, key[1:])
+        if old_sub_node == new_sub_node:
+            return node
+
+        self._delete_node_storage(old_sub_node)
+        if new_sub_node == BLANK:
+            return self._normalize_diverge_node(node)
+        return node
+
+    def _delete_kv_node(self, node, key):
+        node_type = self._get_node_type(node)
+        assert is_key_value_type(node_type)
+        curr_key = without_terminator(unpack_to_nibbles(node[0]))
+
+        if not starts_with(key, curr_key):
+            # key not found
+            return node
+
+        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+            return BLANK if key == curr_key else node
+
+        # for inner key value type
+        sub_node = self._decode_to_node(node[1])
+        new_sub_node = self._delete(sub_node[:], key[len(curr_key):])
+
+        if sub_node == new_sub_node:
+            return node
+
+        self._delete_node_storage(sub_node)
+
+        # new sub node is BLANK
+        if new_sub_node == BLANK:
+            return BLANK
+
+        assert isinstance(new_sub_node, list)
+
+        # new sub node not blank, not value and has changed
+        new_sub_node_type = self._get_node_type(new_sub_node)
+
+        if is_key_value_type(new_sub_node_type):
+            # collape subnode to this node, not this node will have same
+            # terminator with the new sub node, and value does not change
+            new_key = curr_key + unpack_to_nibbles(new_sub_node[0])
+            return [pack_nibbles(new_key), new_sub_node[1]]
+
+        if new_sub_node_type == NODE_TYPE_DIVERGE:
+            return [pack_nibbles(curr_key), new_sub_node[1]]
+
+        # should be no more cases
+        assert False
 
     def delete(self, key):
         '''
         :param key: a string with length of [0, 32]
         '''
         if not isinstance(key, (str, unicode)):
-            raise Exception("Key must be strings")
+            raise Exception("Key must be string")
 
         if len(key) > 32:
             raise Exception("Max key length is 32")
 
-        ''' .. note:: value_is_node should be true, or the key will be updated
-        with a blank value
-        '''
-        self.root, _ = self._update(
-            self._rlp_encode(self.load_root()),
-            True,
-            bin_to_nibbles(str(key)),
-            BLANK,
-            value_is_node=True)
+        self.root_node = self._delete(
+            self.root_node,
+            bin_to_nibbles(str(key)))
         self.db.commit()
-        self.hash_root()
+        self.root_hash = self._mk_root_hash(self.root_node)
 
-    def hash_root(self):
-        if self.root == BLANK:
-            self.root = BLANK_ROOT
-            return
-        if isinstance(self.root, (str, unicode)):
-            assert len(self.root) == 32
-            return
-        assert isinstance(self.root, list)
-        val = rlp.encode(self.root)
-        key = sha3(val)
-        self.db.put(key, val)
-        self.root = key
-
-    def load_root(self):
-        if self.root == BLANK_ROOT:
-            return BLANK
-        if isinstance(self.root, (str, unicode)):
-            assert len(self.root) == 32
-            return self._rlp_decode(self.root)
-
-    def _get_size(self, node, is_node):
+    def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
 
-        :param node: node or hash
-        :is_node: true if node is not a value, other wise false
+        :param node: node in form of list, or BLANK
         '''
-        if not is_node:
-            return 1
-
-        (node_type, content) = self._inspect_node(node)
-        if node_type == NODE_TYPE_BLANK:
+        if node == BLANK:
             return 0
-        elif is_key_value_type(node_type):
-            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
-            return self._get_size(content[1], value_is_node)
-        elif is_diverge_type(node_type):
-            return sum(self._get_size(content[x], True) for x in range(16)) \
-                + (1 if content[-1] else 0)
 
-    def _to_dict(self, node, is_node):
+        node_type = self._get_node_type(node)
+
+        if is_key_value_type(node_type):
+            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
+            if value_is_node:
+                return self._get_size(self._decode_to_node(node[1]))
+            else:
+                return 1
+        elif node_type == NODE_TYPE_DIVERGE:
+            sizes = [self._get_size(self._decode_to_node(node[x]))
+                     for x in range(16)]
+            sizes = sizes + [1 if node[-1] else 0]
+            return sum(sizes)
+
+    def _to_dict(self, node):
         '''convert (key, value) stored in this and the descendant nodes
         to dict items.
 
-        :param node: node or hash
-        :is_node: true if node is not a value, other wise false
+        :param node: node in form of list, or BLANK
 
         .. note::
 
             Here key is in full form, rather than key of the individual node
         '''
-        if not is_node:
-            return {'': node}
-
-        (node_type, content) = self._inspect_node(node)
-
-        if node_type == NODE_TYPE_BLANK:
+        if node == BLANK:
             return {}
 
-        elif is_key_value_type(node_type):
-            key = '+'.join([str(x) for x in content[0]])
-            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
-            sub_dict = self._to_dict(content[1], value_is_node)
+        node_type = self._get_node_type(node)
+
+        if is_key_value_type(node_type):
+            nibbles = without_terminator(unpack_to_nibbles(node[0]))
+            key = '+'.join([str(x) for x in nibbles])
+            if node_type == NODE_TYPE_INNER_KEY_VALUE:
+                sub_dict = self._to_dict(self._decode_to_node(node[1]))
+            else:
+                sub_dict = {str(NIBBLE_TERMINATOR): node[1]}
 
             # prepend key of this node to the keys of children
             res = {}
             for sub_key, sub_value in sub_dict.iteritems():
-                full_key = '{0}+{1}'.format(key, sub_key) if sub_key else key
+                full_key = '{0}+{1}'.format(key, sub_key).strip('+')
                 res[full_key] = sub_value
             return res
 
-        elif is_diverge_type(node_type):
+        elif node_type == NODE_TYPE_DIVERGE:
             res = {}
             for i in range(16):
-                sub_dict = self._to_dict(content[i], True)
+                sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
                 for sub_key, sub_value in sub_dict.iteritems():
-                    full_key = '{0}+{1}'.format(i, sub_key) if sub_key else i
+                    full_key = '{0}+{1}'.format(i, sub_key).strip('+')
                     res[full_key] = sub_value
 
-            if content[-1]:
-                res[str(NIBBLE_TERMINATOR)] = content[-1]
+            if node[16]:
+                res[str(NIBBLE_TERMINATOR)] = node[-1]
             return res
 
     def to_dict(self):
-        d = self._to_dict(self._rlp_encode(self.load_root()), True)
+        d = self._to_dict(self.root_node)
         res = {}
         for key_str, value in d.iteritems():
-            nibbles = [int(x) for x in key_str.split('+')]
+            if key_str:
+                nibbles = [int(x) for x in key_str.split('+')]
+            else:
+                nibbles = []
             key = nibbles_to_bin(without_terminator(nibbles))
             res[key] = value
         return res
 
     def get(self, key):
-        value, _ = self._get(self._rlp_encode(self.load_root()),
-                             True, bin_to_nibbles(str(key)))
-        return value
+        return self._get(self.root_node, bin_to_nibbles(str(key)))
 
-    def get_size(self):
-        return self._get_size(self._rlp_encode(self.load_root()), True)
+    def __len__(self):
+        return self._get_size(self.root_node)
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        return self.update(key, value)
+
+    def __delitem__(self, key):
+        return self.delete(key)
+
+    def __iter__(self):
+        return iter(self.to_dict())
+
+    def __reversed__(self):
+        pass
+
+    def __contains__(self, key):
+        return self.get(key) != BLANK
 
     def update(self, key, value):
         '''
@@ -559,19 +568,17 @@ class Trie(object):
         if not isinstance(value, (str, unicode)):
             raise Exception("Value must be string")
 
-        self.root, _ = self._update(
-            self._rlp_encode(self.load_root()),
-            True,
+        self.root_node = self._update(
+            self.root_node,
             bin_to_nibbles(str(key)),
-            value,
-            value_is_node=False)
+            value)
         self.db.commit()
-        self.hash_root()
+        self.root_hash = self._mk_root_hash(self.root_node)
 
-    def root_valid(self):
-        if self.root == BLANK_ROOT:
+    def root_hash_valid(self):
+        if self.root_hash == BLANK_ROOT:
             return True
-        return self.root in self.db
+        return self.root_hash in self.db
 
 if __name__ == "__main__":
     import sys
@@ -586,7 +593,7 @@ if __name__ == "__main__":
         if sys.argv[1] == 'insert':
             t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
             t.update(sys.argv[4], sys.argv[5])
-            print encode_node(t.root)
+            print encode_node(t.root_hash)
         elif sys.argv[1] == 'get':
             t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
             print t.get(sys.argv[4])
