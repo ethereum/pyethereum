@@ -143,26 +143,11 @@ class Trie(object):
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
 
-    @property
-    def root(self):
-        '''always a 32 bytes string
-        '''
-        if self.root_node == BLANK:
-            return BLANK_ROOT
-        if isinstance(self.root_node, (str, unicode)) and\
-                len(self.root_node) == 32:
-            return self.root_node
-        return sha3(rlp.encode(self.root_node))
-
-    @root.setter
-    def root(self, value):
-        self.root_node = value if value and value != BLANK_ROOT else BLANK
-
     def clear(self):
         ''' clear all tree data
         '''
         # FIXME: remove saved (hash, value) from database
-        self.root_node = BLANK
+        self.root = BLANK_ROOT
 
     def _inspect_node(self, node):
         ''' get node type and content
@@ -451,14 +436,34 @@ class Trie(object):
         ''' .. note:: value_is_node should be true, or the key will be updated
         with a blank value
         '''
-        self.root_node, _ = self._update(
-            self.root_node,
+        self.root, _ = self._update(
+            self._rlp_encode(self.load_root()),
             True,
             bin_to_nibbles(str(key)),
             BLANK,
             value_is_node=True)
         self.db.commit()
-        return self._rlp_decode(self.root_node)
+        self.hash_root()
+
+    def hash_root(self):
+        if self.root == BLANK:
+            self.root = BLANK_ROOT
+            return
+        if isinstance(self.root, (str, unicode)):
+            assert len(self.root) == 32
+            return
+        assert isinstance(self.root, list)
+        val = rlp.encode(self.root)
+        key = sha3(val)
+        self.db.put(key, val)
+        self.root = key
+
+    def load_root(self):
+        if self.root == BLANK_ROOT:
+            return BLANK
+        if isinstance(self.root, (str, unicode)):
+            assert len(self.root) == 32
+            return self._rlp_decode(self.root)
 
     def _get_size(self, node, is_node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -523,8 +528,8 @@ class Trie(object):
                 res[str(NIBBLE_TERMINATOR)] = content[-1]
             return res
 
-    def to_dict(self, as_hex=False):
-        d = self._to_dict(self.root_node, True)
+    def to_dict(self):
+        d = self._to_dict(self._rlp_encode(self.load_root()), True)
         res = {}
         for key_str, value in d.iteritems():
             nibbles = [int(x) for x in key_str.split('+')]
@@ -533,11 +538,12 @@ class Trie(object):
         return res
 
     def get(self, key):
-        value, _ = self._get(self.root_node, True, bin_to_nibbles(str(key)))
+        value, _ = self._get(self._rlp_encode(self.load_root()),
+                             True, bin_to_nibbles(str(key)))
         return value
 
     def get_size(self):
-        return self._get_size(self.root_node, True)
+        return self._get_size(self._rlp_encode(self.load_root()), True)
 
     def update(self, key, value):
         '''
@@ -553,22 +559,19 @@ class Trie(object):
         if not isinstance(value, (str, unicode)):
             raise Exception("Value must be string")
 
-        self.root_node, _ = self._update(
-            self.root_node,
+        self.root, _ = self._update(
+            self._rlp_encode(self.load_root()),
             True,
             bin_to_nibbles(str(key)),
             value,
             value_is_node=False)
         self.db.commit()
-        return self._rlp_decode(self.root_node)
+        self.hash_root()
 
     def root_valid(self):
         if self.root == BLANK_ROOT:
             return True
-        if isinstance(self.root_node, (str, unicode)) and\
-                len(self.root_node) == 32:
-            return self.root in self.db
-        return True
+        return self.root in self.db
 
 if __name__ == "__main__":
     import sys

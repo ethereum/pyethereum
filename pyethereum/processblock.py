@@ -39,7 +39,7 @@ def verify(block, parent):
     assert block2.gas_limit == block.gas_limit
     block2.finalize()  # this is the first potential state change
     for i in range(block.transaction_count):
-        tx, s, g = block.transactions.get(utils.encode_int(i))
+        tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
         tx = transactions.Transaction.deserialize(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
         apply_tx(block2, tx)
@@ -81,7 +81,8 @@ def apply_tx(block, tx):
     else:
         result, gas, data = create_contract(block, tx, message)
     if debug:
-        print('applied tx, result', result, 'gas', gas, 'data/code', ''.join(map(chr,data)).encode('hex'))
+        print('applied tx, result', result, 'gas', gas, 'data/code',
+              ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -330,7 +331,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
-        stk.append(rlp.big_endian_to_int(utils.sha3(data)))
+        stk.append(utils.big_endian_to_int(utils.sha3(data), 256))
     elif op == 'ADDRESS':
         stk.append(msg.to)
     elif op == 'BALANCE':
