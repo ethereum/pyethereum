@@ -81,7 +81,8 @@ def apply_tx(block, tx):
     else:
         result, gas, data = create_contract(block, tx, message)
     if debug:
-        print('applied tx, result', result, 'gas', gas, 'data/code', ''.join(map(chr,data)).encode('hex'))
+        print('applied tx, result', result, 'gas', gas, 'data/code',
+              ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas

@@ -108,6 +108,8 @@ class Transaction(object):
 
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):
+    ''' a contract is a special transaction without the `to` arguments
+    '''
     tx = Transaction(nonce, gasprice, startgas, '', endowment, code)
     tx.v, tx.r, tx.s = v, r, s
     return tx

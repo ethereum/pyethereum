@@ -338,13 +338,9 @@ class Block(object):
         med_dict = {}
         for i, (name, typ, default) in enumerate(acct_structure):
             med_dict[name] = utils.decoders[typ](acct[i])
-        chash = med_dict['code']
         strie = trie.Trie(utils.get_db_path(), med_dict['storage']).to_dict()
-        med_dict['code'] = \
-            self.state.db.get(chash).encode('hex') if chash else ''
-        med_dict['storage'] = {
-            utils.decode_int(k): utils.decode_int(strie[k]) for k in strie
-        }
+        med_dict['storage'] = {utils.decode_int(k): utils.decode_int(v)
+                               for k, v in strie.iteritems()}
         return med_dict
 
     def account_to_dict(self, address):
@@ -404,10 +400,10 @@ class Block(object):
         b = {}
         for name, typ, default in block_structure:
             b[name] = getattr(self, name)
-        state = self.state.to_dict(True)
+        state = self.state.to_dict()
         b["state"] = {}
-        for s in state:
-            b["state"][s.encode('hex')] = self._account_to_dict(state[s])
+        for k, v in state.iteritems():
+            b["state"][k.encode('hex')] = self._account_to_dict(v)
         # txlist = []
         # for i in range(self.transaction_count):
         #     txlist.append(self.transactions.get(utils.encode_int(i)))
