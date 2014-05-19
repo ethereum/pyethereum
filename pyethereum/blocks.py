@@ -110,8 +110,7 @@ class Block(object):
 
         if transaction_list:
             # support init with transactions only if state is known
-            assert len(self.state.root_hash) == 32 and \
-                self.state.root_hash in self.state.db
+            assert self.state.root_hash_valid()
             for tx_serialized, state_root, gas_used_encoded \
                     in transaction_list:
                 self._add_transaction_to_list(
@@ -229,12 +228,14 @@ class Block(object):
         return decoder(acct[acct_structure_rev[param][0]])
 
     def mk_blank_acct(self):
-        codehash = utils.sha3('')
-        self.state.db.put(codehash, '')
-        return [utils.encode_int(0),
-                utils.encode_int(0),
-                trie.BLANK_ROOT,
-                codehash]
+        if not hasattr(self, '_blank_acct'):
+            codehash = utils.sha3('')
+            self.state.db.put(codehash, '')
+            self._blank_acct = [utils.encode_int(0),
+                                utils.encode_int(0),
+                                trie.BLANK_ROOT,
+                                codehash]
+        return self._blank_acct[:]
 
     # _set_acct_item(bin or hex, int, bin)
     def _set_acct_item(self, address, param, value):
