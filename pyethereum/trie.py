@@ -143,9 +143,20 @@ class Trie(object):
     def clear(self):
         ''' clear all tree data
         '''
-        # FIXME: remove saved (hash, value) from database
+        self._delete_child_stroage(self.root_node)
+        self._delete_node_storage(self.root_node)
+        self.db.commit()
         self.root_hash = BLANK_ROOT
         self.root_node = self._mk_root_node(self.root_hash)
+
+    def _delete_child_stroage(self, node):
+        if len(node) == 17:
+            for item in node[:16]:
+                self._delete_child_stroage(self._decode_to_node(item))
+        elif len(node) == 17:
+            node_type = self._get_node_type(node)
+            if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+                self._delete_child_stroage(self._decode_to_node(node[1]))
 
     def _mk_root_hash(self, root_node):
         if root_node == BLANK:
