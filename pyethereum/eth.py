@@ -4,7 +4,7 @@ import time
 import uuid
 import signal
 import ConfigParser
-from optparse import OptionParser
+from argparse import ArgumentParser
 import logging
 import logging.config
 
@@ -51,64 +51,63 @@ def create_config():
     config.add_section('wallet')
     config.set('wallet', 'coinbase', '0' * 40)
 
-    usage = "usage: %prog [options]"
-    parser = OptionParser(usage=usage,  version=Packeter.CLIENT_ID)
-    parser.add_option(
+    parser = ArgumentParser(version=Packeter.CLIENT_ID)
+    parser.add_argument(
         "-l", "--listen",
         dest="listen_port",
         default=config.get('network', 'listen_port'),
         help="<port>  Listen on the given port for incoming"
         " connected (default: 30303).")
-    parser.add_option(
+    parser.add_argument(
         "-a", "--address",
         dest="coinbase",
         help="Set the coinbase (mining payout) address",
         default=config.get('wallet', 'coinbase'))
-    parser.add_option(
+    parser.add_argument(
         "-d", "--data_dir",
         dest="data_dir",
         help="<path>  Load database from path (default: %s)" % config.get(
             'misc', 'data_dir'),
         default=config.get('misc', 'data_dir'))
-    parser.add_option(
+    parser.add_argument(
         "-r", "--remote",
         dest="remote_host",
         help="<host> Connect to remote host"
         " (try: 54.201.28.117 or 54.204.10.41)")
-    parser.add_option(
+    parser.add_argument(
         "-p", "--port",
         dest="remote_port",
         default=config.get('network', 'remote_port'),
         help="<port> Connect to remote port (default: 30303)"
     )
-    parser.add_option(
-        "-v", "--verbose",
+    parser.add_argument(
+        "-V", "--verbose",
         dest="verbosity",
         default=config.get('misc', 'verbosity'),
         help="<0 - 3>  Set the log verbosity from 0 to 3 (default: 1)")
-    parser.add_option(
+    parser.add_argument(
         "-m", "--mining",
         dest="mining",
         default=config.get('misc', 'mining'),
         help="<0 - 100> Percent CPU used for mining 0==off (default: 10)")
-    parser.add_option(
+    parser.add_argument(
         "-L", "--logging",
         dest="logging",
         default=config.get('misc', 'logging'),
         help="<logger1:LEVEL,logger2:LEVEL> set the console log level for"
         " logger1, logger2, etc. Empty loggername means root-logger,"
-        " e.g. 'pyethereum.wire:DEBUG,:INFO'. Overrides '-v'")
-    parser.add_option(
+        " e.g. 'pyethereum.wire:DEBUG,:INFO'. Overrides '-V'")
+    parser.add_argument(
         "-x", "--peers",
         dest="num_peers",
         default=config.get('network', 'num_peers'),
         help="<number> Attempt to connect to given number of peers"
         "(default: 5)")
-    parser.add_option("-C", "--config",
+    parser.add_argument("-C", "--config",
                       dest="config_file",
                       help="read coniguration")
 
-    (options, args) = parser.parse_args()
+    options = parser.parse_args()
 
     # set network options
     for attr in ('listen_port', 'remote_host', 'remote_port', 'num_peers'):
@@ -123,10 +122,6 @@ def create_config():
     for attr in ('coinbase',):
         config.set(
             'wallet', attr, getattr(options, attr) or config.get('wallet', attr))
-
-    if len(args) != 0:
-        parser.error("wrong number of arguments")
-        sys.exit(1)
 
     if config.get('misc', 'config_file'):
         config.read(config.get('misc', 'config_file'))
