@@ -138,7 +138,27 @@ class Trie(object):
         self.root_hash = root_hash
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
-        self.root_node = self._mk_root_node(self.root_hash)
+
+    @property
+    def root_hash(self):
+        '''always a 32 bytes string
+        '''
+        if self.root_node == BLANK:
+            return BLANK_ROOT
+        assert isinstance(self.root_node, list)
+        val = rlp.encode(self.root_node)
+        key = utils.sha3(val)
+        self.db.put(key, val)
+        return key
+
+    @root_hash.setter
+    def root_hash(self, value):
+        if value == BLANK_ROOT:
+            self.root_node = BLANK
+            return
+        assert isinstance(value, (str, unicode))
+        assert len(self.value) == 32
+        self.root_node = self._decode_to_node(value)
 
     def clear(self):
         ''' clear all tree data
@@ -146,8 +166,7 @@ class Trie(object):
         self._delete_child_stroage(self.root_node)
         self._delete_node_storage(self.root_node)
         self.db.commit()
-        self.root_hash = BLANK_ROOT
-        self.root_node = self._mk_root_node(self.root_hash)
+        self.root_node = BLANK
 
     def _delete_child_stroage(self, node):
         if len(node) == 17:
@@ -157,22 +176,6 @@ class Trie(object):
             node_type = self._get_node_type(node)
             if node_type == NODE_TYPE_LEAF:
                 self._delete_child_stroage(self._decode_to_node(node[1]))
-
-    def _mk_root_hash(self, root_node):
-        if root_node == BLANK:
-            return BLANK_ROOT
-        assert isinstance(root_node, list)
-        val = rlp.encode(root_node)
-        key = utils.sha3(val)
-        self.db.put(key, val)
-        return key
-
-    def _mk_root_node(self, root_hash):
-        if root_hash == BLANK_ROOT:
-            return BLANK
-        assert isinstance(root_hash, (str, unicode))
-        assert len(self.root_hash) == 32
-        return self._decode_to_node(root_hash)
 
     def _encode_node(self, node):
         if node == BLANK:
@@ -484,7 +487,6 @@ class Trie(object):
             self.root_node,
             bin_to_nibbles(str(key)))
         self.db.commit()
-        self.root_hash = self._mk_root_hash(self.root_node)
 
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -606,7 +608,6 @@ class Trie(object):
             bin_to_nibbles(str(key)),
             value)
         self.db.commit()
-        self.root_hash = self._mk_root_hash(self.root_node)
 
     def root_hash_valid(self):
         if self.root_hash == BLANK_ROOT:
