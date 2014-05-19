@@ -288,13 +288,13 @@ class Trie(object):
         if remain_key == [] == remain_curr_key:
             if not is_inner:
                 return [node[0], value]
-            new_node = self._update(self._decode_to_node(node[1]),
-                                    remain_key, value)
+            new_node = self._update_and_delete_storage(
+                self._decode_to_node(node[1]), remain_key, value)
 
         elif remain_curr_key == []:
             if is_inner:
-                new_node = self._update(self._decode_to_node(node[1]),
-                                        remain_key, value)
+                new_node = self._update_and_delete_storage(
+                    self._decode_to_node(node[1]), remain_key, value)
             else:
                 new_node = [BLANK] * 17
                 new_node[-1] = node[1]
@@ -392,20 +392,31 @@ class Trie(object):
             return [pack_nibbles([not_blank_index]), sub_node]
         assert False
 
+    def _delete_and_delete_storage(self, node, key):
+        old_node = node[:]
+        new_node = self._delete(node, key)
+        if old_node != new_node:
+            self._delete_node_storage(old_node)
+        return new_node
+
     def _delete_diverge_node(self, node, key):
         # already reach the expected node
         if not key:
             node[-1] = BLANK
             return self._normalize_diverge_node(node)
 
-        old_sub_node = self._decode_to_node(node[key[0]])
-        new_sub_node = self._delete(old_sub_node, key[1:])
-        if old_sub_node == new_sub_node:
+        encoded_new_sub_node = self._encode_node(
+            self._delete_and_delete_storage(
+                self._decode_to_node(node[key[0]]), key[1:])
+        )
+
+        if node[key[0]] == encoded_new_sub_node:
             return node
 
-        self._delete_node_storage(old_sub_node)
-        if new_sub_node == BLANK:
+        if encoded_new_sub_node == BLANK:
             return self._normalize_diverge_node(node)
+
+        node[key[0]] = encoded_new_sub_node
         return node
 
     def _delete_kv_node(self, node, key):
@@ -421,13 +432,11 @@ class Trie(object):
             return BLANK if key == curr_key else node
 
         # for inner key value type
-        sub_node = self._decode_to_node(node[1])
-        new_sub_node = self._delete(sub_node[:], key[len(curr_key):])
+        new_sub_node = self._delete_and_delete_storage(
+            self._decode_to_node(node[1]), key[len(curr_key):])
 
-        if sub_node == new_sub_node:
-            return node
-
-        self._delete_node_storage(sub_node)
+        if self._encode_node(new_sub_node) == node[1]:
+            return
 
         # new sub node is BLANK
         if new_sub_node == BLANK:
@@ -460,7 +469,7 @@ class Trie(object):
         if len(key) > 32:
             raise Exception("Max key length is 32")
 
-        self.root_node = self._delete(
+        self.root_node = self._delete_and_delete_storage(
             self.root_node,
             bin_to_nibbles(str(key)))
         self.db.commit()
@@ -581,7 +590,7 @@ class Trie(object):
         if not isinstance(value, (str, unicode)):
             raise Exception("Value must be string")
 
-        self.root_node = self._update(
+        self.root_node = self._update_and_delete_storage(
             self.root_node,
             bin_to_nibbles(str(key)),
             value)
