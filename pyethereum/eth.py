@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 import logging
 import logging.config
 
-from common import make_pyethereum_avail
+from pyethereum.common import make_pyethereum_avail
 make_pyethereum_avail()
 
 from pyethereum.utils import configure_logging
