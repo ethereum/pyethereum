@@ -586,9 +586,6 @@ class Trie(object):
     def __iter__(self):
         return iter(self.to_dict())
 
-    def __reversed__(self):
-        pass
-
     def __contains__(self, key):
         return self.get(key) != BLANK
 
