@@ -135,9 +135,9 @@ class Trie(object):
         :param dbfile: key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
-        self.root_hash = root_hash
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
+        self.load_root_node(root_hash)
 
     @property
     def root_hash(self):
@@ -153,12 +153,15 @@ class Trie(object):
 
     @root_hash.setter
     def root_hash(self, value):
-        if value == BLANK_ROOT:
+        self.load_root_node()
+
+    def load_root_node(self, root_hash):
+        if root_hash == BLANK_ROOT:
             self.root_node = BLANK
             return
-        assert isinstance(value, (str, unicode))
-        assert len(value) == 32
-        self.root_node = self._decode_to_node(value)
+        assert isinstance(root_hash, (str, unicode))
+        assert len(root_hash) == 32
+        self.root_node = self._decode_to_node(root_hash)
 
     def clear(self):
         ''' clear all tree data
