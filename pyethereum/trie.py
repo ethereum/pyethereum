@@ -113,15 +113,15 @@ def starts_with(full, part):
 
 (
     NODE_TYPE_BLANK,
-    NODE_TYPE_LEAF_KEY_VALUE,
-    NODE_TYPE_INNER_KEY_VALUE,
-    NODE_TYPE_DIVERGE
+    NODE_TYPE_LEAF,
+    NODE_TYPE_EXTENSION,
+    NODE_TYPE_BRANCH
 ) = tuple(range(4))
 
 
 def is_key_value_type(node_type):
-    return node_type in [NODE_TYPE_LEAF_KEY_VALUE,
-                         NODE_TYPE_INNER_KEY_VALUE]
+    return node_type in [NODE_TYPE_LEAF,
+                         NODE_TYPE_EXTENSION]
 
 BLANK = ''
 BLANK_ROOT = chr(0) * 32
@@ -155,7 +155,7 @@ class Trie(object):
                 self._delete_child_stroage(self._decode_to_node(item))
         elif len(node) == 17:
             node_type = self._get_node_type(node)
-            if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+            if node_type == NODE_TYPE_LEAF:
                 self._delete_child_stroage(self._decode_to_node(node[1]))
 
     def _mk_root_hash(self, root_node):
@@ -205,10 +205,10 @@ class Trie(object):
         if len(node) == 2:
             nibbles = unpack_to_nibbles(node[0])
             has_terminator = (nibbles and nibbles[-1] == NIBBLE_TERMINATOR)
-            return NODE_TYPE_LEAF_KEY_VALUE if has_terminator\
-                else NODE_TYPE_INNER_KEY_VALUE
+            return NODE_TYPE_LEAF if has_terminator\
+                else NODE_TYPE_EXTENSION
         if len(node) == 17:
-            return NODE_TYPE_DIVERGE
+            return NODE_TYPE_BRANCH
 
     def _get(self, node, key):
         """ get value inside a node
@@ -222,7 +222,7 @@ class Trie(object):
         if node_type == NODE_TYPE_BLANK:
             return BLANK
 
-        if node_type == NODE_TYPE_DIVERGE:
+        if node_type == NODE_TYPE_BRANCH:
             # already reach the expected node
             if not key:
                 return node[-1]
@@ -231,10 +231,10 @@ class Trie(object):
 
         # key value node
         curr_key = without_terminator(unpack_to_nibbles(node[0]))
-        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+        if node_type == NODE_TYPE_LEAF:
             return node[1] if key == curr_key else BLANK
 
-        if node_type == NODE_TYPE_INNER_KEY_VALUE:
+        if node_type == NODE_TYPE_EXTENSION:
             # traverse child nodes
             if starts_with(key, curr_key):
                 sub_node = self._decode_to_node(node[1])
@@ -261,7 +261,7 @@ class Trie(object):
         if node_type == NODE_TYPE_BLANK:
             return [pack_nibbles(with_terminator(key)), value]
 
-        elif node_type == NODE_TYPE_DIVERGE:
+        elif node_type == NODE_TYPE_BRANCH:
             if not key:
                 node[-1] = value
             else:
@@ -284,7 +284,7 @@ class Trie(object):
     def _update_kv_node(self, node, key, value):
         node_type = self._get_node_type(node)
         curr_key = without_terminator(unpack_to_nibbles(node[0]))
-        is_inner = node_type == NODE_TYPE_INNER_KEY_VALUE
+        is_inner = node_type == NODE_TYPE_EXTENSION
 
         # find longest common prefix
         prefix_length = 0
@@ -367,13 +367,13 @@ class Trie(object):
         if node_type == NODE_TYPE_BLANK:
             return BLANK
 
-        if node_type == NODE_TYPE_DIVERGE:
-            self._delete_diverge_node(node, key)
+        if node_type == NODE_TYPE_BRANCH:
+            self._delete_branch_node(node, key)
 
         if is_key_value_type(node_type):
             return self._delete_kv_node(node, key)
 
-    def _normalize_diverge_node(self, node):
+    def _normalize_branch_node(self, node):
         '''node should have only one item changed
         '''
         not_blank_items_count = sum(1 for x in range(17) if node[x])
@@ -399,7 +399,7 @@ class Trie(object):
             new_key = [not_blank_index] + \
                 unpack_to_nibbles(sub_node[0])
             return [pack_nibbles(new_key), sub_node[1]]
-        if sub_node_type == NODE_TYPE_DIVERGE:
+        if sub_node_type == NODE_TYPE_BRANCH:
             return [pack_nibbles([not_blank_index]), sub_node]
         assert False
 
@@ -410,11 +410,11 @@ class Trie(object):
             self._delete_node_storage(old_node)
         return new_node
 
-    def _delete_diverge_node(self, node, key):
+    def _delete_branch_node(self, node, key):
         # already reach the expected node
         if not key:
             node[-1] = BLANK
-            return self._normalize_diverge_node(node)
+            return self._normalize_branch_node(node)
 
         encoded_new_sub_node = self._encode_node(
             self._delete_and_delete_storage(
@@ -425,7 +425,7 @@ class Trie(object):
             return node
 
         if encoded_new_sub_node == BLANK:
-            return self._normalize_diverge_node(node)
+            return self._normalize_branch_node(node)
 
         node[key[0]] = encoded_new_sub_node
         return node
@@ -439,7 +439,7 @@ class Trie(object):
             # key not found
             return node
 
-        if node_type == NODE_TYPE_LEAF_KEY_VALUE:
+        if node_type == NODE_TYPE_LEAF:
             return BLANK if key == curr_key else node
 
         # for inner key value type
@@ -464,7 +464,7 @@ class Trie(object):
             new_key = curr_key + unpack_to_nibbles(new_sub_node[0])
             return [pack_nibbles(new_key), new_sub_node[1]]
 
-        if new_sub_node_type == NODE_TYPE_DIVERGE:
+        if new_sub_node_type == NODE_TYPE_BRANCH:
             return [pack_nibbles(curr_key), new_sub_node[1]]
 
         # should be no more cases
@@ -497,12 +497,12 @@ class Trie(object):
         node_type = self._get_node_type(node)
 
         if is_key_value_type(node_type):
-            value_is_node = node_type == NODE_TYPE_INNER_KEY_VALUE
+            value_is_node = node_type == NODE_TYPE_EXTENSION
             if value_is_node:
                 return self._get_size(self._decode_to_node(node[1]))
             else:
                 return 1
-        elif node_type == NODE_TYPE_DIVERGE:
+        elif node_type == NODE_TYPE_BRANCH:
             sizes = [self._get_size(self._decode_to_node(node[x]))
                      for x in range(16)]
             sizes = sizes + [1 if node[-1] else 0]
@@ -526,7 +526,7 @@ class Trie(object):
         if is_key_value_type(node_type):
             nibbles = without_terminator(unpack_to_nibbles(node[0]))
             key = '+'.join([str(x) for x in nibbles])
-            if node_type == NODE_TYPE_INNER_KEY_VALUE:
+            if node_type == NODE_TYPE_EXTENSION:
                 sub_dict = self._to_dict(self._decode_to_node(node[1]))
             else:
                 sub_dict = {str(NIBBLE_TERMINATOR): node[1]}
@@ -538,7 +538,7 @@ class Trie(object):
                 res[full_key] = sub_value
             return res
 
-        elif node_type == NODE_TYPE_DIVERGE:
+        elif node_type == NODE_TYPE_BRANCH:
             res = {}
             for i in range(16):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
