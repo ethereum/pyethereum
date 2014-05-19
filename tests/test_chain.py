@@ -204,6 +204,7 @@ def test_mine_block():
     assert blk2.get_parent() == blk
 
 
+@pytest.mark.wip
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     set_db()

@@ -475,5 +475,5 @@ def apply_op(block, tx, msg, code, compustate):
         to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
         block.delta_balance(to, block.get_balance(msg.to))
-        block.state.update(msg.to, '')
+        block.state.delete(msg.to)
         return []

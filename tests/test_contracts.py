@@ -19,7 +19,6 @@ def accounts():
     return k, v, k2, v2
 
 
-@pytest.mark.wip
 def test_namecoin():
     k, v, k2, v2 = accounts()
 

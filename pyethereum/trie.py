@@ -157,7 +157,7 @@ class Trie(object):
             self.root_node = BLANK
             return
         assert isinstance(value, (str, unicode))
-        assert len(self.value) == 32
+        assert len(value) == 32
         self.root_node = self._decode_to_node(value)
 
     def clear(self):
