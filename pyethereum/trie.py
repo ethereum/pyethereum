@@ -239,6 +239,10 @@ class Trie(object):
             .. note:: key may be []
         :param value: value string
         :return: new node
+
+        if this node is changed to a new node, it's parent will take the
+        responsibility to *store* the new node storage, and delete the old
+        node storage
         """
         assert value != BLANK
         node_type = self._get_node_type(node)
@@ -250,15 +254,21 @@ class Trie(object):
             if not key:
                 node[-1] = value
             else:
-                node[key[0]] = self._encode_node(
-                    self._update(
-                        self._decode_to_node(node[key[0]]),
-                        key[1:], value)
-                )
+                new_node = self._update_and_delete_storage(
+                    self._decode_to_node(node[key[0]]),
+                    key[1:], value)
+                node[key[0]] = self._encode_node(new_node)
             return node
 
         elif is_key_value_type(node_type):
             return self._update_kv_node(node, key, value)
+
+    def _update_and_delete_storage(self, node, key, value):
+        old_node = node[:]
+        new_node = self._update(node, key, value)
+        if old_node != new_node:
+            self._delete_node_storage(old_node)
+        return new_node
 
     def _update_kv_node(self, node, key, value):
         node_type = self._get_node_type(node)
@@ -322,6 +332,8 @@ class Trie(object):
         '''delete storage
         :param node: node in form of list, or BLANK
         '''
+        if node == BLANK:
+            return
         assert isinstance(node, list)
         encoded = self._encode_node(node)
         if len(encoded) < 32:
@@ -335,9 +347,10 @@ class Trie(object):
         :param key: nibble list without terminator
             .. note:: key may be []
         :return: new node
-            if this node is changed to a new node, it's parent will take the
-            responsibility to *store* the new node storage, and delete the old
-            node storage
+
+        if this node is changed to a new node, it's parent will take the
+        responsibility to *store* the new node storage, and delete the old
+        node storage
         """
         node_type = self._get_node_type(node)
         if node_type == NODE_TYPE_BLANK:
