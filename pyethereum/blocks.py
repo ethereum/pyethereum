@@ -515,6 +515,9 @@ def dump_genesis_block_tests_data():
         genesis_state_root=g.state_root.encode('hex'),
         genesis_hash=g.hex_hash(),
         genesis_rlp_hex=g.serialize().encode('hex'),
-        initial_alloc=GENESIS_INITIAL_ALLOC
+        initial_alloc=dict()
     )
+    for addr, balance in GENESIS_INITIAL_ALLOC.iteritems():
+        data['initial_alloc'][addr] = str(balance)
+
     print json.dumps(data, indent=1)
