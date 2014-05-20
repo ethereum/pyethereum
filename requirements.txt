@@ -4,3 +4,4 @@ pysha3
 miniupnpc
 bottle
 waitress
+six
