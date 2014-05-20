@@ -100,7 +100,7 @@ class Peer(StoppableLoopThread):
             except socket.error:
                 break
         length = len(self.recv_buffer)
-        if length:
+        while self.recv_buffer:
             self._process_recv_buffer()
         return length
 
