@@ -99,6 +99,31 @@ def test_genesis():
     assert sr in db
     db.commit()
     assert sr in db
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+    set_db()
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+
+
+def test_genesis_db():
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+    set_db()
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
 
 
 def test_trie_state_root_nodep():
@@ -219,6 +244,27 @@ def test_mine_block():
     assert blk2.get_parent() == blk
 
 
+def test_block_serialization_with_transaction():
+    k, v, k2, v2 = accounts()
+    # mine two blocks
+    set_db()
+    a_blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(a_blk)
+    tx = get_transaction()
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx in a_blk2.get_transactions()
+
+
+def test_block_serialization_with_transaction_empty_genesis():
+    k, v, k2, v2 = accounts()
+    set_db()
+    a_blk = mkgenesis()
+    db_store(a_blk)
+    tx = get_transaction()  # must fail, as there is no balance
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx not in a_blk2.get_transactions()
+
+
 @pytest.mark.wip
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
@@ -227,7 +273,9 @@ def test_mine_block_with_transaction():
     db_store(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
+    assert tx in blk2.get_transactions()
     db_store(blk2)
+    assert tx in blk2.get_transactions()
     assert blocks.get_block(blk2.hash) == blk2
     assert tx.gasprice == 0
     assert blk2.get_balance(
