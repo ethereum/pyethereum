@@ -14,11 +14,12 @@ tempdir = tempfile.mktemp()
 
 # https://ethereum.etherpad.mozilla.org/12
 CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
-CPP_PoC5_GENESIS_HEX_HASH = \
-    "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
+    '12582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca16'
+CPP_PoC5_GENESIS_RLP_HEX_HASH = \
+    "c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3f"
 
-CPP_PoC5_GENESIS_HEX = "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a02f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817da00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
+CPP_PoC5_GENESIS_RLP_HEX = \
+    "f8abf8a7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a012582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca1680834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
 
 
 @pytest.fixture(scope="module")
@@ -67,24 +68,63 @@ set_db()
 
 
 def db_store(blk):
-    db = DB(utils.get_db_path())
-    db.put(blk.hash, blk.serialize())
-    db.commit()
+    utils.db_put(blk.hash, blk.serialize())
     assert blocks.get_block(blk.hash) == blk
 
 
 def test_db():
+    set_db()
     db = DB(utils.get_db_path())
+    a, b = DB(utils.get_db_path()),  DB(utils.get_db_path())
+    assert a == b
+    assert a.uncommitted == b.uncommitted
+    a.put('a', 'b')
+    b.get('a') == 'b'
+    assert a.uncommitted == b.uncommitted
+    a.commit()
+    assert a.uncommitted == b.uncommitted
     assert 'test' not in db
+    set_db()
+    assert a != DB(utils.get_db_path())
 
 
 def test_genesis():
     k, v, k2, v2 = accounts()
     set_db()
     blk = blocks.genesis({v: utils.denoms.ether * 1})
+    sr = blk.state_root
+    db = DB(utils.get_db_path())
+    assert blk.state.db.db == db.db
+    db.put(blk.hash, blk.serialize())
+    blk.state.db.commit()
+    assert sr in db
+    db.commit()
+    assert sr in db
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+    set_db()
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+
+
+def test_genesis_db():
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk = blocks.genesis({v: utils.denoms.ether * 1})
     db_store(blk)
-    assert blk in set([blk])
-    assert blk == blocks.Block.deserialize(blk.serialize())
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
+    set_db()
+    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis()
+    assert blk == blk2
+    assert blk != blk3
 
 
 def test_trie_state_root_nodep():
@@ -112,7 +152,8 @@ def test_trie_state_root_nodep():
     for address, value in GENESIS_INITIAL_ALLOC.items():
         acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
-    assert state.root_hash.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+    assert state.root_hash.encode(
+        'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
 def test_genesis_state_root():
@@ -182,14 +223,14 @@ def test_genesis_hash():
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    cpp_genesis_block = rlp.decode(CPP_PoC5_GENESIS_HEX.decode('hex'))
+    cpp_genesis_block = rlp.decode(CPP_PoC5_GENESIS_RLP_HEX.decode('hex'))
     cpp_genesis_header = cpp_genesis_block[0]
 
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
-        # print name, repr(getattr(genesis, name)),  repr(genesis_default)
-        assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
+        assert name == name and utils.decoders[typ](
+            cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
-    assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
+    assert genesis.hex_hash() == CPP_PoC5_GENESIS_RLP_HEX_HASH
 
 
 def test_mine_block():
@@ -204,6 +245,27 @@ def test_mine_block():
     assert blk2.get_parent() == blk
 
 
+def test_block_serialization_with_transaction():
+    k, v, k2, v2 = accounts()
+    # mine two blocks
+    set_db()
+    a_blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(a_blk)
+    tx = get_transaction()
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx in a_blk2.get_transactions()
+
+
+def test_block_serialization_with_transaction_empty_genesis():
+    k, v, k2, v2 = accounts()
+    set_db()
+    a_blk = mkgenesis()
+    db_store(a_blk)
+    tx = get_transaction()  # must fail, as there is no balance
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx not in a_blk2.get_transactions()
+
+
 @pytest.mark.wip
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
@@ -212,7 +274,9 @@ def test_mine_block_with_transaction():
     db_store(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
+    assert tx in blk2.get_transactions()
     db_store(blk2)
+    assert tx in blk2.get_transactions()
     assert blocks.get_block(blk2.hash) == blk2
     assert tx.gasprice == 0
     assert blk2.get_balance(
@@ -257,23 +321,27 @@ def test_block_serialization_other_db():
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 
 
+@pytest.mark.bswto
 def test_block_serialization_with_transaction_other_db():
-    # k, v, k2, v2 = accounts()
+    k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = mkgenesis()
+    a_blk = mkgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     assert tx in a_blk2.get_transactions()
     db_store(a_blk2)
+    assert tx in a_blk2.get_transactions()
     # receive in other db
     set_db()
-    b_blk = mkgenesis()
+    b_blk = mkgenesis({v: utils.denoms.ether * 1})
     assert b_blk == a_blk
+
     db_store(b_blk)
     b_blk2 = b_blk.deserialize(a_blk2.serialize())
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
+
     assert tx in b_blk2.get_transactions()
     db_store(b_blk2)
     assert a_blk2.hex_hash() == b_blk2.hex_hash()

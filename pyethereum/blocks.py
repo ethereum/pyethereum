@@ -20,10 +20,15 @@ BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 
 GENESIS_INITIAL_ALLOC = \
-    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,
-     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
-     "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,
-     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200}
+    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,  # (G)
+     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
+     "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,  # (V)
+     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,  # (A)
+     "2ef47100e0787b915105fd5e3f4ff6752079d5cb": 2 ** 200,  # (M)
+     "cd2a3d9f938e13cd947ec05abc7fe734df8dd826": 2 ** 200,  # (R)
+     "6c386a4b26f73c802f34673f7248bb118f97424a": 2 ** 200,  # (HH)
+     "e4157b34ea9615cfbde6b4fda419828124b70c78": 2 ** 200,  # (CH)
+     }
 
 block_structure = [
     ["prevhash", "bin", ""],
@@ -501,3 +506,18 @@ def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
         block.set_balance(addr, balance)
     block.state.db.commit()
     return block
+
+
+def dump_genesis_block_tests_data():
+    import json
+    g = genesis()
+    data = dict(
+        genesis_state_root=g.state_root.encode('hex'),
+        genesis_hash=g.hex_hash(),
+        genesis_rlp_hex=g.serialize().encode('hex'),
+        initial_alloc=dict()
+    )
+    for addr, balance in GENESIS_INITIAL_ALLOC.iteritems():
+        data['initial_alloc'][addr] = str(balance)
+
+    print json.dumps(data, indent=1)

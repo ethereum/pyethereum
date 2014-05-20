@@ -8,6 +8,9 @@ Ethereum Python Client
 .. image:: https://coveralls.io/repos/ethereum/pyethereum/badge.png
   :target: https://coveralls.io/r/ethereum/pyethereum
 
+.. image:: http://tip4commit.com/projects/758.svg
+   :target: http://tip4commit.com/projects/758
+
 
 Install
 =========

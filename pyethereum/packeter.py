@@ -106,9 +106,6 @@ class Packeter(object):
         except Exception as e:
             return False, str(e)
 
-        # rumours about multiple packets after the sync token being on the network
-        assert len(packet) == payload_len + 8
-
         if len(packet) < payload_len + 8:
             return False, 'Packet is broken'
 

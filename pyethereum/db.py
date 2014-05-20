@@ -8,9 +8,8 @@ class DB(object):
     def __init__(self, dbfile):
         self.dbfile = dbfile
         if dbfile not in databases:
-            databases[dbfile] = leveldb.LevelDB(dbfile)
-        self.db = databases[dbfile]
-        self.uncommitted = {}
+            databases[dbfile] = (leveldb.LevelDB(dbfile), dict())
+        self.db, self.uncommitted = databases[dbfile]
 
     def get(self, key):
         if key in self.uncommitted:
@@ -25,7 +24,7 @@ class DB(object):
         for k, v in self.uncommitted.iteritems():
             batch.Put(k, v)
         self.db.Write(batch, sync=True)
-        self.uncommitted = {}
+        self.uncommitted.clear()
 
     def delete(self, key):
         if key in self.uncommitted:
@@ -44,3 +43,6 @@ class DB(object):
 
     def __contains__(self, key):
         return self._has_key(key)
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.db == other.db

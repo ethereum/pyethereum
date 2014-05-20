@@ -2,7 +2,7 @@ import sys
 import os
 
 
-def make_pyethereum_avail():
+def enable_full_qualified_import():
     ''' so pyethreum.package.module is available'''
     where = os.path.join(__file__, os.path.pardir, os.path.pardir)
     where = os.path.abspath(where)
