@@ -67,24 +67,38 @@ set_db()
 
 
 def db_store(blk):
-    db = DB(utils.get_db_path())
-    db.put(blk.hash, blk.serialize())
-    db.commit()
+    utils.db_put(blk.hash, blk.serialize())
     assert blocks.get_block(blk.hash) == blk
 
 
 def test_db():
+    set_db()
     db = DB(utils.get_db_path())
+    a, b = DB(utils.get_db_path()),  DB(utils.get_db_path())
+    assert a == b
+    assert a.uncommitted == b.uncommitted
+    a.put('a', 'b')
+    b.get('a') == 'b'
+    assert a.uncommitted == b.uncommitted
+    a.commit()
+    assert a.uncommitted == b.uncommitted
     assert 'test' not in db
+    set_db()
+    assert a != DB(utils.get_db_path())
 
 
 def test_genesis():
     k, v, k2, v2 = accounts()
     set_db()
     blk = blocks.genesis({v: utils.denoms.ether * 1})
-    db_store(blk)
-    assert blk in set([blk])
-    assert blk == blocks.Block.deserialize(blk.serialize())
+    sr = blk.state_root
+    db = DB(utils.get_db_path())
+    assert blk.state.db.db == db.db
+    db.put(blk.hash, blk.serialize())
+    blk.state.db.commit()
+    assert sr in db
+    db.commit()
+    assert sr in db
 
 
 def test_trie_state_root_nodep():
@@ -112,7 +126,8 @@ def test_trie_state_root_nodep():
     for address, value in GENESIS_INITIAL_ALLOC.items():
         acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
-    assert state.root_hash.encode('hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+    assert state.root_hash.encode(
+        'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
 def test_genesis_state_root():
