@@ -506,3 +506,15 @@ def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
         block.set_balance(addr, balance)
     block.state.db.commit()
     return block
+
+
+def dump_genesis_block_tests_data():
+    import json
+    g = genesis()
+    data = dict(
+        genesis_state_root=g.state_root.encode('hex'),
+        genesis_hash=g.hex_hash(),
+        genesis_rlp_hex=g.serialize().encode('hex'),
+        initial_alloc=GENESIS_INITIAL_ALLOC
+    )
+    print json.dumps(data, indent=1)
