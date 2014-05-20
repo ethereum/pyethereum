@@ -8,8 +8,9 @@ from argparse import ArgumentParser
 import logging
 import logging.config
 
-from pyethereum.common import make_pyethereum_avail
-make_pyethereum_avail()
+# this must be called before all other import to enable full qualified import
+from common import enable_full_qualified_import
+enable_full_qualified_import()
 
 from pyethereum.utils import configure_logging
 from pyethereum.utils import data_dir
