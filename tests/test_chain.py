@@ -14,12 +14,12 @@ tempdir = tempfile.mktemp()
 
 # https://ethereum.etherpad.mozilla.org/12
 CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-    '00696ee4ed9b61b779e3f44742cee51557972682759093fe9b9b4bc2c88a4d02'
+    '12582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca16'
 CPP_PoC5_GENESIS_RLP_HEX_HASH = \
-    "f5232afe32aba6b366f8aa86a6939437c5e13d1fd71a0f51e77735d3456eb1a6"
+    "c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3f"
 
 CPP_PoC5_GENESIS_RLP_HEX = \
-    "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a000696ee4ed9b61b779e3f44742cee51557972682759093fe9b9b4bc2c88a4d02a00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
+    "f8abf8a7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a012582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca1680834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
 
 
 @pytest.fixture(scope="module")
@@ -227,7 +227,8 @@ def test_genesis_hash():
     cpp_genesis_header = cpp_genesis_block[0]
 
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
-        assert name == name and utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
+        assert name == name and utils.decoders[typ](
+            cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
     assert genesis.hex_hash() == CPP_PoC5_GENESIS_RLP_HEX_HASH
 
