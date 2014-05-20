@@ -272,23 +272,27 @@ def test_block_serialization_other_db():
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 
 
+@pytest.mark.bswto
 def test_block_serialization_with_transaction_other_db():
-    # k, v, k2, v2 = accounts()
+    k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = mkgenesis()
+    a_blk = mkgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     assert tx in a_blk2.get_transactions()
     db_store(a_blk2)
+    assert tx in a_blk2.get_transactions()
     # receive in other db
     set_db()
-    b_blk = mkgenesis()
+    b_blk = mkgenesis({v: utils.denoms.ether * 1})
     assert b_blk == a_blk
+
     db_store(b_blk)
     b_blk2 = b_blk.deserialize(a_blk2.serialize())
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
+
     assert tx in b_blk2.get_transactions()
     db_store(b_blk2)
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
