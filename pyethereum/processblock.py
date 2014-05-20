@@ -5,6 +5,7 @@ import utils
 import time
 import blocks
 import transactions
+import trie
 
 
 debug = 0

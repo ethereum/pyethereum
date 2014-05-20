@@ -63,8 +63,11 @@ else:
     return(0)
 '''
 code1 = serpent.compile(scode1)
-# print("AST", serpent.rewrite(serpent.parse(scode1)))
-# print("Assembly", serpent.compile_to_assembly(scode1))
+# print("AST", serpent.parse(scode1))
+#print("LLL", serpent.compile_to_lll(serpent.parse(scode1)))
+#print("AEVM", serpent.compile_lll(serpent.compile_to_lll(scode1)))
+#print("AEVM2", serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode1))))
+# print("code", code1.encode('hex'))
 tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
 s, addr = pb.apply_tx(blk, tx1)
 snapshot = blk.snapshot()
@@ -105,7 +108,9 @@ else:
 ''' % v
 code2 = serpent.compile(scode2)
 # print("AST", serpent.rewrite(serpent.parse(scode2)))
-# print("Assembly", serpent.compile_to_assembly(scode2))
+#print("LLL", serpent.compile_to_lll(serpent.parse(scode2)))
+#print("AEVM", serpent.compile_lll(serpent.compile_to_lll(scode2)))
+#print("AEVM2", serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode2))))
 print("Starting currency contract tests")
 blk = b.genesis({v: 10**18})
 tx4 = t.contract(0, gasprice, startgas, 0, code2).sign(k)
@@ -177,23 +182,28 @@ elif !contract.storage[1001]:
     ethvalue = contract.storage[1002]
     if msg.value >= ethvalue:
         contract.storage[1001] = msg.sender
-    othervalue = ethvalue * msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    othervalue = ethvalue * call(0x%s,contract.storage[1003])
     contract.storage[1004] = othervalue
     contract.storage[1005] = block.timestamp + 86400
     return([2,othervalue],2)
 else:
     othervalue = contract.storage[1004]
-    ethvalue = othervalue / msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    ethvalue = othervalue / call(0x%s,[contract.storage[1003]],1)
     if ethvalue >= contract.balance:
-        send(contract.storage[1000],contract.balance,tx.gas-100)
+        send(contract.storage[1000],contract.balance)
         return(3)
     elif block.timestamp > contract.storage[1005]:
-        send(contract.storage[1001],contract.balance - ethvalue,tx.gas-100)
-        send(contract.storage[1000],ethvalue,tx.gas-100)
+        send(contract.storage[1001],contract.balance - ethvalue)
+        send(contract.storage[1000],ethvalue)
         return(4)
     else:
         return(5)
 ''' % (addr, addr)
+print scode4
+#print("LLL", serpent.compile_to_lll(serpent.parse(scode4)))
+#print("AEVM", serpent.compile_lll(serpent.compile_to_lll(scode4)))
+#print("AEVM2", serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4))))
+#print("DONE", serpent.serialize(serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4)))))
 code4 = serpent.compile(scode4)
 # print("AST", serpent.rewrite(serpent.parse(scode4)))
 # print("Assembly", serpent.compile_to_assembly(scode4))

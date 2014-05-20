@@ -3,7 +3,9 @@
 import os
 import rlp
 import utils
-from db import DB
+import db
+
+DB = db.DB
 
 
 def bin_to_nibbles(s):
@@ -137,12 +139,15 @@ class Trie(object):
         '''
         dbfile = os.path.abspath(dbfile)
         self.db = DB(dbfile)
-        self.load_root_node(root_hash)
+        self.set_root_hash(root_hash)
 
     @property
     def root_hash(self):
-        '''always a 32 bytes string
+        '''always empty or a 32 bytes string
         '''
+        return self.get_root_hash()
+
+    def get_root_hash(self):
         if self.root_node == BLANK:
             return BLANK_ROOT
         assert isinstance(self.root_node, list)
@@ -153,14 +158,14 @@ class Trie(object):
 
     @root_hash.setter
     def root_hash(self, value):
-        self.load_root_node()
+        self.set_root_hash(value)
 
-    def load_root_node(self, root_hash):
+    def set_root_hash(self, root_hash):
         if root_hash == BLANK_ROOT:
             self.root_node = BLANK
             return
         assert isinstance(root_hash, (str, unicode))
-        assert len(root_hash) == 32
+        assert len(root_hash) in [0, 32]
         self.root_node = self._decode_to_node(root_hash)
 
     def clear(self):
@@ -374,7 +379,7 @@ class Trie(object):
             return BLANK
 
         if node_type == NODE_TYPE_BRANCH:
-            self._delete_branch_node(node, key)
+            return self._delete_branch_node(node, key)
 
         if is_key_value_type(node_type):
             return self._delete_kv_node(node, key)
@@ -453,7 +458,7 @@ class Trie(object):
             self._decode_to_node(node[1]), key[len(curr_key):])
 
         if self._encode_node(new_sub_node) == node[1]:
-            return
+            return node
 
         # new sub node is BLANK
         if new_sub_node == BLANK:
@@ -489,6 +494,7 @@ class Trie(object):
         self.root_node = self._delete_and_delete_storage(
             self.root_node,
             bin_to_nibbles(str(key)))
+        self.get_root_hash()
         self.db.commit()
 
     def _get_size(self, node):
@@ -607,6 +613,7 @@ class Trie(object):
             self.root_node,
             bin_to_nibbles(str(key)),
             value)
+        self.get_root_hash()
         self.db.commit()
 
     def root_hash_valid(self):
