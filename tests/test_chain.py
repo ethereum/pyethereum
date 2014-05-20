@@ -14,11 +14,12 @@ tempdir = tempfile.mktemp()
 
 # https://ethereum.etherpad.mozilla.org/12
 CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-    '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
-CPP_PoC5_GENESIS_HEX_HASH = \
-    "69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e"
+    '00696ee4ed9b61b779e3f44742cee51557972682759093fe9b9b4bc2c88a4d02'
+CPP_PoC5_GENESIS_RLP_HEX_HASH = \
+    "f5232afe32aba6b366f8aa86a6939437c5e13d1fd71a0f51e77735d3456eb1a6"
 
-CPP_PoC5_GENESIS_HEX = "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a02f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817da00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
+CPP_PoC5_GENESIS_RLP_HEX = \
+    "f8cbf8c7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a000696ee4ed9b61b779e3f44742cee51557972682759093fe9b9b4bc2c88a4d02a00000000000000000000000000000000000000000000000000000000000000000834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
 
 
 @pytest.fixture(scope="module")
@@ -222,14 +223,13 @@ def test_genesis_hash():
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    cpp_genesis_block = rlp.decode(CPP_PoC5_GENESIS_HEX.decode('hex'))
+    cpp_genesis_block = rlp.decode(CPP_PoC5_GENESIS_RLP_HEX.decode('hex'))
     cpp_genesis_header = cpp_genesis_block[0]
 
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
-        # print name, repr(getattr(genesis, name)),  repr(genesis_default)
-        assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
+        assert name == name and utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
-    assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
+    assert genesis.hex_hash() == CPP_PoC5_GENESIS_RLP_HEX_HASH
 
 
 def test_mine_block():
