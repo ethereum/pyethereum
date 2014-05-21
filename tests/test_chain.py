@@ -126,7 +126,7 @@ def test_genesis_db():
     assert blk == blk2
     assert blk != blk3
 
-
+@pytest.mark.wip
 def test_trie_state_root_nodep():
     def int_to_big_endian(integer):
         if integer == 0:
@@ -135,7 +135,6 @@ def test_trie_state_root_nodep():
         if len(s) & 1:
             s = '0' + s
         return s.decode('hex')
-    BLANK_ROOT = chr(0) * 32
     CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
         '2f4399b08efe68945c1cf90ffe85bbe3ce978959da753f9e649f034015b8817d'
     GENESIS_INITIAL_ALLOC = \
@@ -150,7 +149,7 @@ def test_trie_state_root_nodep():
     assert ZERO_ENC == ''
     state = trie.Trie(tempfile.mktemp())
     for address, value in GENESIS_INITIAL_ALLOC.items():
-        acct = [int_to_big_endian(value), ZERO_ENC, BLANK_ROOT, EMPTYSHA3]
+        acct = [int_to_big_endian(value), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
     assert state.root_hash.encode(
         'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
