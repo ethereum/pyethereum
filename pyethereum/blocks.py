@@ -82,7 +82,7 @@ class UnknownParentException(Exception):
 class Block(object):
 
     def __init__(self,
-                 prevhash='',
+                 prevhash=trie.BLANK_ROOT,
                  uncles_hash=block_structure_rev['uncles_hash'][2],
                  coinbase=block_structure_rev['coinbase'][2],
                  state_root=trie.BLANK_ROOT,
@@ -418,6 +418,7 @@ class Block(object):
 
     @property
     def hash(self):
+        print 'RLP:', self.serialize().encode('hex')
         return utils.sha3(self.serialize())
 
     def hex_hash(self):
