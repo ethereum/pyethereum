@@ -182,7 +182,7 @@ elif !contract.storage[1001]:
     ethvalue = contract.storage[1002]
     if msg.value >= ethvalue:
         contract.storage[1001] = msg.sender
-    othervalue = ethvalue * call(0x%s,contract.storage[1003])
+    othervalue = ethvalue * call(0x%s,[contract.storage[1003]],1)
     contract.storage[1004] = othervalue
     contract.storage[1005] = block.timestamp + 86400
     return([2,othervalue],2)
@@ -199,11 +199,10 @@ else:
     else:
         return(5)
 ''' % (addr, addr)
-print scode4
-#print("LLL", serpent.compile_to_lll(serpent.parse(scode4)))
-#print("AEVM", serpent.compile_lll(serpent.compile_to_lll(scode4)))
-#print("AEVM2", serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4))))
-#print("DONE", serpent.serialize(serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4)))))
+# print("LLL", serpent.compile_to_lll(serpent.parse(scode4)))
+# print("AEVM", serpent.compile_lll(serpent.compile_to_lll(scode4)))
+# print("AEVM2", serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4))))
+# print("DONE", serpent.serialize(serpent.dereference(serpent.compile_lll(serpent.compile_to_lll(scode4)))))
 code4 = serpent.compile(scode4)
 # print("AST", serpent.rewrite(serpent.parse(scode4)))
 # print("Assembly", serpent.compile_to_assembly(scode4))

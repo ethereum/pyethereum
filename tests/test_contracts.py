@@ -156,19 +156,19 @@ elif !contract.storage[1001]:
     ethvalue = contract.storage[1002]
     if msg.value >= ethvalue:
         contract.storage[1001] = msg.sender
-    othervalue = ethvalue * msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    othervalue = ethvalue * call(0x%s,[contract.storage[1003]],1)
     contract.storage[1004] = othervalue
     contract.storage[1005] = block.timestamp + 86400
     return([2,othervalue],2)
 else:
     othervalue = contract.storage[1004]
-    ethvalue = othervalue / msg(0x%s,0,tx.gas-100,[contract.storage[1003]],1)
+    ethvalue = othervalue / call(0x%s,contract.storage[1003])
     if ethvalue >= contract.balance:
-        send(contract.storage[1000],contract.balance,tx.gas-100)
+        send(contract.storage[1000],contract.balance)
         return(3)
     elif block.timestamp > contract.storage[1005]:
-        send(contract.storage[1001],contract.balance - ethvalue,tx.gas-100)
-        send(contract.storage[1000],ethvalue,tx.gas-100)
+        send(contract.storage[1001],contract.balance - ethvalue)
+        send(contract.storage[1000],ethvalue)
         return(4)
     else:
         return(5)
