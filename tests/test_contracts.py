@@ -19,7 +19,6 @@ def accounts():
     return k, v, k2, v2
 
 
-@pytest.mark.wip
 def test_namecoin():
     k, v, k2, v2 = accounts()
 
@@ -61,7 +60,6 @@ else:
     blk.revert(snapshot)
 
 
-@pytest.mark.wip
 def test_currency():
     k, v, k2, v2 = accounts()
     scode2 = '''
@@ -109,7 +107,6 @@ else:
     assert serpent.decode_datalist(o) == [200]
 
 
-@pytest.mark.wip
 def test_data_feeds():
     k, v, k2, v2 = accounts()
     scode3 = '''
@@ -146,7 +143,6 @@ else:
     return blk, addr
 
 
-@pytest.mark.wip
 def test_hedge():
     k, v, k2, v2 = accounts()
     blk, addr = test_data_feeds()
