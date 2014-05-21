@@ -209,7 +209,7 @@ def test_genesis_hash():
     consulted for the value of the state root.
     """
 
-    h256 = "\x00" * 32
+    h256 = trie.BLANK_ROOT
     sr = CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH.decode('hex')
     genisi_block_defaults = [
         ["prevhash", "bin", h256],  # h256()
