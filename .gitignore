@@ -14,6 +14,7 @@ __pycache__/
 /.tox/
 /bin/
 /develop-eggs/
+/eggs/
 .installed.cfg
 logging.conf
 .*.log
