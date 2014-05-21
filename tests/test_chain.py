@@ -12,11 +12,13 @@ import pyethereum.chainmanager as chainmanager
 
 tempdir = tempfile.mktemp()
 
-# https://ethereum.etherpad.mozilla.org/12
+# https://github.com/ethereum/tests/blob/master/genesishashestest.json
 CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
     '12582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca16'
 CPP_PoC5_GENESIS_RLP_HEX = \
     "f88bf88780a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a012582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca1680834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
+CPP_PoC5_GENESIS_HEX_HASH =\
+    "c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3f"
 
 
 @pytest.fixture(scope="module")
@@ -232,6 +234,8 @@ def test_genesis_hash():
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
         assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
+
+    assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
 
     assert genesis.hex_hash() == utils.sha3(
         CPP_PoC5_GENESIS_RLP_HEX.decode('hex')
