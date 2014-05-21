@@ -125,8 +125,8 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF,
                          NODE_TYPE_EXTENSION]
 
-BLANK = ''
-BLANK_ROOT = chr(0) * 32
+BLANK_NODE = ''
+BLANK_ROOT = ''
 
 
 class Trie(object):
@@ -148,7 +148,7 @@ class Trie(object):
         return self.get_root_hash()
 
     def get_root_hash(self):
-        if self.root_node == BLANK:
+        if self.root_node == BLANK_NODE:
             return BLANK_ROOT
         assert isinstance(self.root_node, list)
         val = rlp.encode(self.root_node)
@@ -162,7 +162,7 @@ class Trie(object):
 
     def set_root_hash(self, root_hash):
         if root_hash == BLANK_ROOT:
-            self.root_node = BLANK
+            self.root_node = BLANK_NODE
             return
         assert isinstance(root_hash, (str, unicode))
         assert len(root_hash) in [0, 32]
@@ -174,7 +174,7 @@ class Trie(object):
         self._delete_child_stroage(self.root_node)
         self._delete_node_storage(self.root_node)
         self.db.commit()
-        self.root_node = BLANK
+        self.root_node = BLANK_NODE
 
     def _delete_child_stroage(self, node):
         if len(node) == 17:
@@ -186,8 +186,8 @@ class Trie(object):
                 self._delete_child_stroage(self._decode_to_node(node[1]))
 
     def _encode_node(self, node):
-        if node == BLANK:
-            return BLANK
+        if node == BLANK_NODE:
+            return BLANK_NODE
         assert isinstance(node, list)
         rlpnode = rlp.encode(node)
         if len(rlpnode) < 32:
@@ -198,8 +198,8 @@ class Trie(object):
         return hashkey
 
     def _decode_to_node(self, encoded):
-        if encoded == BLANK:
-            return BLANK
+        if encoded == BLANK_NODE:
+            return BLANK_NODE
         if isinstance(encoded, list):
             return encoded
         return rlp.decode(self.db.get(encoded))
@@ -207,10 +207,10 @@ class Trie(object):
     def _get_node_type(self, node):
         ''' get node type and content
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         :return: node type
         '''
-        if node == BLANK:
+        if node == BLANK_NODE:
             return NODE_TYPE_BLANK
 
         if len(node) == 2:
@@ -224,14 +224,14 @@ class Trie(object):
     def _get(self, node, key):
         """ get value inside a node
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         :param key: nibble list without terminator
         :return:
-            BLANK if does not exist, otherwise value or hash
+            BLANK_NODE if does not exist, otherwise value or hash
         """
         node_type = self._get_node_type(node)
         if node_type == NODE_TYPE_BLANK:
-            return BLANK
+            return BLANK_NODE
 
         if node_type == NODE_TYPE_BRANCH:
             # already reach the expected node
@@ -243,7 +243,7 @@ class Trie(object):
         # key value node
         curr_key = without_terminator(unpack_to_nibbles(node[0]))
         if node_type == NODE_TYPE_LEAF:
-            return node[1] if key == curr_key else BLANK
+            return node[1] if key == curr_key else BLANK_NODE
 
         if node_type == NODE_TYPE_EXTENSION:
             # traverse child nodes
@@ -251,12 +251,12 @@ class Trie(object):
                 sub_node = self._decode_to_node(node[1])
                 return self._get(sub_node, key[len(curr_key):])
             else:
-                return BLANK
+                return BLANK_NODE
 
     def _update(self, node, key, value):
         """ update item inside a node
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         :param key: nibble list without terminator
             .. note:: key may be []
         :param value: value string
@@ -266,7 +266,7 @@ class Trie(object):
         responsibility to *store* the new node storage, and delete the old
         node storage
         """
-        assert value != BLANK
+        assert value != BLANK_NODE
         node_type = self._get_node_type(node)
 
         if node_type == NODE_TYPE_BLANK:
@@ -318,14 +318,14 @@ class Trie(object):
                 new_node = self._update_and_delete_storage(
                     self._decode_to_node(node[1]), remain_key, value)
             else:
-                new_node = [BLANK] * 17
+                new_node = [BLANK_NODE] * 17
                 new_node[-1] = node[1]
                 new_node[remain_key[0]] = self._encode_node([
                     pack_nibbles(with_terminator(remain_key[1:])),
                     value
                 ])
         else:
-            new_node = [BLANK] * 17
+            new_node = [BLANK_NODE] * 17
             if len(remain_curr_key) == 1 and is_inner:
                 new_node[remain_curr_key[0]] = node[1]
             else:
@@ -352,9 +352,9 @@ class Trie(object):
 
     def _delete_node_storage(self, node):
         '''delete storage
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         '''
-        if node == BLANK:
+        if node == BLANK_NODE:
             return
         assert isinstance(node, list)
         encoded = self._encode_node(node)
@@ -365,7 +365,7 @@ class Trie(object):
     def _delete(self, node, key):
         """ update item inside a node
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         :param key: nibble list without terminator
             .. note:: key may be []
         :return: new node
@@ -376,7 +376,7 @@ class Trie(object):
         """
         node_type = self._get_node_type(node)
         if node_type == NODE_TYPE_BLANK:
-            return BLANK
+            return BLANK_NODE
 
         if node_type == NODE_TYPE_BRANCH:
             return self._delete_branch_node(node, key)
@@ -424,7 +424,7 @@ class Trie(object):
     def _delete_branch_node(self, node, key):
         # already reach the expected node
         if not key:
-            node[-1] = BLANK
+            node[-1] = BLANK_NODE
             return self._normalize_branch_node(node)
 
         encoded_new_sub_node = self._encode_node(
@@ -435,7 +435,7 @@ class Trie(object):
         if node[key[0]] == encoded_new_sub_node:
             return node
 
-        if encoded_new_sub_node == BLANK:
+        if encoded_new_sub_node == BLANK_NODE:
             return self._normalize_branch_node(node)
 
         node[key[0]] = encoded_new_sub_node
@@ -451,7 +451,7 @@ class Trie(object):
             return node
 
         if node_type == NODE_TYPE_LEAF:
-            return BLANK if key == curr_key else node
+            return BLANK_NODE if key == curr_key else node
 
         # for inner key value type
         new_sub_node = self._delete_and_delete_storage(
@@ -460,9 +460,9 @@ class Trie(object):
         if self._encode_node(new_sub_node) == node[1]:
             return node
 
-        # new sub node is BLANK
-        if new_sub_node == BLANK:
-            return BLANK
+        # new sub node is BLANK_NODE
+        if new_sub_node == BLANK_NODE:
+            return BLANK_NODE
 
         assert isinstance(new_sub_node, list)
 
@@ -500,9 +500,9 @@ class Trie(object):
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
         '''
-        if node == BLANK:
+        if node == BLANK_NODE:
             return 0
 
         node_type = self._get_node_type(node)
@@ -523,13 +523,13 @@ class Trie(object):
         '''convert (key, value) stored in this and the descendant nodes
         to dict items.
 
-        :param node: node in form of list, or BLANK
+        :param node: node in form of list, or BLANK_NODE
 
         .. note::
 
             Here key is in full form, rather than key of the individual node
         '''
-        if node == BLANK:
+        if node == BLANK_NODE:
             return {}
 
         node_type = self._get_node_type(node)
@@ -593,7 +593,7 @@ class Trie(object):
         return iter(self.to_dict())
 
     def __contains__(self, key):
-        return self.get(key) != BLANK
+        return self.get(key) != BLANK_NODE
 
     def update(self, key, value):
         '''
