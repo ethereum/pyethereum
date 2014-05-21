@@ -261,7 +261,6 @@ def test_block_serialization_with_transaction():
     assert tx in a_blk2.get_transactions()
 
 
-@pytest.mark.wip
 def test_block_serialization_with_transaction_empty_genesis():
     k, v, k2, v2 = accounts()
     set_db()
