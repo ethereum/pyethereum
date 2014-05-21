@@ -8,7 +8,7 @@ import transactions
 
 
 INITIAL_DIFFICULTY = 2 ** 22
-GENESIS_PREVHASH = trie.BLANK_ROOT
+GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
 GENESIS_GAS_LIMIT = 10 ** 6
@@ -31,7 +31,7 @@ GENESIS_INITIAL_ALLOC = \
      }
 
 block_structure = [
-    ["prevhash", "bin", ""],
+    ["prevhash", "bin", "\00" * 32],
     ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
@@ -82,7 +82,7 @@ class UnknownParentException(Exception):
 class Block(object):
 
     def __init__(self,
-                 prevhash=trie.BLANK_ROOT,
+                 prevhash='\00' * 32,
                  uncles_hash=block_structure_rev['uncles_hash'][2],
                  coinbase=block_structure_rev['coinbase'][2],
                  state_root=trie.BLANK_ROOT,
