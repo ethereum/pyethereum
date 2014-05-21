@@ -48,10 +48,10 @@ def mine_next_block(parent, coinbase=None, transactions=[]):
 
 
 @pytest.fixture(scope="module")
-def get_transaction():
+def get_transaction(gasprice=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
-        0, gasprice=10, startgas=10000,
+        0, gasprice, startgas=10000,
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
@@ -169,7 +169,6 @@ def test_genesis_state_root():
         'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
 
 
-@pytest.mark.wip
 def test_genesis_hash():
     set_db()
     genesis = blocks.genesis()
@@ -268,7 +267,7 @@ def test_block_serialization_with_transaction_empty_genesis():
     set_db()
     a_blk = mkgenesis({})
     db_store(a_blk)
-    tx = get_transaction()  # must fail, as there is no balance
+    tx = get_transaction(gasprice=10)  # must fail, as there is no balance
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     assert tx not in a_blk2.get_transactions()
 
