@@ -418,7 +418,6 @@ class Block(object):
 
     @property
     def hash(self):
-        print 'RLP:', self.serialize().encode('hex')
         return utils.sha3(self.serialize())
 
     def hex_hash(self):
