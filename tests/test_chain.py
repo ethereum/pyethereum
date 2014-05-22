@@ -1,5 +1,6 @@
 import os
 import pytest
+import json
 import tempfile
 import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
@@ -12,13 +13,17 @@ import pyethereum.chainmanager as chainmanager
 
 tempdir = tempfile.mktemp()
 
-# https://github.com/ethereum/tests/blob/master/genesishashestest.json
-CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-    '12582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca16'
-CPP_PoC5_GENESIS_RLP_HEX = \
-    "f8abf8a7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a012582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca1680834000008080830f4240808080a004994f67dc55b09e814ab7ffc8df3686b4afb2bb53e60eae97ef043fe03fb829c0c0"  # noqa
-CPP_PoC5_GENESIS_HEX_HASH =\
-    "c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3f"
+
+@pytest.fixture(scope="module")
+def genesis_fixture():
+    """
+    Read genesis block from fixtures.
+    """
+    genesis_fixture = None
+    with open('fixtures/genesishashestest.json', 'r') as f:
+        genesis_fixture = json.load(f)
+    assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
+    return genesis_fixture
 
 
 @pytest.fixture(scope="module")
@@ -128,7 +133,7 @@ def test_genesis_db():
     assert blk != blk3
 
 
-def test_trie_state_root_nodep():
+def test_trie_state_root_nodep(genesis_fixture):
     def int_to_big_endian(integer):
         if integer == 0:
             return ''
@@ -136,42 +141,30 @@ def test_trie_state_root_nodep():
         if len(s) & 1:
             s = '0' + s
         return s.decode('hex')
-    CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH = \
-        '12582945fc5ad12c3e7b67c4fc37a68fc0d52d995bb7f7291ff41a2739a7ca16'
-    GENESIS_INITIAL_ALLOC = \
-        {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,  # (G)
-         "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
-         "1e12515ce3e0f817a4ddef9ca55788a1d66bd2df": 2 ** 200,  # (V)
-         "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,  # (A)
-         "2ef47100e0787b915105fd5e3f4ff6752079d5cb": 2 ** 200,  # (M)
-         "cd2a3d9f938e13cd947ec05abc7fe734df8dd826": 2 ** 200,  # (R)
-         "6c386a4b26f73c802f34673f7248bb118f97424a": 2 ** 200,  # (HH)
-         "e4157b34ea9615cfbde6b4fda419828124b70c78": 2 ** 200,  # (CH)
-         }
     EMPTYSHA3 = utils.sha3('')
     assert EMPTYSHA3.encode('hex') == \
         'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
     ZERO_ENC = int_to_big_endian(0)
     assert ZERO_ENC == ''
     state = trie.Trie(tempfile.mktemp())
-    for address, value in GENESIS_INITIAL_ALLOC.items():
-        acct = [int_to_big_endian(value), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
+    for address, value in genesis_fixture['initial_alloc'].items():
+        acct = [int_to_big_endian(int(value)), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
     assert state.root_hash.encode(
-        'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+        'hex') == genesis_fixture['genesis_state_root']
 
 
-def test_genesis_state_root():
+def test_genesis_state_root(genesis_fixture):
     # https://ethereum.etherpad.mozilla.org/12
     set_db()
     genesis = blocks.genesis()
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
         assert genesis.get_balance(k) == v
     assert genesis.state_root.encode(
-        'hex') == CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH
+        'hex') == genesis_fixture['genesis_state_root']
 
 
-def test_genesis_hash():
+def test_genesis_hash(genesis_fixture):
     set_db()
     genesis = blocks.genesis()
     """
@@ -211,7 +204,7 @@ def test_genesis_hash():
     """
 
     h256 = '\00' * 32
-    sr = CPP_PoC5_GENESIS_STATE_ROOT_HEX_HASH.decode('hex')
+    sr = genesis_fixture['genesis_state_root'].decode('hex')
     genisi_block_defaults = [
         ["prevhash", "bin", h256],  # h256()
         ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
@@ -228,17 +221,17 @@ def test_genesis_hash():
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    cpp_genesis_block = rlp.decode(CPP_PoC5_GENESIS_RLP_HEX.decode('hex'))
+    cpp_genesis_block = rlp.decode(genesis_fixture['genesis_rlp_hex'].decode('hex'))
     cpp_genesis_header = cpp_genesis_block[0]
 
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
         assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
 
-    assert genesis.hex_hash() == CPP_PoC5_GENESIS_HEX_HASH
+    assert genesis.hex_hash() == genesis_fixture['genesis_hash']
 
     assert genesis.hex_hash() == utils.sha3(
-        CPP_PoC5_GENESIS_RLP_HEX.decode('hex')
+        genesis_fixture['genesis_rlp_hex'].decode('hex')
     ).encode('hex')
 
 
