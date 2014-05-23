@@ -12,10 +12,10 @@ GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
 GENESIS_GAS_LIMIT = 10 ** 6
-GAS_LIMIT = 10 ** 4
+MIN_GAS_LIMIT = 10 ** 4
+GASLIMIT_EMA_FACTOR = 1024
 BLOCK_REWARD = 10 ** 18
 BLOCK_DIFF_FACTOR = 1024
-GASLIMIT_EMA_FACTOR = 1024
 GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
@@ -40,7 +40,7 @@ block_structure = [
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
     ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
-    ["gas_limit", "int", GAS_LIMIT],
+    ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
@@ -72,9 +72,9 @@ def calc_difficulty(parent, timestamp):
 
 def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
-    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
-    return (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
-
+    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN      
+    gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
+    return max(gl, MIN_GAS_LIMIT)
 
 class UnknownParentException(Exception):
     pass
