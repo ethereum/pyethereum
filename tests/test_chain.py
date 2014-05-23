@@ -214,7 +214,7 @@ def test_genesis_hash(genesis_fixture):
         ["difficulty", "int", 2 ** 22],  # c_genesisDifficulty
         ["number", "int", 0],  # 0
         ["min_gas_price", "int", 0],  # 0
-        ["gas_limit", "int", 1000000],  # 1000000
+        ["gas_limit", "int", 10000],  # 10000
         ["gas_used", "int", 0],  # 0
         ["timestamp", "int", 0],  # 0
         ["extra_data", "bin", ""],  # ""
