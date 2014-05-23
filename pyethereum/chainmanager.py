@@ -392,11 +392,14 @@ def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
     old_head = chain_manager.head
     # assuming chain order w/ newest block first
     for block_data in reversed(block_lst):
+        rlp_block = rlp.encode(block_data)
+        bhash = utils.sha3(rlp_block).encode('hex')
+        logger.debug('Trying to deserialize %r', bhash[:4])
         try:
-            block = blocks.Block.deserialize(rlp.encode(block_data))
+            block = blocks.Block.deserialize(rlp_block)
         except blocks.UnknownParentException:
             # no way to ask peers for older parts of chain
-            bhash = utils.sha3(rlp.encode(block_data)).encode('hex')[:4]
+
             phash = block_data[0][0].encode('hex')[:4]
             number = utils.decode_int(block_data[0][6])
             if phash == blocks.GENESIS_PREVHASH:
@@ -404,7 +407,7 @@ def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
                 peer.send_Disconnect(reason='Wrong genesis block')
             else:
                 logger.debug('Block(#%d %s %s) with unknown parent, requesting ...',
-                         number, bhash, phash.encode('hex')[:4])
+                             number, bhash[:4], phash.encode('hex')[:4])
                 chain_manager.synchronize_blockchain()
             break
         if block.hash in chain_manager:
