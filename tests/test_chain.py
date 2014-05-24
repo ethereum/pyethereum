@@ -372,3 +372,16 @@ def test_transaction_serialization():
     assert tx.hex_hash() == \
         transactions.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
     assert tx in set([tx])
+
+
+def test_mine_block_with_transaction():
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    tx = get_transaction()
+    blk = mine_next_block(blk, transactions=[tx])
+    assert tx in blk.get_transactions()
+    assert blk.get_balance(v) == utils.denoms.finney * 990
+    assert blk.get_balance(v2) == utils.denoms.finney * 10
+
