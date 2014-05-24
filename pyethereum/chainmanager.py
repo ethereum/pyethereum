@@ -148,11 +148,9 @@ class ChainManager(StoppableLoopThread):
         genesis = blocks.genesis()
         self._store_block(genesis)
         self._update_head(genesis)
-        self.blockchain.commit()
 
     def synchronize_blockchain(self):
         logger.info('synchronize requested for head %r', self.head)
-
         signals.remote_chain_requested.send(
             sender=None, parents=[self.head.hash], count=256)
 
@@ -184,15 +182,37 @@ class ChainManager(StoppableLoopThread):
                 signals.send_local_blocks.send(
                     sender=None, blocks=[block])  # FIXME DE/ENCODE
 
-    def receive_chain(self, blocks):
+    def receive_chain(self, rlp_blocks, disconnect_cb=None):
         old_head = self.head
-        # assuming chain order w/ newest block first
-        for block in blocks:
+
+        # assuming to receive chain order w/ newest block first
+        for rlp_block in reversed(rlp_blocks):
+            bhash = utils.sha3(rlp_block).encode('hex')
+            logger.debug('Trying to deserialize %r', bhash[:4])
+            try:
+                block = blocks.Block.deserialize(rlp_block)
+            except blocks.UnknownParentException:
+                block_data = rlp.decode(rlp_block)
+                phash = block_data[0][0].encode('hex')[:4]
+                number = utils.decode_int(block_data[0][6])
+                if phash == blocks.GENESIS_PREVHASH:
+                    logger.debug('Incompatible Genesis %r', block)
+                    if disconnect_cb:
+                        disconnect_cb(reason='Wrong genesis block')
+                else:
+                    logger.debug('Block(#%d %s %s) with unknown parent',
+                                 number, bhash[:4], phash.encode('hex')[:4])
+                    if number > self.head.number:
+                        self.synchronize_blockchain()
+                    else:
+                        # FIXME synchronize with side chain
+                        # check for largest number
+                        pass
+                break
             if block.hash in self:
                 logger.debug('Known %r', block)
             else:
                 if block.has_parent():
-                    # add block & set HEAD if it's longest chain
                     success = self.add_block(block)
                     if success:
                         logger.debug('Added %r', block)
@@ -388,37 +408,5 @@ def gettransactions_received_handler(sender, peer, **kwargs):
 @receiver(signals.remote_blocks_received)
 def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
     logger.debug("received %d remote blocks", len(block_lst))
-
-    old_head = chain_manager.head
-    # assuming chain order w/ newest block first
-    for block_data in reversed(block_lst):
-        rlp_block = rlp.encode(block_data)
-        bhash = utils.sha3(rlp_block).encode('hex')
-        logger.debug('Trying to deserialize %r', bhash[:4])
-        try:
-            block = blocks.Block.deserialize(rlp_block)
-        except blocks.UnknownParentException:
-            # no way to ask peers for older parts of chain
-
-            phash = block_data[0][0].encode('hex')[:4]
-            number = utils.decode_int(block_data[0][6])
-            if phash == blocks.GENESIS_PREVHASH:
-                logger.debug('Incompatible Genesis %r', block)
-                peer.send_Disconnect(reason='Wrong genesis block')
-            else:
-                logger.debug('Block(#%d %s %s) with unknown parent, requesting ...',
-                             number, bhash[:4], phash.encode('hex')[:4])
-                chain_manager.synchronize_blockchain()
-            break
-        if block.hash in chain_manager:
-            logger.debug('Known %r', block)
-        else:
-            if block.has_parent():
-                # add block & set HEAD if it's longest chain
-                success = chain_manager.add_block(block)
-                if success:
-                    logger.debug('Added %r', block)
-            else:
-                logger.debug('Orphant %r', block)
-    if chain_manager.head != old_head:
-        chain_manager.synchronize_blockchain()
+    rlp_blocks = [rlp.encode(b) for b in block_lst]
+    chain_manager.receive_chain(rlp_blocks, disconnect_cb=peer.send_Disconnect)
