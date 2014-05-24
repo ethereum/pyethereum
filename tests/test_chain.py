@@ -9,6 +9,7 @@ import pyethereum.utils as utils
 import pyethereum.rlp as rlp
 import pyethereum.trie as trie
 from pyethereum.db import DB as DB
+from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
 
 tempdir = tempfile.mktemp()
@@ -61,6 +62,18 @@ def get_transaction(gasprice=0):
         0, gasprice, startgas=10000,
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
+
+
+@pytest.fixture(scope="module")
+def get_chainmanager(genesis=None):
+    cm = chainmanager.ChainManager()
+    cm.configure(create_default_config())
+    if genesis:
+        assert not 'HEAD' in cm.blockchain
+        cm._store_block(genesis)
+        cm._update_head(genesis)
+    assert 'HEAD' in cm.blockchain
+    return cm
 
 
 def set_db(name=''):
