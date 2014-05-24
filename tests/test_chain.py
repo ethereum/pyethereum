@@ -322,7 +322,6 @@ def test_block_serialization_other_db():
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 
 
-@pytest.mark.bswto
 def test_block_serialization_with_transaction_other_db():
     k, v, k2, v2 = accounts()
     # mine two blocks
@@ -384,4 +383,17 @@ def test_mine_block_with_transaction():
     assert tx in blk.get_transactions()
     assert blk.get_balance(v) == utils.denoms.finney * 990
     assert blk.get_balance(v2) == utils.denoms.finney * 10
+
+
+def test_invalid_transaction():
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk = mkgenesis({v2: utils.denoms.ether * 1})
+    db_store(blk)
+    tx = get_transaction()
+    blk = mine_next_block(blk, transactions=[tx])
+    assert blk.get_balance(v) == 0
+    assert blk.get_balance(v2) == utils.denoms.ether * 1
+    # should invalid transaction be included in blocks?
+    assert tx in blk.get_transactions()
 
