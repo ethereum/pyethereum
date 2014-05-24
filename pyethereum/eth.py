@@ -25,8 +25,7 @@ from pyethereum.packeter import Packeter
 logger = logging.getLogger(__name__)
 
 
-def create_config():
-
+def create_default_config():
     config = ConfigParser.ConfigParser()
     # set some defaults, which may be overwritten
     config.add_section('network')
@@ -52,6 +51,11 @@ def create_config():
     config.add_section('wallet')
     config.set('wallet', 'coinbase', '0' * 40)
 
+    return config
+
+
+def create_config():
+    config = create_default_config()
     parser = ArgumentParser(version=Packeter.CLIENT_ID)
     parser.add_argument(
         "-l", "--listen",
@@ -105,8 +109,8 @@ def create_config():
         help="<number> Attempt to connect to given number of peers"
         "(default: 5)")
     parser.add_argument("-C", "--config",
-                      dest="config_file",
-                      help="read coniguration")
+                        dest="config_file",
+                        help="read coniguration")
 
     options = parser.parse_args()
 
