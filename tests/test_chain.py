@@ -37,13 +37,9 @@ def accounts():
 
 
 @pytest.fixture(scope="module")
-def mkgenesis(*args, **kargs):
+def mkgenesis(initial_alloc={}):
     "set INITIAL_DIFFICULTY to a value that is quickly minable"
-    tmp = blocks.INITIAL_DIFFICULTY
-    blocks.INITIAL_DIFFICULTY = 2 ** 16
-    g = blocks.genesis(*args, **kargs)
-    blocks.INITIAL_DIFFICULTY = tmp
-    return g
+    return blocks.genesis(initial_alloc, difficulty=2 ** 16)
 
 
 def mine_next_block(parent, coinbase=None, transactions=[]):
@@ -56,10 +52,10 @@ def mine_next_block(parent, coinbase=None, transactions=[]):
 
 
 @pytest.fixture(scope="module")
-def get_transaction(gasprice=0):
+def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
-        0, gasprice, startgas=10000,
+        nonce, gasprice, startgas=10000,
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
@@ -67,12 +63,7 @@ def get_transaction(gasprice=0):
 @pytest.fixture(scope="module")
 def get_chainmanager(genesis=None):
     cm = chainmanager.ChainManager()
-    cm.configure(create_default_config())
-    if genesis:
-        assert not 'HEAD' in cm.blockchain
-        cm._store_block(genesis)
-        cm._update_head(genesis)
-    assert 'HEAD' in cm.blockchain
+    cm.configure(config=create_default_config(), genesis=genesis)
     return cm
 
 
@@ -161,7 +152,8 @@ def test_trie_state_root_nodep(genesis_fixture):
     assert ZERO_ENC == ''
     state = trie.Trie(tempfile.mktemp())
     for address, value in genesis_fixture['initial_alloc'].items():
-        acct = [int_to_big_endian(int(value)), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
+        acct = [
+            int_to_big_endian(int(value)), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
         state.update(address.decode('hex'), rlp.encode(acct))
     assert state.root_hash.encode(
         'hex') == genesis_fixture['genesis_state_root']
@@ -227,14 +219,15 @@ def test_genesis_hash(genesis_fixture):
         ["difficulty", "int", 2 ** 22],  # c_genesisDifficulty
         ["number", "int", 0],  # 0
         ["min_gas_price", "int", 0],  # 0
-        ["gas_limit", "int", 10**6],  # 10**6 for genesis
+        ["gas_limit", "int", 10 ** 6],  # 10**6 for genesis
         ["gas_used", "int", 0],  # 0
         ["timestamp", "int", 0],  # 0
         ["extra_data", "bin", ""],  # ""
         ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
     ]
 
-    cpp_genesis_block = rlp.decode(genesis_fixture['genesis_rlp_hex'].decode('hex'))
+    cpp_genesis_block = rlp.decode(
+        genesis_fixture['genesis_rlp_hex'].decode('hex'))
     cpp_genesis_header = cpp_genesis_block[0]
 
     for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
