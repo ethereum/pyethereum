@@ -404,13 +404,12 @@ def test_invalid_transaction():
     assert tx in blk.get_transactions()
 
 
-@pytest.mark.wip
+
 def test_add_side_chain():
     """"
     Local: L0, L1, L2
     add 
     Remote: R0, R1
-
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
@@ -438,4 +437,43 @@ def test_add_side_chain():
     cm.receive_chain(rlp_blocks)
     assert L2.hash in cm
 
+
+@pytest.mark.wip
+def test_add_longer_side_chain():
+    """"
+    Local: L0, L1, L2
+    Remote: R0, R1, R2, R3
+    """
+    k, v, k2, v2 = accounts()
+    # Remote: mine one block
+    set_db()
+    blk = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(blk)
+    blocks = [blk]
+    for i in range(3):
+        tx = get_transaction(nonce=i)
+        blk = mine_next_block(blocks[-1], transactions=[tx])
+        db_store(blk)
+        blocks.append(blk)
+    remote_blocks = blocks
+    # Local: mine two blocks
+    set_db()
+    L0 = mkgenesis({v: utils.denoms.ether * 1})
+    cm = get_chainmanager(genesis=L0)
+    tx0 = get_transaction(nonce=0)
+    L1 = mine_next_block(L0, transactions=[tx0])
+    cm.add_block(L1)
+    tx1 = get_transaction(nonce=1)
+    L2 = mine_next_block(L1, transactions=[tx1])
+    cm.add_block(L2)
+
+    # receive serialized remote blocks, newest first
+    rlp_blocks = [b.serialize() for b in reversed(remote_blocks)]
+    cm.receive_chain(rlp_blocks)
+    assert cm.head == remote_blocks[-1]
+
+
+# TODO ##########################################
+#
+#  test for remote block with invalid transaction
 
