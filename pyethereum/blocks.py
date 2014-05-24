@@ -72,9 +72,10 @@ def calc_difficulty(parent, timestamp):
 
 def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
-    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN      
+    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
+
 
 class UnknownParentException(Exception):
     pass
@@ -497,11 +498,11 @@ def has_block(blockhash):
     return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(initial_alloc=GENESIS_INITIAL_ALLOC):
+def genesis(initial_alloc=GENESIS_INITIAL_ALLOC, difficulty=INITIAL_DIFFICULTY):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
                   tx_list_root=trie.BLANK_ROOT,
-                  difficulty=INITIAL_DIFFICULTY, nonce=GENESIS_NONCE,
+                  difficulty=difficulty, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
     for addr, balance in initial_alloc.iteritems():
         block.set_balance(addr, balance)
