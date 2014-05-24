@@ -410,3 +410,39 @@ def test_invalid_transaction():
     # should invalid transaction be included in blocks?
     assert tx in blk.get_transactions()
 
+
+@pytest.mark.wip
+def test_add_side_chain():
+    """"
+    Local: L0, L1, L2
+    add 
+    Remote: R0, R1
+
+    """
+    k, v, k2, v2 = accounts()
+    # Remote: mine one block
+    set_db()
+    R0 = mkgenesis({v: utils.denoms.ether * 1})
+    db_store(R0)
+    tx0 = get_transaction(nonce=0)
+    R1 = mine_next_block(R0, transactions=[tx0])
+    db_store(R1)
+    assert tx0 in R1.get_transactions()
+
+    # Local: mine two blocks
+    set_db()
+    L0 = mkgenesis({v: utils.denoms.ether * 1})
+    cm = get_chainmanager(genesis=L0)
+    tx0 = get_transaction(nonce=0)
+    L1 = mine_next_block(L0, transactions=[tx0])
+    cm.add_block(L1)
+    tx1 = get_transaction(nonce=1)
+    L2 = mine_next_block(L1, transactions=[tx1])
+    cm.add_block(L2)
+
+    # receive serialized remote blocks, newest first
+    rlp_blocks = [R1.serialize(), R0.serialize()]
+    cm.receive_chain(rlp_blocks)
+    assert L2.hash in cm
+
+

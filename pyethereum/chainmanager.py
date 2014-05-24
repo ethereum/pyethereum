@@ -108,10 +108,12 @@ class ChainManager(StoppableLoopThread):
         self.miner = None
         self.blockchain = None
 
-    def configure(self, config):
+    def configure(self, config, genesis=None):
         self.config = config
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
+        if genesis:
+            self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         self.log_chain()
         self.new_miner()
@@ -143,9 +145,10 @@ class ChainManager(StoppableLoopThread):
         self.blockchain.commit()
         assert block == blocks.get_block(block.hash)
 
-    def _initialize_blockchain(self):
+    def _initialize_blockchain(self, genesis=None):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
-        genesis = blocks.genesis()
+        if not genesis:
+            genesis = blocks.genesis()
         self._store_block(genesis)
         self._update_head(genesis)
 
