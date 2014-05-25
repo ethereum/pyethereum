@@ -435,7 +435,6 @@ def test_add_side_chain():
     assert L2.hash in cm
 
 
-@pytest.mark.wip
 def test_add_longer_side_chain():
     """"
     Local: L0, L1, L2
@@ -468,6 +467,25 @@ def test_add_longer_side_chain():
     rlp_blocks = [b.serialize() for b in reversed(remote_blocks)]
     cm.receive_chain(rlp_blocks)
     assert cm.head == remote_blocks[-1]
+
+
+# blocks 1-3 genereated with Ethereum (++) 0.5.9
+# chain order w/ newest block first
+cpp_rlp_blocks = ["f8b5f8b1a0cea7b6f4379812715562aaf0f44accf61ece5a2d80fe780d7e173fbbb1b146eaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa007e693fe94ea4772ab4c875af6bee3d58c0cab33981a0a336f4ae6cf514c1ee680833feffc038609184e72a000830f36d080845381ae3e80a00000000000000000000000000000000000000000000000000950e155eb5ed4cac0c0",
+                "f8b5f8b1a00c892995c469f57a34447217fc6cebbaf604c9d82d621a6505c7493ac1333e68a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa0e785df309fbf0289aa9d1c09096c039aa69b880b6c001eb95ec838fb2dcebe5180833fe004028609184e72a000830f3a9f80845381ae3e80a0000000000000000000000000000000000000000000000000b985b7d378a23d84c0c0",
+                "f8b5f8b1a0c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa04b6da9af1b96757921ba3a0de69c615fea5482570e37a4d74d051e1e19f996c880833ff000018609184e72a000830f3e6f80845381adf680a00000000000000000000000000000000000000000000000003dfac8aa6e0214b4c0c0"]
+
+
+@pytest.mark.wip
+def test_receive_cpp_block_1():
+    set_db()
+    cm = get_chainmanager()
+    oldest = blocks.TransientBlock(rlp_blocks[-1].decode('hex'))
+    assert oldest.number == 1
+    genesis = cm.head
+    assert oldest.prevhash.encode('hex') == genesis.hex_hash()
+    genesis.deserialize_child(oldest.rlpdata)
+
 
 
 # TODO ##########################################
