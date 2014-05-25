@@ -39,21 +39,21 @@ Feature: trie tree manipulate
       | ["A", "Z"] |
     # ---- end: insert to a key value node---------
 
-    # ---- start: insert to a diverge node---------
-    Examples: insert to a diverge node, with same slot
+    # ---- start: insert to a branch node---------
+    Examples: insert to a branch node, with same slot
       # nibbles of A: [4,1]
       # nibbles of Z: [5,10]
       # nibbles of B: [4,2]
       | keys            |
       | ["A", "Z", "B"] |
 
-    Examples: insert to a diverge node, with different slot
+    Examples: insert to a branch node, with different slot
       # nibbles of A: [4,1]
       # nibbles of Z: [5,10]
       # nibbles of 0: [3,0]
       | keys            |
       | ["A", "Z", "0"] |
-    # ---- end: insert to a diverge node---------
+    # ---- end: insert to a branch node---------
 
     Examples: insert in a more sophisticated case
       | keys                                                                     |
@@ -112,7 +112,7 @@ Feature: trie tree manipulate
       | key  | keys   |
       | "AB" | ["AB"] |
 
-    Examples: diverge node
+    Examples: branch node
       | key | keys       |
       | "A" | ["A", "B"] |
 
@@ -124,6 +124,11 @@ Feature: trie tree manipulate
     Examples:
       | key  | keys             |
       | "AB" | ["A", "B", "AB"] |
+
+    Examples: delete branch and kv node
+      | key    | keys                           |
+      | 'dog'  | ['cat', 'ca', 'dog', 'doge']   |
+      | 'test' | ['cat', 'ca',  'doge', 'test'] |
 
     Examples: sophisticated case
       | key    | keys                                                                    |
@@ -161,7 +166,7 @@ Feature: trie tree manipulate
       | keys           |
       | ["AB", "ABCD"] |
 
-    Examples: diverge node
+    Examples: branch node
       # nibbles of A: [4,1]
       # nibbles of Z: [5,10]
       # nibbles of B: [4,2]
@@ -190,7 +195,7 @@ Feature: trie tree manipulate
       | keys           |
       | ["AB", "ABCD"] |
 
-    Examples: diverge node
+    Examples: branch node
       # nibbles of A: [4,1]
       # nibbles of Z: [5,10]
       # nibbles of B: [4,2]

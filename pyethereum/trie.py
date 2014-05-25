@@ -183,7 +183,7 @@ class Trie(object):
                 self._delete_child_stroage(self._decode_to_node(item))
         elif is_key_value_type(node_type):
             node_type = self._get_node_type(node)
-            if node_type == NODE_TYPE_LEAF:
+            if node_type == NODE_TYPE_EXTENSION:
                 self._delete_child_stroage(self._decode_to_node(node[1]))
 
     def _encode_node(self, node):
