@@ -43,6 +43,10 @@ def accounts():
 
 @pytest.fixture(scope="module")
 def mkgenesis(initial_alloc={}):
+    return blocks.genesis(initial_alloc)
+
+@pytest.fixture(scope="module")
+def mkquickgenesis(initial_alloc={}):
     "set INITIAL_DIFFICULTY to a value that is quickly minable"
     return blocks.genesis(initial_alloc, difficulty=2 ** 16)
 
@@ -53,6 +57,7 @@ def mine_next_block(parent, coinbase=None, transactions=[]):
     for tx in transactions:
         m.add_transaction(tx)
     blk = m.mine(steps=1000 ** 2)
+    assert blk is not False, "Mining failed. Use mkquickgenesis!"
     return blk
 
 
@@ -236,7 +241,7 @@ def test_genesis_hash(genesis_fixture):
 def test_mine_block():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     blk2 = mine_next_block(blk, coinbase=v)
     db_store(blk2)
@@ -249,7 +254,7 @@ def test_block_serialization_with_transaction():
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = mkgenesis({v: utils.denoms.ether * 1})
+    a_blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
@@ -259,7 +264,7 @@ def test_block_serialization_with_transaction():
 def test_block_serialization_with_transaction_empty_genesis():
     k, v, k2, v2 = accounts()
     set_db()
-    a_blk = mkgenesis({})
+    a_blk = mkquickgenesis({})
     db_store(a_blk)
     tx = get_transaction(gasprice=10)  # must fail, as there is no balance
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
@@ -269,7 +274,7 @@ def test_block_serialization_with_transaction_empty_genesis():
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
@@ -289,7 +294,7 @@ def test_mine_block_with_transaction():
 def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     assert blk.hex_hash() == \
         blocks.Block.deserialize(blk.serialize()).hex_hash()
     db_store(blk)
@@ -304,14 +309,14 @@ def test_block_serialization_other_db():
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = mkgenesis()
+    a_blk = mkquickgenesis()
     db_store(a_blk)
     a_blk2 = mine_next_block(a_blk)
     db_store(a_blk2)
 
     # receive in other db
     set_db()
-    b_blk = mkgenesis()
+    b_blk = mkquickgenesis()
     assert b_blk == a_blk
     db_store(b_blk)
     b_blk2 = b_blk.deserialize(a_blk2.serialize())
@@ -324,7 +329,7 @@ def test_block_serialization_with_transaction_other_db():
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
-    a_blk = mkgenesis({v: utils.denoms.ether * 1})
+    a_blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
@@ -333,7 +338,7 @@ def test_block_serialization_with_transaction_other_db():
     assert tx in a_blk2.get_transactions()
     # receive in other db
     set_db()
-    b_blk = mkgenesis({v: utils.denoms.ether * 1})
+    b_blk = mkquickgenesis({v: utils.denoms.ether * 1})
     assert b_blk == a_blk
 
     db_store(b_blk)
@@ -349,7 +354,7 @@ def test_block_serialization_with_transaction_other_db():
 def test_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     blk = mine_next_block(blk)
     tx = get_transaction()
@@ -374,7 +379,7 @@ def test_transaction_serialization():
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
@@ -386,7 +391,7 @@ def test_mine_block_with_transaction():
 def test_invalid_transaction():
     k, v, k2, v2 = accounts()
     set_db()
-    blk = mkgenesis({v2: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v2: utils.denoms.ether * 1})
     db_store(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
@@ -406,7 +411,7 @@ def test_add_side_chain():
     k, v, k2, v2 = accounts()
     # Remote: mine one block
     set_db()
-    R0 = mkgenesis({v: utils.denoms.ether * 1})
+    R0 = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(R0)
     tx0 = get_transaction(nonce=0)
     R1 = mine_next_block(R0, transactions=[tx0])
@@ -415,7 +420,7 @@ def test_add_side_chain():
 
     # Local: mine two blocks
     set_db()
-    L0 = mkgenesis({v: utils.denoms.ether * 1})
+    L0 = mkquickgenesis({v: utils.denoms.ether * 1})
     cm = get_chainmanager(genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])
@@ -439,7 +444,7 @@ def test_add_longer_side_chain():
     k, v, k2, v2 = accounts()
     # Remote: mine one block
     set_db()
-    blk = mkgenesis({v: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
     blocks = [blk]
     for i in range(3):
@@ -450,7 +455,7 @@ def test_add_longer_side_chain():
     remote_blocks = blocks
     # Local: mine two blocks
     set_db()
-    L0 = mkgenesis({v: utils.denoms.ether * 1})
+    L0 = mkquickgenesis({v: utils.denoms.ether * 1})
     cm = get_chainmanager(genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])
