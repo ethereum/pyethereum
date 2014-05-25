@@ -411,7 +411,8 @@ class Trie(object):
                 unpack_to_nibbles(sub_node[0])
             return [pack_nibbles(new_key), sub_node[1]]
         if sub_node_type == NODE_TYPE_BRANCH:
-            return [pack_nibbles([not_blank_index]), sub_node]
+            return [pack_nibbles([not_blank_index]),
+                    self._encode_node(sub_node)]
         assert False
 
     def _delete_and_delete_storage(self, node, key):
@@ -432,13 +433,13 @@ class Trie(object):
                 self._decode_to_node(node[key[0]]), key[1:])
         )
 
-        if node[key[0]] == encoded_new_sub_node:
+        if encoded_new_sub_node == node[key[0]]:
             return node
 
+        node[key[0]] = encoded_new_sub_node
         if encoded_new_sub_node == BLANK_NODE:
             return self._normalize_branch_node(node)
 
-        node[key[0]] = encoded_new_sub_node
         return node
 
     def _delete_kv_node(self, node, key):
@@ -476,7 +477,7 @@ class Trie(object):
             return [pack_nibbles(new_key), new_sub_node[1]]
 
         if new_sub_node_type == NODE_TYPE_BRANCH:
-            return [pack_nibbles(curr_key), new_sub_node]
+            return [pack_nibbles(curr_key), self._encode_node(new_sub_node)]
 
         # should be no more cases
         assert False
