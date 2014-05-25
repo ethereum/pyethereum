@@ -126,9 +126,9 @@ Feature: trie tree manipulate
       | "AB" | ["A", "B", "AB"] |
 
     Examples: delete branch and kv node
-      | key    | keys                           |
-      | 'dog'  | ['cat', 'ca', 'dog', 'doge']   |
-      | 'test' | ['cat', 'ca',  'doge', 'test'] |
+      | key    | keys                                 |
+      | 'dog'  | ['cat', 'ca', 'dog', 'doge', 'test'] |
+      | 'test' | ['cat', 'ca',  'doge', 'test']       |
 
     Examples: sophisticated case
       | key    | keys                                                                    |
