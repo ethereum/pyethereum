@@ -207,7 +207,7 @@ def test_genesis_hash(genesis_fixture):
 
     h256 = '\00' * 32
     sr = genesis_fixture['genesis_state_root'].decode('hex')
-    genisi_block_defaults = [
+    genesis_block_defaults = [
         ["prevhash", "bin", h256],  # h256()
         ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
         ["coinbase", "addr", "0" * 40],  # h160()
@@ -227,7 +227,7 @@ def test_genesis_hash(genesis_fixture):
         genesis_fixture['genesis_rlp_hex'].decode('hex'))
     cpp_genesis_header = cpp_genesis_block[0]
 
-    for i, (name, typ, genesis_default) in enumerate(genisi_block_defaults):
+    for i, (name, typ, genesis_default) in enumerate(genesis_block_defaults):
         assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
         assert getattr(genesis, name) == genesis_default
 
