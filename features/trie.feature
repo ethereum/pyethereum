@@ -95,7 +95,6 @@ Feature: trie tree manipulate
       | "ABDCD" |
       | "X"     |
 
-
   Scenario Outline: delete node
     Given pairs with keys: <keys>
     When clear trie tree
@@ -114,7 +113,7 @@ Feature: trie tree manipulate
 
     Examples: branch node
       | key | keys       |
-      | "A" | ["A", "B"] |
+      | "A" | ["A", "Z"] |
 
     Examples: key value node
       | key  | keys        |
@@ -144,6 +143,17 @@ Feature: trie tree manipulate
       | "0"    | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
       | "Z0"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
       | "0Z"   | ["AB", "AC", "ABCD", "ACD", "A", "B", "CD", "BCD", "Z", "0", "Z0", "0Z"]|
+
+  Scenario Outline: delete none exist key
+    Given pairs with keys: <keys>
+    When clear trie tree
+    And insert pairs
+    And record hash as old hash
+    And delete by the key: <key>
+    And record hash as new hash
+    Then for keys except <key>, get with key will return the correct value
+    And old hash is the same with new hash
+    And get by the key: <key> will return BLANK
 
     Examples: key not existing
       | key        | keys                     |

@@ -51,12 +51,13 @@ def step_impl(context, key):
 
 @when(u'insert pairs except key: {key:Py}')  # noqa
 def step_impl(context, key):
-    context.pairs = []
+    pairs = []
     for k, v in context.pairs:
         if k != key:
             v = gen_random_value()
-            context.trie.update(key, v)
-            context.pairs.add((k, v))
+            context.trie.update(k, v)
+            pairs.append((k, v))
+    context.pairs = pairs
 
 
 @when(u'record hash as old hash')  # noqa
