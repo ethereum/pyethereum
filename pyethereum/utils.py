@@ -212,9 +212,10 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
         def wrapper(*args, **kwargs):
             local['call_number'] = local['call_number'] + 1
             tmp_args = args[1:] if ignore_first_arg and len(args) else args
+            this_call_number = local['call_number']
             print('{0}#{1} args: {2}, {3}'.format(
                 f.__name__,
-                local['call_number'],
+                this_call_number,
                 ', '.join([display(x) for x in tmp_args]),
                 ', '.join(display(key) + '=' + str(value)
                           for key, value in kwargs.iteritems())
@@ -222,7 +223,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
             res = f(*args, **kwargs)
             print('{0}#{1} return: {2}'.format(
                 f.__name__,
-                local['call_number'],
+                this_call_number,
                 display(res)))
 
             if local['call_number'] > 100:

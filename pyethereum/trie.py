@@ -476,7 +476,7 @@ class Trie(object):
             return [pack_nibbles(new_key), new_sub_node[1]]
 
         if new_sub_node_type == NODE_TYPE_BRANCH:
-            return [pack_nibbles(curr_key), new_sub_node[1]]
+            return [pack_nibbles(curr_key), new_sub_node]
 
         # should be no more cases
         assert False
