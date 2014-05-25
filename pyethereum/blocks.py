@@ -81,7 +81,11 @@ class UnknownParentException(Exception):
     pass
 
 class TransientBlock(object):
+    """
+    Read only, non persisted, not validated representation of a block
+    """
     def __init__(self, rlpdata):
+        self.rlpdata = rlpdata
         self.hash = utils.sha3(rlpdata)
         header_args, transaction_list, uncles = rlp.decode(rlpdata)
         self.transaction_list = transaction_list # rlp encoded transactions
