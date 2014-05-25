@@ -480,11 +480,13 @@ cpp_rlp_blocks = ["f8b5f8b1a0cea7b6f4379812715562aaf0f44accf61ece5a2d80fe780d7e1
 def test_receive_cpp_block_1():
     set_db()
     cm = get_chainmanager()
-    oldest = blocks.TransientBlock(rlp_blocks[-1].decode('hex'))
-    assert oldest.number == 1
+    blk1 = blocks.TransientBlock(cpp_rlp_blocks[-1].decode('hex'))
+    assert not blk1.transaction_list
+    assert not blk1.uncles
+    assert blk1.number == 1
     genesis = cm.head
-    assert oldest.prevhash.encode('hex') == genesis.hex_hash()
-    genesis.deserialize_child(oldest.rlpdata)
+    assert blk1.prevhash.encode('hex') == genesis.hex_hash()
+    local_blk1 = genesis.deserialize_child(blk1.rlpdata)
 
 
 
