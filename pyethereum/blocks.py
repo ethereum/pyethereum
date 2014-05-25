@@ -80,6 +80,19 @@ def calc_gaslimit(parent):
 class UnknownParentException(Exception):
     pass
 
+class TransientBlock(object):
+    def __init__(self, rlpdata):
+        self.hash = utils.sha3(rlpdata)
+        header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        self.transaction_list = transaction_list # rlp encoded transactions
+        self.uncles = uncles
+        for i, (name, typ, default) in enumerate(block_structure):
+            setattr(self, name, utils.decoders[typ](header_args[i]))
+
+    def __repr__(self):
+        return '<TransientBlock(#%d %s %s)>' %\
+        (self.number, self.hash.encode('hex')[:4], self.prevhash.encode('hex')[:4])
+
 
 class Block(object):
 
