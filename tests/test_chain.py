@@ -24,6 +24,11 @@ def genesis_fixture():
     with open('fixtures/genesishashestest.json', 'r') as f:
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
+    # FIXME: assert that link is uptodate
+    for k in ('genesis_rlp_hex', 'genesis_state_root', 'genesis_hash', 'initial_alloc'):
+        assert k in genesis_fixture
+    assert utils.sha3(genesis_fixture['genesis_rlp_hex'].decode('hex')).encode('hex') ==\
+             genesis_fixture['genesis_hash']
     return genesis_fixture
 
 
