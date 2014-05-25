@@ -177,10 +177,11 @@ class Trie(object):
         self.root_node = BLANK_NODE
 
     def _delete_child_stroage(self, node):
-        if len(node) == 17:
+        node_type = self._get_node_type(node)
+        if node_type == NODE_TYPE_BRANCH:
             for item in node[:16]:
                 self._delete_child_stroage(self._decode_to_node(item))
-        elif len(node) == 17:
+        elif is_key_value_type(node_type):
             node_type = self._get_node_type(node)
             if node_type == NODE_TYPE_LEAF:
                 self._delete_child_stroage(self._decode_to_node(node[1]))
