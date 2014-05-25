@@ -405,7 +405,7 @@ def test_invalid_transaction():
 def test_add_side_chain():
     """"
     Local: L0, L1, L2
-    add 
+    add
     Remote: R0, R1
     """
     k, v, k2, v2 = accounts()
