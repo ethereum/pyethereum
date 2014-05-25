@@ -173,19 +173,6 @@ def test_genesis_hash(genesis_fixture):
     set_db()
     genesis = blocks.genesis()
     """
-    cpp: https://github.com/ethereum/cpp-ethereum/libethereum/BlockInfo.cpp#L64
-    h256() << sha3EmptyList << h160() << stateRoot << h256()
-    << c_genesisDifficulty << 0 << 0 << 1000000 << 0 << (uint)0 << string()
-    << sha3(bytes(1, 42));
-
-    PoC5 etherpad: https://ethereum.etherpad.mozilla.org/11
-    Genesis block is: ( B32(0, 0, ...), B32(sha3(B())), B20(0, 0, ...),
-    B32(stateRoot), B32(0, 0, ...), P(2^22), P(0), P(0), P(1000000), P(0),
-    P(0) << B() << B32(sha3(B(42))) )
-
-    Genesis hash:
-    69a7356a245f9dc5b865475ada5ee4e89b18f93c06503a9db3b3630e88e9fb4e
-
     YP: https://raw.githubusercontent.com/ethereum/latexpaper/master/Paper.tex
     0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (),
     SHA3(42), (), ()
