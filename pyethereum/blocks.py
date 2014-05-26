@@ -218,7 +218,6 @@ class Block(object):
 
         # checks
         assert block.prevhash == self.hash
-        assert block.state.root_hash == kargs['state_root']
         assert block.tx_list_root == kargs['tx_list_root']
         assert block.gas_used == kargs['gas_used']
         assert block.gas_limit == kargs['gas_limit']
@@ -227,6 +226,7 @@ class Block(object):
         assert block.number == kargs['number']
         assert block.extra_data == kargs['extra_data']
         assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
+        assert block.state.root_hash == kargs['state_root']
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
@@ -238,19 +238,6 @@ class Block(object):
     def hex_deserialize(cls, hexrlpdata):
         return cls.deserialize(hexrlpdata.decode('hex'))
 
-    # _get_acct_item(bin or hex, int) -> bin
-    def _get_acct_item(self, address, param):
-        ''' get account item
-        :param address: account address, can be binary or hex string
-        :param param: parameter to get
-        '''
-        if len(address) == 40:
-            address = address.decode('hex')
-
-        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
-        decoder = utils.decoders[acct_structure_rev[param][1]]
-        return decoder(acct[acct_structure_rev[param][0]])
-
     def mk_blank_acct(self):
         if not hasattr(self, '_blank_acct'):
             codehash = utils.sha3('')
@@ -260,6 +247,21 @@ class Block(object):
                                 trie.BLANK_ROOT,
                                 codehash]
         return self._blank_acct[:]
+
+    def get_acct(self, address):
+        if len(address) == 40:
+            address = address.decode('hex')
+        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
+        return tuple(utils.decoders[t](acct[i]) \
+            for i, (n,t,d) in enumerate(acct_structure))
+
+    # _get_acct_item(bin or hex, int) -> bin
+    def _get_acct_item(self, address, param):
+        ''' get account item
+        :param address: account address, can be binary or hex string
+        :param param: parameter to get
+        '''
+        return self.get_acct(address)[acct_structure_rev[param][0]]
 
     # _set_acct_item(bin or hex, int, bin)
     def _set_acct_item(self, address, param, value):
@@ -282,16 +284,12 @@ class Block(object):
         :param param: parameter to increase/decrease
         :param value: can be positive or negative
         '''
-        if len(address) == 40:
-            address = address.decode('hex')
-        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
-        index = acct_structure_rev[param][0]
-        if utils.decode_int(acct[index]) + value < 0:
+        value = self._get_acct_item(address, param) + value
+        if value < 0:
             return False
-        acct[index] = utils.encode_int(utils.decode_int(acct[index]) + value)
-        self.state.update(address, rlp.encode(acct))
+        self._set_acct_item(address, param, value)
         return True
-
+        
     def _add_transaction_to_list(self, tx_serialized,
                                  state_root, gas_used_encoded):
         # adds encoded data # FIXME: the constructor should get objects
