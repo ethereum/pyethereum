@@ -488,6 +488,18 @@ def test_receive_cpp_block_1():
     assert blk1.prevhash.encode('hex') == genesis.hex_hash()
     local_blk1 = genesis.deserialize_child(blk1.rlpdata)
 
+@pytest.mark.wip
+def test_receive_cpp_chain():
+    set_db()
+    cm = get_chainmanager()
+    local_blk = cm.head # genesis
+    for i, rlp_block in enumerate(reversed(cpp_rlp_blocks)):
+        blk = blocks.TransientBlock(rlp_block.decode('hex'))
+        assert not blk.transaction_list
+        assert not blk.uncles
+        assert blk.number == i+1        
+        local_blk = local_blk.deserialize_child(blk.rlpdata)
+
 
 
 # TODO ##########################################
