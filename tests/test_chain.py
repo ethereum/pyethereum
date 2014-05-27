@@ -475,7 +475,7 @@ cpp_rlp_blocks = ["f8b5f8b1a0cea7b6f4379812715562aaf0f44accf61ece5a2d80fe780d7e1
                 "f8b5f8b1a00c892995c469f57a34447217fc6cebbaf604c9d82d621a6505c7493ac1333e68a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa0e785df309fbf0289aa9d1c09096c039aa69b880b6c001eb95ec838fb2dcebe5180833fe004028609184e72a000830f3a9f80845381ae3e80a0000000000000000000000000000000000000000000000000b985b7d378a23d84c0c0",
                 "f8b5f8b1a0c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa04b6da9af1b96757921ba3a0de69c615fea5482570e37a4d74d051e1e19f996c880833ff000018609184e72a000830f3e6f80845381adf680a00000000000000000000000000000000000000000000000003dfac8aa6e0214b4c0c0"]
 
-
+@pytest.mark.wip
 def test_receive_cpp_block_1():
     set_db()
     cm = get_chainmanager()
@@ -486,8 +486,9 @@ def test_receive_cpp_block_1():
     genesis = cm.head
     assert blk1.prevhash.encode('hex') == genesis.hex_hash()
     local_blk1 = genesis.deserialize_child(blk1.rlpdata)
+    assert local_blk1.check_proof_of_work(local_blk1.nonce) == True
 
-@pytest.mark.wip
+
 def test_receive_cpp_chain():
     set_db()
     cm = get_chainmanager()
@@ -498,6 +499,7 @@ def test_receive_cpp_chain():
         assert not blk.uncles
         assert blk.number == i+1        
         local_blk = local_blk.deserialize_child(blk.rlpdata)
+        assert local_blk.check_proof_of_work(local_blk.nonce) == True
 
 
 
