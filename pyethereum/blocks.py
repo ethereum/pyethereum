@@ -167,8 +167,10 @@ class Block(object):
             self.nonce == GENESIS_NONCE
 
     def check_proof_of_work(self, nonce):
-        prefix = self.serialize_header_without_nonce()
-        h = utils.sha3(utils.sha3(prefix + nonce))
+        assert len(nonce) == 32
+        rlp_Hn = self.serialize_header_without_nonce()
+        # BE(SHA3(SHA3(RLP(Hn)) o n))
+        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
         l256 = utils.big_endian_to_int(h)
         return l256 < 2 ** 256 / self.difficulty
 

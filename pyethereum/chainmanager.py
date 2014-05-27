@@ -71,26 +71,22 @@ class Miner():
             big-endian-encoded integer.
         """
 
-        pack = struct.pack
-        sha3 = utils.sha3
-        beti = utils.big_endian_to_int
-        block = self.block
-
-        nonce_bin_prefix = '\x00' * (32 - len(pack('>q', 0)))
-        prefix = block.serialize_header_without_nonce() + nonce_bin_prefix
-
-        target = 2 ** 256 / block.difficulty
+        nonce_bin_prefix = '\x00' * (32 - len(struct.pack('>q', 0)))
+        target = 2 ** 256 / self.block.difficulty
+        rlp_Hn = self.block.serialize_header_without_nonce()
 
         for nonce in range(self.nonce, self.nonce + steps):
-            h = sha3(sha3(prefix + pack('>q', nonce)))
-            l256 = beti(h)
+            nonce_bin = nonce_bin_prefix + struct.pack('>q', nonce)
+            # BE(SHA3(SHA3(RLP(Hn)) o n))
+            h = utils.sha3(utils.sha3(rlp_Hn) + nonce_bin)
+            l256 = utils.big_endian_to_int(h)
             if l256 < target:
-                block.nonce = nonce_bin_prefix + pack('>q', nonce)
-                assert block.check_proof_of_work(block.nonce) is True
-                assert block.get_parent()
+                self.block.nonce = nonce_bin
+                assert self.block.check_proof_of_work(self.block.nonce) is True
+                assert self.block.get_parent()
                 logger.debug(
-                    'Nonce found %d %r', nonce, block)
-                return block
+                    'Nonce found %d %r', nonce, self.block)
+                return self.block
 
         self.nonce = nonce
         return False
