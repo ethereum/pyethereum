@@ -357,19 +357,14 @@ class Block(object):
             t.delete(utils.coerce_to_bytes(index))
         self._set_acct_item(address, 'storage', t.root_hash)
 
-    def _account_to_dict(self, acct):
+    def account_to_dict(self, address):
         med_dict = {}
-        for i, (name, typ, default) in enumerate(acct_structure):
-            med_dict[name] = utils.decoders[typ](acct[i])
+        for i, val in enumerate(self.get_acct(address)):
+            med_dict[acct_structure[i][0]] = val
         strie = trie.Trie(utils.get_db_path(), med_dict['storage']).to_dict()
         med_dict['storage'] = {utils.decode_int(k): utils.decode_int(v)
                                for k, v in strie.iteritems()}
         return med_dict
-
-    def account_to_dict(self, address):
-        acct = rlp.decode(self.state.get(address.decode('hex')))\
-            or self.mk_blank_acct()
-        return self._account_to_dict(acct)
 
     # Revert computation
     def snapshot(self):
@@ -423,10 +418,9 @@ class Block(object):
         b = {}
         for name, typ, default in block_structure:
             b[name] = getattr(self, name)
-        state = self.state.to_dict()
         b["state"] = {}
-        for k, v in state.iteritems():
-            b["state"][k.encode('hex')] = self._account_to_dict(v)
+        for address, v in self.state.to_dict().iteritems():
+            b["state"][address.encode('hex')] = self.account_to_dict(address)
         # txlist = []
         # for i in range(self.transaction_count):
         #     txlist.append(self.transactions.get(utils.encode_int(i)))
