@@ -3,6 +3,7 @@ import processblock
 import transactions
 import blocks
 import utils
+import json
 
 
 def sha3(x):
@@ -90,4 +91,4 @@ def getstate(blockdata, address=None):
 
 def account_to_dict(blockdata, address):
     block = blocks.Block.hex_deserialize(blockdata)
-    return block.account_to_dict(address)
+    return json.dumps(block.account_to_dict(address), ensure_ascii=False)
