@@ -86,7 +86,7 @@ else:
         return(0)
     ''' % v
     code2 = serpent.compile(scode2)
-    blk = b.genesis({v: 10**18})
+    blk = b.genesis({v: 10 ** 18})
     tx4 = t.contract(0, gasprice, startgas, 0, code2).sign(k)
     s, addr = pb.apply_tx(blk, tx4)
     tx5 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
@@ -126,7 +126,7 @@ else:
     code3 = serpent.compile(scode3)
     # print("AST", serpent.rewrite(serpent.parse(scode3)))
     # print("Assembly", serpent.compile_to_assembly(scode3))
-    blk = b.genesis({v: 10**18, v2: 10**18})
+    blk = b.genesis({v: 10 ** 18, v2: 10 ** 18})
     tx10 = t.contract(0, gasprice, startgas, 0, code3).sign(k)
     s, addr = pb.apply_tx(blk, tx10)
     tx11 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
@@ -182,11 +182,11 @@ else:
     # important: no new genesis block
     tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
     s, addr2 = pb.apply_tx(blk, tx15)
-    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10**17,
+    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10 ** 17,
                          serpent.encode_datalist([500])).sign(k)
     s, o = pb.apply_tx(blk, tx16)
     assert serpent.decode_datalist(o) == [1]
-    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10**17,
+    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10 ** 17,
                          serpent.encode_datalist([500])).sign(k2)
     s, o = pb.apply_tx(blk, tx17)
     assert serpent.decode_datalist(o) == [2, 72600000000000000000L]
