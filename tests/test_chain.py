@@ -475,7 +475,7 @@ cpp_rlp_blocks = ["f8b5f8b1a0cea7b6f4379812715562aaf0f44accf61ece5a2d80fe780d7e1
                 "f8b5f8b1a00c892995c469f57a34447217fc6cebbaf604c9d82d621a6505c7493ac1333e68a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa0e785df309fbf0289aa9d1c09096c039aa69b880b6c001eb95ec838fb2dcebe5180833fe004028609184e72a000830f3a9f80845381ae3e80a0000000000000000000000000000000000000000000000000b985b7d378a23d84c0c0",
                 "f8b5f8b1a0c305511e7cb9b33767e50f5e94ecd7b1c51359a04f45183860ec6808d80b0d3fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa04b6da9af1b96757921ba3a0de69c615fea5482570e37a4d74d051e1e19f996c880833ff000018609184e72a000830f3e6f80845381adf680a00000000000000000000000000000000000000000000000003dfac8aa6e0214b4c0c0"]
 
-@pytest.mark.wip
+
 def test_receive_cpp_block_1():
     set_db()
     cm = get_chainmanager()
@@ -501,6 +501,41 @@ def test_receive_cpp_chain():
         local_blk = local_blk.deserialize_child(blk.rlpdata)
         assert local_blk.check_proof_of_work(local_blk.nonce) == True
 
+
+@pytest.mark.wip
+def test_deserialize_cpp_block_42():
+    # 54.204.10.41 / NEthereum(++)/ZeroGox/v0.5.9/ncurses/Linux/g++ V:17L
+    # E       TypeError: ord() expected a character, but string of length 0 found
+    # 00bab55f2e230d4d56c7a2c11e7f3132663cc6734a5d4406f2e4359f4ab56593  
+    """
+    RomanJ dumped the block
+    BlockData [
+  hash=00bab55f2e230d4d56c7a2c11e7f3132663cc6734a5d4406f2e4359f4ab56593
+  parentHash=0df28c56b0cc32ceb55299934fca74ff63956ede0ffd430367ebcb1bb94d42fe
+  unclesHash=1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347
+  coinbase=a70abb9ed4b5d82ed1d82194943349bcde036812
+  stateHash=203838e6ea7b03bce4b806ab4e5c069d5cd98ca2ba27a2d343d809cc6365e1ce
+  txTrieHash=78aaa0f3b726f8d9273ba145e0efd4a6b21183412582449cc9457f713422b5ae
+  difficulty=4142bd
+  number=48
+  minGasPrice=10000000000000
+  gasLimit=954162
+  gasUsed=500
+  timestamp=1400678342
+  extraData=null
+  nonce=0000000000000000000000000000000000000000000000007d117303138a74e0
+
+TransactionData [ hash=9003d7211c4b0d123778707fbdcabd93a6184be210390de4f73f89eae847556d  nonce=null, gasPrice=09184e72a000, gas=01f4, receiveAddress=e559de5527492bcb42ec68d07df0742a98ec3f1e, value=8ac7230489e80000, data=null, signatureV=27, signatureR=18d646b8c4f7a804fdf7ba8da4d5dd049983e7d2b652ab902f7d4eaebee3e33b, signatureS=229ad485ef078d6e5f252db58dd2cce99e18af02028949896248aa01baf48b77]
+]
+    """
+
+
+
+    hex_rlp_data = \
+    """f9016df8d3a00df28c56b0cc32ceb55299934fca74ff63956ede0ffd430367ebcb1bb94d42fea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794a70abb9ed4b5d82ed1d82194943349bcde036812a0203838e6ea7b03bce4b806ab4e5c069d5cd98ca2ba27a2d343d809cc6365e1cea078aaa0f3b726f8d9273ba145e0efd4a6b21183412582449cc9457f713422b5ae834142bd308609184e72a000830e8f328201f484537ca7c680a00000000000000000000000000000000000000000000000007d117303138a74e0f895f893f86d808609184e72a0008201f494e559de5527492bcb42ec68d07df0742a98ec3f1e888ac7230489e80000801ba018d646b8c4f7a804fdf7ba8da4d5dd049983e7d2b652ab902f7d4eaebee3e33ba0229ad485ef078d6e5f252db58dd2cce99e18af02028949896248aa01baf48b77a06e957f0f99502ad60a66a016f72957eff0f3a5bf791ad4a0606a44f35a6e09288201f4c0"""
+    header_args, transaction_list, uncles = rlp.decode(hex_rlp_data.decode('hex'))
+    for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
+        tx = transactions.Transaction.deserialize(tx_serialized)
 
 
 # TODO ##########################################
