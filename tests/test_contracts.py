@@ -59,6 +59,9 @@ else:
 
     blk.revert(snapshot)
 
+    assert blk.to_dict()
+    assert blk.to_dict()['state'][addr]['code']
+
 
 def test_currency():
     k, v, k2, v2 = accounts()
