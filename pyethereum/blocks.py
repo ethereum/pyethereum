@@ -81,22 +81,26 @@ def calc_gaslimit(parent):
 class UnknownParentException(Exception):
     pass
 
+
 class TransientBlock(object):
+
     """
     Read only, non persisted, not validated representation of a block
     """
+
     def __init__(self, rlpdata):
         self.rlpdata = rlpdata
         self.hash = utils.sha3(rlpdata)
         header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        self.transaction_list = transaction_list # rlp encoded transactions
+        self.transaction_list = transaction_list  # rlp encoded transactions
         self.uncles = uncles
         for i, (name, typ, default) in enumerate(block_structure):
             setattr(self, name, utils.decoders[typ](header_args[i]))
 
     def __repr__(self):
         return '<TransientBlock(#%d %s %s)>' %\
-        (self.number, self.hash.encode('hex')[:4], self.prevhash.encode('hex')[:4])
+            (self.number, self.hash.encode('hex')[
+             :4], self.prevhash.encode('hex')[:4])
 
 
 class Block(object):
@@ -257,8 +261,8 @@ class Block(object):
         if len(address) == 40:
             address = address.decode('hex')
         acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
-        return tuple(utils.decoders[t](acct[i]) \
-            for i, (n,t,d) in enumerate(acct_structure))
+        return tuple(utils.decoders[t](acct[i])
+                     for i, (n, t, d) in enumerate(acct_structure))
 
     # _get_acct_item(bin or hex, int) -> bin
     def _get_acct_item(self, address, param):
@@ -294,7 +298,7 @@ class Block(object):
             return False
         self._set_acct_item(address, param, value)
         return True
-        
+
     def _add_transaction_to_list(self, tx_serialized,
                                  state_root, gas_used_encoded):
         # adds encoded data # FIXME: the constructor should get objects
