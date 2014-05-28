@@ -229,7 +229,7 @@ class ChainManager(StoppableLoopThread):
         "returns True if block was added sucessfully"
         # make sure we know the parent
         if not block.has_parent() and not block.is_genesis():
-            logger.debug('Missing parent for block %r', block.hex_hash())
+            logger.debug('Missing parent for block %r', block)
             return False
 
         # make sure we know the uncles
@@ -240,11 +240,11 @@ class ChainManager(StoppableLoopThread):
 
         # check PoW
         if not len(block.nonce) == 32:
-            logger.debug('Nonce not set %r', block.hex_hash())
+            logger.debug('Nonce not set %r', block)
             return False
         elif not block.check_proof_of_work(block.nonce) and\
                 not block.is_genesis():
-            logger.debug('Invalid nonce %r', block.hex_hash())
+            logger.debug('Invalid nonce %r', block)
             return False
 
         with self.lock:
