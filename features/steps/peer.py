@@ -324,6 +324,7 @@ def step_impl(context):
 
 @given(u'blocks data')  # noqa
 def step_impl(context):
+    # FIXME here we need real blocks.Block objects
     context.blocks_data = [
         ['block_headerA', ['txA1', 'txA2'], ['uncleA1', 'uncleA2']],
         ['block_headerB', ['txB', 'txB'], ['uncleB', 'uncleB2']],
