@@ -470,6 +470,37 @@ def test_add_longer_side_chain():
     assert cm.head == remote_blocks[-1]
 
 
+@pytest.mark.wip
+def test_reward_unlces():
+    """
+    B0 B1 B2 
+    B0 Uncle
+
+    We raise the block's coinbase account by Rb, the block reward,
+    and the coinbase of each uncle by 7 of 8 that.    
+    """
+    k, v, k2, v2 = accounts()
+    set_db()
+    blk0 = mkquickgenesis()
+    local_coinbase = '1' * 40
+    uncle_coinbase = '2' * 40
+    cm = get_chainmanager(genesis=blk0)
+    blk1 = mine_next_block(blk0, coinbase=local_coinbase)
+    cm.add_block(blk1)
+    assert blk1.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
+    uncle = mine_next_block(blk0, coinbase=uncle_coinbase)
+    cm.add_block(uncle)
+    assert cm.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
+    assert cm.head.get_balance(uncle_coinbase) == 0
+    # next block should reward uncles
+    blk2 = mine_next_block(blk1, coinbase=local_coinbase)
+    cm.add_block(blk2)
+    assert blk2.get_parent().prevhash == uncle.prevhash
+    assert blk2 == cm.head
+    assert cm.head.get_balance(local_coinbase) == 2 * blocks.BLOCK_REWARD
+    assert cm.head.get_balance(uncle_coinbase) == 7 * blocks.BLOCK_REWARD / 8
+
+
 # blocks 1-3 genereated with Ethereum (++) 0.5.9
 # chain order w/ newest block first
 cpp_rlp_blocks = ["f8b5f8b1a0cea7b6f4379812715562aaf0f44accf61ece5a2d80fe780d7e173fbbb1b146eaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941315bd599b73fd7b159e23dc75ddef80e7708feaa007e693fe94ea4772ab4c875af6bee3d58c0cab33981a0a336f4ae6cf514c1ee680833feffc038609184e72a000830f36d080845381ae3e80a00000000000000000000000000000000000000000000000000950e155eb5ed4cac0c0",
@@ -503,7 +534,6 @@ def test_receive_cpp_chain():
         assert local_blk.check_proof_of_work(local_blk.nonce) == True
 
 
-@pytest.mark.wip
 def test_deserialize_cpp_block_42():
     # 54.204.10.41 / NEthereum(++)/ZeroGox/v0.5.9/ncurses/Linux/g++ V:17L
     # E       TypeError: ord() expected a character, but string of length 0 found
