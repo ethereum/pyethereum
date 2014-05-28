@@ -9,6 +9,7 @@ from packeter import packeter
 from utils import big_endian_to_int as idec
 from utils import recursive_int_to_big_endian
 import rlp
+import blocks
 
 
 logger = logging.getLogger(__name__)
@@ -232,8 +233,10 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
+        transient_blocks = [blocks.TransientBlock(rlp.encode(b)) \
+                            for b in data] # FIXME
         signals.remote_blocks_received.send(
-            sender=Peer, peer=self, block_lst=data)
+            sender=Peer, peer=self, transient_blocks=transient_blocks)
 
     def send_GetChain(self, parents=[], count=1):
         self.send_packet(packeter.dump_GetChain(parents, count))

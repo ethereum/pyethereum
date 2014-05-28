@@ -181,26 +181,23 @@ class ChainManager(StoppableLoopThread):
                 signals.send_local_blocks.send(
                     sender=None, blocks=[block])  # FIXME DE/ENCODE
 
-    def receive_chain(self, rlp_blocks, disconnect_cb=None):
+    def receive_chain(self, transient_blocks, disconnect_cb=None):
         old_head = self.head
 
         # assuming to receive chain order w/ newest block first
-        for rlp_block in reversed(rlp_blocks):
-            bhash = utils.sha3(rlp_block).encode('hex')
-            logger.debug('Trying to deserialize %r', bhash[:4])
+        for t_block in reversed(transient_blocks):
+            logger.debug('Trying to deserialize %r', t_block)
             try:
-                block = blocks.Block.deserialize(rlp_block)
+                block = blocks.Block.deserialize(t_block.rlpdata)
             except blocks.UnknownParentException:
-                block_data = rlp.decode(rlp_block)
-                phash = block_data[0][0].encode('hex')[:4]
-                number = utils.decode_int(block_data[0][6])
-                if phash == blocks.GENESIS_PREVHASH:
-                    logger.debug('Incompatible Genesis %r', block)
+
+                number = t_block.number
+                if t_block.prevhash == blocks.GENESIS_PREVHASH:
+                    logger.debug('Incompatible Genesis %r', t_block)
                     if disconnect_cb:
                         disconnect_cb(reason='Wrong genesis block')
                 else:
-                    logger.debug('Block(#%d %s %s) with unknown parent',
-                                 number, bhash[:4], phash.encode('hex')[:4])
+                    logger.debug('%s with unknown parent', t_block)
                     if number > self.head.number:
                         self.synchronize_blockchain()
                     else:
@@ -405,7 +402,8 @@ def gettransactions_received_handler(sender, peer, **kwargs):
 
 
 @receiver(signals.remote_blocks_received)
-def remote_blocks_received_handler(sender, block_lst, peer, **kwargs):
-    logger.debug("received %d remote blocks", len(block_lst))
-    rlp_blocks = [rlp.encode(b) for b in block_lst]
-    chain_manager.receive_chain(rlp_blocks, disconnect_cb=peer.send_Disconnect)
+def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
+    logger.debug("recv %d remote blocks: %r", len(
+        transient_blocks), transient_blocks)
+    chain_manager.receive_chain(
+        transient_blocks, disconnect_cb=peer.send_Disconnect)
