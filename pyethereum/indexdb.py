@@ -20,6 +20,7 @@ class Index(object):
     def add(self, key, valnum, value):
         assert isinstance(value, str)
         self.db.put(self._key(key, valnum), value)
+        self.db.commit()
 
     def append(self, key, value):
         self.add(key, self.num_values(key), value)
