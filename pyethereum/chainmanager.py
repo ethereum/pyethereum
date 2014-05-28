@@ -233,20 +233,21 @@ class ChainManager(StoppableLoopThread):
             logger.debug('Invalid nonce %r', block.hex_hash())
             return False
 
-        if block.has_parent():
-            try:
-                processblock.verify(block, block.get_parent())
-            except AssertionError, e:
-                logger.debug('verification failed: %s', str(e))
-                processblock.verify(block, block.get_parent())
-                return False
+        with self.lock:
+            if block.has_parent():
+                try:
+                    processblock.verify(block, block.get_parent())
+                except AssertionError, e:
+                    logger.debug('verification failed: %s', str(e))
+                    processblock.verify(block, block.get_parent())
+                    return False
 
-        self._store_block(block)
-        # set to head if this makes the longest chain w/ most work
-        if block.chain_difficulty() > self.head.chain_difficulty():
-            logger.debug('New Head %r', block)
-            self._update_head(block)
-        return True
+            self._store_block(block)
+            # set to head if this makes the longest chain w/ most work
+            if block.chain_difficulty() > self.head.chain_difficulty():
+                logger.debug('New Head %r', block)
+                self._update_head(block)
+            return True
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
