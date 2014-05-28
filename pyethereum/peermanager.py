@@ -27,19 +27,16 @@ class PeerManager(StoppableLoopThread):
         super(PeerManager, self).__init__()
         self.connected_peers = set()
         self._known_peers = set()  # (ip, port, node_id)
-
-        self.local_ip = ''
-        self.local_port = ''
+        self.local_ip = '0.0.0.0'
+        self.local_port = 0
         self.local_node_id = ''
 
     def configure(self, config):
         self.config = config
         self.local_node_id = config.get('network', 'node_id')
-
-    def set_local_address(self, ip, port):
-        with self.lock:
-            self.local_ip = ip
-            self.local_port = port
+        self.local_ip = config.get('network', 'listen_host')
+        assert is_valid_ip(self.local_ip)
+        self.local_port = config.getint('network', 'listen_port')
 
     def stop(self):
         with self.lock:
