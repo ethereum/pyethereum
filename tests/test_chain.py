@@ -52,9 +52,10 @@ def mkquickgenesis(initial_alloc={}):
     return blocks.genesis(initial_alloc, difficulty=2 ** 16)
 
 
-def mine_next_block(parent, coinbase=None, transactions=[]):
+def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
     # advance one block
-    m = chainmanager.Miner(parent, coinbase or parent.coinbase)
+    coinbase = coinbase or parent.coinbase
+    m = chainmanager.Miner(parent, uncles=uncles, coinbase=coinbase)
     for tx in transactions:
         m.add_transaction(tx)
     blk = m.mine(steps=1000 ** 2)
@@ -490,15 +491,17 @@ def test_reward_unlces():
     assert blk1.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     uncle = mine_next_block(blk0, coinbase=uncle_coinbase)
     cm.add_block(uncle)
+    assert uncle.hash in cm
     assert cm.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     assert cm.head.get_balance(uncle_coinbase) == 0
     # next block should reward uncles
-    blk2 = mine_next_block(blk1, coinbase=local_coinbase)
+    blk2 = mine_next_block(blk1, uncles=[uncle], coinbase=local_coinbase)
     cm.add_block(blk2)
     assert blk2.get_parent().prevhash == uncle.prevhash
     assert blk2 == cm.head
     assert cm.head.get_balance(local_coinbase) == 2 * blocks.BLOCK_REWARD
-    assert cm.head.get_balance(uncle_coinbase) == 7 * blocks.BLOCK_REWARD / 8
+    assert cm.head.get_balance(uncle_coinbase) == blocks.UNCLE_REWARD
+    assert 7 * blocks.BLOCK_REWARD / 8 == blocks.UNCLE_REWARD
 
 
 # blocks 1-3 genereated with Ethereum (++) 0.5.9
