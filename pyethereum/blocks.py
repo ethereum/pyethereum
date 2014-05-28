@@ -15,6 +15,7 @@ GENESIS_GAS_LIMIT = 10 ** 6
 MIN_GAS_LIMIT = 10 ** 4
 GASLIMIT_EMA_FACTOR = 1024
 BLOCK_REWARD = 1500 * utils.denoms.finney
+UNCLE_REWARD = 7 * BLOCK_REWARD / 8
 BLOCK_DIFF_FACTOR = 1024
 GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
@@ -384,7 +385,16 @@ class Block(object):
         self.transaction_count = mysnapshot['txcount']
 
     def finalize(self):
+        """
+        Apply rewards
+        We raise the block's coinbase account by Rb, the block reward,
+        and the coinbase of each uncle by 7 of 8 that.
+        Rb = 1500 finney
+        """
         self.delta_balance(self.coinbase, BLOCK_REWARD)
+        for uncle_hash in self.uncles:
+            uncle = get_block(uncle_hash)
+            self.delta_balance(uncle.coinbase, UNCLE_REWARD)
 
     def serialize_header_without_nonce(self):
         return rlp.encode(self.list_header(exclude=['nonce']))
