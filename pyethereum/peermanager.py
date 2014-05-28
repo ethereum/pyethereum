@@ -204,8 +204,7 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
 
 
 @receiver(signals.send_local_blocks)
-def send_blocks(sender, blocks=[], **kwargs):
-    blocks = [rlp.decode(b.serialize()) for b in blocks]  # FIXME
+def send_blocks_handler(sender, blocks=[], **kwargs):
     for peer in peer_manager.connected_peers:
         peer.send_Blocks(blocks)
 
