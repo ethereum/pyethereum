@@ -255,7 +255,7 @@ class Peer(StoppableLoopThread):
         If no parents are passed, then reply need not be made.
         """
         signals.local_chain_requested.send(
-            sender=Peer, peer=self, blocks=data[:-1], count=idec(data[-1]))
+            sender=Peer, peer=self, block_hashes=data[:-1], count=idec(data[-1]))
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))

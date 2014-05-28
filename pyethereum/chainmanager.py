@@ -179,7 +179,7 @@ class ChainManager(StoppableLoopThread):
                 self.add_block(block)
                 logger.debug("broadcasting new %r" % block)
                 signals.send_local_blocks.send(
-                    sender=None, blocks=[block])  # FIXME DE/ENCODE
+                    sender=None, blocks=[block])
 
     def receive_chain(self, transient_blocks, disconnect_cb=None):
         old_head = self.head
@@ -315,7 +315,7 @@ chain_manager = ChainManager()
 
 
 @receiver(signals.local_chain_requested)
-def handle_local_chain_requested(sender, peer, blocks, count, **kwargs):
+def handle_local_chain_requested(sender, peer, block_hashes, count, **kwargs):
     """
     [0x14, Parent1, Parent2, ..., ParentN, Count]
     Request the peer to send Count (to be interpreted as an integer) blocks
@@ -335,25 +335,25 @@ def handle_local_chain_requested(sender, peer, blocks, count, **kwargs):
     """
     logger.debug(
         "local_chain_requested: %r %d",
-        [b.encode('hex') for b in blocks], count)
-    res = []
-    for i, b in enumerate(blocks):
+        [b.encode('hex') for b in block_hashes], count)
+    found_blocks = []
+    for i, b in enumerate(block_hashes):
         if b in chain_manager:
             block = chain_manager.get(b)
             logger.debug("local_chain_requested: found: %r", block)
-            res = chain_manager.get_descendents(block, count=count)
-            if res:
-                logger.debug("sending: found: %r ", res)
-                res = [rlp.decode(b.serialize()) for b in res]  # FIXME
+            found_blocks = chain_manager.get_descendents(block, count=count)
+            if found_blocks:
+                logger.debug("sending: found: %r ", found_blocks)
                 # if b == head: no descendents == no reply
                 with peer.lock:
-                    peer.send_Blocks(res)
+                    peer.send_Blocks(found_blocks)
                 return
 
-    if len(blocks):
+    if len(block_hashes):
         #  If none of the parents are in the current
-        logger.debug("Sending NotInChain: %r", blocks[-1].encode('hex')[:4])
-        peer.send_NotInChain(blocks[-1])
+        logger.debug(
+            "Sending NotInChain: %r", block_hashes[-1].encode('hex')[:4])
+        peer.send_NotInChain(block_hashes[-1])
     else:
         # If no parents are passed, then reply need not be made.
         pass
