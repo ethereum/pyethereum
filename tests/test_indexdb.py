@@ -24,6 +24,16 @@ def mkindex():
     return idx
 
 
+def test_appending():
+    idx = pyethereum.indexdb.Index('namespace')
+    key = 'key'
+    vals = ['v0', 'v1']
+    for v in vals:
+        idx.append(key, v)
+    assert idx.num_values(key) == 2
+    assert list(idx.get(key)) == vals
+
+
 def test_adding():
     acct = act(10000)
     acct2 = act(10000)
