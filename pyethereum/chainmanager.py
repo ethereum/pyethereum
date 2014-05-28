@@ -128,12 +128,14 @@ class ChainManager(StoppableLoopThread):
         self.new_miner()  # reset mining
 
     def get(self, blockhash):
+        assert isinstance(blockhash, str)
         return blocks.get_block(blockhash)
 
     def has_block(self, blockhash):
         return blockhash in self.blockchain
 
     def __contains__(self, blockhash):
+        assert isinstance(blockhash, str)
         return self.has_block(blockhash)
 
     def _store_block(self, block):
