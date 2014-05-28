@@ -38,13 +38,11 @@ class Index(object):
             self.db.delete(self._key(key, offset))
             offset += 1
 
-    def keys(self, key_from=None):
+    def keys(self, key_from=''):
         assert not self.db.uncommitted
-        if key_from is not None:
-            key_from = self.namespace + key_from
         zero = struct.pack('>I', 0)
         for key in self.db.db.RangeIter(include_value=False,
-                                        key_from=key_from):
+                                        key_from=self.namespace + key_from):
             if key.endswith(zero):
                 yield key[len(self.namespace):-4]
 
