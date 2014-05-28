@@ -430,8 +430,9 @@ def test_add_side_chain():
     cm.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    rlp_blocks = [R1.serialize(), R0.serialize()]
-    cm.receive_chain(rlp_blocks)
+    transient_blocks = [blocks.TransientBlock(R1.serialize()),
+                        blocks.TransientBlock(R0.serialize())]
+    cm.receive_chain(transient_blocks=transient_blocks)
     assert L2.hash in cm
 
 
@@ -445,13 +446,12 @@ def test_add_longer_side_chain():
     set_db()
     blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(blk)
-    blocks = [blk]
+    remote_blocks = [blk]
     for i in range(3):
         tx = get_transaction(nonce=i)
-        blk = mine_next_block(blocks[-1], transactions=[tx])
+        blk = mine_next_block(remote_blocks[-1], transactions=[tx])
         db_store(blk)
-        blocks.append(blk)
-    remote_blocks = blocks
+        remote_blocks.append(blk)
     # Local: mine two blocks
     set_db()
     L0 = mkquickgenesis({v: utils.denoms.ether * 1})
