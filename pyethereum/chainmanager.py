@@ -10,6 +10,7 @@ import rlp
 import blocks
 import processblock
 from transactions import Transaction
+import indexdb
 
 logger = logging.getLogger(__name__)
 
@@ -103,11 +104,13 @@ class ChainManager(StoppableLoopThread):
         # initialized after configure
         self.miner = None
         self.blockchain = None
+        self._children_index = None
 
     def configure(self, config, genesis=None):
         self.config = config
         logger.info('Opening chain @ %s', utils.get_db_path())
         self.blockchain = DB(utils.get_db_path())
+        self._children_index = indexdb.Index('ci')
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
@@ -244,12 +247,16 @@ class ChainManager(StoppableLoopThread):
                     processblock.verify(block, block.get_parent())
                     return False
 
+            self._children_index.append(block.prevhash, block.hash)
             self._store_block(block)
             # set to head if this makes the longest chain w/ most work
             if block.chain_difficulty() > self.head.chain_difficulty():
                 logger.debug('New Head %r', block)
                 self._update_head(block)
             return True
+
+    def get_children(self, block):
+        return [self.get(c) for c in self._children_index.get(block.hash)]
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
