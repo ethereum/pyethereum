@@ -204,6 +204,7 @@ class Packeter(object):
         '''
         data = [self.cmd_map_by_name['Peers']]
         for ip, port, pid in peers:
+            assert ip.count('.') == 3
             ip = ''.join(chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)

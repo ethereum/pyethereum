@@ -13,6 +13,9 @@ from peer import Peer
 
 logger = logging.getLogger(__name__)
 
+def is_valid_ip(ip): # FIXME, IPV6
+    return ip.count('.') == 3
+
 
 class PeerManager(StoppableLoopThread):
 
@@ -56,6 +59,7 @@ class PeerManager(StoppableLoopThread):
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):
+        assert is_valid_ip(ip)
         if not ip or not port or not node_id:
             return
         ipn = (ip, port, node_id)
@@ -218,6 +222,7 @@ def send_blocks(sender, blocks=[], **kwargs):
 def getaddress_received_handler(sender, peer, **kwargs):
     with peer_manager.lock:
         peers = peer_manager.get_known_peer_addresses()
+        assert is_valid_ip(peer_manager.local_ip)
         peers.add((peer_manager.local_ip,
                   peer_manager.local_port,
                   peer_manager.local_node_id))
