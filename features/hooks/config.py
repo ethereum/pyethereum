@@ -22,6 +22,9 @@ class ConfigHook(object):
             if section == 'network' and option == 'client_id':
                 return 'client id'
 
+            if section == 'network' and option == 'listen_host':
+                return '0.0.0.0'
+
             if section == 'network' and option == 'node_id':
                 return node_id
 
