@@ -51,7 +51,7 @@ class PeerManager(StoppableLoopThread):
     def load_saved_peers(self):
         path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         if os.path.exists(path):
-            peers = set((i, p, "") for i, p in json.load(open(path)))
+            peers = set((ip, port, "") for ip, port in json.load(open(path)))
             self._known_peers.update(peers)
 
     def save_peers(self):
@@ -201,11 +201,6 @@ def config_peermanager(sender, config, **kwargs):
     peer_manager.configure(config)
 
 
-@receiver(signals.p2p_address_ready)
-def p2p_address_ready_handler(sender, ip, port, **kwargs):
-    peer_manager.set_local_address(ip, port)
-
-
 @receiver(signals.peer_connection_accepted)
 def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
@@ -243,8 +238,8 @@ def disconnect_requested_handler(sender, peer, forget=False, **kwargs):
 def peer_addresses_received_handler(sender, addresses, **kwargs):
     ''' addresses should be (ip, port, node_id)
     '''
-    for address in addresses:
-        peer_manager.add_known_peer_address(*address)
+    for ip, port, node_id in addresses:
+        peer_manager.add_known_peer_address(ip, port, node_id)
     peer_manager.save_peers()
 
 
