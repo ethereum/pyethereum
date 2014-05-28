@@ -21,6 +21,9 @@ class Index(object):
         assert isinstance(value, str)
         self.db.put(self._key(key, valnum), value)
 
+    def append(self, key, value):
+        self.add(key, self.num_values(key), value)
+
     def get(self, key, offset=0):
         assert not self.db.uncommitted
         key_from = self._key(key, offset)
