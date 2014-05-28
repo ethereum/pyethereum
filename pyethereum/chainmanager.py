@@ -24,9 +24,10 @@ class Miner():
     Stores received transactions
     """
 
-    def __init__(self, parent, coinbase):
+    def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
         block = self.block = blocks.Block.init_from_parent(parent, coinbase)
+        block.uncles = [u.hash for u in uncles]
         block.finalize()  # order?
         logger.debug('Mining #%d %s', block.number, block.hex_hash())
         logger.debug('Difficulty %s', block.difficulty)
@@ -170,7 +171,8 @@ class ChainManager(StoppableLoopThread):
 
     def new_miner(self):
         "new miner is initialized if HEAD is updated"
-        miner = Miner(self.head, self.config.get('wallet', 'coinbase'))
+        uncles = self.get_uncles(self.head)
+        miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:
             for tx in self.miner.get_transactions():
                 miner.add_transaction(tx)
@@ -229,6 +231,12 @@ class ChainManager(StoppableLoopThread):
             logger.debug('Missing parent for block %r', block.hex_hash())
             return False
 
+        # make sure we know the uncles
+        for uncle_hash in block.uncles:
+            if not uncle_hash in self:
+                logger.debug('Missing uncle for block %r', block)
+                return False
+
         # check PoW
         if not len(block.nonce) == 32:
             logger.debug('Nonce not set %r', block.hex_hash())
@@ -257,6 +265,15 @@ class ChainManager(StoppableLoopThread):
 
     def get_children(self, block):
         return [self.get(c) for c in self._children_index.get(block.hash)]
+
+    def get_uncles(self, block):
+        if not block.has_parent():
+            return []
+        parent = block.get_parent()
+        if not parent.has_parent():
+            return []
+        return [u for u in self.get_children(parent.get_parent())
+                if u != parent]
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)
