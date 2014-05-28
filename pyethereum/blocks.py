@@ -155,6 +155,8 @@ class Block(object):
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
+        if len(self.uncles) != len(set(self.uncles)):
+            raise Exception("Uncle hash not uniqe in uncles list")
         if len(self.extra_data) > 1024:
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
