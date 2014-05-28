@@ -133,19 +133,20 @@ class ChainManager(StoppableLoopThread):
 
     def get(self, blockhash):
         assert isinstance(blockhash, str)
+        assert len(blockhash) == 32
         return blocks.get_block(blockhash)
 
     def has_block(self, blockhash):
+        assert isinstance(blockhash, str)
+        assert len(blockhash) == 32
         return blockhash in self.blockchain
 
     def __contains__(self, blockhash):
-        assert isinstance(blockhash, str)
         return self.has_block(blockhash)
 
     def _store_block(self, block):
         self.blockchain.put(block.hash, block.serialize())
         self.blockchain.commit()
-        assert block == blocks.get_block(block.hash)
 
     def _initialize_blockchain(self, genesis=None):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
