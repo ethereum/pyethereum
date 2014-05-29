@@ -64,6 +64,9 @@ class Transaction(object):
 
     @classmethod
     def create(cls, args):
+        '''
+        :param args: data for a transaction in a block, already rlp decoded
+        '''
         kargs = dict()
         assert len(args) in (len(tx_structure), len(tx_structure) - 3)
         # Deserialize all properties
