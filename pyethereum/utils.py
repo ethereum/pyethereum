@@ -190,7 +190,15 @@ encoders = {
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
-    '''
+    ''' utility function to facilitate debug, it will print input args before
+    function call, and print return value after function call
+
+    usage:
+
+        @print_func_call
+        def some_func_to_be_debu():
+            pass
+
     :param ignore_first_arg: whether print the first arg or not.
     useful when ignore the `self` parameter of an object method call
     '''

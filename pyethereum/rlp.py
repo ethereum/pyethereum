@@ -1,3 +1,37 @@
+'''
+First byte of an encoded item
+
+    single byte, itself
+    |
+    |
+0x7f == 127
+
+0x80 == 128
+    |
+    [0, 55] byte long string
+    |
+0xb7 == 183
+
+0xb8 == 184
+    |
+    [55, ] long string
+    |
+0xbf == 191
+
+0xc0 == 192
+    |
+    [0, 55] byte long list
+    |
+0xf7 == 247
+
+0xf8 == 248
+    |
+    [55, ] long list
+    |
+0xff == 255
+'''
+
+
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
     # 0 is a special case, treated same as ''
@@ -8,6 +42,7 @@ def int_to_big_endian(integer):
         s = '0' + s
     return s.decode('hex')
 
+
 def big_endian_to_int(string):
     '''convert a big endian binary string to integer'''
     # '' is a special case, treated same as 0
@@ -15,7 +50,15 @@ def big_endian_to_int(string):
     s = string.encode('hex')
     return long(s, 16)
 
+
 def __decode(s, pos=0):
+    ''' decode string start at `pos`
+    :param s: string of rlp encoded data
+    :param pos: start position of `s` to decode from
+    :return:
+        o: decoded object
+        pos: end position of the obj in the string of rlp encoded data
+    '''
     assert pos < len(s), "read beyond end of string in __decode"
 
     fchar = ord(s[pos])
@@ -67,7 +110,15 @@ def into(data, pos):
         return pos + 1 + (fchar - 247)
 
 
-def next(data, pos):
+def next_item_pos(data, pos):
+    '''get position of next item in the encoded list or string:
+
+        if list, then get next item's start position
+        if string, then get next charactor's postion
+
+    :param data: rlp encoded from list or string
+    :pos: current item's position
+    '''
     fchar = ord(data[pos])
     if fchar < 128:
         return pos + 1
@@ -82,13 +133,13 @@ def next(data, pos):
 def descend(data, *indices):
     pos = 0
     for i in indices:
-        fin = next(data, pos)
+        finish_pos = next_item_pos(data, pos)
         pos = into(data, pos)
         for j in range(i):
-            pos = next(data, pos)
-            if pos >= fin:
+            pos = next_item_pos(data, pos)
+            if pos >= finish_pos:
                 raise Exception("End of list")
-    return data[pos: fin]
+    return data[pos: finish_pos]
 
 
 def encode_length(L, offset):
@@ -115,5 +166,9 @@ def encode(s):
 
 
 def concat(s):
+    '''
+    :param s: a list, each item is a string of a rlp encoded data
+    '''
+    assert isinstance(s, list)
     output = ''.join(s)
     return encode_length(len(output), 192) + output
