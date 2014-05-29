@@ -1,32 +1,32 @@
 '''
 First byte of an encoded item
 
-    single byte, itself
+    x: single byte, itself
     |
     |
 0x7f == 127
 
 0x80 == 128
     |
-    [0, 55] byte long string
+    x: [0, 55] byte long string, x-0x80 == length
     |
 0xb7 == 183
 
 0xb8 == 184
     |
-    [55, ] long string
+    x: [55, ] long string, x-0xf8 == length of the length
     |
 0xbf == 191
 
 0xc0 == 192
     |
-    [0, 55] byte long list
+    x: [0, 55] byte long list, x-0xc0 == length
     |
 0xf7 == 247
 
 0xf8 == 248
     |
-    [55, ] long list
+    x: [55, ] long list, x-0xf8 == length of the length
     |
 0xff == 255
 '''
