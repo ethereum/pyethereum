@@ -109,8 +109,11 @@ def encode(s):
         else:
             return encode_length(len(s), 128) + s
     elif isinstance(s, list):
-        output = ''
-        for item in s:
-            output += encode(item)
-        return encode_length(len(output), 192) + output
+        return concat(map(encode, s))
+
     raise TypeError("Encoding of %s not supported" % type(s))
+
+
+def concat(s):
+    output = ''.join(s)
+    return encode_length(len(output), 192) + output
