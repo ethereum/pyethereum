@@ -474,11 +474,11 @@ def test_add_longer_side_chain():
 @pytest.mark.wip
 def test_reward_unlces():
     """
-    B0 B1 B2 
+    B0 B1 B2
     B0 Uncle
 
     We raise the block's coinbase account by Rb, the block reward,
-    and the coinbase of each uncle by 7 of 8 that.    
+    and the coinbase of each uncle by 7 of 8 that.
     """
     k, v, k2, v2 = accounts()
     set_db()
@@ -537,6 +537,7 @@ def test_receive_cpp_chain():
         assert local_blk.check_proof_of_work(local_blk.nonce) == True
 
 
+@pytest.mark.wip
 def test_deserialize_cpp_block_42():
     # 54.204.10.41 / NEthereum(++)/ZeroGox/v0.5.9/ncurses/Linux/g++ V:17L
     # E       TypeError: ord() expected a character, but string of length 0 found
@@ -568,7 +569,7 @@ TransactionData [ hash=9003d7211c4b0d123778707fbdcabd93a6184be210390de4f73f89eae
     header_args, transaction_list, uncles = rlp.decode(
         hex_rlp_data.decode('hex'))
     for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
-        tx = transactions.Transaction.deserialize(tx_serialized)
+        tx = transactions.Transaction.create(tx_serialized)
 
 
 # TODO ##########################################
