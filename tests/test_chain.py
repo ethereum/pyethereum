@@ -537,7 +537,6 @@ def test_receive_cpp_chain():
         assert local_blk.check_proof_of_work(local_blk.nonce) == True
 
 
-@pytest.mark.wip
 def test_deserialize_cpp_block_42():
     # 54.204.10.41 / NEthereum(++)/ZeroGox/v0.5.9/ncurses/Linux/g++ V:17L
     # E       TypeError: ord() expected a character, but string of length 0 found
@@ -568,8 +567,8 @@ TransactionData [ hash=9003d7211c4b0d123778707fbdcabd93a6184be210390de4f73f89eae
         """f9016df8d3a00df28c56b0cc32ceb55299934fca74ff63956ede0ffd430367ebcb1bb94d42fea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794a70abb9ed4b5d82ed1d82194943349bcde036812a0203838e6ea7b03bce4b806ab4e5c069d5cd98ca2ba27a2d343d809cc6365e1cea078aaa0f3b726f8d9273ba145e0efd4a6b21183412582449cc9457f713422b5ae834142bd308609184e72a000830e8f328201f484537ca7c680a00000000000000000000000000000000000000000000000007d117303138a74e0f895f893f86d808609184e72a0008201f494e559de5527492bcb42ec68d07df0742a98ec3f1e888ac7230489e80000801ba018d646b8c4f7a804fdf7ba8da4d5dd049983e7d2b652ab902f7d4eaebee3e33ba0229ad485ef078d6e5f252db58dd2cce99e18af02028949896248aa01baf48b77a06e957f0f99502ad60a66a016f72957eff0f3a5bf791ad4a0606a44f35a6e09288201f4c0"""
     header_args, transaction_list, uncles = rlp.decode(
         hex_rlp_data.decode('hex'))
-    for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
-        tx = transactions.Transaction.create(tx_serialized)
+    for tx_data, _state_root, _gas_used_encoded in transaction_list:
+        tx = transactions.Transaction.create(tx_data)
 
 
 # TODO ##########################################
