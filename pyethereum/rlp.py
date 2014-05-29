@@ -52,6 +52,7 @@ def __decode(s, pos=0):
 
 
 def decode(s):
+    assert isinstance(s, str)
     if s:
         return __decode(s)[0]
 
