@@ -403,8 +403,7 @@ def test_invalid_transaction():
     blk = mine_next_block(blk, transactions=[tx])
     assert blk.get_balance(v) == 0
     assert blk.get_balance(v2) == utils.denoms.ether * 1
-    # should invalid transaction be included in blocks?
-    assert tx in blk.get_transactions()
+    assert tx not in blk.get_transactions()
 
 
 def test_add_side_chain():
