@@ -345,6 +345,12 @@ class Block(object):
     def delta_balance(self, address, value):
         return self._delta_item(address, 'balance', value)
 
+    def transfer_value(self, from_addr, to_addr, value):
+        assert value >= 0
+        if self.delta_balance(from_addr, -value):
+            return self.delta_balance(to_addr, value)
+        return False
+
     def get_code(self, address):
         return self._get_acct_item(address, 'code')
 
