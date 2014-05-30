@@ -33,17 +33,10 @@ class Miner():
         logger.debug('Difficulty %s', block.difficulty)
 
     def add_transaction(self, transaction):
-        """
-        (1) The transaction signature is valid;
-        (2) the transaction nonce is valid (equivalent to the
-            sender accounts current nonce);
-        (3) the gas limit is no smaller than the intrinsic gas,
-            g0 , used by the transaction;
-        (4) the sender account balance contains at least the cost,
-            v0, required in up-front payment.
-        """
         try:
             success, res = self.block.apply_transaction(transaction)
+            # if unsuccessfull the prerequistes were not fullfilled
+            # and the tx isinvalid, state should not have changed
             assert transaction in self.block.get_transactions()
         except Exception, e:
             logger.debug('rejected transaction %r: %s', transaction, e)

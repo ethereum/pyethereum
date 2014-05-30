@@ -62,16 +62,50 @@ class Message(object):
         self.data = data
 
 
+class InvalidTransaction(Exception):
+    pass
+
+
+class UnsignedTransaction(InvalidTransaction):
+    pass
+
+
+class InvalidNonce(InvalidTransaction):
+    pass
+
+
+class InsufficientBalance(InvalidTransaction):
+    pass
+
+
+class InsufficientStartGas(InvalidTransaction):
+    pass
+
+
 def apply_tx(block, tx):
+    # (1) The transaction signature is valid;
     if not tx.sender:
-        raise Exception("Trying to apply unsigned transaction!")
+        raise UnsignedTransaction(tx)
+    # (2) the transaction nonce is valid (equivalent to the
+    #     sender account's current nonce);
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
-        raise Exception("Invalid nonce! sender_acct:%s tx:%s" %
-                        (acctnonce, tx.nonce))
-    o = block.delta_balance(tx.sender, -tx.gasprice * tx.startgas)
-    if not o:
-        raise Exception("Insufficient balance to pay fee!")
+        raise InvalidNonce("sender_acct:%s tx:%s" %
+                           (acctnonce, tx.nonce))
+
+    # (3) the gas limit is no smaller than the intrinsic gas,
+    # g0, used by the transaction;
+    intrinsic_gas_used = GTXDATA * len(tx.serialize()) + GTXCOST
+    if tx.startgas < intrinsic_gas_used:
+        raise InsufficientStartGas(tx)
+
+    # (4) the sender account balance contains at least the
+    # cost, v0, required in up-front payment.
+    up_front_payment = tx.gasprice * tx.startgas
+    if block.get_balance(tx.sender) < up_front_payment:
+        raise InsufficientBalance(tx)
+
+    # start transacting
     if tx.to:
         block.increment_nonce(tx.sender)
     snapshot = block.snapshot()

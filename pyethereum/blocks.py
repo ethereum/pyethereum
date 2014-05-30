@@ -219,9 +219,11 @@ class Block(object):
                                        timestamp=kargs['timestamp'])
         block.finalize()  # this is the first potential state change
         # replay transactions
-        for tx_serialized, _state_root, _gas_used_encoded in transaction_list:
-            tx = transactions.Transaction.deserialize(tx_serialized)
-            processblock.apply_tx(block, tx)
+        for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
+            tx = transactions.Transaction.create(tx_lst_serialized)
+            success = block.apply_transaction(tx)
+            # if unsuccessfull the prerequistes were not fullfilled
+            # and the tx isinvalid, state should not have changed
             assert _state_root == block.state.root_hash
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
 
@@ -327,8 +329,11 @@ class Block(object):
         return [transactions.Transaction.create(tx) for
                 tx, s, g in self._list_transactions()]
 
-    def apply_transaction(self, tx):
-        return processblock.apply_tx(self, tx)
+    def apply_tx(self, tx):
+        try:
+            return processblock.apply_tx(self, tx)
+        except InvalidTransaction:
+            return False
 
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')
