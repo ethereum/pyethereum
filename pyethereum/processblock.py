@@ -94,7 +94,7 @@ def apply_tx(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    intrinsic_gas_used = GTXDATA * len(tx.serialize()) + GTXCOST
+    intrinsic_gas_used = GTXDATA * len(tx.data) + GTXCOST
     if tx.startgas < intrinsic_gas_used:
         raise InsufficientStartGas(tx)
 
