@@ -60,6 +60,7 @@ class Transaction(object):
 
     @classmethod
     def deserialize(cls, rlpdata):
+        assert isinstance(rlpdata, str)
         return cls.create(rlp.decode(rlpdata))
 
     @classmethod
