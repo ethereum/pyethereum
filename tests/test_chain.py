@@ -12,6 +12,10 @@ from pyethereum.db import DB as DB
 from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+
 tempdir = tempfile.mktemp()
 
 

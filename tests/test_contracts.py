@@ -4,7 +4,9 @@ import pyethereum.processblock as pb
 import pyethereum.blocks as b
 import pyethereum.transactions as t
 import pyethereum.utils as u
-
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 gasprice = 0
 startgas = 10000

@@ -5,6 +5,9 @@ import tempfile
 import pyethereum.indexdb
 import pyethereum.utils
 import pyethereum.db
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 tempdir = tempfile.mktemp()
 
