@@ -19,6 +19,32 @@ def accounts():
     return k, v, k2, v2
 
 
+
+def test_transfer():
+    k, v, k2, v2 = accounts()
+    blk = b.genesis({v: u.denoms.ether * 1})
+    b_v = blk.get_balance(v)
+    b_v2 = blk.get_balance(v2)
+    value = 42
+    success = blk.transfer_value(v, v2, value)
+    assert success
+    assert blk.get_balance(v) == b_v - value
+    assert blk.get_balance(v2) == b_v2 + value
+
+def test_failing_transfer():
+    k, v, k2, v2 = accounts()
+    blk = b.genesis({v: u.denoms.ether * 1})
+    b_v = blk.get_balance(v)
+    b_v2 = blk.get_balance(v2)
+    value =  u.denoms.ether * 2
+    # should fail
+    success = blk.transfer_value(v, v2, value)
+    assert not success
+    assert blk.get_balance(v) == b_v
+    assert blk.get_balance(v2) == b_v2
+
+
+
 def test_namecoin():
     k, v, k2, v2 = accounts()
 
