@@ -137,7 +137,7 @@ def deserialize_child(parent, rlpdata):
         logger.debug('applying %r', tx)
         logger.debug('applying %r', tx.to_dict())
         success, output = processblock.apply_transaction(block, tx)
-        assert success
+        logger.debug('success: %r', success)
         assert utils.decode_int(_gas_used_encoded) == block.gas_used
         assert _state_root == block.state.root_hash
 

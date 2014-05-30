@@ -222,7 +222,6 @@ class Block(object):
         for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
             success, output = processblock.apply_transaction(block, tx)
-            assert success
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
 
