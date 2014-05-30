@@ -31,43 +31,6 @@ else:
 '''
 
 
-def test_transfer():
-    k, v, k2, v2 = accounts()
-    blk = b.genesis({v: u.denoms.ether * 1})
-    b_v = blk.get_balance(v)
-    b_v2 = blk.get_balance(v2)
-    value = 42
-    success = blk.transfer_value(v, v2, value)
-    assert success
-    assert blk.get_balance(v) == b_v - value
-    assert blk.get_balance(v2) == b_v2 + value
-
-def test_failing_transfer():
-    k, v, k2, v2 = accounts()
-    blk = b.genesis({v: u.denoms.ether * 1})
-    b_v = blk.get_balance(v)
-    b_v2 = blk.get_balance(v2)
-    value =  u.denoms.ether * 2
-    # should fail
-    success = blk.transfer_value(v, v2, value)
-    assert not success
-    assert blk.get_balance(v) == b_v
-    assert blk.get_balance(v2) == b_v2
-
-
-
-
-def test_gas_deduction():
-    k, v, k2, v2 = accounts()
-    blk = b.genesis({v: u.denoms.ether * 1})
-    gasprice = 1
-    startgas = 10000
-    code1 = serpent.compile(namecoin_code)
-    tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
-    success, addr = pb.apply_tx(blk, tx1)
-    assert success
-
-
 def test_namecoin():
     k, v, k2, v2 = accounts()
 
