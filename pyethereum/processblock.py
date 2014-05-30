@@ -81,6 +81,14 @@ class InsufficientStartGas(InvalidTransaction):
     pass
 
 
+class BlockGasLimitReached(InvalidTransaction):
+    pass
+
+
+class GasPriceTooLow(InvalidTransaction):
+    pass
+
+
 def apply_transaction(block, tx):
 
     def rp(actual, target):
@@ -89,6 +97,7 @@ def apply_transaction(block, tx):
     # (1) The transaction signature is valid;
     if not tx.sender:
         raise UnsignedTransaction(tx)
+
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
     acctnonce = block.get_nonce(tx.sender)
@@ -108,11 +117,22 @@ def apply_transaction(block, tx):
         raise InsufficientBalance(
             rp(block.get_balance(tx.sender), total_cost))
 
-    # start transacting
+    # check offered gas price is enough
+    if tx.gasprice < block.min_gas_price:
+        raise GasPriceTooLow(rp(tx.gasprice, block.min_gas_price))
+
+    # check block gas limit
+    if block.gas_used + tx.startgas > block.gas_limit:
+        BlockGasLimitReached(
+            rp(block.gas_used + tx.startgas, block.gas_limit))
+
+    # start transacting #################
     if tx.to:
         block.increment_nonce(tx.sender)
+
     # buy startgas
-    success = block.transfer_value(tx.sender, block.coinbase, tx.gasprice * tx.startgas)
+    success = block.transfer_value(tx.sender, block.coinbase,
+                                   tx.gasprice * tx.startgas)
     assert success
 
     snapshot = block.snapshot()
