@@ -108,7 +108,8 @@ def apply_tx(block, tx):
     if tx.to:
         block.increment_nonce(tx.sender)
     # buy startgas
-    assert block.transfer_value(tx.sender, block.coinbase, tx.gasprice * tx.startgas)
+    success = block.transfer_value(tx.sender, block.coinbase, tx.gasprice * tx.startgas)
+    assert success
 
     snapshot = block.snapshot()
     message_gas = tx.startgas - intrinsic_gas_used
