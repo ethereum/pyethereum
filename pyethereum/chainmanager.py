@@ -193,6 +193,7 @@ class ChainManager(StoppableLoopThread):
         # assuming to receive chain order w/ newest block first
         for t_block in reversed(transient_blocks):
             logger.debug('Trying to deserialize %r', t_block)
+            logger.debug(t_block.rlpdata.encode('hex'))
             try:
                 block = blocks.Block.deserialize(t_block.rlpdata)
             except processblock.InvalidTransaction as e:
