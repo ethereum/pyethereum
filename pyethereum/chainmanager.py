@@ -33,25 +33,25 @@ class Miner():
         logger.debug('Difficulty %s', block.difficulty)
 
     def add_transaction(self, transaction):
-        block_state = block.state_root
+        block_state = self.block.state_root
         try:
             success, output = processblock.apply_transaction(
                 self.block, transaction)
         except processblock.InvalidTransaction as e:
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state must not have changed
-            logger.debug('Invalid Transaction %r: %s', transaction, e)
-            assert block_state == block.state_root
+            logger.debug('Invalid Transaction %r: %r', transaction, e)
+            assert block_state == self.block.state_root
             return False
         if not success:
             logger.debug('transaction %r not applied', transaction)
-            assert block_state == block.state_root
+            assert block_state == self.block.state_root
         else:
             assert transaction in self.block.get_transactions()
             logger.debug(
                 'transaction %r applied to %r res: %r',
                 transaction, self.block, output)
-            assert block_state != block.state_root
+            assert block_state != self.block.state_root
             return True
 
     def get_transactions(self):
