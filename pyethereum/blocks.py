@@ -140,10 +140,10 @@ class Block(object):
         if transaction_list:
             # support init with transactions only if state is known
             assert self.state.root_hash_valid()
-            for tx_serialized, state_root, gas_used_encoded \
+            for tx_lst_serialized, state_root, gas_used_encoded \
                     in transaction_list:
                 self._add_transaction_to_list(
-                    tx_serialized, state_root, gas_used_encoded)
+                    tx_lst_serialized, state_root, gas_used_encoded)
 
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
@@ -299,22 +299,24 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
-    def _add_transaction_to_list(self, tx_serialized,
+    def _add_transaction_to_list(self, tx_lst_serialized,
                                  state_root, gas_used_encoded):
         # adds encoded data # FIXME: the constructor should get objects
-        data = [tx_serialized, state_root, gas_used_encoded]
+        assert isinstance(tx_lst_serialized, list)
+        data = [tx_lst_serialized, state_root, gas_used_encoded]
         self.transactions.update(
             utils.encode_int(self.transaction_count), rlp.encode(data))
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
         # used by processblocks apply_tx only. not atomic!
-        self._add_transaction_to_list(tx.serialize(),
+        tx_lst_serialized = rlp.decode(tx.serialize())
+        self._add_transaction_to_list(tx_lst_serialized,
                                       self.state_root,
                                       utils.encode_int(self.gas_used))
 
     def _list_transactions(self):
-        # returns [[tx_serialized, state_root, gas_used_encoded],...]
+        # returns [[tx_lst_serialized, state_root, gas_used_encoded],...]
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(rlp.decode(
@@ -322,7 +324,7 @@ class Block(object):
         return txlist
 
     def get_transactions(self):
-        return [transactions.Transaction.deserialize(tx) for
+        return [transactions.Transaction.create(tx) for
                 tx, s, g in self._list_transactions()]
 
     def apply_transaction(self, tx):
