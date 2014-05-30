@@ -64,7 +64,7 @@ class Packeter(object):
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
     SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 17
+    PROTOCOL_VERSION = 19
 
     # is the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
