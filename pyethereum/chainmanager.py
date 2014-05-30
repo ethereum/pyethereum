@@ -208,7 +208,9 @@ class ChainManager(StoppableLoopThread):
                     logger.debug('%s with unknown parent', t_block)
                     if t_block.number > self.head.number:
                         self.synchronize_blockchain()
-                    else:
+                    else: # FIXME: Issue #108
+                        logger.debug(
+                            'UNIMPLEMENTED: Need sidechain with parent of %s', t_block)
                         # FIXME synchronize with side chain
                         # check for largest number
                 break
