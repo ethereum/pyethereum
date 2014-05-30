@@ -54,7 +54,6 @@ def verify(block, parent):
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data):
-        assert gas >= 0
         self.sender = sender
         self.to = to
         self.value = value
@@ -108,25 +107,30 @@ def apply_tx(block, tx):
     # start transacting
     if tx.to:
         block.increment_nonce(tx.sender)
+    # buy startgas
+    block.transfer_value(tx.sender, block.coinbase, tx.gasprice * tx.startgas)
+
     snapshot = block.snapshot()
-    message_gas = tx.startgas - GTXDATA * len(tx.serialize()) - GTXCOST
+    message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     if tx.to:
-        result, gas, data = apply_msg(block, tx, message)
+        result, gas_remained, data = apply_msg(block, tx, message)
     else:
-        result, gas, data = create_contract(block, tx, message)
+        result, gas_remained, data = create_contract(block, tx, message)
+    assert gas_remained >= 0
     if debug:
-        print('applied tx, result', result, 'gas', gas, 'data/code',
+        print('applied tx, result', result, 'gas remained', gas_remained, 'data/code',
               ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
-        block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
         output = OUT_OF_GAS
     else:
-        block.delta_balance(tx.sender, tx.gasprice * gas)
-        block.delta_balance(block.coinbase, tx.gasprice * (tx.startgas - gas))
-        block.gas_used += tx.startgas - gas
+        gas_used = tx.startgas - gas_remained
+        # sell remaining gas
+        block.transfer_value(
+            block.coinbase, tx.sender, tx.gasprice * gas_remained)
+        block.gas_used += gas_used
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
     block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
@@ -191,8 +195,7 @@ def create_contract(block, tx, msg):
     msg.to = recvaddr
     block.increment_nonce(msg.sender)
     # Transfer value, instaquit if not enough
-    block.delta_balance(recvaddr, msg.value)
-    o = block.delta_balance(msg.sender, msg.value)
+    o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
         return 0, msg.gas
     compustate = Compustate(gas=msg.gas)
