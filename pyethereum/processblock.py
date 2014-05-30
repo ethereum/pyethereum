@@ -82,6 +82,10 @@ class InsufficientStartGas(InvalidTransaction):
 
 
 def apply_transaction(block, tx):
+
+    def rp(actual, target):
+        return '%r, actual:%r target:%r' % (tx, actual, target)
+
     # (1) The transaction signature is valid;
     if not tx.sender:
         raise UnsignedTransaction(tx)
@@ -89,20 +93,20 @@ def apply_transaction(block, tx):
     #     sender account's current nonce);
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
-        raise InvalidNonce("sender_acct:%s tx:%s" %
-                           (acctnonce, tx.nonce))
+        raise InvalidNonce(rp(tx.nonce, acctnonce))
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
     intrinsic_gas_used = GTXDATA * len(tx.data) + GTXCOST
     if tx.startgas < intrinsic_gas_used:
-        raise InsufficientStartGas(tx)
+        raise InsufficientStartGas(rp(tx.startgas, intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
     # cost, v0, required in up-front payment.
-    up_front_payment = tx.gasprice * tx.startgas
-    if block.get_balance(tx.sender) < up_front_payment:
-        raise InsufficientBalance(tx)
+    total_cost = tx.value + tx.gasprice * tx.startgas
+    if block.get_balance(tx.sender) < total_cost:
+        raise InsufficientBalance(
+            rp(block.get_balance(tx.sender), total_cost))
 
     # start transacting
     if tx.to:
