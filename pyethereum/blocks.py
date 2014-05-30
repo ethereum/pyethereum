@@ -53,8 +53,8 @@ for i, (name, typ, default) in enumerate(block_structure):
     block_structure_rev[name] = [i, typ, default]
 
 acct_structure = [
-    ["balance", "int", 0],
     ["nonce", "int", 0],
+    ["balance", "int", 0],
     ["storage", "trie_root", trie.BLANK_ROOT],
     ["code", "hash", ""],
 ]
