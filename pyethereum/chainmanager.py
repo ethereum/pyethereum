@@ -379,6 +379,13 @@ def handle_local_chain_requested(sender, peer, block_hashes, count, **kwargs):
                 return
 
     if len(block_hashes):
+        # handle genesis special case
+        if block_hashes[-1] in chain_manager:
+            assert chain_manager.get(block_hashes[-1]).is_genesis()
+            block_hashes.pop(-1)
+            if not block_hashes:
+                return
+        assert block_hashes[-1] not in chain_manager
         #  If none of the parents are in the current
         logger.debug(
             "Sending NotInChain: %r", block_hashes[-1].encode('hex')[:4])
