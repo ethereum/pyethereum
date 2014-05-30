@@ -6,11 +6,10 @@ import time
 import blocks
 import transactions
 import trie
+import logging
+logger = logging.getLogger(__name__)
 
-
-debug = 0
-
-# params
+expensive_debug = False
 
 GSTEP = 1
 GSTOP = 0
@@ -28,8 +27,6 @@ OUT_OF_GAS = -1
 
 
 def verify(block, parent):
-    if block.timestamp < parent.timestamp:
-        print block.timestamp, parent.timestamp
     assert block.timestamp >= parent.timestamp
     assert block.timestamp <= time.time() + 900
     block2 = blocks.Block.init_from_parent(parent,
@@ -143,9 +140,8 @@ def apply_transaction(block, tx):
     else:
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
-    if debug:
-        print('applied tx, result', result, 'gas remained', gas_remained, 'data/code',
-              ''.join(map(chr, data)).encode('hex'))
+    logger.debug('applied tx, result %s gas remained %s data/code %s', result, gas_remained, 
+          ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -193,18 +189,16 @@ def apply_msg(block, tx, msg):
     compustate = Compustate(gas=msg.gas)
     # Main loop
     while 1:
-        if debug:
-            print({
-                "Stack": compustate.stack,
-                "PC": compustate.pc,
-                "Gas": compustate.gas,
-                "Memory": decode_datalist(compustate.memory),
-                "Storage": block.get_storage(msg.to).to_dict(),
-            })
+        logger.debug({
+            "Stack": compustate.stack,
+            "PC": compustate.pc,
+            "Gas": compustate.gas,
+            "Memory": decode_datalist(compustate.memory),
+            "Storage": block.get_storage(msg.to).to_dict(),
+        })
         o = apply_op(block, tx, msg, code, compustate)
         if o is not None:
-            if debug:
-                print('done', o)
+            logger.debug('done %s', o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, 0, []
@@ -301,20 +295,19 @@ def apply_op(block, tx, msg, code, compustate):
     # out of gas error
     fee = calcfee(block, tx, msg, compustate, op)
     if fee > compustate.gas:
-        if debug:
-            print("Out of gas", compustate.gas, "need", fee)
-            print(op, list(reversed(compustate.stack)))
+        logger.debug("Out of gas %s need %s", compustate.gas, fee)
+        logger.debug('%s %s', op, list(reversed(compustate.stack)))
         return OUT_OF_GAS
     stackargs = []
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
-    if debug:
+    if expensive_debug:
         import serpent
         if op[:4] == 'PUSH':
             start, n = compustate.pc + 1, int(op[4:])
-            print(op, utils.big_endian_to_int(code[start:start + n]))
+            logger.debug('%s %s ', op, utils.big_endian_to_int(code[start:start + n]))
         else:
-            print(op, ' '.join(map(str, stackargs)),
+            logger.debug('%s %s ', op, ' '.join(map(str, stackargs)),
                   serpent.decode_datalist(compustate.memory))
     # Apply operation
     oldgas = compustate.gas
@@ -493,12 +486,10 @@ def apply_op(block, tx, msg, code, compustate):
         gas = stackargs[0]
         value = stackargs[1]
         data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
-        if debug:
-            print("Sub-contract:", msg.to, value, gas, data)
+        logger.debug("Sub-contract: %s %s %s %s ", msg.to, value, gas, data)
         addr, gas, code = create_contract(
             block, tx, Message(msg.to, '', value, gas, data))
-        if debug:
-            print("Output of contract creation:", addr, code)
+        logger.debug("Output of contract creation: %s  %s ", addr, code)
         if addr:
             stk.append(utils.coerce_to_int(addr))
         else:
@@ -513,14 +504,12 @@ def apply_op(block, tx, msg, code, compustate):
         to = (('\x00' * (32 - len(to))) + to)[12:]
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
-        if debug:
-            print("Sub-call:", utils.coerce_addr_to_hex(msg.to),
+        logger.debug("Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
                   utils.coerce_addr_to_hex(to), value, gas, data)
         result, gas, data = apply_msg(
             block, tx, Message(msg.to, to, value, gas, data))
-        if debug:
-            print("Output of sub-call:", result, data, "length", len(data),
-                  "expected", stackargs[6])
+        logger.debug("Output of sub-call: %s %s length %s expected %s", result, data,len(data),
+                  stackargs[6])
         for i in range(stackargs[6]):
             mem[stackargs[5] + i] = 0
         if result == 0:
