@@ -221,7 +221,7 @@ class Block(object):
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
-            success = block.apply_transaction(tx)
+            success, output = processblock.apply_transaction(block, tx)
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state should not have changed
             assert _state_root == block.state.root_hash
@@ -311,7 +311,6 @@ class Block(object):
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
-        # used by processblocks apply_tx only. not atomic!
         tx_lst_serialized = rlp.decode(tx.serialize())
         self._add_transaction_to_list(tx_lst_serialized,
                                       self.state_root,
@@ -328,12 +327,6 @@ class Block(object):
     def get_transactions(self):
         return [transactions.Transaction.create(tx) for
                 tx, s, g in self._list_transactions()]
-
-    def apply_tx(self, tx):
-        try:
-            return processblock.apply_tx(self, tx)
-        except InvalidTransaction:
-            return False
 
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')

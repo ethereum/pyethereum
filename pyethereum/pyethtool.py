@@ -63,7 +63,7 @@ def applytx(blockdata, txdata, debug=0, limit=2 ** 100):
         raise Exception("Transaction is asking for too much gas!")
     if debug:
         processblock.debug = 1
-    success, o = processblock.apply_tx(block, tx)
+    success, o = processblock.apply_transaction(block, tx)
     return {
         "block": block.hex_serialize(),
         "result": ''.join(o).encode('hex') if tx.to else ''.join(o)

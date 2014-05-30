@@ -43,7 +43,7 @@ def verify(block, parent):
         tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
         tx = transactions.Transaction.create(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
-        apply_tx(block2, tx)
+        apply_transaction(block2, tx)
         assert s == block2.state.root_hash
         assert g == utils.encode_int(block2.gas_used)
     assert block2.state.root_hash == block.state.root_hash
@@ -81,7 +81,7 @@ class InsufficientStartGas(InvalidTransaction):
     pass
 
 
-def apply_tx(block, tx):
+def apply_transaction(block, tx):
     # (1) The transaction signature is valid;
     if not tx.sender:
         raise UnsignedTransaction(tx)

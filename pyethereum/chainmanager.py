@@ -34,7 +34,9 @@ class Miner():
 
     def add_transaction(self, transaction):
         try:
-            success, res = self.block.apply_transaction(transaction)
+            success, output = processblock.apply_transaction(
+                self.block, transaction)
+        except processblock.InvalidTransaction as e:
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state should not have changed
             assert transaction in self.block.get_transactions()
