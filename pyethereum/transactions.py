@@ -104,6 +104,14 @@ class Transaction(object):
     def hex_hash(self):
         return self.hash.encode('hex')
 
+    def to_dict(self):
+        h = {}
+        for name, typ, default in tx_structure:
+            h[name] = getattr(self, name)
+        h['msglen'] = len(self.serialize())
+        return h
+
+
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
 
