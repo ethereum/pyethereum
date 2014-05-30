@@ -19,6 +19,15 @@ def accounts():
     return k, v, k2, v2
 
 
+namecoin_code =\
+    '''
+if !contract.storage[msg.data[0]]:
+    contract.storage[msg.data[0]] = msg.data[1]
+    return(1)
+else:
+    return(0)
+'''
+
 
 def test_transfer():
     k, v, k2, v2 = accounts()
@@ -45,20 +54,24 @@ def test_failing_transfer():
 
 
 
+
+def test_gas_deduction():
+    k, v, k2, v2 = accounts()
+    blk = b.genesis({v: u.denoms.ether * 1})
+    gasprice = 1
+    startgas = 10000
+    code1 = serpent.compile(namecoin_code)
+    tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
+    success, addr = pb.apply_tx(blk, tx1)
+    assert success
+
+
 def test_namecoin():
     k, v, k2, v2 = accounts()
 
     blk = b.genesis({v: u.denoms.ether * 1})
 
-    # tx1
-    scode1 = '''
-if !contract.storage[msg.data[0]]:
-    contract.storage[msg.data[0]] = msg.data[1]
-    return(1)
-else:
-    return(0)
-    '''
-    code1 = serpent.compile(scode1)
+    code1 = serpent.compile(namecoin_code)
     tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
     s, addr = pb.apply_tx(blk, tx1)
 
