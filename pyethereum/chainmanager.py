@@ -200,20 +200,17 @@ class ChainManager(StoppableLoopThread):
                     'Malicious %r w/ invalid Transaction %r', t_block, e)
                 continue
             except blocks.UnknownParentException:
-
-                number = t_block.number
                 if t_block.prevhash == blocks.GENESIS_PREVHASH:
-                    logger.debug('Incompatible Genesis %r', t_block)
+                    logger.debug('Received Incompatible Genesis %r', t_block)
                     if disconnect_cb:
                         disconnect_cb(reason='Wrong genesis block')
                 else:
                     logger.debug('%s with unknown parent', t_block)
-                    if number > self.head.number:
+                    if t_block.number > self.head.number:
                         self.synchronize_blockchain()
                     else:
                         # FIXME synchronize with side chain
                         # check for largest number
-                        pass
                 break
             if block.hash in self:
                 logger.debug('Known %r', block)
