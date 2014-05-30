@@ -108,7 +108,7 @@ class Transaction(object):
         h = {}
         for name, typ, default in tx_structure:
             h[name] = getattr(self, name)
-        h['msglen'] = len(self.serialize())
+        h['sender'] = self.sender
         return h
 
 
