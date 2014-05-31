@@ -178,28 +178,6 @@ def test_genesis_db():
     assert blk != blk3
 
 
-def test_trie_state_root_nodep(genesis_fixture):
-    def int_to_big_endian(integer):
-        if integer == 0:
-            return ''
-        s = '%x' % integer
-        if len(s) & 1:
-            s = '0' + s
-        return s.decode('hex')
-    EMPTYSHA3 = utils.sha3('')
-    assert EMPTYSHA3.encode('hex') == \
-        'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
-    ZERO_ENC = int_to_big_endian(0)
-    assert ZERO_ENC == ''
-    state = trie.Trie(tempfile.mktemp())
-    for address, value in genesis_fixture['initial_alloc'].items():
-        acct = [
-            int_to_big_endian(int(value)), ZERO_ENC, trie.BLANK_ROOT, EMPTYSHA3]
-        state.update(address.decode('hex'), rlp.encode(acct))
-    assert state.root_hash.encode(
-        'hex') == genesis_fixture['genesis_state_root']
-
-
 def test_genesis_state_root(genesis_fixture):
     # https://ethereum.etherpad.mozilla.org/12
     set_db()
