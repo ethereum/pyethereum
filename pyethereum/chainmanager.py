@@ -28,8 +28,8 @@ class Miner():
 
     def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
-        block = self.block = blocks.Block.init_from_parent(parent, coinbase,
-                                                           uncles=[u.hash for u in uncles])
+        block = self.block = blocks.Block.init_from_parent(
+            parent, coinbase, uncles=[u.hash for u in uncles])
         block.finalize()
         logger.debug('Mining #%d %s', block.number, block.hex_hash())
         logger.debug('Difficulty %s', block.difficulty)
@@ -155,10 +155,30 @@ class ChainManager(StoppableLoopThread):
         self._store_block(genesis)
         self._update_head(genesis)
 
-    def synchronize_blockchain(self):
-        logger.info('synchronize requested for head %r', self.head)
+    def synchronize_newer_blockchain(self):
+        logger.info('sync newer request for head %r', self.head)
         signals.remote_chain_requested.send(
-            sender=None, parents=[self.head.hash], count=256)
+            sender=None, parents=[self.head.hash], count=NUM_BLOCKS_PER_REQUEST)
+
+    def synchronize_older_blockchain(self, block_number):
+        # block_number: for block we search the parent for
+        # seek 1st possible branching block
+        logger.info('sync older request for parent of block #%r', block_number)
+        blk = self.head
+        while blk.number > block_number:
+            blk = blk.get_parent()
+
+        # collect blocks
+        requested = []
+        while len(requested) < NUM_BLOCKS_PER_REQUEST and blk.has_parent():
+            blk = blk.get_parent()
+            requested.append(blk)
+        logger.debug('requesting %d blocks', len(requested))
+        # newest first, GetChain, will try to answer w/ older ones if the
+        # the newest is not in the canonical chain
+        # expected answer is the first here known block in the canonical chain
+        signals.remote_chain_requested.send(sender=None,
+                                            parents=[b.hash for b in requested], count=NUM_BLOCKS_PER_REQUEST)
 
     def loop_body(self):
         ts = time.time()
@@ -192,42 +212,42 @@ class ChainManager(StoppableLoopThread):
     def receive_chain(self, transient_blocks, disconnect_cb=None):
         old_head = self.head
 
-        # assuming to receive chain order w/ newest block first
-        for t_block in reversed(transient_blocks):
-            logger.debug('Trying to deserialize %r', t_block)
-            logger.debug(t_block.rlpdata.encode('hex'))
-            try:
-                block = blocks.Block.deserialize(t_block.rlpdata)
-            except processblock.InvalidTransaction as e:
-                logger.debug(
-                    'Malicious %r w/ invalid Transaction %r', t_block, e)
-                continue
-            except blocks.UnknownParentException:
-                if t_block.prevhash == blocks.GENESIS_PREVHASH:
-                    logger.debug('Received Incompatible Genesis %r', t_block)
-                    if disconnect_cb:
-                        disconnect_cb(reason='Wrong genesis block')
+        with self.lock:
+            # assuming to receive chain order w/ newest block first
+            for t_block in reversed(transient_blocks):
+                logger.debug('Trying to deserialize %r', t_block)
+                logger.debug(t_block.rlpdata.encode('hex'))
+                try:
+                    block = blocks.Block.deserialize(t_block.rlpdata)
+                except processblock.InvalidTransaction as e:
+                    logger.debug(
+                        'Malicious %r w/ invalid Transaction %r', t_block, e)
+                    continue
+                except blocks.UnknownParentException:
+                    if t_block.prevhash == blocks.GENESIS_PREVHASH:
+                        logger.debug('Rec Incompatible Genesis %r', t_block)
+                        if disconnect_cb:
+                            disconnect_cb(reason='Wrong genesis block')
+                    else:
+                        logger.debug('%s with unknown parent', t_block)
+                        if t_block.number > self.head.number:
+                            self.synchronize_newer_blockchain()
+                        else:
+                            logger.debug(
+                                'Need parent of %s', t_block)
+                            self.synchronize_older_blockchain(t_block.number)
+                    break
+                if block.hash in self:
+                    logger.debug('Known %r', block)
                 else:
-                    logger.debug('%s with unknown parent', t_block)
-                    if t_block.number > self.head.number:
-                        self.synchronize_blockchain()
-                    else: # FIXME: Issue #108
-                        logger.debug(
-                            'UNIMPLEMENTED: Need sidechain with parent of %s', t_block)
-                        # FIXME synchronize with side chain
-                        # check for largest number
-                break
-            if block.hash in self:
-                logger.debug('Known %r', block)
-            else:
-                if block.has_parent():
-                    success = self.add_block(block)
-                    if success:
-                        logger.debug('Added %r', block)
-                else:
-                    logger.debug('Orphant %r', block)
-        if self.head != old_head:
-            self.synchronize_blockchain()
+                    if block.has_parent():
+                        success = self.add_block(block)
+                        if success:
+                            logger.debug('Added %r', block)
+                    else:
+                        logger.debug('Orphant %r', block)
+            if self.head != old_head:
+                self.synchronize_newer_blockchain()
 
     def add_block(self, block):
         "returns True if block was added sucessfully"
@@ -251,22 +271,21 @@ class ChainManager(StoppableLoopThread):
             logger.debug('Invalid nonce %r', block)
             return False
 
-        with self.lock:
-            if block.has_parent():
-                try:
-                    processblock.verify(block, block.get_parent())
-                except AssertionError, e:
-                    logger.debug('verification failed: %s', str(e))
-                    processblock.verify(block, block.get_parent())
-                    return False
+        if block.has_parent():
+            try:
+                processblock.verify(block, block.get_parent())
+            except AssertionError as e:
+                logger.debug('verification failed: %s', str(e))
+                processblock.verify(block, block.get_parent())
+                return False
 
-            self._children_index.append(block.prevhash, block.hash)
-            self._store_block(block)
-            # set to head if this makes the longest chain w/ most work
-            if block.chain_difficulty() > self.head.chain_difficulty():
-                logger.debug('New Head %r', block)
-                self._update_head(block)
-            return True
+        self._children_index.append(block.prevhash, block.hash)
+        self._store_block(block)
+        # set to head if this makes the longest chain w/ most work
+        if block.chain_difficulty() > self.head.chain_difficulty():
+            logger.debug('New Head %r', block)
+            self._update_head(block)
+        return True
 
     def get_children(self, block):
         return [self.get(c) for c in self._children_index.get(block.hash)]
