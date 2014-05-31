@@ -16,7 +16,7 @@ def step_impl(context):
     code = '6011515b525b600a37f260205b6000355b54205b525b54602052f2'.decode('hex')
 
     tx_contract = transactions.contract(0,10,10**30, 10**30, code).sign(context.key)
-    success, context.contract = processblock.apply_tx(context.gen, tx_contract)
+    success, context.contract = processblock.apply_transaction(context.gen, tx_contract)
     assert(success)
 
 
@@ -25,7 +25,7 @@ def step_impl(context):
     word = 'hello'
     msg = context.msg = '\x00'*(32-len(word))+word
     tx = transactions.Transaction(1, 100, 10**40, context.contract, 0, msg).sign(context.key)
-    success, context.ans = processblock.apply_tx(context.gen, tx)
+    success, context.ans = processblock.apply_transaction(context.gen, tx)
     assert(success)
 
 
@@ -36,7 +36,7 @@ def step_impl(context):
     if len(word)%2 != 0: word = '0' + word
     msg = context.msg = '\x00'*(32-len(word)/2)+word.decode('hex')
     tx = transactions.Transaction(1, 100, 10**40, context.contract, 0, msg).sign(context.key)
-    success, context.ans = processblock.apply_tx(context.gen, tx)
+    success, context.ans = processblock.apply_transaction(context.gen, tx)
     assert(success)
 
 @when(u'a msg is sent to the contract with msg.data[0] = \'a5b2cc1f54\'')
@@ -44,7 +44,7 @@ def step_impl(context):
     word = 'a5b2cc1f54'
     msg = context.msg = '\x00'*(32-len(word))+word
     tx = transactions.Transaction(1, 100, 10**40, context.contract, 0, msg).sign(context.key)
-    success, context.ans = processblock.apply_tx(context.gen, tx)
+    success, context.ans = processblock.apply_transaction(context.gen, tx)
     assert(success)
 
 @then(u'the contract should return the result of sha3(msg.data[0])')
