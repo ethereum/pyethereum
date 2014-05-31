@@ -31,11 +31,12 @@ def verify(block, parent):
     assert block.timestamp <= time.time() + 900
     block2 = blocks.Block.init_from_parent(parent,
                                            block.coinbase,
-                                           block.extra_data,
-                                           block.timestamp)
+                                           extra_data=block.extra_data,
+                                           timestamp=block.timestamp,
+                                           uncles=block.uncles)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
-    block2.finalize()  # this is the first potential state change
+    block2.finalize()
     for i in range(block.transaction_count):
         tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
         tx = transactions.Transaction.create(tx)

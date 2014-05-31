@@ -26,9 +26,9 @@ class Miner():
 
     def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
-        block = self.block = blocks.Block.init_from_parent(parent, coinbase)
-        block.uncles = [u.hash for u in uncles]
-        block.finalize()  # order?
+        block = self.block = blocks.Block.init_from_parent(parent, coinbase,
+                                                           uncles=[u.hash for u in uncles])
+        block.finalize()
         logger.debug('Mining #%d %s', block.number, block.hex_hash())
         logger.debug('Difficulty %s', block.difficulty)
 

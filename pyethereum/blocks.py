@@ -499,10 +499,10 @@ class Block(object):
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
-                         timestamp=int(time.time())):
+                         timestamp=int(time.time()), uncles=[]):
         return Block(
             prevhash=parent.hash,
-            uncles_hash=utils.sha3(rlp.encode([])),
+            uncles_hash=utils.sha3(rlp.encode(uncles)),
             coinbase=coinbase,
             state_root=parent.state.root_hash,
             tx_list_root=trie.BLANK_ROOT,
@@ -515,7 +515,7 @@ class Block(object):
             extra_data=extra_data,
             nonce='',
             transaction_list=[],
-            uncles=[])
+            uncles=uncles)
 
 # put the next two functions into this module to support Block.get_parent
 # should be probably be in chainmanager otherwise
