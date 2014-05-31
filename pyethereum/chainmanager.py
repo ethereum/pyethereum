@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
+NUM_BLOCKS_PER_REQUEST = 256
+
 
 class Miner():
 
@@ -291,7 +293,7 @@ class ChainManager(StoppableLoopThread):
         logger.debug("get_transactions called")
         return self.miner.get_transactions()
 
-    def get_chain(self, start='', count=256):
+    def get_chain(self, start='', count=NUM_BLOCKS_PER_REQUEST):
         "return 'count' blocks starting from head or start"
         logger.debug("get_chain: start:%s count%d", start.encode('hex'), count)
         blocks = []
@@ -409,9 +411,10 @@ def new_peer_connected(sender, peer, **kwargs):
         logger.debug("send get transactions")
         peer.send_GetTransactions()
     # request chain
-    blocks = [b.hash for b in chain_manager.get_chain(count=256)]
+    blocks = [b.hash for b in chain_manager.get_chain(
+        count=NUM_BLOCKS_PER_REQUEST)]
     with peer.lock:
-        peer.send_GetChain(blocks, count=256)
+        peer.send_GetChain(blocks, count=NUM_BLOCKS_PER_REQUEST)
         logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
 
 
