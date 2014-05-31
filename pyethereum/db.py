@@ -1,4 +1,5 @@
 import leveldb
+import threading
 
 databases = {}
 
@@ -8,8 +9,9 @@ class DB(object):
     def __init__(self, dbfile):
         self.dbfile = dbfile
         if dbfile not in databases:
-            databases[dbfile] = (leveldb.LevelDB(dbfile), dict())
-        self.db, self.uncommitted = databases[dbfile]
+            databases[dbfile] = (
+                leveldb.LevelDB(dbfile), dict(), threading.Lock())
+        self.db, self.uncommitted, self.lock = databases[dbfile]
 
     def get(self, key):
         if key in self.uncommitted:
@@ -17,22 +19,25 @@ class DB(object):
         return self.db.Get(key)
 
     def put(self, key, value):
-        self.uncommitted[key] = value
+        with self.lock:
+            self.uncommitted[key] = value
 
     def commit(self):
-        batch = leveldb.WriteBatch()
-        for k, v in self.uncommitted.iteritems():
-            batch.Put(k, v)
-        self.db.Write(batch, sync=True)
-        self.uncommitted.clear()
+        with self.lock:
+            batch = leveldb.WriteBatch()
+            for k, v in self.uncommitted.iteritems():
+                batch.Put(k, v)
+            self.db.Write(batch, sync=True)
+            self.uncommitted.clear()
 
     def delete(self, key):
-        if key in self.uncommitted:
-            del self.uncommitted[key]
-            if key not in self:
+        with self.lock:
+            if key in self.uncommitted:
+                del self.uncommitted[key]
+                if key not in self:
+                    self.db.Delete(key)
+            else:
                 self.db.Delete(key)
-        else:
-            self.db.Delete(key)
 
     def _has_key(self, key):
         try:
