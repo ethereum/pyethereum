@@ -13,6 +13,7 @@ logger = logging.getLogger()
 
 tempdir = tempfile.mktemp()
 
+
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
@@ -35,9 +36,10 @@ def get_transaction(gasprice=0, nonce=0):
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
+
 def set_db():
     utils.data_dir.set(tempfile.mktemp())
-    
+
 namecoin_code =\
     '''
 if !contract.storage[msg.data[0]]:
@@ -46,6 +48,7 @@ if !contract.storage[msg.data[0]]:
 else:
     return(0)
 '''
+
 
 def test_gas_deduction():
     k, v, k2, v2 = accounts()
@@ -59,11 +62,11 @@ def test_gas_deduction():
     success, addr = processblock.apply_transaction(blk, tx1)
     assert success
     assert blk.coinbase != v
-    assert v_old_balance  > blk.get_balance(v)
-    assert v_old_balance  == blk.get_balance(v) + blk.get_balance(blk.coinbase) 
-    intrinsic_gas_used = processblock.GTXCOST + processblock.GTXDATA * len(tx1.data)
-    assert v_old_balance  - blk.get_balance(v) >= intrinsic_gas_used * gasprice
-
+    assert v_old_balance > blk.get_balance(v)
+    assert v_old_balance == blk.get_balance(v) + blk.get_balance(blk.coinbase)
+    intrinsic_gas_used = processblock.GTXCOST + \
+        processblock.GTXDATA * len(tx1.data)
+    assert v_old_balance - blk.get_balance(v) >= intrinsic_gas_used * gasprice
 
 
 @pytest.mark.blk42
@@ -102,17 +105,17 @@ def test_deserialize_cpp_block_42():
         signatureS=229ad485ef078d6e5f252db58dd2cce99e18af02028949896248aa01baf48b77]
         ]
     """
-    
-    genesis = mkgenesis({'a70abb9ed4b5d82ed1d82194943349bcde036812':100000000000000000000L})
+
+    genesis = mkgenesis(
+        {'a70abb9ed4b5d82ed1d82194943349bcde036812': 100000000000000000000L})
     hex_rlp_data = \
         """f9016df8d3a00df28c56b0cc32ceb55299934fca74ff63956ede0ffd430367ebcb1bb94d42fea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794a70abb9ed4b5d82ed1d82194943349bcde036812a0203838e6ea7b03bce4b806ab4e5c069d5cd98ca2ba27a2d343d809cc6365e1cea078aaa0f3b726f8d9273ba145e0efd4a6b21183412582449cc9457f713422b5ae834142bd308609184e72a000830e8f328201f484537ca7c680a00000000000000000000000000000000000000000000000007d117303138a74e0f895f893f86d808609184e72a0008201f494e559de5527492bcb42ec68d07df0742a98ec3f1e888ac7230489e80000801ba018d646b8c4f7a804fdf7ba8da4d5dd049983e7d2b652ab902f7d4eaebee3e33ba0229ad485ef078d6e5f252db58dd2cce99e18af02028949896248aa01baf48b77a06e957f0f99502ad60a66a016f72957eff0f3a5bf791ad4a0606a44f35a6e09288201f4c0"""
     header_args, transaction_list, uncles = rlp.decode(
         hex_rlp_data.decode('hex'))
     for tx_data, _state_root, _gas_used_encoded in transaction_list:
         tx = transactions.Transaction.create(tx_data)
-        logger.debug('Block #48 failing tx %r',tx.to_dict())
+        logger.debug('Block #48 failing tx %r', tx.to_dict())
         processblock.apply_transaction(genesis, tx)
-
 
 
 def deserialize_child(parent, rlpdata):
@@ -127,8 +130,8 @@ def deserialize_child(parent, rlpdata):
         kargs[name] = utils.decoders[typ](header_args[i])
 
     block = blocks.Block.init_from_parent(parent, kargs['coinbase'],
-                                   extra_data=kargs['extra_data'],
-                                   timestamp=kargs['timestamp'])
+                                          extra_data=kargs['extra_data'],
+                                          timestamp=kargs['timestamp'])
     block.finalize()  # this is the first potential state change
     # replay transactions
     for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
@@ -140,7 +143,6 @@ def deserialize_child(parent, rlpdata):
         logger.debug('success: %r', success)
         assert utils.decode_int(_gas_used_encoded) == block.gas_used
         assert _state_root == block.state.root_hash
-
 
     # checks
     assert block.prevhash == parent.hash
@@ -159,7 +161,6 @@ def deserialize_child(parent, rlpdata):
     block.min_gas_price = kargs['min_gas_price']
 
     return block
-
 
 
 @pytest.mark.blk1
