@@ -182,8 +182,7 @@ def apply_msg(block, tx, msg):
     snapshot = block.snapshot()
     code = block.get_code(msg.to)
     # Transfer value, instaquit if not enough
-    block.delta_balance(msg.to, msg.value)
-    o = block.delta_balance(msg.sender, -msg.value)
+    o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
         return 0, msg.gas, []
     compustate = Compustate(gas=msg.gas)
