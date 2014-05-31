@@ -1,7 +1,7 @@
 
 from setuptools import setup, find_packages
 
-console_scripts = ['eth=pyethereum.eth:main',
+console_scripts = ['pyeth=pyethereum.eth:main',
                    'pyethtool=tools.pyethtool_cli:main']
 
 setup(name="pyethereum",
