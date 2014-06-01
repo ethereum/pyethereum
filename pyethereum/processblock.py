@@ -142,8 +142,9 @@ def apply_transaction(block, tx):
     else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
-    logger.debug('applied tx, result %s gas remained %s data/code %s', result, gas_remained, 
-          ''.join(map(chr, data)).encode('hex'))
+    logger.debug(
+        'applied tx, result %s gas remained %s data/code %s', result, gas_remained,
+        ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -209,6 +210,7 @@ def apply_msg(block, tx, msg):
 
 def create_contract(block, tx, msg):
     snapshot = block.snapshot()
+
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = utils.encode_int(block.get_nonce(msg.sender))
     recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
@@ -316,10 +318,11 @@ def apply_op(block, tx, msg, code, compustate):
         import serpent
         if op[:4] == 'PUSH':
             start, n = compustate.pc + 1, int(op[4:])
-            logger.debug('%s %s ', op, utils.big_endian_to_int(code[start:start + n]))
+            logger.debug('%s %s ', op,
+                         utils.big_endian_to_int(code[start:start + n]))
         else:
-            logger.debug('%s %s ', op, ' '.join(map(str, stackargs)),
-                  serpent.decode_datalist(compustate.memory))
+            logger.debug('%s %s %s', op, ' '.join(map(str, stackargs)),
+                         serpent.decode_datalist(compustate.memory))
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -515,12 +518,14 @@ def apply_op(block, tx, msg, code, compustate):
         to = (('\x00' * (32 - len(to))) + to)[12:]
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
-        logger.debug("Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
-                  utils.coerce_addr_to_hex(to), value, gas, data)
+        logger.debug(
+            "Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
+            utils.coerce_addr_to_hex(to), value, gas, data)
         result, gas, data = apply_msg(
             block, tx, Message(msg.to, to, value, gas, data))
-        logger.debug("Output of sub-call: %s %s length %s expected %s", result, data,len(data),
-                  stackargs[6])
+        logger.debug(
+            "Output of sub-call: %s %s length %s expected %s", result, data, len(data),
+            stackargs[6])
         for i in range(stackargs[6]):
             mem[stackargs[5] + i] = 0
         if result == 0:

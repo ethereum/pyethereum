@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 256
+NUM_BLOCKS_PER_REQUEST = 32
 
 
 class Miner():
