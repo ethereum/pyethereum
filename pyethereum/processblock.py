@@ -136,9 +136,10 @@ def apply_transaction(block, tx):
     snapshot = block.snapshot()
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
-    if tx.to:
+    # MESSAGE
+    if tx.to and tx.to != '0000000000000000000000000000000000000000':
         result, gas_remained, data = apply_msg(block, tx, message)
-    else:
+    else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
     logger.debug('applied tx, result %s gas remained %s data/code %s', result, gas_remained, 
