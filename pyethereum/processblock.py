@@ -253,9 +253,14 @@ def calcfee(block, tx, msg, compustate, op):
         m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
         return GSHA3 + m_extend / 32 * GMEMORY
     elif op == 'SLOAD':
-        return GSLOAD
+        return GSTEP + GSLOAD
     elif op == 'SSTORE':
-        return GSSTORE
+        if not block.get_storage_data(msg.to, stk[-1]) and stk[-2]:
+            return 2 * GSSTORE
+        elif block.get_storage_data(msg.to, stk[-1]) and not stk[-2]:
+            return 0
+        else:
+            return GSSTORE
     elif op == 'MLOAD':
         m_extend = max(0, ceil32(stk[-1] + 32) - len(mem))
         return GSTEP + m_extend / 32 * GMEMORY
@@ -271,15 +276,20 @@ def calcfee(block, tx, msg, compustate, op):
                        ceil32(stk[-6] + stk[-7]) - len(mem))
         return GCALL + stk[-1] + m_extend / 32 * GMEMORY
     elif op == 'CREATE':
-        m_extend = max(0, ceil32(stk[-3] + stk[-4]) - len(mem))
-        return GCREATE + stk[-2] + m_extend / 32 * GMEMORY
+        m_extend = max(0, ceil32(stk[-2] + stk[-3]) - len(mem))
+        return GSTEP + GCREATE + m_extend / 32 * GMEMORY
     elif op == 'RETURN':
         m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
         return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'CALLDATACOPY':
         m_extend = max(0, ceil32(stk[-1] + stk[-3]) - len(mem))
         return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'STOP' or op == 'INVALID':
+    elif op == 'CODECOPY':
+        m_extend = max(0, ceil32(stk[-1] + stk[-3]) - len(mem))
+        return GSTEP + m_extend / 32 * GMEMORY
+    elif op == 'BALANCE':
+        return GBALANCE
+    elif op == 'STOP' or op == 'INVALID' or op == 'SUICIDE':
         return GSTOP
     else:
         return GSTEP
