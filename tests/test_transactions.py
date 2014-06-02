@@ -147,7 +147,7 @@ def deserialize_child(parent, rlpdata):
         diff = utils.decode_int(_gas_used_encoded) - block.gas_used
         logger.debug("GAS_USED DIFF %r", diff)
         assert utils.decode_int(_gas_used_encoded) == block.gas_used
-        assert _state_root == block.state.root_hash
+        assert _state_root.encode('hex') == block.state.root_hash.encode('hex')
 
     # checks
     assert block.prevhash == parent.hash
@@ -159,22 +159,14 @@ def deserialize_child(parent, rlpdata):
     assert block.number == kargs['number']
     assert block.extra_data == kargs['extra_data']
     assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
-    assert block.state.root_hash == kargs['state_root']
+    assert block.state.root_hash.encode(
+        'hex') == kargs['state_root'].encode('hex')
 
     block.uncles_hash = kargs['uncles_hash']
     block.nonce = kargs['nonce']
     block.min_gas_price = kargs['min_gas_price']
 
     return block
-
-
-@pytest.mark.blk1
-def test_receive_blk1_cpp_chain():
-    hex_rlp_data = """f901a2f8d5a0e8aadca44f4bc6ebfa07a310e01ef3cd273d8819b9b3906b0afd587684eba739a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479451f5f813f4cebc829e6f6aae6193fd625e413bc3a00d9117dfcb5a51fdb4e8267c3f3db554df3e0cbc51185432515ece7a51410644a073df40ef5afacf0dbd1c2121bdbfb4437e12951876ce97457f6b61047a864a45834c82fe8201138609184e72a000830ba9678203e9845389c49280a02d0183aac3b1128981b5a6735b8a1cc997aa03b7757d38518abe6ce9eaa77e40f8c8f8c6f8a0808609184e72a00082271094000000000000000000000000000000000000000080b83a33604557602a5160106000396000f200604556330e0f602a59366000530a0f602a596020600053013560005335576040600053016000546009581ba06708514ed88a8e5fab2f4bb20ec2c3a522d6c5fd98f47719224baab6335c3dc6a0654bd0307cacebddfca56656762a808b1f07402271aac22d80605fee5e1801dea0194bee93994af582141eb1b1e98d4b65c908cc39a2cde6fc5b9d3dd67702af7a8203e9c0"""
-    set_db()
-    genesis = blocks.genesis(
-        {'7a7e9291f1fd5bb46ee42eeb516f2af73c9dddb2': 200000000000000000L})
-    deserialize_child(genesis,  hex_rlp_data.decode('hex'))
 
 
 @pytest.mark.gas_used
