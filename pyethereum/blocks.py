@@ -148,6 +148,11 @@ class Block(object):
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
 
+        # use de/encoders to check type and validity
+        for name, typ, d in block_structure:
+            v = getattr(self, name)
+            assert utils.decoders[typ](utils.encoders[typ](v)) == v
+
         # Basic consistency verifications
         if not self.state.root_hash_valid():
             raise Exception(
