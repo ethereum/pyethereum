@@ -143,8 +143,8 @@ def apply_transaction(block, tx):
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
     logger.debug(
-        'applied tx, result %s gas remained %s data/code %s', result, gas_remained,
-        ''.join(map(chr, data)).encode('hex'))
+        'applied tx, result %s gas remained %s data/code %s', result,
+        gas_remained, ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -214,6 +214,7 @@ def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = utils.encode_int(block.get_nonce(msg.sender))
     recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    assert not block.get_code(recvaddr)
     msg.to = recvaddr
     block.increment_nonce(msg.sender)
     # Transfer value, instaquit if not enough
