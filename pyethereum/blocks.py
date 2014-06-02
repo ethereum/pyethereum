@@ -222,17 +222,24 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'])
-        block.finalize()  # this is the first potential state change
+
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
             success, output = processblock.apply_transaction(block, tx)
+            block.add_transaction_to_list(tx)
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
 
+        block.finalize()
+
+        block.uncles_hash = kargs['uncles_hash']
+        block.nonce = kargs['nonce']
+        block.min_gas_price = kargs['min_gas_price']
+
         # checks
         assert block.prevhash == self.hash
-        assert block.tx_list_root == kargs['tx_list_root']
+
         assert block.gas_used == kargs['gas_used']
         assert block.gas_limit == kargs['gas_limit']
         assert block.timestamp == kargs['timestamp']
@@ -240,13 +247,12 @@ class Block(object):
         assert block.number == kargs['number']
         assert block.extra_data == kargs['extra_data']
         assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
+
+        assert block.tx_list_root == kargs['tx_list_root']
         assert block.state.root_hash == kargs['state_root']
 
-        block.uncles_hash = kargs['uncles_hash']
-        block.nonce = kargs['nonce']
-        block.min_gas_price = kargs['min_gas_price']
-
         return block
+
 
     @classmethod
     def hex_deserialize(cls, hexrlpdata):
