@@ -184,6 +184,7 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg):
+    logger.debug("apply_msg:%r %r", tx, msg)
     snapshot = block.snapshot()
     code = block.get_code(msg.to)
     # Transfer value, instaquit if not enough

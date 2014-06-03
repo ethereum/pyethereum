@@ -48,7 +48,10 @@ def do_test_vm(name):
 
     logger.debug('running test:%r', name)
     params = vm_tests_fixtures()[name]
-    #logger.debug(json.dumps(params, indent=1))
+
+    # HOTFIFX
+    # params['pre']['0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6']['balance'] *= 100
+
     pre = params['pre']
     execs = params['exec']
     callcreates = params['callcreates']
@@ -56,13 +59,8 @@ def do_test_vm(name):
     post = params['post']
 
 
-    assert set(env.keys()) == set(['code',
-                                 'currentGasLimit',
-                                 'currentTimestamp',
-                                 'previousHash',
-                                 'currentCoinbase',
-                                 'currentDifficulty',
-                                 'currentNumber'])
+    check_testdata(env.keys(), ['code', 'currentGasLimit', 'currentTimestamp','previousHash',
+                                'currentCoinbase', 'currentDifficulty', 'currentNumber'])
     # setup env
     blk = blocks.Block(
              prevhash=env['previousHash'].decode('hex'),
@@ -102,10 +100,29 @@ def do_test_vm(name):
         logger.debug('TX %r > %r v:%r gas:%s @price:%s',
                         sender, recvaddr, tx.value, tx.startgas, tx.gasprice)
 
-        success, output  = processblock.apply_transaction(blk, tx)
-        assert success
 
-        # FIXME. check against callcreates
+        # capture apply_message calls
+        apply_message_calls = []
+        orig_apply_msg = processblock.apply_msg
+        def apply_msg_wrapper(_block, _tx, msg):
+            result, gas_remained, data = orig_apply_msg(_block, _tx, msg)
+            apply_message_calls.append(dict(msg=msg, result=result,
+                                            gas_remained=gas_remained, data=data))
+            return result, gas_remained, data
+
+        processblock.apply_msg = apply_msg_wrapper
+        success, output  = processblock.apply_transaction(blk, tx)
+        processblock.apply_msg = orig_apply_msg
+
+        assert success
+        assert len(callcreates) == len(apply_message_calls)
+
+        # check against callcreates
+        for i, callcreate in enumerate(callcreates):
+            amc = apply_message_calls[i]
+            assert callcreate['data'] == amc['data']
+            assert callcreate['gasLimit'] == amc['gas_remained']
+            assert callcreate['value'] == amc['msg'].value
 
         # data and out not set in tests yet
         assert output == params['out']
