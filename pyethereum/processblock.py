@@ -25,6 +25,8 @@ GTXCOST = 500
 
 OUT_OF_GAS = -1
 
+CREATE_CONTRACT_ADDRESS = '0000000000000000000000000000000000000000'
+
 
 def verify(block, parent):
     assert block.timestamp >= parent.timestamp
@@ -137,7 +139,7 @@ def apply_transaction(block, tx):
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     # MESSAGE
-    if tx.to and tx.to != '0000000000000000000000000000000000000000':
+    if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         result, gas_remained, data = apply_msg(block, tx, message)
     else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
