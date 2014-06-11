@@ -1,3 +1,4 @@
+import os
 import pytest
 import serpent
 import pyethereum.processblock as pb
@@ -10,6 +11,14 @@ logger = logging.getLogger()
 
 gasprice = 0
 startgas = 10000
+
+
+def serpent_compile(code):
+    f = open("/tmp/123", "w")
+    f.write(code)
+    f.close()
+    return os.popen("serpent compile /tmp/123").read() \
+        .replace('\n', '').decode('hex')
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +45,7 @@ def test_namecoin():
 
     blk = b.genesis({v: u.denoms.ether * 1})
 
-    code1 = serpent.compile(namecoin_code)
+    code1 = serpent_compile(namecoin_code)
     tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
     s, addr = pb.apply_transaction(blk, tx1)
 
@@ -89,7 +98,7 @@ else:
     else:
         return(0)
     ''' % v
-    code2 = serpent.compile(scode2)
+    code2 = serpent_compile(scode2)
     blk = b.genesis({v: 10 ** 18})
     tx4 = t.contract(0, gasprice, startgas, 0, code2).sign(k)
     s, addr = pb.apply_transaction(blk, tx4)
@@ -127,7 +136,7 @@ elif msg.sender == contract.storage[1001] and msg.datasize == 2:
 else:
     return(contract.storage[msg.data[0]])
 '''
-    code3 = serpent.compile(scode3)
+    code3 = serpent_compile(scode3)
     logger.debug("AST", serpent.rewrite(serpent.parse(scode3)))
     blk = b.genesis({v: 10 ** 18, v2: 10 ** 18})
     tx10 = t.contract(0, gasprice, startgas, 0, code3).sign(k)
@@ -179,7 +188,7 @@ else:
     else:
         return(5)
 ''' % (addr, addr)
-    code4 = serpent.compile(scode4)
+    code4 = serpent_compile(scode4)
     logger.debug("AST", serpent.rewrite(serpent.parse(scode4)))
     # important: no new genesis block
     tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
