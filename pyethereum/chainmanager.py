@@ -196,7 +196,8 @@ class ChainManager(StoppableLoopThread):
         miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:
             for tx in self.miner.get_transactions():
-                miner.add_transaction(tx)
+                if self.head.get_nonce(tx.sender) == tx.nonce:
+                    miner.add_transaction(tx)
         self.miner = miner
 
     def mine(self):
