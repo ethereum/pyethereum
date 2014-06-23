@@ -1,34 +1,12 @@
 import os
 import pytest
-import serpent
-import pyethereum.processblock as pb
-import pyethereum.blocks as b
-import pyethereum.transactions as t
-import pyethereum.utils as u
+from pyethereum import tester
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 gasprice = 0
 startgas = 10000
-
-
-def serpent_compile(code):
-    f = open("/tmp/123", "w")
-    f.write(code)
-    f.close()
-    return os.popen("serpent compile /tmp/123").read() \
-        .replace('\n', '').decode('hex')
-
-
-@pytest.fixture(scope="module")
-def accounts():
-    k = u.sha3('cow')
-    v = u.privtoaddr(k)
-    k2 = u.sha3('horse')
-    v2 = u.privtoaddr(k2)
-    return k, v, k2, v2
-
 
 namecoin_code =\
     '''
@@ -41,183 +19,131 @@ else:
 
 
 def test_namecoin():
-    k, v, k2, v2 = accounts()
+    s = tester.state()
+    c = s.contract(namecoin_code)
+    o1 = s.send(tester.k0, c, 0, ['"george"', 45])
+    assert o1 == ["1"]
+    o2 = s.send(tester.k0, c, 0, ['"george"', 20])
+    assert o2 == ["0"]
+    o3 = s.send(tester.k0, c, 0, ['"harry"', 60])
+    assert o3 == ["1"]
 
-    blk = b.genesis({v: u.denoms.ether * 1})
+    assert s.block.to_dict()
 
-    code1 = serpent_compile(namecoin_code)
-    tx1 = t.contract(0, gasprice, startgas, 0, code1).sign(k)
-    s, addr = pb.apply_transaction(blk, tx1)
 
-    snapshot = blk.snapshot()
-
-    # tx2
-    tx2 = t.Transaction(1, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist(['george', 45]))
-    tx2.sign(k)
-    s, o = pb.apply_transaction(blk, tx2)
-    assert serpent.decode_datalist(o) == [1]
-
-    # tx3
-    tx3 = t.Transaction(2, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist(['george', 20])).sign(k)
-    s, o = pb.apply_transaction(blk, tx3)
-    assert serpent.decode_datalist(o) == [0]
-
-    # tx4
-    tx4 = t.Transaction(3, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist(['harry', 60])).sign(k)
-    s, o = pb.apply_transaction(blk, tx4)
-    assert serpent.decode_datalist(o) == [1]
-
-    blk.revert(snapshot)
-
-    assert blk.to_dict()
-    assert blk.to_dict()['state'][addr]['code']
+currency_code = '''
+init:
+    contract.storage[msg.sender] = 1000
+code:
+    if msg.datasize == 1:
+        addr = msg.data[0]
+        return(contract.storage[addr])
+    else:
+        from = msg.sender
+        fromvalue = contract.storage[from]
+        to = msg.data[0]
+        value = msg.data[1]
+        if fromvalue >= value:
+            contract.storage[from] = fromvalue - value
+            contract.storage[to] = contract.storage[to] + value
+            return(1)
+        else:
+            return(0)
+'''
 
 
 def test_currency():
-    k, v, k2, v2 = accounts()
-    scode2 = '''
-if !contract.storage[1000]:
-    contract.storage[1000] = 1
-    contract.storage[0x%s] = 1000
-    return(1)
-elif msg.datasize == 1:
-    addr = msg.data[0]
-    return(contract.storage[addr])
-else:
-    from = msg.sender
-    fromvalue = contract.storage[from]
-    to = msg.data[0]
-    value = msg.data[1]
-    if fromvalue >= value:
-        contract.storage[from] = fromvalue - value
-        contract.storage[to] = contract.storage[to] + value
-        return(1)
-    else:
-        return(0)
-    ''' % v
-    code2 = serpent_compile(scode2)
-    blk = b.genesis({v: 10 ** 18})
-    tx4 = t.contract(0, gasprice, startgas, 0, code2).sign(k)
-    s, addr = pb.apply_transaction(blk, tx4)
-    tx5 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
-    s, o = pb.apply_transaction(blk, tx5)
-    assert serpent.decode_datalist(o) == [1]
-    tx6 = t.Transaction(2, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist([v2, 200])).sign(k)
-    s, o = pb.apply_transaction(blk, tx6)
-    assert serpent.decode_datalist(o) == [1]
-    tx7 = t.Transaction(3, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist([v2, 900])).sign(k)
-    s, o = pb.apply_transaction(blk, tx7)
-    assert serpent.decode_datalist(o) == [0]
-    tx8 = t.Transaction(4, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist([v])).sign(k)
-    s, o = pb.apply_transaction(blk, tx8)
-    assert serpent.decode_datalist(o) == [800]
-    tx9 = t.Transaction(5, gasprice, startgas, addr, 0,
-                        serpent.encode_datalist([v2])).sign(k)
-    s, o = pb.apply_transaction(blk, tx9)
-    assert serpent.decode_datalist(o) == [200]
+    s = tester.state()
+    c = s.contract(currency_code, sender=tester.k0)
+    o1 = s.send(tester.k0, c, 0, [tester.a2, 200])
+    assert o1 == ["1"]
+    o2 = s.send(tester.k0, c, 0, [tester.a2, 900])
+    assert o2 == ["0"]
+    o3 = s.send(tester.k0, c, 0, [tester.a0])
+    assert o3 == ["800"]
+    o4 = s.send(tester.k0, c, 0, [tester.a2])
+    assert o4 == ["200"]
 
 
-def test_data_feeds():
-    k, v, k2, v2 = accounts()
-    scode3 = '''
+data_feed_code = '''
 if !contract.storage[1000]:
     contract.storage[1000] = 1
     contract.storage[1001] = msg.sender
-    return(0)
-elif msg.sender == contract.storage[1001] and msg.datasize == 2:
-    contract.storage[msg.data[0]] = msg.data[1]
-    return(1)
+    return(20)
+elif msg.datasize == 2:
+    if msg.sender == contract.storage[1001]:
+        contract.storage[msg.data[0]] = msg.data[1]
+        return(1)
+    else:
+        return(0)
 else:
     return(contract.storage[msg.data[0]])
 '''
-    code3 = serpent_compile(scode3)
-    logger.debug("AST", serpent.rewrite(serpent.parse(scode3)))
-    blk = b.genesis({v: 10 ** 18, v2: 10 ** 18})
-    tx10 = t.contract(0, gasprice, startgas, 0, code3).sign(k)
-    s, addr = pb.apply_transaction(blk, tx10)
-    tx11 = t.Transaction(1, gasprice, startgas, addr, 0, '').sign(k)
-    s, o = pb.apply_transaction(blk, tx11)
-    tx12 = t.Transaction(2, gasprice, startgas, addr, 0,
-                         serpent.encode_datalist([500])).sign(k)
-    s, o = pb.apply_transaction(blk, tx12)
-    assert serpent.decode_datalist(o) == [0]
-    tx13 = t.Transaction(3, gasprice, startgas, addr, 0,
-                         serpent.encode_datalist([500, 726])).sign(k)
-    s, o = pb.apply_transaction(blk, tx13)
-    assert serpent.decode_datalist(o) == [1]
-    tx14 = t.Transaction(4, gasprice, startgas, addr, 0,
-                         serpent.encode_datalist([500])).sign(k)
-    s, o = pb.apply_transaction(blk, tx14)
-    assert serpent.decode_datalist(o) == [726]
-    return blk, addr
 
 
-def test_hedge():
-    k, v, k2, v2 = accounts()
-    blk, addr = test_data_feeds()
-    scode4 = '''
+def test_data_feeds():
+    s = tester.state()
+    c = s.contract(data_feed_code, sender=tester.k0)
+    o1 = s.send(tester.k0, c, 0)
+    assert o1 == ["20"]
+    o2 = s.send(tester.k0, c, 0, [500])
+    assert o2 == ["0"]
+    o3 = s.send(tester.k0, c, 0, [500, 19])
+    assert o3 == ["1"]
+    o4 = s.send(tester.k0, c, 0, [500])
+    assert o4 == ["19"]
+    o5 = s.send(tester.k1, c, 0, [500, 726])
+    assert o5 == ["0"]
+    o6 = s.send(tester.k0, c, 0, [500, 726])
+    assert o6 == ["1"]
+    return s, c
+
+hedge_code = '''
 if !contract.storage[1000]:
     contract.storage[1000] = msg.sender
     contract.storage[1002] = msg.value
     contract.storage[1003] = msg.data[0]
+    contract.storage[1004] = msg.data[1]
     return(1)
 elif !contract.storage[1001]:
     ethvalue = contract.storage[1002]
     if msg.value >= ethvalue:
         contract.storage[1001] = msg.sender
-    othervalue = ethvalue * call(0x%s,[contract.storage[1003]],1)
-    contract.storage[1004] = othervalue
-    contract.storage[1005] = block.timestamp + 86400
+    c = call(contract.storage[1003],[contract.storage[1004]],1)
+    othervalue = ethvalue * c
+    contract.storage[1005] = othervalue
+    contract.storage[1006] = block.timestamp + 500
     return([2,othervalue],2)
 else:
-    othervalue = contract.storage[1004]
-    ethvalue = othervalue / call(0x%s,contract.storage[1003])
+    othervalue = contract.storage[1005]
+    ethvalue = othervalue / call(contract.storage[1003],contract.storage[1004])
     if ethvalue >= contract.balance:
         send(contract.storage[1000],contract.balance)
         return(3)
-    elif block.timestamp > contract.storage[1005]:
+    elif block.timestamp > contract.storage[1006]:
         send(contract.storage[1001],contract.balance - ethvalue)
         send(contract.storage[1000],ethvalue)
         return(4)
     else:
         return(5)
-''' % (addr, addr)
-    code4 = serpent_compile(scode4)
-    logger.debug("AST", serpent.rewrite(serpent.parse(scode4)))
-    # important: no new genesis block
-    tx15 = t.contract(5, gasprice, startgas, 0, code4).sign(k)
-    s, addr2 = pb.apply_transaction(blk, tx15)
-    tx16 = t.Transaction(6, gasprice, startgas, addr2, 10 ** 17,
-                         serpent.encode_datalist([500])).sign(k)
-    s, o = pb.apply_transaction(blk, tx16)
-    assert serpent.decode_datalist(o) == [1]
-    tx17 = t.Transaction(0, gasprice, startgas, addr2, 10 ** 17,
-                         serpent.encode_datalist([500])).sign(k2)
-    s, o = pb.apply_transaction(blk, tx17)
-    assert serpent.decode_datalist(o) == [2, 72600000000000000000L]
-    snapshot = blk.snapshot()
-    tx18 = t.Transaction(7, gasprice, startgas, addr2, 0, '').sign(k)
-    s, o = pb.apply_transaction(blk, tx18)
-    assert serpent.decode_datalist(o) == [5]
-    tx19 = t.Transaction(8, gasprice, startgas, addr, 0,
-                         serpent.encode_datalist([500, 300])).sign(k)
-    s, o = pb.apply_transaction(blk, tx19)
-    assert serpent.decode_datalist(o) == [1]
-    tx20 = t.Transaction(9, gasprice, startgas, addr2, 0, '').sign(k)
-    s, o = pb.apply_transaction(blk, tx20)
-    assert serpent.decode_datalist(o) == [3]
-    blk.revert(snapshot)
-    blk.timestamp += 200000
-    tx21 = t.Transaction(7, gasprice, startgas, addr, 0,
-                         serpent.encode_datalist([500, 1452])).sign(k)
-    s, o = pb.apply_transaction(blk, tx21)
-    assert serpent.decode_datalist(o) == [1]
-    tx22 = t.Transaction(8, gasprice, 2000, addr2, 0, '').sign(k)
-    s, o = pb.apply_transaction(blk, tx22)
-    assert serpent.decode_datalist(o) == [4]
+'''
+
+
+def test_hedge():
+    s, c = test_data_feeds()
+    c2 = s.contract(hedge_code, sender=tester.k0)
+    o1 = s.send(tester.k0, c2, 10**16, [c, 500])
+    assert o1 == ["1"]
+    o2 = s.send(tester.k2, c2, 10**16)
+    assert o2 == ['2', '7260000000000000000']
+    snapshot = s.snapshot()
+    o3 = s.send(tester.k0, c, 0, [500, 300])
+    assert o3 == ['1']
+    o4 = s.send(tester.k0, c2, 0)
+    assert o4 == ['3']
+    s.revert(snapshot)
+    o5 = s.send(tester.k0, c2, 0)
+    assert o5 == ['5']
+    s.mine(10, tester.a3)
+    o6 = s.send(tester.k0, c2, 0)
+    assert o6 == ['4']
