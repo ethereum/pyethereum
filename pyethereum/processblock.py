@@ -9,8 +9,6 @@ import trie
 import logging
 logger = logging.getLogger(__name__)
 
-expensive_debug = False
-
 GSTEP = 1
 GSTOP = 0
 GSHA3 = 20
@@ -318,15 +316,14 @@ def apply_op(block, tx, msg, code, compustate):
     stackargs = []
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
-    if expensive_debug:
-        import serpent
-        if op[:4] == 'PUSH':
-            start, n = compustate.pc + 1, int(op[4:])
-            logger.debug('%s %s ', op,
-                         utils.big_endian_to_int(code[start:start + n]))
-        else:
-            logger.debug('%s %s %s', op, ' '.join(map(str, stackargs)),
-                         serpent.decode_datalist(compustate.memory))
+    if op[:4] == 'PUSH':
+        ind = compustate.pc + 1
+        v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
+        logger.debug('%s %x %s', compustate.pc, op, v)
+        #print '%s %s %s' % (compustate.pc, op, v)
+    else:
+        logger.debug('%s %s %s', compustate.pc, op, stackargs)
+        #print '%s %s %s' % (compustate.pc, op, stackargs)
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -499,19 +496,20 @@ def apply_op(block, tx, msg, code, compustate):
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
         stk.append(utils.big_endian_to_int(dat))
     elif op == 'CREATE':
-        if len(mem) < ceil32(stackargs[2] + stackargs[3]):
-            mem.extend([0] * (ceil32(stackargs[2] + stackargs[3]) - len(mem)))
-        gas = stackargs[0]
-        value = stackargs[1]
-        data = ''.join(map(chr, mem[stackargs[2]:stackargs[2] + stackargs[3]]))
-        logger.debug("Sub-contract: %s %s %s %s ", msg.to, value, gas, data)
+        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
+            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
+        value = stackargs[0]
+        data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
+        logger.debug("Sub-contract: %s %s %s ", msg.to, value, data)
         addr, gas, code = create_contract(
-            block, tx, Message(msg.to, '', value, gas, data))
+            block, tx, Message(msg.to, '', value, compustate.gas, data))
         logger.debug("Output of contract creation: %s  %s ", addr, code)
         if addr:
             stk.append(utils.coerce_to_int(addr))
+            compustate.gas = gas
         else:
             stk.append(0)
+            compustate.gas = 0
     elif op == 'CALL':
         if len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
@@ -547,5 +545,5 @@ def apply_op(block, tx, msg, code, compustate):
         to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
         block.delta_balance(to, block.get_balance(msg.to))
-        block.state.delete(msg.to)
+        block.state.delete(utils.encode_addr(msg.to))
         return []

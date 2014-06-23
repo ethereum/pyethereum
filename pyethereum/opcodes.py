@@ -51,7 +51,7 @@ opcodes = {
     0x5b: ['MSIZE', 0, 1],
     0x5c: ['GAS', 0, 1],
     0x60: ['PUSH', 0, 1],  # encompasses 96...127
-    0xf0: ['CREATE', 4, 1],
+    0xf0: ['CREATE', 3, 1],
     0xf1: ['CALL', 7, 1],
     0xf2: ['RETURN', 2, 1],
     0xff: ['SUICIDE', 1, 1],
