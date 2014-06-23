@@ -168,6 +168,7 @@ class Compustate():
         self.stack = []
         self.pc = 0
         self.gas = 0
+        self.suicides = []
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
 
@@ -206,6 +207,8 @@ def apply_msg(block, tx, msg):
                 block.revert(snapshot)
                 return 0, 0, []
             else:
+                for s in block.suicides:
+                    block.state.delete(utils.encode_addr(s))
                 return 1, compustate.gas, o
 
 
@@ -231,6 +234,8 @@ def create_contract(block, tx, msg):
                 block.revert(snapshot)
                 return 0, 0, []
             else:
+                for s in block.suicides:
+                    block.state.delete(utils.encode_addr(s))
                 block.set_code(recvaddr, ''.join(map(chr, o)))
                 return recvaddr, compustate.gas, o
 
@@ -320,10 +325,10 @@ def apply_op(block, tx, msg, code, compustate):
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
         logger.debug('%s %x %s', compustate.pc, op, v)
-        #print '%s %s %s' % (compustate.pc, op, v)
+        # print '%s %s %s' % (compustate.pc, op, v)
     else:
         logger.debug('%s %s %s', compustate.pc, op, stackargs)
-        #print '%s %s %s' % (compustate.pc, op, stackargs)
+        # print '%s %s %s' % (compustate.pc, op, stackargs)
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -544,6 +549,6 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:]
-        block.delta_balance(to, block.get_balance(msg.to))
-        block.state.delete(utils.encode_addr(msg.to))
+        block.transfer_value(msg.to, to, block.get_balance(msg.to))
+        compustate.suicides.append(msg.to)
         return []
