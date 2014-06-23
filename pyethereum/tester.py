@@ -41,6 +41,10 @@ class state():
         for d in data:
             if isinstance(d, int):
                 data2.append(str(d))
+            elif len(d) == 0:
+                data2.append('0')
+            elif len(d) == 40:
+                data2.append('0x'+d)
             else:
                 data2.append('0x'+d.encode('hex'))
         evmdata = pyserpent.encode_datalist(data2)

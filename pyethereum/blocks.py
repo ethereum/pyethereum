@@ -131,6 +131,7 @@ class Block(object):
         self.extra_data = extra_data
         self.nonce = nonce
         self.uncles = uncles
+        self.suicides = []
 
         self.transactions = trie.Trie(utils.get_db_path(), tx_list_root)
         self.transaction_count = 0
