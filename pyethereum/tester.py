@@ -39,7 +39,7 @@ class state():
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         data2 = []
         for d in data:
-            if isinstance(d, int):
+            if isinstance(d, (int, long)):
                 data2.append(str(d))
             elif len(d) == 0:
                 data2.append('0')
@@ -52,7 +52,7 @@ class state():
         tx.sign(sender)
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
-            raise Exception("Contract creation failed")
+            raise Exception("Transaction failed")
         return pyserpent.decode_datalist(r)
 
     def mine(self, n=1, coinbase=a0):

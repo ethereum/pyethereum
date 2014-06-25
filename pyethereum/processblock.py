@@ -9,6 +9,18 @@ import trie
 import logging
 logger = logging.getLogger(__name__)
 
+print_debug = 0
+
+
+def enable_debug():
+    global print_debug
+    print_debug = 1
+
+
+def disable_debug():
+    global print_debug
+    print_debug = 0
+
 GSTEP = 1
 GSTOP = 0
 GSHA3 = 20
@@ -157,7 +169,7 @@ def apply_transaction(block, tx):
         block.gas_used += gas_used
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
     for s in block.suicides:
-        block.state.delete(utils.encode_addr(s))
+        block.state.delete(s)
         block.suicides = []
     block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
@@ -323,10 +335,12 @@ def apply_op(block, tx, msg, code, compustate):
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
         logger.debug('%s %x %s', compustate.pc, op, v)
-        # print '%s %s %s' % (compustate.pc, op, v)
+        if print_debug:
+            print '%s %s %s' % (compustate.pc, op, v)
     else:
         logger.debug('%s %s %s', compustate.pc, op, stackargs)
-        # print '%s %s %s' % (compustate.pc, op, stackargs)
+        if print_debug:
+            print '%s %s %s' % (compustate.pc, op, stackargs)
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
