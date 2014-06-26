@@ -386,9 +386,12 @@ class Block(object):
         med_dict = {}
         for i, val in enumerate(self.get_acct(address)):
             med_dict[acct_structure[i][0]] = val
-        strie = trie.Trie(utils.get_db_path(), med_dict['storage']).to_dict()
-        med_dict['storage'] = {utils.decode_int(k): utils.decode_int(v)
-                               for k, v in strie.iteritems()}
+        med_dict['code_hash'] = utils.sha3(med_dict['code']).encode('hex')
+        med_dict['code'] = med_dict['code'].encode('hex')
+        strie = trie.Trie(utils.get_db_path(), med_dict['storage'])
+        med_dict['storage'] = {k.encode('hex'): v.encode('hex')
+                               for k, v in strie.to_dict().iteritems()}
+        med_dict['storage_root'] = strie.root_hash.encode('hex')
         return med_dict
 
     # Revert computation
@@ -452,13 +455,22 @@ class Block(object):
         b = {}
         for name, typ, default in block_structure:
             b[name] = getattr(self, name)
+        for key in ["nonce", "state_root", "uncles_hash", "prevhash"]:
+            b[key] = b[key].encode("hex")
         b["state"] = {}
         for address, v in self.state.to_dict().iteritems():
             b["state"][address.encode('hex')] = self.account_to_dict(address)
-        # txlist = []
-        # for i in range(self.transaction_count):
-        #     txlist.append(self.transactions.get(utils.encode_int(i)))
-        # b["transactions"] = txlist
+        txlist = []
+        for i in range(self.transaction_count):
+            td = self.transactions.get(utils.encode_int(i))
+            tx, msr, gas = map(lambda i: rlp.descend(td, i), range(3))
+            txjson = transactions.Transaction.deserialize(tx).to_dict()
+            txlist.append({
+                "tx": txjson,
+                "medstate": msr,
+                "gas": utils.decode_int(gas)
+            })
+        b["transactions"] = txlist
         return b
 
     @property

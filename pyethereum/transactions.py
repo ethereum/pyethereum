@@ -111,7 +111,6 @@ class Transaction(object):
         h['sender'] = self.sender
         return h
 
-
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
 
