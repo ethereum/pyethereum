@@ -21,6 +21,12 @@ def disable_debug():
     global print_debug
     print_debug = 0
 
+
+def logger_debug(*args):
+    logger.debug(*args)
+    if print_debug:
+        print(args[0] % tuple(args[1:]))
+
 GSTEP = 1
 GSTOP = 0
 GSHA3 = 20
@@ -334,13 +340,9 @@ def apply_op(block, tx, msg, code, compustate):
     if op[:4] == 'PUSH':
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
-        logger.debug('%s %x %s', compustate.pc, op, v)
-        if print_debug:
-            print '%s %s %s' % (compustate.pc, op, v)
+        logger_debug('%s %s %s', compustate.pc, op, v)
     else:
-        logger.debug('%s %s %s', compustate.pc, op, stackargs)
-        if print_debug:
-            print '%s %s %s' % (compustate.pc, op, stackargs)
+        logger_debug('%s %s %s', compustate.pc, op, stackargs)
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -421,7 +423,7 @@ def apply_op(block, tx, msg, code, compustate):
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
     elif op == 'ADDRESS':
-        stk.append(msg.to)
+        stk.append(utils.coerce_to_int(msg.to))
     elif op == 'BALANCE':
         stk.append(block.get_balance(msg.to))
     elif op == 'ORIGIN':
@@ -471,8 +473,18 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'POP':
         pass
     elif op == 'DUP':
-        stk.append(stackargs[0])
-        stk.append(stackargs[0])
+        # DUP POP POP Debug hint
+        if get_op_data(code, oldpc + 1)[0] == 'POP' and \
+           get_op_data(code, oldpc + 2)[0] == 'POP':
+            o = print_debug
+            enable_debug()
+            logger_debug("Debug: %s", stackargs[0])
+            if not o:
+                disable_debug()
+            compustate.pc = oldpc + 3
+        else:
+            stk.append(stackargs[0])
+            stk.append(stackargs[0])
     elif op == 'SWAP':
         stk.append(stackargs[0])
         stk.append(stackargs[1])
@@ -517,10 +529,10 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         value = stackargs[0]
         data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
-        logger.debug("Sub-contract: %s %s %s ", msg.to, value, data)
+        logger_debug("Sub-contract: %s %s %s ", msg.to, value, data)
         addr, gas, code = create_contract(
             block, tx, Message(msg.to, '', value, compustate.gas, data))
-        logger.debug("Output of contract creation: %s  %s ", addr, code)
+        logger_debug("Output of contract creation: %s  %s ", addr, code)
         if addr:
             stk.append(utils.coerce_to_int(addr))
             compustate.gas = gas
@@ -537,12 +549,12 @@ def apply_op(block, tx, msg, code, compustate):
         to = (('\x00' * (32 - len(to))) + to)[12:]
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
-        logger.debug(
+        logger_debug(
             "Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
-            utils.coerce_addr_to_hex(to), value, gas, data)
+            utils.coerce_addr_to_hex(to), value, gas, data.encode('hex'))
         result, gas, data = apply_msg(
             block, tx, Message(msg.to, to, value, gas, data))
-        logger.debug(
+        logger_debug(
             "Output of sub-call: %s %s length %s expected %s", result, data, len(data),
             stackargs[6])
         for i in range(stackargs[6]):

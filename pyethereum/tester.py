@@ -24,6 +24,7 @@ class state():
         for i in range(len(keys)):
             o[accounts[i]] = 10**18
         self.block = b.genesis(o)
+        self.mine(1)
 
     def contract(self, code, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -66,3 +67,11 @@ class state():
 
     def revert(self, data):
         self.block = b.Block.deserialize(data)
+
+
+def enable_debug():
+    pb.enable_debug()
+
+
+def disable_debug():
+    pb.disable_debug()
