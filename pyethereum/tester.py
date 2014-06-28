@@ -41,7 +41,7 @@ class state():
         data2 = []
         for d in data:
             if isinstance(d, (int, long)):
-                data2.append(str(d))
+                data2.append(str(d % 2**256))
             elif len(d) == 0:
                 data2.append('0')
             elif len(d) == 40:
@@ -54,7 +54,8 @@ class state():
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
-        return pyserpent.decode_datalist(r)
+        o = map(int, pyserpent.decode_datalist(r))
+        return map(lambda x: x-2**256 if x > 2**255 else x, o)
 
     def mine(self, n=1, coinbase=a0):
         for i in range(n):

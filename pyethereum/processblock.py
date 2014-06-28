@@ -174,9 +174,10 @@ def apply_transaction(block, tx):
             block.coinbase, tx.sender, tx.gasprice * gas_remained)
         block.gas_used += gas_used
         output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
-    for s in block.suicides:
-        block.state.delete(s)
-        block.suicides = []
+    suicides = block.suicides
+    block.suicides = []
+    for s in suicides:
+        block.state.delete(s.decode('hex'))
     block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
     return success, output if success else ''
