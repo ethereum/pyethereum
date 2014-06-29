@@ -479,7 +479,8 @@ def apply_op(block, tx, msg, code, compustate):
            get_op_data(code, oldpc + 2)[0] == 'POP':
             o = print_debug
             enable_debug()
-            logger_debug("Debug: %s", stackargs[0])
+            v = stackargs[0]
+            logger_debug("Debug: %s", v if v < 2**255 else v - 2**256)
             if not o:
                 disable_debug()
             compustate.pc = oldpc + 3
