@@ -10,8 +10,6 @@ Ethereum Python Client
 .. image:: https://coveralls.io/repos/ethereum/pyethereum/badge.png
   :target: https://coveralls.io/r/ethereum/pyethereum
 
-.. image:: http://tip4commit.com/projects/758.svg
-   :target: http://tip4commit.com/projects/758
 
 
 Quickstart
@@ -59,7 +57,7 @@ Testing
 #.  `behave <http://pythonhosted.org/behave/index.html>`_ and
 #.  `pytest <http://pytest.org/latest/>`_ are used for testing.
 
-In order to run tests, you need to prepare the ``fixtures``-submodule 
+In order to run tests, you need to prepare the ``fixtures``-submodule
 (not necessary when using bootstrap)::
 
     git submodule init
@@ -148,7 +146,7 @@ console-scripts
 ~~~~~~~~~~~~~~~
 If you follow the **buildout** way, some of the commands in this `README` will change,
 since buildout installs the dependencies as well as pyethereum's console_scripts in the ``bin/``-directory.
-For example, instead of running the cli client with:: 
+For example, instead of running the cli client with::
 
     pyethereum/eth.py # it will become
     bin/eth
