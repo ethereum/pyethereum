@@ -371,13 +371,14 @@ class Block(object):
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
-        val = t.get(utils.coerce_to_bytes(index))
+        val = rlp.decode(t.get(utils.coerce_to_bytes(index)))
         return utils.decode_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
         if val:
-            t.update(utils.coerce_to_bytes(index), utils.encode_int(val))
+            t.update(utils.coerce_to_bytes(index),
+                     rlp.encode(utils.encode_int(val)))
         else:
             t.delete(utils.coerce_to_bytes(index))
         self._set_acct_item(address, 'storage', t.root_hash)

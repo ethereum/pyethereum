@@ -599,20 +599,20 @@ class Trie(object):
 
     def update(self, key, value):
         '''
-        :param key: a string with length of [0, 32]
+        :param key: a string
         :value: a string
         '''
         if not isinstance(key, (str, unicode)):
             raise Exception("Key must be string")
 
-        if len(key) > 32:
-            raise Exception("Max key length is 32")
+        # if len(key) > 32:
+        #     raise Exception("Max key length is 32")
 
         if not isinstance(value, (str, unicode)):
             raise Exception("Value must be string")
 
-        if value == '':
-            return self.delete(key)
+        # if value == '':
+        #     return self.delete(key)
 
         self.root_node = self._update_and_delete_storage(
             self.root_node,
