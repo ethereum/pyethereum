@@ -22,11 +22,11 @@ def test_namecoin():
     s = tester.state()
     c = s.contract(namecoin_code)
     o1 = s.send(tester.k0, c, 0, ['"george"', 45])
-    assert o1 == ["1"]
+    assert o1 == [1]
     o2 = s.send(tester.k0, c, 0, ['"george"', 20])
-    assert o2 == ["0"]
+    assert o2 == [0]
     o3 = s.send(tester.k0, c, 0, ['"harry"', 60])
-    assert o3 == ["1"]
+    assert o3 == [1]
 
     assert s.block.to_dict()
 
@@ -56,13 +56,13 @@ def test_currency():
     s = tester.state()
     c = s.contract(currency_code, sender=tester.k0)
     o1 = s.send(tester.k0, c, 0, [tester.a2, 200])
-    assert o1 == ["1"]
+    assert o1 == [1]
     o2 = s.send(tester.k0, c, 0, [tester.a2, 900])
-    assert o2 == ["0"]
+    assert o2 == [0]
     o3 = s.send(tester.k0, c, 0, [tester.a0])
-    assert o3 == ["800"]
+    assert o3 == [800]
     o4 = s.send(tester.k0, c, 0, [tester.a2])
-    assert o4 == ["200"]
+    assert o4 == [200]
 
 
 data_feed_code = '''
@@ -85,17 +85,17 @@ def test_data_feeds():
     s = tester.state()
     c = s.contract(data_feed_code, sender=tester.k0)
     o1 = s.send(tester.k0, c, 0)
-    assert o1 == ["20"]
+    assert o1 == [20]
     o2 = s.send(tester.k0, c, 0, [500])
-    assert o2 == ["0"]
+    assert o2 == [0]
     o3 = s.send(tester.k0, c, 0, [500, 19])
-    assert o3 == ["1"]
+    assert o3 == [1]
     o4 = s.send(tester.k0, c, 0, [500])
-    assert o4 == ["19"]
+    assert o4 == [19]
     o5 = s.send(tester.k1, c, 0, [500, 726])
-    assert o5 == ["0"]
+    assert o5 == [0]
     o6 = s.send(tester.k0, c, 0, [500, 726])
-    assert o6 == ["1"]
+    assert o6 == [1]
     return s, c
 
 hedge_code = '''
@@ -133,17 +133,17 @@ def test_hedge():
     s, c = test_data_feeds()
     c2 = s.contract(hedge_code, sender=tester.k0)
     o1 = s.send(tester.k0, c2, 10**16, [c, 500])
-    assert o1 == ["1"]
+    assert o1 == [1]
     o2 = s.send(tester.k2, c2, 10**16)
-    assert o2 == ['2', '7260000000000000000']
+    assert o2 == [2, 7260000000000000000]
     snapshot = s.snapshot()
     o3 = s.send(tester.k0, c, 0, [500, 300])
-    assert o3 == ['1']
+    assert o3 == [1]
     o4 = s.send(tester.k0, c2, 0)
-    assert o4 == ['3']
+    assert o4 == [3]
     s.revert(snapshot)
     o5 = s.send(tester.k0, c2, 0)
-    assert o5 == ['5']
+    assert o5 == [5]
     s.mine(10, tester.a3)
     o6 = s.send(tester.k0, c2, 0)
-    assert o6 == ['4']
+    assert o6 == [4]
