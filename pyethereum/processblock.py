@@ -216,13 +216,6 @@ def apply_msg(block, tx, msg, code):
     compustate = Compustate(gas=msg.gas)
     # Main loop
     while 1:
-        logger.debug({
-            "Stack": compustate.stack,
-            "PC": compustate.pc,
-            "Gas": compustate.gas,
-            "Memory": decode_datalist(compustate.memory),
-            "Storage": block.get_storage(msg.to).to_dict(),
-        })
         o = apply_op(block, tx, msg, code, compustate)
         if o is not None:
             logger.debug('done %s', o)
