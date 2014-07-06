@@ -156,7 +156,7 @@ def apply_transaction(block, tx):
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     # MESSAGE
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        result, gas_remained, data = apply_msg(block, tx, message)
+        result, gas_remained, data = apply_msg_send(block, tx, message)
     else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
@@ -173,7 +173,10 @@ def apply_transaction(block, tx):
         block.transfer_value(
             block.coinbase, tx.sender, tx.gasprice * gas_remained)
         block.gas_used += gas_used
-        output = ''.join(map(chr, data)) if tx.to else result.encode('hex')
+        if tx.to:
+            output = ''.join(map(chr, data))
+        else:
+            output = utils.coerce_addr_to_hex(result)
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
@@ -203,10 +206,9 @@ def decode_datalist(arr):
     return o
 
 
-def apply_msg(block, tx, msg):
+def apply_msg(block, tx, msg, code):
     logger.debug("apply_msg:%r %r", tx, msg)
     snapshot = block.snapshot()
-    code = block.get_code(msg.to)
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
@@ -231,30 +233,25 @@ def apply_msg(block, tx, msg):
                 return 1, compustate.gas, o
 
 
-def create_contract(block, tx, msg):
-    snapshot = block.snapshot()
+def apply_msg_send(block, tx, msg):
+    return apply_msg(block, tx, msg, block.get_code(msg.to))
 
+
+def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = utils.encode_int(block.get_nonce(msg.sender))
-    recvaddr = utils.sha3(rlp.encode([sender, nonce]))[12:]
-    assert not block.get_code(recvaddr)
-    msg.to = recvaddr
-    block.increment_nonce(msg.sender)
-    # Transfer value, instaquit if not enough
-    o = block.transfer_value(msg.sender, msg.to, msg.value)
-    if not o:
-        return 0, msg.gas
-    compustate = Compustate(gas=msg.gas)
-    # Main loop
-    while 1:
-        o = apply_op(block, tx, msg, msg.data, compustate)
-        if o is not None:
-            if o == OUT_OF_GAS:
-                block.revert(snapshot)
-                return 0, 0, []
-            else:
-                block.set_code(recvaddr, ''.join(map(chr, o)))
-                return recvaddr, compustate.gas, o
+    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    assert not block.get_code(msg.to)
+    res, gas, dat = apply_msg(block, tx, msg, msg.data)
+    if res and len(dat):
+        block.increment_nonce(msg.sender)
+        block.set_code(msg.to, ''.join(map(chr, dat)))
+        return utils.coerce_to_int(msg.to), gas, dat
+    elif res:
+        block.state.delete(msg.to)
+        return utils.coerce_to_int(msg.to), gas, dat
+    else:
+        return res, gas, dat
 
 
 def get_op_data(code, index):
@@ -536,7 +533,7 @@ def apply_op(block, tx, msg, code, compustate):
             block, tx, Message(msg.to, '', value, compustate.gas, data))
         logger_debug("Output of contract creation: %s  %s ", addr, code)
         if addr:
-            stk.append(utils.coerce_to_int(addr))
+            stk.append(addr)
             compustate.gas = gas
         else:
             stk.append(0)
@@ -554,7 +551,7 @@ def apply_op(block, tx, msg, code, compustate):
         logger_debug(
             "Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
             utils.coerce_addr_to_hex(to), value, gas, data.encode('hex'))
-        result, gas, data = apply_msg(
+        result, gas, data = apply_msg_send(
             block, tx, Message(msg.to, to, value, gas, data))
         logger_debug(
             "Output of sub-call: %s %s length %s expected %s", result, data, len(data),
