@@ -5,7 +5,7 @@ console_scripts = ['pyeth=pyethereum.eth:main',
                    'pyethtool=tools.pyethtool_cli:main']
 
 setup(name="pyethereum",
-      version='0.0.1',
+      version='0.2.2',
       packages=find_packages("."),
       install_requires=[
           'six', 'leveldb', 'bitcoin', 'pysha3',

@@ -233,7 +233,7 @@ def apply_msg_send(block, tx, msg):
 def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     nonce = utils.encode_int(block.get_nonce(msg.sender))
-    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     assert not block.get_code(msg.to)
     res, gas, dat = apply_msg(block, tx, msg, msg.data)
     if res and len(dat):
@@ -241,7 +241,7 @@ def create_contract(block, tx, msg):
         block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     elif res:
-        block.state.delete(msg.to)
+        block.state.delete(msg.to.decode('hex'))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
         return res, gas, dat
@@ -446,7 +446,7 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
-            if stackargs[0] + i < len(code):
+            if stackargs[1] + i < len(code):
                 mem[stackargs[0] + i] = ord(code[stackargs[1] + i])
             else:
                 mem[stackargs[0] + i] = 0
