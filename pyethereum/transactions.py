@@ -108,7 +108,10 @@ class Transaction(object):
         h = {}
         for name, typ, default in tx_structure:
             h[name] = getattr(self, name)
+            if isinstance(h[name], (int, long)):
+                h[name] = str(h[name])
         h['sender'] = self.sender
+        h['data'] = self.data.encode('hex')
         return h
 
     def __eq__(self, other):

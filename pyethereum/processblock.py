@@ -331,9 +331,10 @@ def apply_op(block, tx, msg, code, compustate):
     if op[:4] == 'PUSH':
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
-        logger_debug('%s %s %s', compustate.pc, op, v)
+        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas)
     else:
-        logger_debug('%s %s %s', compustate.pc, op, stackargs)
+        logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
+                     compustate.gas)
     # Apply operation
     oldgas = compustate.gas
     oldpc = compustate.pc
@@ -442,13 +443,13 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
-        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
-            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
+        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
+            mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[0] + i < len(code):
-                mem[stackargs[1] + i] = ord(code[stackargs[0] + i])
+                mem[stackargs[0] + i] = ord(code[stackargs[1] + i])
             else:
-                mem[stackargs[1] + i] = 0
+                mem[stackargs[0] + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
@@ -510,7 +511,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'MSIZE':
         stk.append(len(mem))
     elif op == 'GAS':
-        stk.append(oldgas)
+        stk.append(compustate.gas)  # AFTER subtracting cost 1
     elif op[:4] == 'PUSH':
         pushnum = int(op[4:])
         compustate.pc = oldpc + 1 + pushnum
@@ -538,7 +539,7 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
         gas = stackargs[0]
         to = utils.encode_int(stackargs[1])
-        to = (('\x00' * (32 - len(to))) + to)[12:]
+        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
         logger_debug(

@@ -225,7 +225,8 @@ class Block(object):
                                        timestamp=kargs['timestamp'])
 
         # replay transactions
-        for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
+        for tx_lst_serialized, _state_root, _gas_used_encoded in \
+                transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
             success, output = processblock.apply_transaction(block, tx)
             block.add_transaction_to_list(tx)
@@ -253,7 +254,6 @@ class Block(object):
         assert block.state.root_hash == kargs['state_root']
 
         return block
-
 
     @classmethod
     def hex_deserialize(cls, hexrlpdata):
@@ -386,13 +386,13 @@ class Block(object):
     def account_to_dict(self, address):
         med_dict = {}
         for i, val in enumerate(self.get_acct(address)):
+            if isinstance(val, (int, long)):
+                val = str(val)
             med_dict[acct_structure[i][0]] = val
-        med_dict['code_hash'] = utils.sha3(med_dict['code']).encode('hex')
         med_dict['code'] = med_dict['code'].encode('hex')
         strie = trie.Trie(utils.get_db_path(), med_dict['storage'])
         med_dict['storage'] = {k.encode('hex'): v.encode('hex')
                                for k, v in strie.to_dict().iteritems()}
-        med_dict['storage_root'] = strie.root_hash.encode('hex')
         return med_dict
 
     # Revert computation
@@ -456,7 +456,10 @@ class Block(object):
         b = {}
         for name, typ, default in block_structure:
             b[name] = getattr(self, name)
-        for key in ["nonce", "state_root", "uncles_hash", "prevhash"]:
+            if isinstance(b[name], (int, long)):
+                b[name] = str(b[name])
+        for key in ["nonce", "state_root", "uncles_hash",
+                    "prevhash", "tx_list_root"]:
             b[key] = b[key].encode("hex")
         b["state"] = {}
         for address, v in self.state.to_dict().iteritems():
@@ -468,8 +471,8 @@ class Block(object):
             txjson = transactions.Transaction.deserialize(tx).to_dict()
             txlist.append({
                 "tx": txjson,
-                "medstate": msr,
-                "gas": utils.decode_int(gas)
+                "medstate": msr.encode('hex'),
+                "gas": str(utils.decode_int(gas))
             })
         b["transactions"] = txlist
         return b
@@ -554,13 +557,13 @@ def has_block(blockhash):
     return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(initial_alloc=GENESIS_INITIAL_ALLOC, difficulty=INITIAL_DIFFICULTY):
+def genesis(start_alloc=GENESIS_INITIAL_ALLOC, difficulty=INITIAL_DIFFICULTY):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
                   tx_list_root=trie.BLANK_ROOT,
                   difficulty=difficulty, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
-    for addr, balance in initial_alloc.iteritems():
+    for addr, balance in start_alloc.iteritems():
         block.set_balance(addr, balance)
     block.state.db.commit()
     return block
