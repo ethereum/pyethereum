@@ -4,12 +4,15 @@ import tempfile
 import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
+import sys
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 tempdir = tempfile.mktemp()
+
+filename = 'fixtures/vmtests.json' if len(sys.argv) == 2 else sys.argv[2]
 
 
 def check_testdata(data_keys, expected_keys):
@@ -22,7 +25,7 @@ def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
     try:
-        vm_fixture = json.load(open('fixtures/vmtests.json', 'r'))
+        vm_fixture = json.load(open(filename, 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures."
                       " Make sure you did 'git submodule init'!")
