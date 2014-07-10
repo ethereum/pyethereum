@@ -2,6 +2,7 @@ import os
 import pytest
 from pyethereum import tester
 import logging
+import pyserpent
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
