@@ -341,6 +341,9 @@ class Block(object):
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')
 
+    def set_nonce(self, address, value):
+        return self._set_acct_item(address, 'nonce', value)
+
     def increment_nonce(self, address):
         return self._delta_item(address, 'nonce', 1)
 
@@ -386,12 +389,11 @@ class Block(object):
     def account_to_dict(self, address):
         med_dict = {}
         for i, val in enumerate(self.get_acct(address)):
-            if isinstance(val, (int, long)):
-                val = str(val)
-            med_dict[acct_structure[i][0]] = val
-        med_dict['code'] = med_dict['code'].encode('hex')
-        strie = trie.Trie(utils.get_db_path(), med_dict['storage'])
-        med_dict['storage'] = {k.encode('hex'): v.encode('hex')
+            name, typ, default = acct_structure[i]
+            med_dict[acct_structure[i][0]] = utils.printers[typ](val)
+            if name == 'storage':
+                strie = trie.Trie(utils.get_db_path(), val)
+        med_dict['storage'] = {'0x'+k.encode('hex'): '0x'+v.encode('hex')
                                for k, v in strie.to_dict().iteritems()}
         return med_dict
 
@@ -455,12 +457,7 @@ class Block(object):
     def to_dict(self):
         b = {}
         for name, typ, default in block_structure:
-            b[name] = getattr(self, name)
-            if isinstance(b[name], (int, long)):
-                b[name] = str(b[name])
-        for key in ["nonce", "state_root", "uncles_hash",
-                    "prevhash", "tx_list_root"]:
-            b[key] = b[key].encode("hex")
+            b[name] = utils.printers[typ](getattr(self, name))
         b["state"] = {}
         for address, v in self.state.to_dict().iteritems():
             b["state"][address.encode('hex')] = self.account_to_dict(address)

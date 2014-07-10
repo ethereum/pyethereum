@@ -4,6 +4,7 @@ import tempfile
 import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
+import pyethereum.utils as u
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -22,7 +23,7 @@ def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
     try:
-        vm_fixture = json.load(open('fixtures/vmtests.json', 'r'))
+        vm_fixture = json.load(open('tests/99', 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures."
                       " Make sure you did 'git submodule init'!")
@@ -30,19 +31,19 @@ def vm_tests_fixtures():
 
 
 def test_boolean():
-    do_test_vm('boolean')
+    do_test_vm('namecoin')
 
 
-def test_suicide():
-    do_test_vm('suicide')
+#def test_suicide():
+#    do_test_vm('suicide')
 
 
-def test_arith():
-    do_test_vm('arith')
+#def test_arith():
+#    do_test_vm('arith')
 
 
-def test_mktx():
-    do_test_vm('mktx')
+#def test_mktx():
+#    do_test_vm('mktx')
 
 
 def do_test_vm(name):
@@ -66,7 +67,7 @@ def do_test_vm(name):
         coinbase=env['currentCoinbase'],
         difficulty=int(env['currentDifficulty']),
         gas_limit=int(env['currentGasLimit']),
-        timestamp=env['currentTimestamp'])
+        timestamp=int(env['currentTimestamp']))
 
     # code FIXME WHAT TO DO WITH THIS CODE???
     # if isinstance(env['code'], str):
@@ -78,10 +79,14 @@ def do_test_vm(name):
     # setup state
     for address, h in pre.items():
         check_testdata(h.keys(), ['code', 'nonce', 'balance', 'storage'])
-        blk.set_balance(address, h['balance'])
-        logger.debug('PRE Balance: %r: %r', address, h['balance'])
-        blk._set_acct_item(address, 'nonce', h['nonce'])
+        blk.set_nonce(address, int(h['nonce']))
+        blk.set_balance(address, int(h['balance']))
         blk.set_code(address, h['code'][2:].decode('hex'))
+        for k, v in h['storage']:
+            blk.set_storage_data(address,
+                                 u.big_endian_to_int(k.decode('hex')),
+                                 u.big_endian_to_int(v.decode('hex')))
+        logger.debug('PRE Balance: %r: %r', address, h['balance'])
 
     # execute transactions
     pb.enable_debug()
@@ -93,7 +98,7 @@ def do_test_vm(name):
         startgas=int(exek['gas']),
         to=recvaddr,
         value=int(exek['value']),
-        data=exek['data'])
+        data=exek['data'][2:].decode('hex'))
     tx.sender = sender
     logger.debug('TX %r > %r v:%r gas:%s @price:%s',
                  sender, recvaddr, tx.value, tx.startgas, tx.gasprice)
@@ -106,7 +111,7 @@ def do_test_vm(name):
         pb.enable_debug()
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
-                                        data='0x'+msg.data.encode('hex')))
+                                        data=msg.data.encode('hex')))
         result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
         pb.disable_debug()
         return result, gas_rem, data
@@ -132,14 +137,9 @@ def do_test_vm(name):
         assert callcreate['value'] == amc['value']
         assert callcreate['destination'] == amc['destination']
 
-    # data and out not set in tests yet
     assert output == params['out']
-    assert not params['out']
-    assert gas_remained == params['gas']
+    assert str(gas_remained) == params['gas']
 
     # check state
     for address, data in post.items():
-        assert data['code'][2:].decode('hex') == blk.get_code(address)
-        assert data['balance'] == blk.get_balance(address)
-        assert data['nonce'] == blk.get_nonce(address)
-        assert data['storage'] == blk.get_storage(address).to_dict()
+        assert data == blk.account_to_dict(address)

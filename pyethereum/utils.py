@@ -172,6 +172,7 @@ def encode_int(v):
         raise Exception("Integer invalid or out of range")
     return int_to_big_endian(v)
 
+
 decoders = {
     "hash": decode_hash,
     "bin": decode_bin,
@@ -186,6 +187,14 @@ encoders = {
     "addr": encode_addr,
     "int": encode_int,
     "trie_root": encode_root,
+}
+
+printers = {
+    "hash": lambda v: '0x'+v.encode('hex'),
+    "bin": lambda v: '0x'+v.encode('hex'),
+    "addr": lambda v: v.encode('hex'),
+    "int": lambda v: str(v),
+    "trie_root": lambda v: v.encode('hex')
 }
 
 

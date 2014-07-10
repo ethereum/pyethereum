@@ -271,7 +271,7 @@ def calcfee(block, tx, msg, compustate, op):
         m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
         return GSHA3 + m_extend / 32 * GMEMORY
     elif op == 'SLOAD':
-        return GSTEP + GSLOAD
+        return GSLOAD
     elif op == 'SSTORE':
         if not block.get_storage_data(msg.to, stk[-1]) and stk[-2]:
             return 2 * GSSTORE
@@ -323,8 +323,8 @@ def apply_op(block, tx, msg, code, compustate):
     # out of gas error
     fee = calcfee(block, tx, msg, compustate, op)
     if fee > compustate.gas:
-        logger.debug("Out of gas %s need %s", compustate.gas, fee)
-        logger.debug('%s %s', op, list(reversed(compustate.stack)))
+        logger_debug("Out of gas %s need %s", compustate.gas, fee)
+        logger_debug('Op: %s %s', op, list(reversed(compustate.stack)))
         return OUT_OF_GAS
     stackargs = []
     for i in range(in_args):
@@ -337,13 +337,12 @@ def apply_op(block, tx, msg, code, compustate):
         logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
                      compustate.gas)
     # Apply operation
-    oldgas = compustate.gas
     oldpc = compustate.pc
     compustate.gas -= fee
     compustate.pc += 1
     stk = compustate.stack
     mem = compustate.memory
-    if op == 'STOP':
+    if op == 'STOP' or op == 'INVALID':
         return []
     elif op == 'ADD':
         stk.append((stackargs[0] + stackargs[1]) % 2 ** 256)
@@ -420,7 +419,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'BALANCE':
         stk.append(block.get_balance(utils.coerce_addr_to_hex(stackargs[0])))
     elif op == 'ORIGIN':
-        stk.append(tx.sender)
+        stk.append(utils.coerce_to_int(tx.sender))
     elif op == 'CALLER':
         stk.append(utils.coerce_to_int(msg.sender))
     elif op == 'CALLVALUE':
@@ -462,7 +461,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'DIFFICULTY':
         stk.append(block.difficulty)
     elif op == 'GASLIMIT':
-        stk.append(block.gaslimit)
+        stk.append(block.gas_limit)
     elif op == 'POP':
         pass
     elif op == 'DUP':
@@ -570,3 +569,5 @@ def apply_op(block, tx, msg, code, compustate):
         block.transfer_value(msg.to, to, block.get_balance(msg.to))
         block.suicides.append(msg.to)
         return []
+    for a in stk:
+        assert isinstance(a, (int, long))
