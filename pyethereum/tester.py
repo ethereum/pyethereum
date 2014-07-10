@@ -19,9 +19,9 @@ a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 
 class state():
-    def __init__(self, accounts=len(keys)):
+    def __init__(self, num_accounts=len(keys)):
         o = {}
-        for i in range(accounts):
+        for i in range(num_accounts):
             o[accounts[i]] = 10**18
         self.block = b.genesis(o)
         self.mine(1)

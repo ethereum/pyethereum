@@ -6,6 +6,7 @@ import time
 import blocks
 import transactions
 import trie
+import sys
 import logging
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def disable_debug():
 def logger_debug(*args):
     logger.debug(*args)
     if print_debug:
-        print(args[0] % tuple(args[1:]))
+        sys.stderr.write(args[0] % tuple(args[1:]) + '\n')
 
 GSTEP = 1
 GSTOP = 0
@@ -417,7 +418,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'ADDRESS':
         stk.append(utils.coerce_to_int(msg.to))
     elif op == 'BALANCE':
-        stk.append(block.get_balance(msg.to))
+        stk.append(block.get_balance(utils.coerce_addr_to_hex(stackargs[0])))
     elif op == 'ORIGIN':
         stk.append(tx.sender)
     elif op == 'CALLER':
