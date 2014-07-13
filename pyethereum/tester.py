@@ -27,6 +27,7 @@ class state():
         for i in range(num_accounts):
             o[accounts[i]] = 10**18
         self.block = b.genesis(o)
+        self.block.coinbase = a0
         self.mine(1)
 
     def contract(self, code, sender=k0, endowment=0):

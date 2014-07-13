@@ -63,7 +63,7 @@ def gen_test(code, val, data):
         "post": post,
         "exec": exek,
         "gas": str(gas),
-        "out": o
+        "out": '0x'+''.join(map(chr, o)).encode('hex')
     }
 
 if __name__ == "__main__":
