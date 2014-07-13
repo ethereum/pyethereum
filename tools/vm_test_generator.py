@@ -2,7 +2,7 @@ import json
 import pyethereum
 t = pyethereum.tester
 pb = pyethereum.processblock
-import pyserpent
+import serpent
 import sys
 
 
@@ -36,7 +36,7 @@ def gen_test(code, val, data):
 
         pb.apply_msg = apply_msg_wrapper
 
-        d = pyserpent.encode_datalist(data)
+        d = serpent.encode_datalist(map(int, data))
         tx = pyethereum.transactions.Transaction(1, 10**12, 10000, c, val, data)\
             .sign(t.keys[0])
         msg = pb.Message(t.accounts[0], c, val, 10000, d)

@@ -23,7 +23,7 @@ def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
     try:
-        vm_fixture = json.load(open('tests/98', 'r'))
+        vm_fixture = json.load(open('random.json', 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures."
                       " Make sure you did 'git submodule init'!")
@@ -137,7 +137,7 @@ def do_test_vm(name):
         assert callcreate['value'] == amc['value']
         assert callcreate['destination'] == amc['destination']
 
-    assert output == params['out']
+    assert '0x'+''.join(map(chr, output)).encode('hex') == params['out']
     assert str(gas_remained) == params['gas']
 
     # check state
