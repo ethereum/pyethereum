@@ -37,7 +37,7 @@ def gen_test():
     while 1:
             CODE = gen_random_code()
             DATA = gen_random_code()
-            VAL = random.randrange(10**18)
+            VAL = 0
             s = t.state(1)
             pre = s.block.to_dict()['state']
             FROM = t.keys[0]

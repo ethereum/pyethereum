@@ -23,7 +23,7 @@ def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
     try:
-        vm_fixture = json.load(open('tests/99', 'r'))
+        vm_fixture = json.load(open('tests/98', 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures."
                       " Make sure you did 'git submodule init'!")
@@ -31,7 +31,7 @@ def vm_tests_fixtures():
 
 
 def test_boolean():
-    do_test_vm('namecoin')
+    do_test_vm('random')
 
 
 #def test_suicide():
