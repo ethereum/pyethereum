@@ -1,6 +1,6 @@
 import pyethereum
-import serpent
 import time
+serpent = None
 
 u = pyethereum.utils
 t = pyethereum.transactions
@@ -20,6 +20,9 @@ a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 class state():
     def __init__(self, num_accounts=len(keys)):
+        global serpent
+        if not serpent:
+            serpent = __import__('serpent')
         o = {}
         for i in range(num_accounts):
             o[accounts[i]] = 10**18
