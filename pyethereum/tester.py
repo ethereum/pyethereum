@@ -1,5 +1,5 @@
 import pyethereum
-import pyserpent
+import serpent
 import time
 
 u = pyethereum.utils
@@ -28,7 +28,7 @@ class state():
 
     def contract(self, code, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evm = pyserpent.compile(code)
+        evm = serpent.compile(code)
         tx = t.contract(sendnonce, 1, 100000, endowment, evm)
         tx.sign(sender)
         (s, a) = pb.apply_transaction(self.block, tx)
@@ -38,23 +38,13 @@ class state():
 
     def send(self, sender, to, value, data=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        data2 = []
-        for d in data:
-            if isinstance(d, (int, long)):
-                data2.append(str(d % 2**256))
-            elif len(d) == 0:
-                data2.append('0')
-            elif len(d) == 40:
-                data2.append('0x'+d)
-            else:
-                data2.append('0x'+d.encode('hex'))
-        evmdata = pyserpent.encode_datalist(data2)
+        evmdata = serpent.encode_datalist(data)
         tx = t.Transaction(sendnonce, 1, 100000, to, value, evmdata)
         tx.sign(sender)
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
-        o = map(int, pyserpent.decode_datalist(r))
+        o = serpent.decode_datalist(r)
         return map(lambda x: x-2**256 if x > 2**255 else x, o)
 
     def mine(self, n=1, coinbase=a0):
