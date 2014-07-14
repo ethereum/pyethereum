@@ -2,25 +2,40 @@ import json
 import pyethereum
 t = pyethereum.tester
 pb = pyethereum.processblock
+u = pyethereum.utils
 import sys
 import random
 
 
-def gen_random_code():
+def mkrndgen(seed):
+    state = [0, 0]
+
+    def rnd(n):
+        if state[0] < 2**32:
+            state[0] = u.big_endian_to_int(u.sha3(seed+str(state[1]+1)))
+            state[1] += 1
+        o = state[0] % n
+        state[0] /= n
+        return o
+    return rnd
+
+
+def gen_random_code(rnd):
     o = []
     for i in range(4):
-        o.extend([96, random.randrange(256)])
-        o.extend([99] + [random.randrange(256) for i in range(4)])
+        o.extend([96, rnd(256)])
+        o.extend([99] + [rnd(256) for i in range(4)])
     ops = pyethereum.opcodes.opcodes.keys()
-    o += [random.choice(ops) for i in range(64)]
+    o += [ops[rnd(len(ops))] for i in range(64)]
     return ''.join(map(chr, o))
 
 
 # Code: serpent code
 # Tx:[ val, data ]
-def gen_test():
+def gen_test(seed):
     orig_apply_msg = pb.apply_msg
     apply_message_calls = []
+    i = 0
 
     def apply_msg_wrapper(_block, _tx, msg, code):
         pb.enable_debug()
@@ -35,14 +50,16 @@ def gen_test():
     pb.apply_msg = apply_msg_wrapper
 
     while 1:
-            CODE = gen_random_code()
-            DATA = gen_random_code()
+            CODE = gen_random_code(mkrndgen(seed+str(i)))
+            DATA = gen_random_code(mkrndgen(seed+str(i+1)))
+            i += 2
             VAL = 0
             s = t.state(1)
-            pre = s.block.to_dict()['state']
             FROM = t.keys[0]
             FROMADDR = t.accounts[0]
             TO = t.accounts[1]
+            s.block.delta_balance(TO, 1)
+            pre = s.block.to_dict()['state']
             env = {
                 "currentCoinbase": s.block.coinbase,
                 "currentDifficulty": str(s.block.difficulty),
@@ -84,5 +101,5 @@ def gen_test():
     }
 
 if __name__ == "__main__":
-    o = gen_test()
+    o = gen_test((sys.argv + [str(random.randrange(10**50))])[2])
     print json.dumps({sys.argv[1]: o}, indent=4)
