@@ -22,32 +22,42 @@ def check_testdata(data_keys, expected_keys):
 def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
+    # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
     try:
-        vm_fixture = json.load(open('random.json', 'r'))
+        vm_fixture = json.load(open('fixtures/vmtests.json', 'r'))
     except IOError:
-        raise IOError("Could not read vmtests.json from fixtures."
-                      " Make sure you did 'git submodule init'!")
+        raise IOError("Could not read vmtests.json from fixtures",
+            "Make sure you did 'git submodule init'")
+    try:
+        vm_fixture.update(json.load(open('fixtures/random.json', 'r')))
+    except IOError:
+        raise IOError("Could not read random.json from fixtures.")
+    assert vm_fixture.keys() == ['boolean', 'suicide', 'random', 'arith', 'mktx'],\
+        "Tests changed, try updating the fixtures submodule"
+
     return vm_fixture
 
-
-def test_boolean():
+def test_random():
     do_test_vm('random')
 
-
-#def test_suicide():
-#    do_test_vm('suicide')
-
-
-#def test_arith():
-#    do_test_vm('arith')
+def test_boolean():
+    do_test_vm('boolean')
 
 
-#def test_mktx():
-#    do_test_vm('mktx')
+def test_suicide():
+    do_test_vm('suicide')
+
+
+def test_arith():
+    do_test_vm('arith')
+
+
+def test_mktx():
+    do_test_vm('mktx')
 
 
 def do_test_vm(name):
-
+    print('running test:%r', name)
     logger.debug('running test:%r', name)
     params = vm_tests_fixtures()[name]
 
