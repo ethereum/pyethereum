@@ -57,7 +57,6 @@ def test_mktx():
 
 
 def do_test_vm(name):
-    print('running test:%r', name)
     logger.debug('running test:%r', name)
     params = vm_tests_fixtures()[name]
 
