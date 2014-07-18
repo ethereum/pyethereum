@@ -11,6 +11,7 @@ import blocks
 import processblock
 from transactions import Transaction
 import indexdb
+import chainlogger
 
 logger = logging.getLogger(__name__)
 
@@ -357,6 +358,7 @@ class ChainManager(StoppableLoopThread):
     def log_chain(self):
         num = self.head.number + 1
         for b in reversed(self.get_chain(count=num)):
+            chainlogger.log_block(b)
             logger.debug(b)
             for tx in b.get_transactions():
                 logger.debug('\t%r', tx)
