@@ -5,7 +5,9 @@ import db
 import utils
 import processblock
 import transactions
-
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = '\00' * 32
@@ -223,6 +225,8 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'])
+
+        logger.debug('%r initialized from parent state:%r', block, block.state_root)
 
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in \
