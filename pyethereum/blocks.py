@@ -225,19 +225,19 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'])
-
-        logger.debug('%r initialized from parent state:%r', block, block.state_root)
+        block.finalize()
 
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in \
                 transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
+#            logger.debug('state:\n%s', utils.dump_state(block.state))
+#            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
-            block.add_transaction_to_list(tx)
+            #block.add_transaction_to_list(tx) # < this is done by processblock
+#            logger.debug('state:\n%s', utils.dump_state(block.state))
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
-
-        block.finalize()
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
@@ -295,6 +295,7 @@ class Block(object):
         :param param: parameter to set
         :param value: new value
         '''
+#        logger.debug('set acct %r %r %d', address, param, value)
         if len(address) == 40:
             address = address.decode('hex')
         acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
