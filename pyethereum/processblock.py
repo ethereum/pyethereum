@@ -162,7 +162,7 @@ def apply_transaction(block, tx):
         result, gas_remained, data = create_contract(block, tx, message)
     assert gas_remained >= 0
     logger.debug(
-        'applied tx, result %s gas remained %s data/code %s', result,
+        'applied tx, result %r gas remained %r data/code %r', result,
         gas_remained, ''.join(map(chr, data)).encode('hex'))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
