@@ -169,31 +169,6 @@ def deserialize_child(parent, rlpdata):
     return block
 
 
-@pytest.mark.gas_used
-def test_gas_price_calculation():
-    code = [
-        'CALLER', 'PUSH1', 69, 'SSTORE', 'PUSH1', 42, 'DUP', 'PUSH1', 16, 'PUSH1', 0, 'CODECOPY', 'PUSH1', 0, 'RETURN', 'STOP', 'PUSH1', 69, 'SLOAD', 'CALLER', 'EQ', 'NOT', 'PUSH1', 42, 'JUMPI', 'CALLDATASIZE', 'PUSH1', 0,
-        'MLOAD', 'LT', 'NOT', 'PUSH1', 42, 'JUMPI', 'PUSH1', 32, 'PUSH1', 0, 'MLOAD', 'ADD', 'CALLDATALOAD', 'PUSH1', 0, 'MLOAD', 'CALLDATALOAD', 'SSTORE', 'PUSH1', 64, 'PUSH1', 0, 'MLOAD', 'ADD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 9, 'JUMP']
-    tx_dict = {'nonce': 0L,
-               'startgas': 10000L,
-               'value': 0L,
-               'to': '0000000000000000000000000000000000000000',
-               's': 9504411864285061276187941232604806802531640604671611347567260576513458657555L,
-               'r': 23362574597211079051662254624411036839077618676481166419446762923566339937125L,
-               'v': 28L,
-               'data': '3`EW`*Q`\x10`\x009`\x00\xf2\x00`EV3\x0e\x0f`*Y6`\x00S\n\x0f`*Y` `\x00S\x015`\x00S5W`@`\x00S\x01`\x00T`\tX',
-               'gasprice': 10000000000000L}
-    assert serpent.compiler.serialize(code) == tx_dict['data']
-    set_db()
-    block = genesis = blocks.genesis()
-
-    tx = transactions.Transaction(**tx_dict)
-    assert block.gas_used == 0
-    success, output = processblock.apply_transaction(block, tx)
-    GAS_USED_CPP = 1001  # as seen for tx0 in block1 in protocol 17 cpp chain
-    assert block.gas_used == GAS_USED_CPP
-
-
 # TODO ##########################################
 #
 # test for remote block with invalid transaction

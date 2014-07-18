@@ -301,6 +301,11 @@ def db_get(key):
     database = db.DB(get_db_path())
     return database.get(key)
 
+def dump_state(trie):
+    res = ''
+    for k, v in trie.to_dict().items():
+        res+= '%r:%r\n'%(k.encode('hex'), v.encode('hex'))
+    return res
 
 def configure_logging(loggerlevels=':DEBUG', verbosity=1):
     logconfig = dict(

@@ -5,7 +5,9 @@ import db
 import utils
 import processblock
 import transactions
-
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 INITIAL_DIFFICULTY = 2 ** 22
 GENESIS_PREVHASH = '\00' * 32
@@ -22,7 +24,7 @@ BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 
 GENESIS_INITIAL_ALLOC = \
-    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,  # (G)
+    {"51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,  # (G)
      "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
      "b9c015918bdaba24b4ff057a92a3873d6eb201be": 2 ** 200,  # (V)
      "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,  # (A)
@@ -223,17 +225,19 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'])
+        block.finalize()
 
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in \
                 transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
+#            logger.debug('state:\n%s', utils.dump_state(block.state))
+#            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
-            block.add_transaction_to_list(tx)
+            #block.add_transaction_to_list(tx) # < this is done by processblock
+#            logger.debug('state:\n%s', utils.dump_state(block.state))
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
-
-        block.finalize()
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
@@ -291,6 +295,7 @@ class Block(object):
         :param param: parameter to set
         :param value: new value
         '''
+#        logger.debug('set acct %r %r %d', address, param, value)
         if len(address) == 40:
             address = address.decode('hex')
         acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()

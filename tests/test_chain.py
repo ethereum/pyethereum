@@ -8,6 +8,7 @@ import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
 import pyethereum.trie as trie
+import pyethereum.utils as utils
 from pyethereum.db import DB as DB
 from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
@@ -259,7 +260,7 @@ def test_mine_block():
     assert blk2.get_parent() == blk
 
 
-def test_block_serialization_with_transaction():
+def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
@@ -333,25 +334,38 @@ def test_block_serialization_other_db():
     db_store(b_blk2)
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 
-
+@pytest.mark.wip
 def test_block_serialization_with_transaction_other_db():
+
+    hx = lambda x: x.encode('hex')
+
     k, v, k2, v2 = accounts()
     # mine two blocks
     set_db()
     a_blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
+    logger.debug('a: state_root before tx %r', hx(a_blk.state_root))
+    logger.debug('a: state:\n%s', utils.dump_state(a_blk.state))
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    logger.debug('a: state_root after tx %r', hx(a_blk2.state_root))
+    logger.debug('a: state:\n%s', utils.dump_state(a_blk2.state))
     assert tx in a_blk2.get_transactions()
     db_store(a_blk2)
     assert tx in a_blk2.get_transactions()
+    logger.debug('preparing receiving chain ---------------------')
     # receive in other db
     set_db()
     b_blk = mkquickgenesis({v: utils.denoms.ether * 1})
-    assert b_blk == a_blk
-
     db_store(b_blk)
-    b_blk2 = b_blk.deserialize(a_blk2.serialize())
+
+    assert b_blk.number == 0
+    assert b_blk == a_blk
+    logger.debug('b: state_root before tx %r', hx(b_blk.state_root))
+    logger.debug('starting deserialization of remote block w/ tx')
+    b_blk2 = b_blk.deserialize(a_blk2.serialize()) # BOOM
+    logger.debug('b: state_root after %r', hx(b_blk2.state_root))
+
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 
     assert tx in b_blk2.get_transactions()
@@ -477,7 +491,7 @@ def test_add_longer_side_chain():
     assert cm.head == remote_blocks[-1]
 
 
-@pytest.mark.wip
+
 def test_reward_unlces():
     """
     B0 B1 B2
