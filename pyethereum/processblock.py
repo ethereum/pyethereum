@@ -8,6 +8,7 @@ import transactions
 import trie
 import sys
 import logging
+import json
 logger = logging.getLogger(__name__)
 
 print_debug = 0
@@ -55,7 +56,6 @@ def verify(block, parent):
                                            uncles=block.uncles)
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
-    block2.finalize()
     for i in range(block.transaction_count):
         tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
         tx = transactions.Transaction.create(tx)
@@ -63,6 +63,7 @@ def verify(block, parent):
         apply_transaction(block2, tx)
         assert s == block2.state.root_hash
         assert g == utils.encode_int(block2.gas_used)
+    block2.finalize()
     assert block2.state.root_hash == block.state.root_hash
     assert block2.gas_used == block.gas_used
     return True
@@ -144,7 +145,7 @@ def apply_transaction(block, tx):
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
     # start transacting #################
-    if tx.to:
+    if tx.to not in ['', '0'*40]:
         block.increment_nonce(tx.sender)
 
     # buy startgas
@@ -160,10 +161,12 @@ def apply_transaction(block, tx):
         result, gas_remained, data = apply_msg_send(block, tx, message)
     else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
+        result = utils.coerce_addr_to_hex(result)
     assert gas_remained >= 0
     logger.debug(
         'applied tx, result %r gas remained %r data/code %r', result,
         gas_remained, ''.join(map(chr, data)).encode('hex'))
+    logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -177,7 +180,7 @@ def apply_transaction(block, tx):
         if tx.to:
             output = ''.join(map(chr, data))
         else:
-            output = utils.coerce_addr_to_hex(result)
+            output = result
     suicides = block.suicides
     block.suicides = []
     for s in suicides:

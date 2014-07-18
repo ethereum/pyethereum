@@ -190,13 +190,22 @@ class Block(object):
         return l256 < 2 ** 256 / self.difficulty
 
     @classmethod
-    def deserialize(cls, rlpdata):
-        header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        assert len(header_args) == len(block_structure)
-        kargs = dict(transaction_list=transaction_list, uncles=uncles)
+    def deserialize_header(cls, header_data):
+        if isinstance(header_data, (str, unicode)):
+            header_data = rlp.decode(header_data)
+        assert len(header_data) == len(block_structure)
+        kargs = {}
         # Deserialize all properties
         for i, (name, typ, default) in enumerate(block_structure):
-            kargs[name] = utils.decoders[typ](header_args[i])
+            kargs[name] = utils.decoders[typ](header_data[i])
+        return kargs
+
+    @classmethod
+    def deserialize(cls, rlpdata):
+        header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        kargs = cls.deserialize_header(header_args)
+        kargs['transaction_list'] = transaction_list
+        kargs['uncles'] = uncles
 
         # if we don't have the state we need to replay transactions
         _db = db.DB(utils.get_db_path())
@@ -225,7 +234,6 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'])
-        block.finalize()
 
         # replay transactions
         for tx_lst_serialized, _state_root, _gas_used_encoded in \
@@ -238,6 +246,7 @@ class Block(object):
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
+        block.finalize()
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
@@ -322,7 +331,8 @@ class Block(object):
         assert isinstance(tx_lst_serialized, list)
         data = [tx_lst_serialized, state_root, gas_used_encoded]
         self.transactions.update(
-            utils.encode_int(self.transaction_count), rlp.encode(data))
+            utils.zpad(utils.encode_int(self.transaction_count), 32),
+            rlp.encode(data))
         self.transaction_count += 1
 
     def add_transaction_to_list(self, tx):
@@ -385,8 +395,8 @@ class Block(object):
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
         if val:
-            t.update(utils.coerce_to_bytes(index),
-                     rlp.encode(utils.encode_int(val)))
+            t.update(utils.zpad(utils.coerce_to_bytes(index), 32),
+                     rlp.encode(utils.zpad(utils.encode_int(val), 32)))
         else:
             t.delete(utils.coerce_to_bytes(index))
         self._set_acct_item(address, 'storage', t.root_hash)

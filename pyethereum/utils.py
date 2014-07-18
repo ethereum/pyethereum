@@ -192,7 +192,7 @@ encoders = {
 printers = {
     "hash": lambda v: '0x'+v.encode('hex'),
     "bin": lambda v: '0x'+v.encode('hex'),
-    "addr": lambda v: v.encode('hex'),
+    "addr": lambda v: v,
     "int": lambda v: str(v),
     "trie_root": lambda v: v.encode('hex')
 }
