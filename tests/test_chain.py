@@ -8,6 +8,7 @@ import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
 import pyethereum.trie as trie
+import pyethereum.utils as utils
 from pyethereum.db import DB as DB
 from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
@@ -345,12 +346,14 @@ def test_block_serialization_with_transaction_other_db():
     db_store(a_blk)
     tx = get_transaction()
     logger.debug('a: state_root before tx %r', hx(a_blk.state_root))
+    logger.debug('a: state:\n%s', utils.dump_state(a_blk.state))
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     logger.debug('a: state_root after tx %r', hx(a_blk2.state_root))
+    logger.debug('a: state:\n%s', utils.dump_state(a_blk2.state))
     assert tx in a_blk2.get_transactions()
     db_store(a_blk2)
     assert tx in a_blk2.get_transactions()
-
+    logger.debug('preparing receiving chain ---------------------')
     # receive in other db
     set_db()
     b_blk = mkquickgenesis({v: utils.denoms.ether * 1})
