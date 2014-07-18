@@ -22,7 +22,7 @@ BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 
 GENESIS_INITIAL_ALLOC = \
-    {"8a40bfaa73256b60764c1bf40675a99083efb075": 2 ** 200,  # (G)
+    {"51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,  # (G)
      "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
      "b9c015918bdaba24b4ff057a92a3873d6eb201be": 2 ** 200,  # (V)
      "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,  # (A)
