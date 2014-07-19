@@ -57,7 +57,8 @@ def verify(block, parent):
     assert block2.difficulty == block.difficulty
     assert block2.gas_limit == block.gas_limit
     for i in range(block.transaction_count):
-        tx, s, g = rlp.decode(block.transactions.get(utils.encode_int(i)))
+        tx, s, g = rlp.decode(
+            block.transactions.get(utils.zpad(utils.encode_int(i), 32)))
         tx = transactions.Transaction.create(tx)
         assert tx.startgas + block2.gas_used <= block.gas_limit
         apply_transaction(block2, tx)
