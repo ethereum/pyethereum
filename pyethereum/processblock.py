@@ -9,6 +9,7 @@ import trie
 import sys
 import logging
 import json
+import time
 logger = logging.getLogger(__name__)
 
 print_debug = 0
@@ -146,7 +147,7 @@ def apply_transaction(block, tx):
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
     # start transacting #################
-    if tx.to not in ['', '0'*40]:
+    if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         block.increment_nonce(tx.sender)
 
     # buy startgas
@@ -219,10 +220,13 @@ def apply_msg(block, tx, msg, code):
     if not o:
         return 0, msg.gas, []
     compustate = Compustate(gas=msg.gas)
+    t, ops = time.time(), 0
     # Main loop
     while 1:
         o = apply_op(block, tx, msg, code, compustate)
+        ops += 1
         if o is not None:
+            logger_debug("Time per op: %s", str((time.time() - t) * 1.0 / ops))
             logger.debug('done %s', o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
