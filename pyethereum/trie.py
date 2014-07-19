@@ -40,6 +40,13 @@ def nibbles_to_bin(nibbles):
 
 
 NIBBLE_TERMINATOR = 16
+RECORDING = 1
+NONE = 0
+VERIFYING = -1
+
+
+class InvalidSPVProof(Exception):
+    pass
 
 
 def with_terminator(nibbles):
@@ -130,6 +137,7 @@ BLANK_ROOT = ''
 
 
 class Trie(object):
+    proof_mode = 0
 
     def __init__(self, dbfile, root_hash=BLANK_ROOT):
         '''it also present a dictionary like interface
@@ -137,9 +145,24 @@ class Trie(object):
         :param dbfile: key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
-        dbfile = os.path.abspath(dbfile)
-        self.db = DB(dbfile)
+        if isinstance(dbfile, str):
+            dbfile = os.path.abspath(dbfile)
+            self.db = DB(dbfile)
+        else:
+            self.db = dbfile  # Pass in a database object directly
         self.set_root_hash(root_hash)
+        self.proof_mode = 0
+        self.proof_nodes = []
+
+    # For SPV proof production/verification purposes
+    def spv_check(self, node):
+        if not self.proof_mode:
+            pass
+        elif self.proof_mode == RECORDING:
+            self.proof_nodes.append(node)
+        elif self.proof_nodes == VERIFYING:
+            if node not in self.proof_nodes:
+                raise InvalidSPVProof("Proof invalid!")
 
     @property
     def root_hash(self):
@@ -154,6 +177,7 @@ class Trie(object):
         val = rlp.encode(self.root_node)
         key = utils.sha3(val)
         self.db.put(key, val)
+        self.spv_check(self.root_node)
         return key
 
     @root_hash.setter
@@ -196,6 +220,7 @@ class Trie(object):
 
         hashkey = utils.sha3(rlpnode)
         self.db.put(hashkey, rlpnode)
+        self.spv_check(node)
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -203,7 +228,9 @@ class Trie(object):
             return BLANK_NODE
         if isinstance(encoded, list):
             return encoded
-        return rlp.decode(self.db.get(encoded))
+        o = rlp.decode(self.db.get(encoded))
+        self.spv_check(o)
+        return o
 
     def _get_node_type(self, node):
         ''' get node type and content
@@ -625,6 +652,33 @@ class Trie(object):
         if self.root_hash == BLANK_ROOT:
             return True
         return self.root_hash in self.db
+
+    def produce_spv_proof(self, key):
+        self.proof_mode = RECORDING
+        self.proof_nodes = [self.root_node]
+        self.get(key)
+        self.proof_mode = NONE
+        o = self.proof_nodes
+        self.proof_nodes = []
+        return o
+
+
+def verify_spv_proof(root, key, proof):
+    t = Trie(db.EphemDB())
+    t.proof_mode = VERIFYING
+    t.proof_nodes = proof
+    for i, node in enumerate(proof):
+        R = rlp.encode(node)
+        H = utils.sha3(R)
+        t.db.put(H, R)
+    try:
+        t.root_hash = root
+        t.get(key)
+        return True
+    except Exception, e:
+        print e
+        return False
+
 
 if __name__ == "__main__":
     import sys

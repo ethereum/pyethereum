@@ -346,7 +346,7 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(rlp.decode(
-                self.transactions.get(utils.encode_int(i))))
+                self.transactions.get(utils.zpad(utils.encode_int(i), 32))))
         return txlist
 
     def get_transactions(self):
@@ -389,8 +389,8 @@ class Block(object):
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
-        val = rlp.decode(t.get(utils.coerce_to_bytes(index)))
-        return utils.decode_int(val) if val else 0
+        val = rlp.decode(t.get(utils.zpad(utils.coerce_to_bytes(index), 32)))
+        return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
@@ -400,6 +400,11 @@ class Block(object):
         else:
             t.delete(utils.coerce_to_bytes(index))
         self._set_acct_item(address, 'storage', t.root_hash)
+
+    def del_account(self, address):
+        if len(address) == 40:
+            address = address.decode('hex')
+        self.state.delete(address)
 
     def account_to_dict(self, address):
         med_dict = {}
@@ -478,7 +483,7 @@ class Block(object):
             b["state"][address.encode('hex')] = self.account_to_dict(address)
         txlist = []
         for i in range(self.transaction_count):
-            td = self.transactions.get(utils.encode_int(i))
+            td = self.transactions.get(utils.zpad(utils.encode_int(i), 32))
             tx, msr, gas = map(lambda i: rlp.descend(td, i), range(3))
             txjson = transactions.Transaction.deserialize(tx).to_dict()
             txlist.append({

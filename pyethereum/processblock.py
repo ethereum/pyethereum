@@ -166,7 +166,7 @@ def apply_transaction(block, tx):
     logger.debug(
         'applied tx, result %r gas remained %r data/code %r', result,
         gas_remained, ''.join(map(chr, data)).encode('hex'))
-    logger.debug(json.dumps(block.to_dict(), indent=2))
+    #logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
@@ -184,7 +184,7 @@ def apply_transaction(block, tx):
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
-        block.state.delete(s.decode('hex'))
+        block.del_account(s)
     block.add_transaction_to_list(tx)
     success = output is not OUT_OF_GAS
     return success, output if success else ''
