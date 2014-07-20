@@ -447,13 +447,19 @@ class Block(object):
     def serialize_header_without_nonce(self):
         return rlp.encode(self.list_header(exclude=['nonce']))
 
-    @property
-    def state_root(self):
+    def get_state_root(self):
         return self.state.root_hash
 
-    @property
-    def tx_list_root(self):
+    def set_state_root(self, state_root_hash):
+        self.state = trie.Trie(utils.get_db_path(), state_root_hash)
+
+    state_root = property(get_state_root, set_state_root)
+
+    def get_tx_list_root(self):
         return self.transactions.root_hash
+
+    tx_list_root = property(get_tx_list_root)
+
 
     def list_header(self, exclude=[]):
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
