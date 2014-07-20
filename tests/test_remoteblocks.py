@@ -6,10 +6,9 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
-set_db()
-chain_manager = get_chainmanager()
-
 def test_import_chain():
+	set_db()
+	chain_manager = get_chainmanager()
 	data = rlp.decode(hex_rlp_encoded_data.decode('hex'))
 	transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data]
 	chain_manager.receive_chain(transient_blocks)
