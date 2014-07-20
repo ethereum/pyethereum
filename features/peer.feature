@@ -127,19 +127,19 @@ Feature: peer
     And all data with the peer is processed
     Then the new_transactions_received handler should be called once with the transactions data
 
-  Scenario: send Blocks to peer
-    Given blocks data
-    When peer.send_Blocks is called
-    And all data with the peer is processed
-    Then the packet sent through connection should be a Blocks packet with the blocks data
+#  Scenario: send Blocks to peer
+#    Given blocks data
+#    When peer.send_Blocks is called
+#    And all data with the peer is processed
+#    Then the packet sent through connection should be a Blocks packet with the blocks data
 
-  Scenario: receive a Blocks packet
-    Given blocks data
-    And a Blocks packet with the blocks data
-    When handler for a new_blocks_received signal is registered
-    And the packet is received from peer
-    And all data with the peer is processed
-    Then the new_blocks_received handler should be called once with the blocks data
+#  Scenario: receive a Blocks packet
+#    Given blocks data
+#    And a Blocks packet with the blocks data
+#    When handler for a new_blocks_received signal is registered
+#    And the packet is received from peer
+#    And all data with the peer is processed
+#    Then the new_blocks_received handler should be called once with the blocks data
 
   Scenario: send GetChain to peer
     Given a GetChain request data
