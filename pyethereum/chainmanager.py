@@ -21,22 +21,31 @@ NUM_BLOCKS_PER_REQUEST = 32
 
 
 class Miner():
-
     """
     Mines on the current head
     Stores received transactions
+
+    The process of finalising a block involves four stages:
+    1) Validate (or, if mining, determine) uncles;
+    2) validate (or, if mining, determine) transactions;
+    3) apply rewards;
+    4) verify (or, if mining, compute a valid) state and nonce.
     """
 
     def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
-        block = self.block = blocks.Block.init_from_parent(
+        self.block = blocks.Block.init_from_parent(
             parent, coinbase, uncles=[u.hash for u in uncles])
-        block.finalize()
-        logger.debug('Mining #%d %s', block.number, block.hex_hash())
-        logger.debug('Difficulty %s', block.difficulty)
+        self.pre_finalize_state_root = self.block.state_root
+        self.block.finalize()
+        logger.debug('Mining #%d %s', self.block.number, self.block.hex_hash())
+        logger.debug('Difficulty %s', self.block.difficulty)
+
 
     def add_transaction(self, transaction):
-        block_state = self.block.state_root
+        old_state_root = self.block.state_root
+        # revert finalization
+        self.block.state_root = self.pre_finalize_state_root
         try:
             success, output = processblock.apply_transaction(
                 self.block, transaction)
@@ -44,18 +53,25 @@ class Miner():
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state must not have changed
             logger.debug('Invalid Transaction %r: %r', transaction, e)
-            assert block_state == self.block.state_root
-            return False
+            success = False
+
+        # finalize
+        self.pre_finalize_state_root = self.block.state_root
+        self.block.finalize()
+
         if not success:
             logger.debug('transaction %r not applied', transaction)
-            assert block_state == self.block.state_root
+            assert old_state_root == self.block.state_root
+            return False
         else:
             assert transaction in self.block.get_transactions()
             logger.debug(
                 'transaction %r applied to %r res: %r',
                 transaction, self.block, output)
-            assert block_state != self.block.state_root
+            assert old_state_root != self.block.state_root
             return True
+
+
 
     def get_transactions(self):
         return self.block.get_transactions()
