@@ -148,7 +148,7 @@ def step_impl(context):
 def step_impl(context):
     for title, example in context.examples.iteritems():
         context.trie.clear()
-        for pair in example['inputs']:
+        for pair in example['in']:
             context.trie.update(pair[0], pair[1])
         hex_hash = context.trie.root_hash.encode('hex')
-        assert hex_hash == example['expectation'], '{} fails'.format(title)
+        assert hex_hash == example['root'], '{} fails'.format(title)
