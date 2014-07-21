@@ -27,15 +27,19 @@ def load_tests():
     return fixture
 
 
-
 def run_test(name):
 
     logger.debug('testing %s', name)
     t = trie.Trie(tempfile.mktemp())
     pairs = load_tests()[name]
-    for k,v in pairs['in'].items():
+
+    for k, v in pairs['in'].items():
+        if k[:2] == '0x':
+            k = k[2:].decode('hex')
+        if v[:2] == '0x':
+            v = v[2:].decode('hex')
         logger.debug('updating with (%s, %s)', k, v)
-        t.update(k,v)
+        t.update(k, v)
     assert pairs['root'] == t.root_hash.encode('hex')
 
 

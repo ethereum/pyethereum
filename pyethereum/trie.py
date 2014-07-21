@@ -294,7 +294,6 @@ class Trie(object):
         responsibility to *store* the new node storage, and delete the old
         node storage
         """
-        assert value != BLANK_NODE
         node_type = self._get_node_type(node)
 
         if node_type == NODE_TYPE_BLANK:
