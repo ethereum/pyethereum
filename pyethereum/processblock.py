@@ -213,7 +213,7 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg, code):
-    logger.debug("apply_msg:%r %r", tx, msg)
+    logger.debug("apply_msg:%r %r gas:%r", tx, msg, msg.gas)
     snapshot = block.snapshot()
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
@@ -303,7 +303,7 @@ def calcfee(block, tx, msg, compustate, op):
         return GCALL + stk[-1] + m_extend / 32 * GMEMORY
     elif op == 'CREATE':
         m_extend = max(0, ceil32(stk[-2] + stk[-3]) - len(mem))
-        return GSTEP + GCREATE + m_extend / 32 * GMEMORY
+        return GCREATE + m_extend / 32 * GMEMORY
     elif op == 'RETURN':
         m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
         return GSTEP + m_extend / 32 * GMEMORY
@@ -340,10 +340,10 @@ def apply_op(block, tx, msg, code, compustate):
     if op[:4] == 'PUSH':
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
-        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas)
+        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas - fee)
     else:
         logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
-                     compustate.gas)
+                     compustate.gas - fee)
     # Apply operation
     oldpc = compustate.pc
     compustate.gas -= fee
