@@ -414,7 +414,8 @@ class Block(object):
             med_dict[acct_structure[i][0]] = utils.printers[typ](val)
             if name == 'storage':
                 strie = trie.Trie(utils.get_db_path(), val)
-        med_dict['storage'] = {'0x'+k.encode('hex'): '0x'+v.encode('hex')
+        med_dict['storage'] = {'0x'+k.encode('hex'):
+                               '0x'+rlp.decode(v).encode('hex')
                                for k, v in strie.to_dict().iteritems()}
         return med_dict
 
