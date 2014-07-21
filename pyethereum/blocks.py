@@ -461,7 +461,6 @@ class Block(object):
 
     tx_list_root = property(get_tx_list_root)
 
-
     def list_header(self, exclude=[]):
         self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
@@ -491,7 +490,9 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             td = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx, msr, gas = map(lambda i: rlp.descend(td, i), range(3))
+            tx = rlp.descend(td, 0)
+            msr = rlp.descend_to_val(td, 1)
+            gas = rlp.descend_to_val(td, 2)
             txjson = transactions.Transaction.deserialize(tx).to_dict()
             txlist.append({
                 "tx": txjson,

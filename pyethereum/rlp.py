@@ -130,6 +130,18 @@ def next_item_pos(data, pos):
         return pos + 1 + b + b2
 
 
+def unpack(data):
+    fchar = ord(data[0])
+    if fchar < 128:
+        return data
+    elif (fchar % 64) < 56:
+        return data[1:]
+    else:
+        b = (fchar % 64) - 55
+        return data[1 + b:]
+
+
+# eg. given x = rlp([a, [b,c,[d,e]], f]), descend(x,1,2) gives rlp([d,e])
 def descend(data, *indices):
     pos = 0
     for i in indices:
@@ -139,7 +151,12 @@ def descend(data, *indices):
             pos = next_item_pos(data, pos)
             if pos >= finish_pos:
                 raise Exception("End of list")
+    finish_pos = next_item_pos(data, pos)
     return data[pos: finish_pos]
+
+
+def descend_to_val(data, *indices):
+    return unpack(descend(data, *indices))
 
 
 def encode_length(L, offset):
