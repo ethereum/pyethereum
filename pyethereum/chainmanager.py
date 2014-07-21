@@ -132,7 +132,7 @@ class ChainManager(StoppableLoopThread):
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
-        self.log_chain()
+        #self.log_chain()
         self.new_miner()
 
     @property
