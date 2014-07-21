@@ -331,7 +331,7 @@ class Block(object):
         assert isinstance(tx_lst_serialized, list)
         data = [tx_lst_serialized, state_root, gas_used_encoded]
         self.transactions.update(
-            utils.zpad(utils.encode_int(self.transaction_count), 32),
+            rlp.encode(utils.encode_int(self.transaction_count)),
             rlp.encode(data))
         self.transaction_count += 1
 
@@ -346,7 +346,7 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(rlp.decode(
-                self.transactions.get(utils.zpad(utils.encode_int(i), 32))))
+                self.transactions.get(rlp.encode(utils.encode_int(i)))))
         return txlist
 
     def get_transactions(self):
@@ -489,7 +489,7 @@ class Block(object):
             b["state"][address.encode('hex')] = self.account_to_dict(address)
         txlist = []
         for i in range(self.transaction_count):
-            td = self.transactions.get(utils.zpad(utils.encode_int(i), 32))
+            td = self.transactions.get(rlp.encode(utils.encode_int(i)))
             tx, msr, gas = map(lambda i: rlp.descend(td, i), range(3))
             txjson = transactions.Transaction.deserialize(tx).to_dict()
             txlist.append({
