@@ -389,16 +389,17 @@ class Block(object):
 
     def get_storage_data(self, address, index):
         t = self.get_storage(address)
-        val = rlp.decode(t.get(utils.zpad(utils.coerce_to_bytes(index), 32)))
+        key = utils.zpad(utils.coerce_to_bytes(index), 32)
+        val = rlp.decode(t.get(key))
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
         t = self.get_storage(address)
+        key = utils.zpad(utils.coerce_to_bytes(index), 32)
         if val:
-            t.update(utils.zpad(utils.coerce_to_bytes(index), 32),
-                     rlp.encode(utils.zpad(utils.encode_int(val), 32)))
+            t.update(key, rlp.encode(utils.encode_int(val)))
         else:
-            t.delete(utils.coerce_to_bytes(index))
+            t.delete(key)
         self._set_acct_item(address, 'storage', t.root_hash)
 
     def del_account(self, address):
