@@ -377,6 +377,86 @@ class Trie(object):
         else:
             return new_node
 
+    def _getany(self, node, reverse=False, path=[]):
+        node_type = self._get_node_type(node)
+        if node_type == NODE_TYPE_BLANK:
+            return None
+        if node_type == NODE_TYPE_BRANCH:
+            if node[16]:
+                return [16]
+            scan_range = range(16)
+            if reverse:
+                scan_range.reverse()
+            for i in scan_range:
+                o = self._getany(self._decode_to_node(node[i]), path=path+[i])
+                if o:
+                    return [i] + o
+            return None
+        curr_key = without_terminator(unpack_to_nibbles(node[0]))
+        if node_type == NODE_TYPE_LEAF:
+            return curr_key
+
+        if node_type == NODE_TYPE_EXTENSION:
+            curr_key = without_terminator(unpack_to_nibbles(node[0]))
+            sub_node = self._decode_to_node(node[1])
+            return self._getany(sub_node, path=path+curr_key)
+
+    def _iter(self, node, key, reverse=False, path=[]):
+        node_type = self._get_node_type(node)
+
+        if node_type == NODE_TYPE_BLANK:
+            return None
+
+        elif node_type == NODE_TYPE_BRANCH:
+            if len(key):
+                sub_node = self._decode_to_node(node[key[0]])
+                o = self._iter(sub_node, key[1:], reverse, path+[key[0]])
+                if o:
+                    return [key[0]] + o
+            if reverse:
+                scan_range = range(key[0] if len(key) else 0)
+            else:
+                scan_range = range(key[0]+1 if len(key) else 0, 16)
+            for i in scan_range:
+                sub_node = self._decode_to_node(node[i])
+                o = self._getany(sub_node, reverse, path+[i])
+                if o:
+                    return [i] + o
+            if reverse and node[16]:
+                return [16]
+            return None
+
+        descend_key = without_terminator(unpack_to_nibbles(node[0]))
+        if node_type == NODE_TYPE_LEAF:
+            if reverse:
+                return descend_key if descend_key < key else None
+            else:
+                return descend_key if descend_key > key else None
+
+        if node_type == NODE_TYPE_EXTENSION:
+            # traverse child nodes
+            sub_node = self._decode_to_node(node[1])
+            sub_key = key[len(descend_key):]
+            if starts_with(key, descend_key):
+                o = self._iter(sub_node, sub_key, reverse, path + descend_key)
+            elif descend_key > key[:len(descend_key)] and not reverse:
+                o = self._getany(sub_node, sub_key, False, path + descend_key)
+            elif descend_key < key[:len(descend_key)] and reverse:
+                o = self._getany(sub_node, sub_key, True, path + descend_key)
+            else:
+                o = None
+            return descend_key + o if o else None
+
+    def next(self, key):
+        key = bin_to_nibbles(key)
+        o = self._iter(self.root_node, key)
+        return nibbles_to_bin(o) if o else None
+
+    def prev(self, key):
+        key = bin_to_nibbles(key)
+        o = self._iter(self.root_node, key, reverse=True)
+        return nibbles_to_bin(o) if o else None
+
     def _delete_node_storage(self, node):
         '''delete storage
         :param node: node in form of list, or BLANK_NODE
