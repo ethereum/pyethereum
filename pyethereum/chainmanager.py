@@ -302,6 +302,9 @@ class ChainManager(StoppableLoopThread):
         if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
             self._update_head(block)
+
+        # log the block
+        chainlogger.log_block(block)
         return True
 
     def get_children(self, block):
