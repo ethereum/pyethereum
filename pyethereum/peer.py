@@ -233,6 +233,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
+        # open('raw_remote_blocks_hex.txt', 'a').write(rlp.encode(data).encode('hex') + '\n') # LOG line
         transient_blocks = [blocks.TransientBlock(rlp.encode(b)) \
                             for b in data] # FIXME
         signals.remote_blocks_received.send(
