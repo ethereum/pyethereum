@@ -237,6 +237,9 @@ class ChainManager(StoppableLoopThread):
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
+                    # FIXME there might be another exception in
+                    # blocks.deserializeChild when replaying transactions
+                    # if this fails, we need torewind state
                     logger.debug(
                         'Malicious %r w/ invalid Transaction %r', t_block, e)
                     continue
