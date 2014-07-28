@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 32
+NUM_BLOCKS_PER_REQUEST = 1
 
 
 class Miner():
@@ -307,7 +307,7 @@ class ChainManager(StoppableLoopThread):
             self._update_head(block)
 
         # log the block
-        chainlogger.log_block(block)
+        #chainlogger.log_block(block)
         return True
 
     def get_children(self, block):
@@ -380,7 +380,7 @@ class ChainManager(StoppableLoopThread):
     def log_chain(self):
         num = self.head.number + 1
         for b in reversed(self.get_chain(count=num)):
-            chainlogger.log_block(b)
+            #chainlogger.log_block(b)
             logger.debug(b)
             for tx in b.get_transactions():
                 logger.debug('\t%r', tx)
@@ -426,7 +426,8 @@ def handle_local_chain_requested(sender, peer, block_hashes, count, **kwargs):
 
     if len(block_hashes):
         # handle genesis special case
-        if block_hashes[-1] in chain_manager:
+        ACTIVATED = False # FIXME, current logic does not work
+        if ACTIVATED and block_hashes[-1] in chain_manager:
             assert chain_manager.get(block_hashes[-1]).is_genesis()
             block_hashes.pop(-1)
             if not block_hashes:
