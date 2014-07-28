@@ -220,7 +220,7 @@ def apply_msg(block, tx, msg, code):
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        return 0, msg.gas, []
+        return 1, msg.gas, []
     compustate = Compustate(gas=msg.gas)
     t, ops = time.time(), 0
     # Main loop
