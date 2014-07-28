@@ -343,7 +343,7 @@ def apply_op(block, tx, msg, code, compustate):
         logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas)
     else:
         logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
-                     compustate.gas - fee)
+                     compustate.gas)
     # Apply operation
     oldpc = compustate.pc
     compustate.gas -= fee
