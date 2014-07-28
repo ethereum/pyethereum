@@ -340,7 +340,7 @@ def apply_op(block, tx, msg, code, compustate):
     if op[:4] == 'PUSH':
         ind = compustate.pc + 1
         v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
-        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas - fee)
+        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas)
     else:
         logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
                      compustate.gas - fee)
