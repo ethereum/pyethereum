@@ -25,10 +25,12 @@ def disable_debug():
     print_debug = 0
 
 
-def logger_debug(*args):
+def logger_debug(*args, **kwargs):
     logger.debug(*args)
-    if print_debug:
+    threshold = kwargs.get('threshold', 1)
+    if print_debug >= threshold:
         sys.stderr.write(args[0] % tuple(args[1:]) + '\n')
+        
 
 GSTEP = 1
 GSTOP = 0
@@ -344,6 +346,11 @@ def apply_op(block, tx, msg, code, compustate):
     else:
         logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
                      compustate.gas)
+    if print_debug >= 2:
+        for i in range(0, len(compustate.memory), 16):
+            memblk = compustate.memory[i:i+16]
+            memline = ' '.join([chr(x).encode('hex') for x in memblk])
+            logger_debug('mem: %s', memline)
     # Apply operation
     oldpc = compustate.pc
     compustate.gas -= fee
@@ -385,7 +392,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'EXP':
         stk.append(pow(stackargs[0], stackargs[1], 2 ** 256))
     elif op == 'NEG':
-        stk.append(2 ** 256 - stackargs[0])
+        stk.append(-stackargs[0] % 2**256)
     elif op == 'LT':
         stk.append(1 if stackargs[0] < stackargs[1] else 0)
     elif op == 'GT':
@@ -416,7 +423,7 @@ def apply_op(block, tx, msg, code, compustate):
         if stackargs[0] >= 32:
             stk.append(0)
         else:
-            stk.append((stackargs[1] / 256 ** stackargs[0]) % 256)
+            stk.append((stackargs[1] / 256 ** (31 - stackargs[0])) % 256)
     elif op == 'SHA3':
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
@@ -441,13 +448,14 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
-            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
+        logger_debug('data: %s', msg.data.encode('hex'))
+        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
+            mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
-            if stackargs[0] + i < len(msg.data):
-                mem[stackargs[1] + i] = ord(msg.data[stackargs[0] + i])
+            if stackargs[1] + i < len(msg.data):
+                mem[stackargs[0] + i] = ord(msg.data[stackargs[1] + i])
             else:
-                mem[stackargs[1] + i] = 0
+                mem[stackargs[0] + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
