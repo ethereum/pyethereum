@@ -366,29 +366,23 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'MUL':
         stk.append((stackargs[0] * stackargs[1]) % 2 ** 256)
     elif op == 'DIV':
-        if stackargs[1] == 0:
-            return []
-        stk.append(stackargs[0] / stackargs[1])
+        stk.append(0 if stackargs[1] == 0 else stackargs[0] / stackargs[1])
     elif op == 'MOD':
-        if stackargs[1] == 0:
-            return []
-        stk.append(stackargs[0] % stackargs[1])
+        stk.append(0 if stackargs[1] == 0 else stackargs[0] % stackargs[1])
     elif op == 'SDIV':
-        if stackargs[1] == 0:
-            return []
         if stackargs[0] >= 2 ** 255:
             stackargs[0] -= 2 ** 256
         if stackargs[1] >= 2 ** 255:
             stackargs[1] -= 2 ** 256
-        stk.append((stackargs[0] / stackargs[1]) % 2 ** 256)
+        stk.append(0 if stackargs[1] == 0 else
+                   (stackargs[0] / stackargs[1]) % 2 ** 256)
     elif op == 'SMOD':
-        if stackargs[1] == 0:
-            return []
         if stackargs[0] >= 2 ** 255:
             stackargs[0] -= 2 ** 256
         if stackargs[1] >= 2 ** 255:
             stackargs[1] -= 2 ** 256
-        stk.append((stackargs[0] % stackargs[1]) % 2 ** 256)
+        stk.append(0 if stackargs[1] == 0 else
+                   (stackargs[0] % stackargs[1]) % 2 ** 256)
     elif op == 'EXP':
         stk.append(pow(stackargs[0], stackargs[1], 2 ** 256))
     elif op == 'NEG':
@@ -538,7 +532,8 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         value = stackargs[0]
         data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
-        logger_debug("Sub-contract: %s %s %s ", msg.to, value, data)
+        logger_debug("Sub-contract: %s %s %s",
+                     msg.to, value, data.encode('hex'))
         addr, gas, code = create_contract(
             block, tx, Message(msg.to, '', value, compustate.gas, data))
         logger_debug("Output of contract creation: %s  %s ", addr, code)
