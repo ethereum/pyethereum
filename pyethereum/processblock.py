@@ -247,12 +247,9 @@ def create_contract(block, tx, msg):
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     assert not block.get_code(msg.to)
     res, gas, dat = apply_msg(block, tx, msg, msg.data)
-    if res and len(dat):
+    if res:
         block.increment_nonce(msg.sender)
         block.set_code(msg.to, ''.join(map(chr, dat)))
-        return utils.coerce_to_int(msg.to), gas, dat
-    elif res:
-        block.state.delete(msg.to.decode('hex'))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
         return res, gas, dat
