@@ -82,6 +82,8 @@ class Message(object):
         self.gas = gas
         self.data = data
 
+    def __repr__(self):
+        return '<Message(to:%s...)>' % self.to[:8]
 
 class InvalidTransaction(Exception):
     pass
