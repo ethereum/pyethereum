@@ -165,12 +165,13 @@ def apply_transaction(block, tx):
         result, gas_remained, data = apply_msg_send(block, tx, message)
     else:  # CREATE
         result, gas_remained, data = create_contract(block, tx, message)
-        result = utils.coerce_addr_to_hex(result)
+        if result > 0:
+            result = utils.coerce_addr_to_hex(result)
     assert gas_remained >= 0
     logger.debug(
         'applied tx, result %r gas remained %r data/code %r', result,
         gas_remained, ''.join(map(chr, data)).encode('hex'))
-    #logger.debug(json.dumps(block.to_dict(), indent=2))
+    # logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
         block.revert(snapshot)
         block.gas_used += tx.startgas
