@@ -20,7 +20,7 @@ def is_valid_ip(ip): # FIXME, IPV6
 class PeerManager(StoppableLoopThread):
 
     max_silence = 10  # how long before pinging a peer
-    max_ping_wait = 5  # how long to wait before disconenctiong after ping
+    max_ping_wait = 15  # how long to wait before disconenctiong after ping
     max_ask_for_peers_elapsed = 30  # how long before asking for peers
 
     def __init__(self):

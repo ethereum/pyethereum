@@ -82,6 +82,8 @@ class Message(object):
         self.gas = gas
         self.data = data
 
+    def __repr__(self):
+        return '<Message(to:%s...)>' % self.to[:8]
 
 class InvalidTransaction(Exception):
     pass
@@ -148,15 +150,18 @@ def apply_transaction(block, tx):
         BlockGasLimitReached(
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
+    logger_debug('initial: %s', str(block.account_to_dict(tx.sender)))
+
     # start transacting #################
-    if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        block.increment_nonce(tx.sender)
+    block.increment_nonce(tx.sender)
 
     # buy startgas
     success = block.transfer_value(tx.sender, block.coinbase,
                                    tx.gasprice * tx.startgas)
     assert success
 
+    logger_debug('tx: %s', str(tx.to_dict()))
+    logger_debug('snapshot: %s', str(block.account_to_dict(tx.sender)))
     snapshot = block.snapshot()
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
@@ -173,10 +178,11 @@ def apply_transaction(block, tx):
         gas_remained, ''.join(map(chr, data)).encode('hex'))
     # logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
-        block.revert(snapshot)
+        logger_debug('not result')
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
+        logger_debug('yes result')
         gas_used = tx.startgas - gas_remained
         # sell remaining gas
         block.transfer_value(
@@ -186,6 +192,7 @@ def apply_transaction(block, tx):
             output = ''.join(map(chr, data))
         else:
             output = result
+    logger_debug('post: %s', str(block.account_to_dict(tx.sender)))
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
@@ -217,11 +224,11 @@ def decode_datalist(arr):
 
 def apply_msg(block, tx, msg, code):
     logger.debug("apply_msg:%r %r gas:%r", tx, msg, msg.gas)
-    snapshot = block.snapshot()
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        return 1, msg.gas, []
+        return 0, msg.gas, []
+    snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
     t, ops = time.time(), 0
     # Main loop
@@ -244,15 +251,19 @@ def apply_msg_send(block, tx, msg):
 
 def create_contract(block, tx, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
-    nonce = utils.encode_int(block.get_nonce(msg.sender))
+    if tx.sender != msg.sender:
+        block.increment_nonce(msg.sender)
+    nonce = utils.encode_int(block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     assert not block.get_code(msg.to)
     res, gas, dat = apply_msg(block, tx, msg, msg.data)
     if res:
-        block.increment_nonce(msg.sender)
         block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
+        if tx.sender != msg.sender:
+            block.decrement_nonce(msg.sender)
+        block.del_account(msg.to)
         return res, gas, dat
 
 
@@ -563,6 +574,7 @@ def apply_op(block, tx, msg, code, compustate):
             mem[stackargs[5] + i] = 0
         if result == 0:
             stk.append(0)
+            compustate.gas += gas
         else:
             stk.append(1)
             compustate.gas += gas

@@ -66,7 +66,8 @@ acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
-
+import sys
+sys.setrecursionlimit(10000) # FIXME: persist difficulty of known blocks
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < 42 else -1
@@ -361,6 +362,9 @@ class Block(object):
 
     def increment_nonce(self, address):
         return self._delta_item(address, 'nonce', 1)
+
+    def decrement_nonce(self, address):
+        return self._delta_item(address, 'nonce', -1)
 
     def get_balance(self, address):
         return self._get_acct_item(address, 'balance')
