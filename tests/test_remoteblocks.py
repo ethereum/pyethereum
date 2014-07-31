@@ -3,6 +3,7 @@ from pyethereum import rlp
 from test_chain import set_db, get_chainmanager
 from remoteblocksdata import data_poc5v23_1
 import logging
+import pytest
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
@@ -34,3 +35,30 @@ def test_import_remote_chain_blk_128_contract():
     # do_test(data_poc5v23_1)
     do_test(load_raw())
 
+
+#@pytest.mark.skipif(False, reason='profiling needs to be activated')
+@pytest.mark.profiled
+def test_profiled():
+    import cProfile
+    import StringIO
+    import pstats
+
+    def do_cprofile(func):
+        def profiled_func(*args, **kwargs):
+            profile = cProfile.Profile()
+            try:
+                profile.enable()
+                result = func(*args, **kwargs)
+                profile.disable()
+                return result
+            finally:
+                s = StringIO.StringIO()
+                ps = pstats.Stats(
+                    profile, stream=s).strip_dirs().sort_stats('cum', 'time')
+                ps.print_stats()
+                print s.getvalue()
+
+        return profiled_func
+
+    do_cprofile(test_import_remote_chain_blk_128_contract)()
+    assert 0  # fail in order to have py.test report
