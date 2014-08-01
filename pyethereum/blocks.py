@@ -535,8 +535,14 @@ class Block(object):
             # calculate the summarized_difficulty (on the fly for now)
         if self.is_genesis():
             return self.difficulty
+        elif 'difficulty:'+self.hex_hash() in self.state.db:
+            return utils.decode_int(
+                self.state.db.get('difficulty:'+self.hex_hash()))
         else:
-            return self.difficulty + self.get_parent().chain_difficulty()
+            o = self.difficulty + self.get_parent().chain_difficulty()
+            self.state.db.put('difficulty:'+self.hex_hash(),
+                              utils.encode_int(o))
+            return o
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash

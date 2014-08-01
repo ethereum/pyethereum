@@ -119,9 +119,10 @@ if __name__ == "__main__":
         fh.readline()
 
     for hex_rlp_encoded_data in fh:
-        data = rlp.decode(hex_rlp_encoded_data.strip().decode('hex'))
-        #print repr(data)
-        blk = blocks.TransientBlock(rlp.encode(data))
+        hexdata = hex_rlp_encoded_data.strip().decode('hex')
+        data = rlp.decode(hexdata)
+        # print repr(data)
+        blk = blocks.TransientBlock(hexdata)
         chain_manager.receive_chain([blk])
         assert blk.hash in chain_manager
 
