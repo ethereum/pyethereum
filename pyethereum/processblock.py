@@ -150,7 +150,9 @@ def apply_transaction(block, tx):
         BlockGasLimitReached(
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    logger_debug('#'*80 + ' NEW TRANSACTION ' + '#'*80)
+    logger_debug(' ')
+    logger_debug('#'*40 + ' NEW TRANSACTION ' + '#'*40)
+    logger_debug(' ')
     logger_debug('initial: %s', str(block.account_to_dict(tx.sender)))
 
     # start transacting #################
@@ -163,7 +165,6 @@ def apply_transaction(block, tx):
 
     logger_debug('tx: %s', str(tx.to_dict()))
     logger_debug('snapshot: %s', str(block.account_to_dict(tx.sender)))
-    snapshot = block.snapshot()
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     # MESSAGE
@@ -179,11 +180,11 @@ def apply_transaction(block, tx):
         gas_remained, ''.join(map(chr, data)).encode('hex'))
     # logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
-        logger_debug('not result')
+        logger_debug('tx out of gas')
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
-        logger_debug('yes result')
+        logger_debug('tx successful')
         gas_used = tx.startgas - gas_remained
         # sell remaining gas
         block.transfer_value(
