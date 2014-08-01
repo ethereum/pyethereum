@@ -1,8 +1,10 @@
 from pyethereum import blocks
 from pyethereum import rlp
 from pyethereum import transactions
-from test_chain import set_db, get_chainmanager
+from pyethereum import chainmanager
+import pyethereum.utils as utils
 from remoteblocksdata import data_poc5v23_1
+from pyethereum import eth
 import logging
 import pytest
 logging.basicConfig(level=logging.DEBUG)
@@ -19,6 +21,7 @@ def load_raw():
 
 
 def do_test(hex_rlp_encoded_data):
+    from test_chain import set_db, get_chainmanager
     set_db()
     chain_manager = get_chainmanager()
     data = rlp.decode(hex_rlp_encoded_data.decode('hex'))
@@ -84,6 +87,44 @@ def dump_transactions(hex_rlp_encoded_data):
 @pytest.mark.tx
 def test_dump_tx(data=blk_1228):
     return dump_transactions(data)
+
+
+
+if __name__ == "__main__":
+    """
+    this can be run to import raw chain data to a certain db.
+
+    python tests/test_remoteblocks.py rawdatafile testdbdir offset
+    e.g.
+    python tests/test_remoteblocks.py blocks.0-20k.p23.hexdata testdb 0
+
+    make sure to rm -r the testdb
+
+    data can be created with blockfetcherpatch.py
+    """
+    import sys
+
+
+    raw_blocks_fn = sys.argv[1]
+    test_db_path = sys.argv[2]
+    skip = int(sys.argv[3])
+
+    print utils
+    utils.data_dir.set(test_db_path)
+
+    chain_manager = chainmanager.ChainManager()
+    chain_manager.configure(config=eth.create_default_config(), genesis=None)
+
+    fh = open(raw_blocks_fn)
+    for i in range(skip):
+        fh.readline()
+
+    for hex_rlp_encoded_data in fh:
+        data = rlp.decode(hex_rlp_encoded_data.strip().decode('hex'))
+        print repr(data)
+        blk = blocks.TransientBlock(rlp.encode(data))
+        chain_manager.receive_chain([blk])
+
 
 
 
