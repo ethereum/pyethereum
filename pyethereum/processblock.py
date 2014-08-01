@@ -569,17 +569,15 @@ def apply_op(block, tx, msg, code, compustate):
         result, gas, data = apply_msg_send(
             block, tx, Message(msg.to, to, value, gas, data))
         logger_debug(
-            "Output of sub-call: %s %s length %s expected %s", result, data, len(data),
-            stackargs[6])
-        for i in range(stackargs[6]):
-            mem[stackargs[5] + i] = 0
+            "Output of sub-call: %s %s length %s expected %s", result, data,
+            len(data), stackargs[6])
         if result == 0:
             stk.append(0)
             compustate.gas += gas
         else:
             stk.append(1)
             compustate.gas += gas
-            for i in range(len(data)):
+            for i in range(min(len(data), stackargs[6])):
                 mem[stackargs[5] + i] = data[i]
     elif op == 'RETURN':
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
