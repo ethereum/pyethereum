@@ -150,6 +150,7 @@ def apply_transaction(block, tx):
         BlockGasLimitReached(
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
+    logger_debug('#'*80 + ' NEW TRANSACTION ' + '#'*80)
     logger_debug('initial: %s', str(block.account_to_dict(tx.sender)))
 
     # start transacting #################

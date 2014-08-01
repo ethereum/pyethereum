@@ -104,7 +104,6 @@ if __name__ == "__main__":
     """
     import sys
 
-
     raw_blocks_fn = sys.argv[1]
     test_db_path = sys.argv[2]
     skip = int(sys.argv[3])
@@ -121,7 +120,7 @@ if __name__ == "__main__":
 
     for hex_rlp_encoded_data in fh:
         data = rlp.decode(hex_rlp_encoded_data.strip().decode('hex'))
-        print repr(data)
+        #print repr(data)
         blk = blocks.TransientBlock(rlp.encode(data))
         chain_manager.receive_chain([blk])
 
