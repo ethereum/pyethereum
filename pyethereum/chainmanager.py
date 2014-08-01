@@ -278,10 +278,10 @@ class ChainManager(StoppableLoopThread):
             return False
 
         # make sure we know the uncles
-        for uncle_hash in block.uncles:
-            if not uncle_hash in self:
-                logger.debug('Missing uncle for block %r', block)
-                return False
+        # for uncle_hash in block.uncles:
+        #     if not uncle_hash in self:
+        #         logger.debug('Missing uncle for block %r', block)
+        #        return False
 
         # check PoW
         if not len(block.nonce) == 32:

@@ -7,7 +7,7 @@ from remoteblocksdata import data_poc5v23_1
 from pyethereum import eth
 import logging
 import pytest
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
@@ -107,6 +107,10 @@ if __name__ == "__main__":
     raw_blocks_fn = sys.argv[1]
     test_db_path = sys.argv[2]
     skip = int(sys.argv[3])
+    if len(sys.argv) == 4 or sys.argv[4] != 'silent':
+        logging.basicConfig(level=logging.DEBUG)
+        global logger
+        logger = logging.getLogger()
 
     print utils
     utils.data_dir.set(test_db_path)
@@ -123,6 +127,7 @@ if __name__ == "__main__":
         data = rlp.decode(hexdata)
         # print repr(data)
         blk = blocks.TransientBlock(hexdata)
+        print blk.number, blk.hash.encode('hex')
         chain_manager.receive_chain([blk])
         assert blk.hash in chain_manager
 
