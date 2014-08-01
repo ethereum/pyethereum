@@ -67,8 +67,6 @@ acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
-import sys
-sys.setrecursionlimit(10000) # FIXME: persist difficulty of known blocks
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < 42 else -1
