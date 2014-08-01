@@ -124,6 +124,7 @@ if __name__ == "__main__":
         print repr(data)
         blk = blocks.TransientBlock(rlp.encode(data))
         chain_manager.receive_chain([blk])
+        assert blk.hash in chain_manager
 
 
 
