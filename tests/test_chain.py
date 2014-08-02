@@ -498,7 +498,7 @@ def test_reward_unlces():
     B0 Uncle
 
     We raise the block's coinbase account by Rb, the block reward,
-    and the coinbase of each uncle by 7 of 8 that.
+    and also add uncle and nephew rewards
     """
     k, v, k2, v2 = accounts()
     set_db()
@@ -519,11 +519,9 @@ def test_reward_unlces():
     cm.add_block(blk2)
     assert blk2.get_parent().prevhash == uncle.prevhash
     assert blk2 == cm.head
-    assert cm.head.get_balance(local_coinbase) == 2 * blocks.BLOCK_REWARD
+    assert cm.head.get_balance(local_coinbase) == \
+        2 * blocks.BLOCK_REWARD + blocks.NEPHEW_REWARD
     assert cm.head.get_balance(uncle_coinbase) == blocks.UNCLE_REWARD
-    assert 7 * blocks.BLOCK_REWARD / 8 == blocks.UNCLE_REWARD
-
-
 
 
 # TODO ##########################################

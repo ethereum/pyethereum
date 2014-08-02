@@ -36,7 +36,7 @@ class Miner():
     def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
         self.block = blocks.Block.init_from_parent(
-            parent, coinbase, uncles=[u.hash for u in uncles])
+            parent, coinbase, uncles=[u.list_header() for u in uncles])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         logger.debug('Mining #%d %s', self.block.number, self.block.hex_hash())
