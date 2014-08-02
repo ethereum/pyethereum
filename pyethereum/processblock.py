@@ -181,6 +181,7 @@ def apply_transaction(block, tx):
     # logger.debug(json.dumps(block.to_dict(), indent=2))
     if not result:  # 0 = OOG failure in both cases
         logger_debug('tx out of gas')
+        logger_debug('d %s %s', tx.startgas, gas_remained)
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
@@ -229,7 +230,7 @@ def apply_msg(block, tx, msg, code):
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        return 0, msg.gas, []
+        return 1, msg.gas, []
     snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
     t, ops = time.time(), 0
@@ -242,7 +243,7 @@ def apply_msg(block, tx, msg, code):
             logger.debug('done %s', o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
-                return 0, 0, []
+                return 0, compustate.gas, []
             else:
                 return 1, compustate.gas, o
 
@@ -311,8 +312,8 @@ def calcfee(block, tx, msg, compustate, op):
         return GSTEP + m_extend / 32 * GMEMORY
     elif op == 'CALL':
         m_extend = max(0,
-                       ceil32(stk[-4] + stk[-5]) - len(mem),
-                       ceil32(stk[-6] + stk[-7]) - len(mem))
+                       ceil32((stk[-4] + stk[-5]) % 2**64) - len(mem),
+                       ceil32((stk[-6] + stk[-7]) % 2**64) - len(mem))
         return GCALL + stk[-1] + m_extend / 32 * GMEMORY
     elif op == 'CREATE':
         m_extend = max(0, ceil32(stk[-2] + stk[-3]) - len(mem))
@@ -555,6 +556,8 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
             compustate.gas = 0
     elif op == 'CALL':
+        for i in range(3, 7):
+            stackargs[i] = stackargs[i] % 2**64
         if len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
         if len(mem) < ceil32(stackargs[5] + stackargs[6]):
@@ -574,7 +577,6 @@ def apply_op(block, tx, msg, code, compustate):
             len(data), stackargs[6])
         if result == 0:
             stk.append(0)
-            compustate.gas += gas
         else:
             stk.append(1)
             compustate.gas += gas

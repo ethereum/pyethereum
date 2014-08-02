@@ -247,6 +247,7 @@ class Block(object):
             success, output = processblock.apply_transaction(block, tx)
             #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
+            logger.debug('d %s %s', utils.decode_int(_gas_used_encoded), block.gas_used)
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
 
