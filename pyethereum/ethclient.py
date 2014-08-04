@@ -6,39 +6,10 @@ from docopt import docopt
 import utils
 import transactions
 from apiserver import base_url as api_path
-from pyethtool import sha3, privtoaddr, mktx, contract
+from pyethtool import sha3, privtoaddr, mktx, contract, sign
 
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 30203
-
-def sha3(x):
-    return utils.sha3(x).encode('hex')
-
-
-def privtoaddr(x):
-    if len(x) == 64:
-        x = x.decode('hex')
-    return utils.privtoaddr(x)
-
-def mktx(nonce, to, value, data):
-    return transactions.Transaction(
-        int(nonce), gasprice=10 ** 12, startgas=10000, to=to, value=int(value), data=data.decode('hex')
-    ).hex_serialize(False)
-
-
-def mkcontract(*args):
-    return contract(*args)
-
-
-def contract(nonce, value, code):
-    return transactions.contract(
-        int(nonce), 10 ** 12, 10000, int(value), code.decode('hex')
-    ).hex_serialize(False)
-
-
-def sign(txdata, key):
-    return transactions.Transaction.hex_deserialize(txdata).sign(key).hex_serialize(True)
-
 
 class APIClient(object):
 
@@ -119,6 +90,7 @@ def main():
                     applytx=(api.applytx, arguments['<tx_hex>']),
                     sha3=(sha3, arguments['<data>']),
                     privtoaddr=(privtoaddr, arguments['<pkey_hex>']),
+                    mkcontract=(contract, arguments['<code_hex>']),
                     mktx=(mktx, arguments['<nonce>'], arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
                     sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
                     )
