@@ -195,6 +195,7 @@ def apply_transaction(block, tx):
             output = ''.join(map(chr, data))
         else:
             output = result
+    block.commit_state()
     logger_debug('post: %s', str(block.account_to_dict(tx.sender)))
     suicides = block.suicides
     block.suicides = []
@@ -588,7 +589,7 @@ def apply_op(block, tx, msg, code, compustate):
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
-        to = (('\x00' * (32 - len(to))) + to)[12:]
+        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         block.transfer_value(msg.to, to, block.get_balance(msg.to))
         block.suicides.append(msg.to)
         return []

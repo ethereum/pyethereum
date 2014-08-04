@@ -134,6 +134,7 @@ def do_test_vm(name):
         pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
     apply_message_calls.pop(0)
+    blk.commit_state()
 
     assert success
     assert len(callcreates) == len(apply_message_calls)

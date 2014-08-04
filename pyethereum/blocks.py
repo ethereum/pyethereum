@@ -136,6 +136,13 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
         self.suicides = []
+        self.caches = {
+            'balance': {},
+            'nonce': {},
+            'code': {},
+            'storage': {},
+            'all': {}
+        }
 
         self.transactions = trie.Trie(utils.get_db_path(), tx_list_root)
         self.transaction_count = 0
@@ -247,7 +254,7 @@ class Block(object):
             success, output = processblock.apply_transaction(block, tx)
             #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
-            logger.debug('d %s %s', utils.decode_int(_gas_used_encoded), block.gas_used)
+            logger.debug('d %s %s', _gas_used_encoded, block.gas_used)
             assert utils.decode_int(_gas_used_encoded) == block.gas_used
             assert _state_root == block.state.root_hash
 
@@ -300,6 +307,8 @@ class Block(object):
         :param address: account address, can be binary or hex string
         :param param: parameter to get
         '''
+        if address in self.caches[param] and param != 'storage':
+            return self.caches[param][address]
         return self.get_acct(address)[acct_structure_rev[param][0]]
 
     # _set_acct_item(bin or hex, int, bin)
@@ -310,12 +319,8 @@ class Block(object):
         :param value: new value
         '''
 #        logger.debug('set acct %r %r %d', address, param, value)
-        if len(address) == 40:
-            address = address.decode('hex')
-        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
-        encoder = utils.encoders[acct_structure_rev[param][1]]
-        acct[acct_structure_rev[param][0]] = encoder(value)
-        self.state.update(address, rlp.encode(acct))
+        self.caches[param][address] = value
+        self.caches['all'][address] = True
 
     # _delta_item(bin or hex, int, int) -> success/fail
     def _delta_item(self, address, param, value):
@@ -396,26 +401,50 @@ class Block(object):
         return trie.Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
+        if address in self.caches['storage']:
+            if index in self.caches['storage'][address]:
+                return self.caches['storage'][address][index]
         t = self.get_storage(address)
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         val = rlp.decode(t.get(key))
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
-        t = self.get_storage(address)
-        key = utils.zpad(utils.coerce_to_bytes(index), 32)
-        if val:
-            t.update(key, rlp.encode(utils.encode_int(val)))
-        else:
-            t.delete(key)
-        self._set_acct_item(address, 'storage', t.root_hash)
+        if address not in self.caches['storage']:
+            self.caches['storage'][address] = {}
+            self.caches['all'][address] = True
+        self.caches['storage'][address][index] = val
+
+    def commit_state(self):
+        for address in self.caches['all']:
+            acct = rlp.decode(self.state.get(address.decode('hex'))) \
+                or self.mk_blank_acct()
+            for i, (key, typ, default) in enumerate(acct_structure):
+                if key == 'storage':
+                    t = trie.Trie(utils.get_db_path(), acct[i])
+                    for k, v in self.caches[key].get(address, {}).iteritems():
+                        enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
+                        val = rlp.encode(utils.int_to_big_endian(v))
+                        if v:
+                            t.update(enckey, val)
+                        else:
+                            t.delete(enckey)
+                    acct[i] = t.root_hash
+                else:
+                    if address in self.caches[key]:
+                        v = self.caches[key].get(address, default)
+                        acct[i] = utils.encoders[acct_structure[i][1]](v)
+            self.state.update(address.decode('hex'), rlp.encode(acct))
+        self.reset_cache()
 
     def del_account(self, address):
+        self.commit_state()
         if len(address) == 40:
             address = address.decode('hex')
         self.state.delete(address)
 
     def account_to_dict(self, address):
+        self.commit_state()
         med_dict = {}
         for i, val in enumerate(self.get_acct(address)):
             name, typ, default = acct_structure[i]
@@ -427,8 +456,18 @@ class Block(object):
                                for k, v in strie.to_dict().iteritems()}
         return med_dict
 
+    def reset_cache(self):
+        self.caches = {
+            'all': {},
+            'balance': {},
+            'nonce': {},
+            'code': {},
+            'storage': {}
+        }
+
     # Revert computation
     def snapshot(self):
+        self.commit_state()
         return {
             'state': self.state.root_hash,
             'gas': self.gas_used,
@@ -441,6 +480,7 @@ class Block(object):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self.reset_cache()
 
     def finalize(self):
         """
@@ -454,15 +494,18 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
+        self.commit_state()
 
     def serialize_header_without_nonce(self):
         return rlp.encode(self.list_header(exclude=['nonce']))
 
     def get_state_root(self):
+        self.commit_state()
         return self.state.root_hash
 
     def set_state_root(self, state_root_hash):
         self.state = trie.Trie(utils.get_db_path(), state_root_hash)
+        self.reset_cache()
 
     state_root = property(get_state_root, set_state_root)
 
@@ -491,6 +534,7 @@ class Block(object):
         return self.serialize().encode('hex')
 
     def to_dict(self):
+        self.commit_state()
         b = {}
         for name, typ, default in block_structure:
             b[name] = utils.printers[typ](getattr(self, name))
