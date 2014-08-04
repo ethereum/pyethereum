@@ -123,13 +123,14 @@ def transactions():
 @app.get(base_url + '/accounts/')
 def accounts():
     logger.debug('accounts')
-    pass
-
 
 @app.get(base_url + '/accounts/<address>')
 def account(address=None):
-    logger.debug('account/%s', address)
-    pass
+    logger.debug('accounts/%s', address)
+    data = chain_manager.head.account_to_dict(address)
+    logger.debug(data)
+    return data
+
 
 
 # ######## Peers ###################
