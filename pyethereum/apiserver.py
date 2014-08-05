@@ -116,7 +116,8 @@ def transactions():
     logger.debug('PUT transactions/ %s', hex_data)
     tx = Transaction.hex_deserialize(hex_data)
     signals.local_transaction_received.send(sender=None, transaction=tx)
-    return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
+    return ''
+    #return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
 
 
 # ######## Accounts ############
