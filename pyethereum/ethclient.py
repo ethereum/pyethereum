@@ -6,10 +6,38 @@ from docopt import docopt
 import utils
 import transactions
 from apiserver import base_url as api_path
-from pyethtool import sha3, privtoaddr, mktx, contract, sign
 
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 30203
+DEFAULT_GASPRICE = 10**12
+DEFAULT_STARTGAS = 10000
+
+def sha3(x):
+    return utils.sha3(x).encode('hex')
+
+
+def privtoaddr(x):
+    if len(x) == 64:
+        x = x.decode('hex')
+    return utils.privtoaddr(x)
+
+
+def mktx(nonce, gasprice, startgas, to, value, data):
+    return transactions.Transaction(
+        int(nonce), gasprice, startgas, to, int(value), data.decode('hex')
+    ).hex_serialize(False)
+
+
+def contract(nonce, gasprice, startgas, value, code):
+    return transactions.contract(
+        int(nonce), gasprice, startgas, int(value), code.decode('hex')
+    ).hex_serialize(False)
+
+
+def sign(txdata, key):
+    return transactions.Transaction.hex_deserialize(txdata).sign(key).hex_serialize(True)
+
+
 
 class APIClient(object):
 
