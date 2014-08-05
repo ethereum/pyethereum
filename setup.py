@@ -2,8 +2,7 @@
 from setuptools import setup, find_packages
 
 console_scripts = [ 'pyeth=pyethereum.eth:main',
-                    'pyethclient=pyethereum.ethclient:main',
-                    'pyethtool=tools.pyethtool_cli:main']
+                    'pyethclient=pyethereum.ethclient:main']
 
 setup(name="pyethereum",
       version='0.2.4',
