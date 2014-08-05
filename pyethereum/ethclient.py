@@ -78,6 +78,10 @@ class APIClient(object):
         r = requests.put(url, txdata)
         return dict(status_code=r.status_code, reason=r.reason, url=r.url)
 
+    def quicktx(self, gasprice, startgas, to, value, data, pkey_hex):
+        nonce = self.getnonce(privtoaddr(pkey_hex))
+        tx = mktx(nonce, gasprice, startgas, to, value, data)
+        return self.applytx(sign(tx, pkey_hex))
 
 doc = \
 """ethclient
