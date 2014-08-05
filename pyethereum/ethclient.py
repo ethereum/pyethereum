@@ -91,19 +91,24 @@ Usage:
   pyethclient getcode [options] <address>
   pyethclient getstate [options] <address>
   pyethclient getnonce [options] <address>
-  pyethclient applytx [options] <tx_hex>
+  pyethclient quicktx [options] <to> <value> <data_hex> <pkey_hex>
   pyethclient mktx <nonce> <to> <value> <data_hex>
+  pyethclient quicktx <to> <value> <data_hex> <pkey_hex>
+  pyethclient mkcontract <nonce> <value> <code_hex>
+  pyethclient applytx [options] <tx_hex>
   pyethclient sign <tx_hex> <pkey_hex>
-  pyethclient mkcontract <code_hex>
   pyethclient privtoaddr <pkey_hex>
   pyethclient sha3 <data>
 
 Options:
-  -h --help     Show this screen.
-  --version     Show version.
-  --host=<host> API server host [default: %s]
-  --port=<port> API server port [default: %d]
-""" % (DEFAULT_HOST, DEFAULT_PORT)
+  -h --help                 Show this screen
+  -v --version              Show version
+  -H --host=<host>          API server host [default: %s]
+  -p --port=<port>          API server port [default: %d]
+  -g --gasprice=<gasprice>  maximum gas price [default: %d]
+  -s --startgas=<startgas>  gas provided [default: %d]
+  -n --nonce                by default the next nonce is looked up
+""" % (DEFAULT_HOST, DEFAULT_PORT, DEFAULT_GASPRICE, DEFAULT_STARTGAS)
 
 
 
@@ -113,8 +118,12 @@ def main():
 
     host = arguments.get('--host') or DEFAULT_HOST
     port = int(arguments.get('--port') or DEFAULT_PORT)
-
     api = APIClient(host, port)
+
+    gasprice = int(arguments.get('--gasprice') or DEFAULT_GASPRICE)
+    startgas = int(arguments.get('--startgas') or DEFAULT_STARTGAS)
+
+
     cmd_map = dict( getbalance=(api.getbalance, arguments['<address>']),
                     getcode=(api.getcode,  arguments['<address>']),
                     getstate=(api.getstate,  arguments['<address>']),
@@ -122,8 +131,9 @@ def main():
                     applytx=(api.applytx, arguments['<tx_hex>']),
                     sha3=(sha3, arguments['<data>']),
                     privtoaddr=(privtoaddr, arguments['<pkey_hex>']),
-                    mkcontract=(contract, arguments['<code_hex>']),
-                    mktx=(mktx, arguments['<nonce>'], arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
+                    mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments['<value>'], arguments['<code_hex>']),
+                    mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
+                    quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
                     sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
                     )
     for k in cmd_map:
