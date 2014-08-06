@@ -11,6 +11,8 @@ import rlp
 import signals
 from peer import Peer
 
+DEFAULT_SOCKET_TIMEOUT = .01
+
 logger = logging.getLogger(__name__)
 
 def is_valid_ip(ip): # FIXME, IPV6
@@ -90,7 +92,7 @@ class PeerManager(StoppableLoopThread):
     def _create_peer_sock(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(1)
+        sock.settimeout(1)  # relaxed timeout for connecting
         return sock
 
     def connect_peer(self, host, port):
@@ -184,7 +186,7 @@ class PeerManager(StoppableLoopThread):
         for peer in self.connected_peers:
             if (ip, port) == (peer.ip, peer.port):
                 return peer
-        connection.settimeout(1)
+        connection.settimeout(DEFAULT_SOCKET_TIMEOUT)
         peer = self._start_peer(connection, ip, port)
         with self.lock:
             self.connected_peers.add(peer)
