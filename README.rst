@@ -11,7 +11,6 @@ Ethereum Python Client
   :target: https://coveralls.io/r/ethereum/pyethereum
 
 
-
 Quickstart
 -------------
 
