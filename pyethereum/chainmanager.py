@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 32 # FIXME timeouts occure if validating received blocks takes too long.
-# small numbers don't fetch the old blocks ...
-
+NUM_BLOCKS_PER_REQUEST = 32
 
 class Miner():
     """
@@ -112,6 +110,101 @@ class Miner():
         return False
 
 
+class SynchronizationTask(object):
+    """
+    Created if we receive a block w/o known parent. Possibly from a different branch.
+
+    Strategy:
+
+    1) - divide the chain in NUM_BLOCKS_PER_REQUEST slices and
+       - query for the first block of every slice
+
+    2) - from the response of the peer use the highest common block and
+       - lookup the corresponding slice
+       - repeat 1) with the blocks in the slice
+
+    3) - done once we find a block with a known parent in the local chain
+    """
+
+
+
+    def __init__(self, chain_manager, peer):
+        self.chain_manager = chain_manager
+        self.peer = peer
+        self.slices = [] # containing the 1st block.hash of every slice
+        self.request(start=blocks.genesis(), end=chain_manager.head)
+
+    def request(self, start, end):
+        """
+        GetChain:
+        [0x14, Parent1, Parent2, ..., ParentN, Count]
+        Parent N being the parent with the lowest block_number
+        """
+        logger.debug("SynchronizationTask.request for %r start:%r end:%r", self.peer, start, end)
+        # evenly divide the chain and select test blocks to be requested
+        num = end.number - start.number
+        num_slices = min(num, NUM_BLOCKS_PER_REQUEST)
+        blk_numbers = [int(start.number + i * float(num)/num_slices) for i in range(num_slices)]
+        logger.debug("SynchronizationTask.request numbers %r", blk_numbers)
+        slices = [self.chain_manager.index.get_block_by_number(n) for n in blk_numbers]
+        self.slices = slices
+        logger.debug("SynchronizationTask.request blocks %r", [x.encode('hex') for x in slices])
+        self.peer.send_GetChain(list(reversed(slices)), count=NUM_BLOCKS_PER_REQUEST)
+
+
+    def received_blocks(self, transient_blocks):
+        """
+        if the the blocks are a response to our request:
+        - we expect to receive successors of the highest requested block
+
+        returns True if sync was successfull
+        """
+        logger.debug("SynchronizationTask.received_blocks: %r", transient_blocks)
+        blk0 = transient_blocks[-1] # child of the requested one
+        blkN = transient_blocks[0] # newest block in the chain following blk0
+        assert blkN.number >= blk0.number
+
+        if blk0.prevhash in self.slices: # gives us slot with highest known common block
+            logger.debug("blk0 matched a slice")
+            if blkN.prevhash not in self.chain_manager: # the chain split must be in this slice
+                # we are done, the split is within the result
+                # blocks will be added and new head eventually set
+                logger.debug("blkN not yet in chain. synced!")
+                return True
+            else:
+                idx = self.slices.index(blk0.prevhash)
+                logger.debug("blkN in slice %d of %d", idx, len(self.slices))
+                cm = self.chain_manager
+                end = list(self.slices + [cm.head.hash])[idx+1]
+                self.request(cm.get(blkN.prevhash), cm.get(end))
+
+
+
+class Synchronizer(object):
+
+    def __init__(self, chain_manager):
+        self.chain_manager = chain_manager
+        self.synchronization_tasks = {} # peer . syncer
+
+    def synchronize_newer(self):
+        logger.info('sync successors for head %r', self.chain_manager.head)
+        signals.remote_chain_requested.send(
+            sender=None, parents=[self.chain_manager.head.hash], count=NUM_BLOCKS_PER_REQUEST)
+
+    def synchronize_branch(self, peer):
+        logger.info('sync branch for peer %r', peer)
+        if peer and not peer in self.synchronization_tasks:
+            self.synchronization_tasks[peer] = SynchronizationTask(self.chain_manager, peer)
+        else:
+            logger.info('have existing sync task for %r', peer)
+
+    def received_blocks(self, peer, transient_blocks):
+        if peer in self.synchronization_tasks:
+            res = self.synchronization_tasks[peer].received_blocks(transient_blocks)
+            if res is True:
+                logger.debug("Synchronizer.received_blocks: chain w %r synced", peer)
+                del self.synchronization_tasks[peer]
+
 
 class Index(object):
     """"
@@ -146,6 +239,7 @@ class ChainManager(StoppableLoopThread):
         self.miner = None
         self.blockchain = None
         self._children_index = None
+        self.synchronizer = Synchronizer(self)
 
     def configure(self, config, genesis=None):
         self.config = config
@@ -157,6 +251,8 @@ class ChainManager(StoppableLoopThread):
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         #self.log_chain()
         self.new_miner()
+
+
 
     @property
     def head(self):
@@ -192,33 +288,9 @@ class ChainManager(StoppableLoopThread):
         logger.info('Initializing new chain @ %s', utils.get_db_path())
         if not genesis:
             genesis = blocks.genesis()
+            self.index.add_block(genesis)
         self._store_block(genesis)
         self._update_head(genesis)
-
-    def synchronize_newer_blockchain(self):
-        logger.info('sync newer request for head %r', self.head)
-        signals.remote_chain_requested.send(
-            sender=None, parents=[self.head.hash], count=NUM_BLOCKS_PER_REQUEST)
-
-    def synchronize_older_blockchain(self, block_number):
-        # block_number: for block we search the parent for
-        # seek 1st possible branching block
-        logger.info('sync older request for parent of block #%r', block_number)
-        blk = self.head
-        while blk.number > block_number:
-            blk = blk.get_parent()
-
-        # collect blocks
-        requested = []
-        while len(requested) < NUM_BLOCKS_PER_REQUEST and blk.has_parent():
-            blk = blk.get_parent()
-            requested.append(blk)
-        logger.debug('requesting %d blocks', len(requested))
-        # newest first, GetChain, will try to answer w/ older ones if the
-        # the newest is not in the canonical chain
-        # expected answer is the first here known block in the canonical chain
-        signals.remote_chain_requested.send(sender=None,
-                                            parents=[b.hash for b in requested], count=NUM_BLOCKS_PER_REQUEST)
 
     def loop_body(self):
         ts = time.time()
@@ -249,36 +321,36 @@ class ChainManager(StoppableLoopThread):
                 signals.send_local_blocks.send(
                     sender=None, blocks=[block])
 
-    def receive_chain(self, transient_blocks, disconnect_cb=None):
-        old_head = self.head
-
+    def receive_chain(self, transient_blocks, peer=None):
         with self.lock:
+            old_head = self.head
             # assuming to receive chain order w/ newest block first
-            for t_block in reversed(transient_blocks):
-                logger.debug('Trying to deserialize %r', t_block)
+            assert transient_blocks[0].number >= transient_blocks[-1].number
+
+            # notify syncer
+            self.synchronizer.received_blocks(peer, transient_blocks)
+
+            for t_block in reversed(transient_blocks): # oldest to newest
+                logger.debug('Deserializing %r', t_block)
                 logger.debug(t_block.rlpdata.encode('hex'))
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
-                    # if this fails, we need torewind state
+                    # if this fails, we need to rewind state
                     logger.debug(
                         'Malicious %r w/ invalid Transaction %r', t_block, e)
                     continue
                 except blocks.UnknownParentException:
                     if t_block.prevhash == blocks.GENESIS_PREVHASH:
                         logger.debug('Rec Incompatible Genesis %r', t_block)
-                        if disconnect_cb:
-                            disconnect_cb(reason='Wrong genesis block')
+                        if peer:
+                            peer.send_Disconnect(reason='Wrong genesis block')
                     else:
-                        logger.debug('%s with unknown parent', t_block)
-                        if t_block.number > self.head.number:
-                            self.synchronize_newer_blockchain()
-                        else:
-                            logger.debug(
-                                'Need parent of %s', t_block)
-                            self.synchronize_older_blockchain(t_block.number)
+                        logger.debug('%s with unknown parent, peer:%r', t_block, peer)
+                        if peer:
+                            self.synchronizer.synchronize_branch(peer)
                     break
                 if block.hash in self:
                     logger.debug('Known %r', block)
@@ -290,7 +362,7 @@ class ChainManager(StoppableLoopThread):
                     else:
                         logger.debug('Orphant %r', block)
             if self.head != old_head:
-                self.synchronize_newer_blockchain()
+                self.synchronizer.synchronize_newer()
 
     def add_block(self, block):
         "returns True if block was added sucessfully"
@@ -322,15 +394,26 @@ class ChainManager(StoppableLoopThread):
                 processblock.verify(block, block.get_parent())
                 return False
 
-        self._children_index.append(block.prevhash, block.hash)
+
+        if block.number < self.head.number:
+            logger.debug("%r is older than head %r", block, self.head)
+            old_block = self.get(self.index.get_block_by_number(block.number))
+            if block.chain_difficulty() < old_block.chain_difficulty():
+                logger.debug(">= difficulty lower than in local chain, rejecting")
+                return
+        else:
+            old_block = self.head
+
+        self.index.add_block(block)
         self._store_block(block)
-        # set to head if this makes the longest chain w/ most work
-        if block.chain_difficulty() > self.head.chain_difficulty():
+
+        # set to head if this makes the longest chain w/ most work for that number
+        logger.debug('new:%d %r old:%d %r',block.chain_difficulty(),  block, old_block.chain_difficulty(), old_block)
+        if block.chain_difficulty() > old_block.chain_difficulty():
             logger.debug('New Head %r', block)
+            # FIXME DELETE OLD CHAIN?
             self._update_head(block)
 
-        # log the block
-        #chainlogger.log_block(block)
         return True
 
     def get_children(self, block):
@@ -478,12 +561,8 @@ def new_peer_connected(sender, peer, **kwargs):
         logger.debug("send get transactions")
         peer.send_GetTransactions()
     # request chain
-    blocks = [b.hash for b in chain_manager.get_chain(
-        count=NUM_BLOCKS_PER_REQUEST)]
     with peer.lock:
-        peer.send_GetChain(blocks, count=NUM_BLOCKS_PER_REQUEST)
-        logger.debug("send get chain %r", [b.encode('hex') for b in blocks])
-
+        chain_manager.synchronizer.synchronize_branch(peer)
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, **kwargs):
@@ -512,5 +591,5 @@ def gettransactions_received_handler(sender, peer, **kwargs):
 def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
     logger.debug("recv %d remote blocks: %r", len(
         transient_blocks), transient_blocks)
-    chain_manager.receive_chain(
-        transient_blocks, disconnect_cb=peer.send_Disconnect)
+    if transient_blocks:
+        chain_manager.receive_chain(transient_blocks, peer)
