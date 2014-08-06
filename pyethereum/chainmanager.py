@@ -112,6 +112,28 @@ class Miner():
         return False
 
 
+
+class Index(object):
+    """"
+    Collection of indexes
+    """
+    def __init__(self, db):
+        self.db = db
+        self.children_of = indexdb.Index('ci')
+
+    def add_block(self, blk):
+        self.children_of.append(blk.prevhash, blk.hash)
+        self.db.put('blocknumber:%d' % blk.number, blk.hash)
+
+    def get_block_by_number(self, number):
+        "returns block hashe"
+        return self.db.get('blocknumber:%d' % number)
+
+    def get_children(self, blk_hash):
+        "returns block hashes"
+        return self.children_of.get(blk_hash)
+
+
 class ChainManager(StoppableLoopThread):
 
     """
@@ -128,8 +150,8 @@ class ChainManager(StoppableLoopThread):
     def configure(self, config, genesis=None):
         self.config = config
         logger.info('Opening chain @ %s', utils.get_db_path())
-        self.blockchain = DB(utils.get_db_path())
-        self._children_index = indexdb.Index('ci')
+        db = self.blockchain = DB(utils.get_db_path())
+        self.index = Index(db)
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
@@ -312,7 +334,7 @@ class ChainManager(StoppableLoopThread):
         return True
 
     def get_children(self, block):
-        return [self.get(c) for c in self._children_index.get(block.hash)]
+        return [self.get(c) for c in self.index.get_children(block.hash)]
 
     def get_uncles(self, block):
         if not block.has_parent():
