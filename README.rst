@@ -66,14 +66,13 @@ In order to run tests, you need to prepare the ``fixtures``-submodule
 then run the tests either by calling
 ``behave`` and ``py.test`` consecutively or by calling ``tox`` (which will do both).
 
-In order to update the ``fixtures``-submodule:
+In order to update the ``fixtures``-submodule::
 
     git submodule status
     cd fixtures/
     git pull origin develop
     cd ..
     git commit -m 'updated fixtures submodule'
-
 
 
 Tips for writing test code for *behave*
