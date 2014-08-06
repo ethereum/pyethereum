@@ -11,7 +11,7 @@ import rlp
 import signals
 from peer import Peer
 
-DEFAULT_SOCKET_TIMEOUT = .01
+DEFAULT_SOCKET_TIMEOUT = .5
 
 logger = logging.getLogger(__name__)
 
