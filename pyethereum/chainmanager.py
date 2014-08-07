@@ -217,10 +217,20 @@ class Index(object):
 
     def add_block(self, blk):
         self.children_of.append(blk.prevhash, blk.hash)
-        self.db.put('blocknumber:%d' % blk.number, blk.hash)
+
+    def update_blocknumbers(self, blk):
+        "start from head and update until the existing indices match the block"
+        while True:
+            self.db.put('blocknumber:%d' % blk.number, blk.hash)
+            if blk.number == 0:
+                break
+            blk = blk.get_parent()
+            if blk.hash == self.get_block_by_number(blk.number):
+                break
+
 
     def get_block_by_number(self, number):
-        "returns block hashe"
+        "returns block hash"
         return self.db.get('blocknumber:%d' % number)
 
     def get_children(self, blk_hash):
@@ -250,7 +260,6 @@ class ChainManager(StoppableLoopThread):
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
-        #self.log_chain()
         self.new_miner()
 
 
@@ -265,6 +274,7 @@ class ChainManager(StoppableLoopThread):
     def _update_head(self, block):
         bh = block.hash
         self.blockchain.put('HEAD', block.hash)
+        self.index.update_blocknumbers(self.head)
         self.blockchain.commit()
         self.new_miner()  # reset mining
 
@@ -448,7 +458,7 @@ class ChainManager(StoppableLoopThread):
         blocks = []
         block = self.head
         if start:
-            if start not in self:
+            if start in self.index.db:
                 return []
             block = self.get(start)
             if not self.in_main_branch(block):
@@ -461,28 +471,13 @@ class ChainManager(StoppableLoopThread):
         return blocks
 
     def in_main_branch(self, block):
-        if block.is_genesis():
-            return True
-        return block == self.get_descendents(block.get_parent(), count=1)[0]
+        return block.hash == self.index.get_block_by_number(block.number)
 
-    def get_descendents(self, block, count=1):
-        logger.debug("get_descendents: %r ", block)
+    def get_descendants(self, block, count=1):
+        logger.debug("get_descendants: %r ", block)
         assert block.hash in self
-        # FIXME inefficient implementation
-        res = []
-        cur = self.head
-        while cur != block:
-            res.append(cur)
-            if cur.has_parent():
-                cur = cur.get_parent()
-            else:
-                break
-            if cur.number == block.number and cur != block:
-                # no descendents on main branch
-                logger.debug("no descendents on main branch for: %r ", block)
-                return []
-        res.reverse()
-        return res[:count]
+        block_numbers = range(block.number+1, min(self.head.number, block.number+count))
+        return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
 
     def log_chain(self):
         num = self.head.number + 1
@@ -523,10 +518,10 @@ def handle_local_chain_requested(sender, peer, block_hashes, count, **kwargs):
         if b in chain_manager:
             block = chain_manager.get(b)
             logger.debug("local_chain_requested: found: %r", block)
-            found_blocks = chain_manager.get_descendents(block, count=count)
+            found_blocks = chain_manager.get_descendants(block, count=count)
             if found_blocks:
                 logger.debug("sending: found: %r ", found_blocks)
-                # if b == head: no descendents == no reply
+                # if b == head: no descendants == no reply
                 with peer.lock:
                     peer.send_Blocks(found_blocks)
                 return
