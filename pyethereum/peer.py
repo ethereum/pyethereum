@@ -245,7 +245,7 @@ class Peer(StoppableLoopThread):
         # open('raw_remote_blocks_hex.txt', 'a').write(rlp.encode(data).encode('hex') + '\n') # LOG line
         transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data] # FIXME
         if len(transient_blocks) > MAX_BLOCKS_ACCEPTED:
-            logger.warn('Peer sending too many blocks', len(transient_blocks))
+            logger.warn('Peer sending too many blocks %d', len(transient_blocks))
         signals.remote_blocks_received.send(
             sender=Peer, peer=self, transient_blocks=transient_blocks)
 
@@ -271,10 +271,10 @@ class Peer(StoppableLoopThread):
         count = idec(data[-1])
 
         if count > MAX_GET_CHAIN_REQUEST_BLOCKS:
-            logger.warn('GetChain: Peer asking for too many blocks', count)
+            logger.warn('GetChain: Peer asking for too many blocks %d', count)
 
         if len(block_hashes) > MAX_GET_CHAIN_ACCEPT_HASHES:
-            logger.warn('GetChain: Peer sending too many block hashes', len(block_hashes))
+            logger.warn('GetChain: Peer sending too many block hashes %d', len(block_hashes))
 
         signals.local_chain_requested.send(
             sender=Peer, peer=self, block_hashes=block_hashes, count=count)
