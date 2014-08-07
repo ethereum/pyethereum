@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 base_url = '/api/v0alpha'
 
 app = bottle.Bottle()
-app.config['autojson'] = True
+app.config['autojson'] = False
+app.install(bottle.JSONPlugin(json_dumps=lambda s: json.dumps(s, sort_keys=True)))
 
 
 class ApiServer(threading.Thread):
