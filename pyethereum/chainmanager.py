@@ -405,24 +405,17 @@ class ChainManager(StoppableLoopThread):
                 processblock.verify(block, block.get_parent())
                 return False
 
-
-        if block.number < self.head.number:
-            logger.debug("%r is older than head %r", block, self.head)
-            old_block = self.get(self.index.get_block_by_number(block.number))
-            if block.chain_difficulty() < old_block.chain_difficulty():
-                logger.debug(">= difficulty lower than in local chain, rejecting")
-                return
-        else:
-            old_block = self.head
-
         self.index.add_block(block)
         self._store_block(block)
 
+        if block.number < self.head.number:
+            logger.debug("%r is older than head %r", block, self.head)
+
+        # FIXME: Should we have any limitations on adding blocks?
+
         # set to head if this makes the longest chain w/ most work for that number
-        logger.debug('new:%d %r old:%d %r',block.chain_difficulty(),  block, old_block.chain_difficulty(), old_block)
-        if block.chain_difficulty() > old_block.chain_difficulty():
+        if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
-            # FIXME DELETE OLD CHAIN?
             self._update_head(block)
 
         return True
