@@ -12,6 +12,14 @@ import rlp
 import blocks
 
 
+MAX_GET_CHAIN_ACCEPT_HASHES = 2048 # Maximum number of send hashes GetChain will accept
+MAX_GET_CHAIN_SEND_HASHES = 2048 # Maximum number of hashes GetChain will ever send
+MAX_GET_CHAIN_ASK_BLOCKS = 512 # Maximum number of blocks GetChain will ever ask for
+MAX_GET_CHAIN_REQUEST_BLOCKS = 512 # Maximum number of requested blocks GetChain will accept
+MAX_BLOCKS_SEND = MAX_GET_CHAIN_REQUEST_BLOCKS # Maximum number of blocks Blocks will ever send
+MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND # Maximum number of blocks Blocks will ever accept
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,9 +178,9 @@ class Peer(StoppableLoopThread):
         pass
 
     reasons_to_forget = ('Bad protocol',
-                        'Incompatible network protocols', 
+                        'Incompatible network protocols',
                         'Wrong genesis block')
-    
+
     def send_Disconnect(self, reason=None):
         logger.info('disconnecting {0}, reason: {1}'.format(
             str(self), reason or ''))
@@ -230,16 +238,20 @@ class Peer(StoppableLoopThread):
             sender=Peer, transactions=data)
 
     def send_Blocks(self, blocks):
+        assert len(blocks) <= MAX_BLOCKS_SEND
         self.send_packet(packeter.dump_Blocks(blocks))
 
     def _recv_Blocks(self, data):
         # open('raw_remote_blocks_hex.txt', 'a').write(rlp.encode(data).encode('hex') + '\n') # LOG line
-        transient_blocks = [blocks.TransientBlock(rlp.encode(b)) \
-                            for b in data] # FIXME
+        transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data] # FIXME
+        if len(transient_blocks) > MAX_BLOCKS_ACCEPTED:
+            logger.warn('Peer sending too many blocks', len(transient_blocks))
         signals.remote_blocks_received.send(
             sender=Peer, peer=self, transient_blocks=transient_blocks)
 
     def send_GetChain(self, parents=[], count=1):
+        assert len(parents) <= MAX_GET_CHAIN_SEND_HASHES
+        assert count <= MAX_GET_CHAIN_ASK_BLOCKS
         self.send_packet(packeter.dump_GetChain(parents, count))
 
     def _recv_GetChain(self, data):
@@ -255,8 +267,17 @@ class Peer(StoppableLoopThread):
         sent along with ParentN (i.e. the last Parent in the parents list).
         If no parents are passed, then reply need not be made.
         """
+        block_hashes = data[:-1]
+        count = idec(data[-1])
+
+        if count > MAX_GET_CHAIN_REQUEST_BLOCKS:
+            logger.warn('GetChain: Peer asking for too many blocks', count)
+
+        if len(block_hashes) > MAX_GET_CHAIN_ACCEPT_HASHES:
+            logger.warn('GetChain: Peer sending too many block hashes', len(block_hashes))
+
         signals.local_chain_requested.send(
-            sender=Peer, peer=self, block_hashes=data[:-1], count=idec(data[-1]))
+            sender=Peer, peer=self, block_hashes=block_hashes, count=count)
 
     def send_NotInChain(self, block_hash):
         self.send_packet(packeter.dump_NotInChain(block_hash))
