@@ -12,12 +12,15 @@ import processblock
 from transactions import Transaction
 import indexdb
 import chainlogger
+from peer import MAX_GET_CHAIN_SEND_HASHES
+from peer import MAX_GET_CHAIN_REQUEST_BLOCKS
 
 logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 32
+NUM_BLOCKS_PER_REQUEST = 32 # MAX_GET_CHAIN_REQUEST_BLOCKS
+MAX_GET_CHAIN_SEND_HASHES = 32 # lower for less traffic
 
 class Miner():
     """
@@ -116,7 +119,7 @@ class SynchronizationTask(object):
 
     Strategy:
 
-    1) - divide the chain in NUM_BLOCKS_PER_REQUEST slices and
+    1) - divide the chain in MAX_GET_CHAIN_SEND_HASHES slices and
        - query for the first block of every slice
 
     2) - from the response of the peer use the highest common block and
@@ -125,8 +128,6 @@ class SynchronizationTask(object):
 
     3) - done once we find a block with a known parent in the local chain
     """
-
-
 
     def __init__(self, chain_manager, peer):
         self.chain_manager = chain_manager
@@ -143,7 +144,7 @@ class SynchronizationTask(object):
         logger.debug("SynchronizationTask.request for %r start:%r end:%r", self.peer, start, end)
         # evenly divide the chain and select test blocks to be requested
         num = end.number - start.number
-        num_slices = min(num, NUM_BLOCKS_PER_REQUEST)
+        num_slices = min(num, MAX_GET_CHAIN_SEND_HASHES)
         blk_numbers = [int(start.number + i * float(num)/num_slices) for i in range(num_slices)]
         logger.debug("SynchronizationTask.request numbers %r", blk_numbers)
         slices = [self.chain_manager.index.get_block_by_number(n) for n in blk_numbers]
