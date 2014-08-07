@@ -80,15 +80,7 @@ def load_json_req():
 
 # ######## Blocks ############
 def make_blocks_response(blocks):
-    objs = []
-    for block in blocks:
-        obj = block.to_dict()
-        for item_name, item_type, _ in block_structure:
-            if item_type in ["bin", "trie_root"]:
-                obj[item_name] = obj[item_name].encode('hex')
-        objs.append(obj)
-
-    return dict(blocks=objs)
+    return dict(blocks = [block.to_dict() for block in blocks])
 
 
 @app.get(base_url + '/blocks/')
@@ -102,7 +94,7 @@ def block(blockhash=None):
     logger.debug('blocks/%s', blockhash)
     blockhash = blockhash.decode('hex')
     if blockhash in chain_manager:
-        return make_blocks_response(chain_manager.get(blockhash))
+        return make_blocks_response([chain_manager.get(blockhash)])
     else:
         return bottle.abort(404, 'No block with id %s' % blockhash)
 
