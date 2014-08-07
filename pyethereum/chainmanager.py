@@ -188,16 +188,16 @@ class Synchronizer(object):
         self.synchronization_tasks = {} # peer . syncer
 
     def synchronize_newer(self):
-        logger.info('sync successors for head %r', self.chain_manager.head)
-        signals.remote_chain_requested.send(
-            sender=None, parents=[self.chain_manager.head.hash], count=NUM_BLOCKS_PER_REQUEST)
+        logger.debug('sync successors for head %r', self.chain_manager.head)
+        signals.remote_chain_requested.send(sender=None, parents=[self.chain_manager.head.hash],
+                                            count=NUM_BLOCKS_PER_REQUEST)
 
     def synchronize_branch(self, peer):
-        logger.info('sync branch for peer %r', peer)
+        logger.debug('sync branch for peer %r', peer)
         if peer and not peer in self.synchronization_tasks:
             self.synchronization_tasks[peer] = SynchronizationTask(self.chain_manager, peer)
         else:
-            logger.info('have existing sync task for %r', peer)
+            logger.debug('have existing sync task for %r', peer)
 
     def received_blocks(self, peer, transient_blocks):
         if peer in self.synchronization_tasks:
