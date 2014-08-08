@@ -152,4 +152,6 @@ def do_test_vm(name):
 
     # check state
     for address, data in post.items():
-        assert data == blk.account_to_dict(address)
+        state = blk.account_to_dict(address)
+        state.pop('storage_root', None)  # attribute not present in vmtest fixtures
+        assert data == state
