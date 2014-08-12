@@ -143,8 +143,6 @@ class Packeter(object):
         return packet
 
     def dump_Hello(self):
-        # inconsistency here!
-        # spec says CAPABILITIES, LISTEN_PORT but code reverses
         """
         [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
         LISTEN_PORT, NODE_ID]
@@ -173,8 +171,8 @@ class Packeter(object):
                 self.PROTOCOL_VERSION,
                 self.NETWORK_ID,
                 self.CLIENT_ID,
-                self.config.getint('network', 'listen_port'),
                 self.CAPABILITIES,
+                self.config.getint('network', 'listen_port'),
                 self.NODE_ID
                 ]
         return self.dump_packet(data)

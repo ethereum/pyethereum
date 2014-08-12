@@ -464,7 +464,7 @@ def step_impl(context):
 def step_impl(context):
     from pyethereum.utils import big_endian_to_int as idec
     decoded_packet = context.packeter.load_packet(context.packet)[1][3]
-    port = idec(decoded_packet[3])
+    port = idec(decoded_packet[4])
     node_id = decoded_packet[5]
     assert(context.peer.port == port)
     assert(context.peer.node_id == node_id)

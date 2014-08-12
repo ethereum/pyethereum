@@ -33,6 +33,7 @@ class Peer(StoppableLoopThread):
         self.ip = ip
         # None if peer was created in response to external connect
         self.port = port
+        self.client_id = ''
         self.node_id = ''
         self.response_queue = Queue.Queue()
         self.hello_received = False
@@ -142,21 +143,25 @@ class Peer(StoppableLoopThread):
 
     def _recv_Hello(self, data):
         # check compatibility
-        client_id, peer_protocol_version = data[2], idec(data[0])
-        logger.debug('received Hello %s V:%r',client_id, peer_protocol_version)
+        peer_protocol_version, network_id, client_id = idec(data[0]), idec(data[1]), data[2]
+        capabilities, listen_port, node_id = idec(data[3]), idec(data[4]), data[5]
+
+        logger.debug('received Hello %s V:%r N:%r C:%r P:%r I:%s', client_id,
+                     peer_protocol_version, network_id, capabilities, listen_port,
+                     node_id.encode('hex'))
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(
                 reason='Incompatible network protocols')
 
-        if idec(data[1]) != packeter.NETWORK_ID:
+        if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
         # add to known peers list in handshake signal
         self.hello_received = True
-        if len(data) == 6:
-            self.node_id = data[5]
-            self.port = idec(data[3]) # replace connection port with listen port
+        self.client_id = client_id
+        self.node_id = node_id
+        self.port = listen_port  # replace connection port with listen port
 
         # reply with hello if not send
         if not self.hello_sent:
