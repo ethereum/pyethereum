@@ -1,11 +1,10 @@
 import sys
 import os
 import pytest
-import shutil
-import tempfile
 import pyethereum.indexdb
 import pyethereum.utils
 import pyethereum.db
+from tests.utils import set_db
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
@@ -19,21 +18,14 @@ def mktx(a, b):
     return 'tx(%d,%d)' % (a, b)
 
 @pytest.fixture(scope="module")
-def tempdir(request):
-    tempdir = tempfile.mkdtemp()
-    def fin():
-        shutil.rmtree(tempdir)
-        return
-    request.addfinalizer(fin)
-    return tempdir
-
-@pytest.fixture(scope="module")
-def idx(request, tempdir):
-    return pyethereum.indexdb.AccountTxIndex(idx_db=pyethereum.db.DB(tempdir))
+def idx():
+    set_db()
+    return pyethereum.indexdb.AccountTxIndex()
 
 
-def test_appending(tempdir):
-    idx = pyethereum.indexdb.Index('namespace', idx_db=pyethereum.db.DB(tempdir))
+def test_appending():
+    set_db()
+    idx = pyethereum.indexdb.Index('namespace')
     key = 'key'
     vals = ['v0', 'v1']
     for v in vals:

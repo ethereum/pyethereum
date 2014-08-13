@@ -7,6 +7,7 @@ from remoteblocksdata import data_poc5v23_1
 from pyethereum import eth
 import logging
 import pytest
+from tests.utils import set_db
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
@@ -21,7 +22,7 @@ def load_raw():
 
 
 def do_test(hex_rlp_encoded_data):
-    from test_chain import set_db, get_chainmanager
+    from test_chain import get_chainmanager
     set_db()
     chain_manager = get_chainmanager()
     data = rlp.decode(hex_rlp_encoded_data.decode('hex'))

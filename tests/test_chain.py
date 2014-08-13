@@ -1,23 +1,22 @@
 import os
 import pytest
 import json
-import tempfile
 import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
-import pyethereum.utils as utils
 import pyethereum.rlp as rlp
 import pyethereum.trie as trie
 import pyethereum.utils as utils
 from pyethereum.db import DB as DB
 from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
+from tests.utils import set_db
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
-tempdir = tempfile.mktemp()
+set_db()
 
 
 @pytest.fixture(scope="module")
@@ -82,16 +81,6 @@ def get_chainmanager(genesis=None):
     cm = chainmanager.ChainManager()
     cm.configure(config=create_default_config(), genesis=genesis)
     return cm
-
-
-def set_db(name=''):
-    if name:
-        utils.data_dir.set(os.path.join(tempdir, name))
-    else:
-        utils.data_dir.set(tempfile.mktemp())
-
-
-set_db()
 
 
 def db_store(blk):

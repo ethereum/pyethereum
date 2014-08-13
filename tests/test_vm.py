@@ -1,6 +1,5 @@
 import pytest
 import json
-import tempfile
 import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
@@ -9,8 +8,6 @@ import pyethereum.utils as u
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
-
-tempdir = tempfile.mktemp()
 
 
 def check_testdata(data_keys, expected_keys):
