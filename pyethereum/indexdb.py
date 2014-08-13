@@ -10,12 +10,9 @@ class Index(object):
     datastructure: namespace|key|valnum > val
     """
 
-    def __init__(self, namespace, idx_db=None):
+    def __init__(self, namespace):
         self.namespace = namespace
-        if idx_db is not None:
-            self.db = idx_db
-        else:
-            self.db = db.DB(get_index_path())
+        self.db = db.DB(get_index_path())
 
     def _key(self, key, valnum=None):
         return self.namespace + key + struct.pack('>I', valnum)
@@ -62,8 +59,8 @@ class AccountTxIndex(Index):
 
     "acct|txnonce > tx"
 
-    def __init__(self, idx_db=None):
-        super(AccountTxIndex, self).__init__('tx', idx_db=idx_db)
+    def __init__(self):
+        super(AccountTxIndex, self).__init__('tx')
 
     def add_transaction(self, account, nonce, transaction_hash):
         self.add(account, nonce, transaction_hash)
