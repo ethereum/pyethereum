@@ -361,10 +361,7 @@ class ChainManager(StoppableLoopThread):
                     else:
                         logger.debug('%s with unknown parent, peer:%r', t_block, peer)
                         if peer:
-                            if t_block <= self.head.block:
-                                self.synchronizer.synchronize_branch(peer)
-                            else:
-                                self.synchronizer.synchronize_newer()
+                            self.synchronizer.synchronize_branch(peer)
                     break
                 if block.hash in self:
                     logger.debug('Known %r', block)
