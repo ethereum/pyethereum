@@ -343,7 +343,7 @@ class ChainManager(StoppableLoopThread):
 
             for t_block in reversed(transient_blocks): # oldest to newest
                 logger.debug('Deserializing %r', t_block)
-                logger.debug(t_block.rlpdata.encode('hex'))
+                #logger.debug(t_block.rlpdata.encode('hex'))
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
@@ -361,7 +361,10 @@ class ChainManager(StoppableLoopThread):
                     else:
                         logger.debug('%s with unknown parent, peer:%r', t_block, peer)
                         if peer:
-                            self.synchronizer.synchronize_branch(peer)
+                            if t_block <= self.head.block:
+                                self.synchronizer.synchronize_branch(peer)
+                            else:
+                                self.synchronizer.synchronize_newer()
                     break
                 if block.hash in self:
                     logger.debug('Known %r', block)
@@ -388,7 +391,7 @@ class ChainManager(StoppableLoopThread):
         #         logger.debug('Missing uncle for block %r', block)
         #        return False
 
-        # check PoW
+        # check PoW and forward asap in order to avoid stale blocks
         if not len(block.nonce) == 32:
             logger.debug('Nonce not set %r', block)
             return False
@@ -396,6 +399,8 @@ class ChainManager(StoppableLoopThread):
                 not block.is_genesis():
             logger.debug('Invalid nonce %r', block)
             return False
+
+        # FIXME: Forward blocks w/ valid PoW asap
 
         if block.has_parent():
             try:
