@@ -1,15 +1,13 @@
 import sys
 import os
 import pytest
-import tempfile
 import pyethereum.indexdb
 import pyethereum.utils
 import pyethereum.db
+from tests.utils import set_db
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
-
-tempdir = tempfile.mktemp()
 
 
 def act(num):
@@ -19,15 +17,14 @@ def act(num):
 def mktx(a, b):
     return 'tx(%d,%d)' % (a, b)
 
-
 @pytest.fixture(scope="module")
-def mkindex():
-    idx = pyethereum.indexdb.AccountTxIndex()
-    idx.db = pyethereum.db.DB(tempfile.mktemp())
-    return idx
+def idx():
+    set_db()
+    return pyethereum.indexdb.AccountTxIndex()
 
 
 def test_appending():
+    set_db()
     idx = pyethereum.indexdb.Index('namespace')
     key = 'key'
     vals = ['v0', 'v1']
@@ -37,15 +34,13 @@ def test_appending():
     assert list(idx.get(key)) == vals
 
 
-def test_adding():
+def test_adding(idx):
     acct = act(10000)
     acct2 = act(10000)
     tx0 = mktx(0, 0)
     tx1 = mktx(0, 1)
     tx2 = mktx(0, 2)
     tx3 = mktx(0, 3)
-
-    idx = mkindex()
 
     idx.add_transaction(acct, 0, tx0)
     idx.db.commit()
@@ -83,9 +78,7 @@ def test_adding():
         assert txs == [tx0, tx1, tx2, tx3][:keep]
 
 
-def test_multiple_accounts():
-    idx = mkindex()
-
+def test_multiple_accounts(idx):
     NUM_ACCOUNTS = 20
 
     for i in range(NUM_ACCOUNTS)[1:]:
@@ -107,8 +100,7 @@ def test_multiple_accounts():
         set(list(idx.get_accounts(account_from='')))) == NUM_ACCOUNTS - 1
 
 
-def test_num_transactions():
-    idx = mkindex()
+def test_num_transactions(idx):
     acct = act(4200000)
     assert idx.num_transactions(acct) == 0
 

@@ -1,5 +1,4 @@
 import pytest
-import tempfile
 import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
@@ -10,8 +9,6 @@ import serpent
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
-
-tempdir = tempfile.mktemp()
 
 
 @pytest.fixture(scope="module")
@@ -36,9 +33,6 @@ def get_transaction(gasprice=0, nonce=0):
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
-
-def set_db():
-    utils.data_dir.set(tempfile.mktemp())
 
 namecoin_code =\
     '''

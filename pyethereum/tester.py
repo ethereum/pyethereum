@@ -1,4 +1,6 @@
 import pyethereum
+import shutil
+import tempfile
 import time
 serpent = None
 
@@ -23,12 +25,19 @@ class state():
         global serpent
         if not serpent:
             serpent = __import__('serpent')
+
+        self.temp_data_dir = tempfile.mkdtemp()
+        u.data_dir.set(self.temp_data_dir)
+
         o = {}
         for i in range(num_accounts):
             o[accounts[i]] = 10**18
         self.block = b.genesis(o)
         self.block.coinbase = a0
         self.mine(1)
+
+    def __del__(self):
+        shutil.rmtree(self.temp_data_dir)
 
     def contract(self, code, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
