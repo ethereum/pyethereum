@@ -40,26 +40,6 @@ class EthClient(QObject):
         print 'response:', res
         self.on_transact_cb.emit(json.dumps(res))
 
-
-    @Slot(str)
-    def connect(self, data):
-        data = json.loads(data)
-        print "connect", data
-        if data['method'] == 'balance':
-            address = privtoaddr(self.privkey)
-            balance = self.api.getbalance(address)
-            res = dict(address=address, balance=balance)
-        else:
-            res = dict()
-        print 'response:', res
-        self.on_client_event.emit(json.dumps(res))
-
-
-
-    @Slot(str)
-    def disconnect(self, config):
-        print "disconnect", config
-
     on_getbalance = Signal(str)
     on_getbalance_cb = Signal(str)
     on_transact = Signal(str)
@@ -67,9 +47,6 @@ class EthClient(QObject):
 
     on_client_event = Signal(str)
     on_actor_event = Signal(str)
-    on_connect = Signal(str)
-    on_disconnect = Signal(str)
-
 
 
 class HTMLApplication(object):
