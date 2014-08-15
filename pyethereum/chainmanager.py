@@ -401,6 +401,11 @@ class ChainManager(StoppableLoopThread):
 
         if block.has_parent():
             try:
+                logger.debug('verifying: %s', block)
+                logger.debug('GETTING ACCOUNT FOR COINBASE:')
+                acct = block.get_acct(block.coinbase)
+                logger.debug('GOT ACCOUNT FOR COINBASE: %r', acct)
+
                 processblock.verify(block, block.get_parent())
             except AssertionError as e:
                 logger.debug('verification failed: %s', str(e))
