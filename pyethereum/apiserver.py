@@ -111,7 +111,13 @@ def transactions():
     signals.local_transaction_received.send(sender=None, transaction=tx)
     return ''
     #return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
+    """
 
+    HTTP status code 200 OK for a successful PUT of an update to an existing resource. No response body needed. (Per Section 9.6, 204 No Content is even more appropriate.)
+    HTTP status code 201 Created for a successful PUT of a new resource, with URIs and metadata of the new resource echoed in the response body. (RFC 2616 Section 10.2.2)
+    HTTP status code 409 Conflict for a PUT that is unsuccessful due to a 3rd-party modification, with a list of differences between the attempted update and the current resource in the response body. (RFC 2616 Section 10.4.10)
+    HTTP status code 400 Bad Request for an unsuccessful PUT, with natural-language text (such as English) in the response body that explains why the PUT failed. (RFC 2616 Section 10.4)
+    """
 
 # ######## Accounts ############
 @app.get(base_url + '/accounts/')
