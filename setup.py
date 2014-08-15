@@ -9,6 +9,6 @@ setup(name="pyethereum",
       packages=find_packages("."),
       install_requires=[
           'six', 'leveldb', 'bitcoin', 'pysha3',
-          'miniupnpc','ethereum-serpent', 'pytest'
+          'miniupnpc','ethereum-serpent', 'pytest',
           'bottle', 'waitress', 'docopt'],
       entry_points=dict(console_scripts=console_scripts))
