@@ -6,3 +6,5 @@ bottle
 waitress
 docopt
 six
+ethereum-serpent
+pytest
