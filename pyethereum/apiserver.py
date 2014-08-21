@@ -117,16 +117,18 @@ def block(arg=None):
 
 
 # ######## Transactions ############
+def make_transaction_response(txs):
+    return dict(transactions = [tx.to_dict() for tx in txs])
+
 @app.put(base_url + '/transactions/')
-def transactions():
+def add_transaction():
     # request.json FIXME / post json encoded data? i.e. the representation of
     # a tx
     hex_data = bottle.request.body.read()
     logger.debug('PUT transactions/ %s', hex_data)
     tx = Transaction.hex_deserialize(hex_data)
     signals.local_transaction_received.send(sender=None, transaction=tx)
-    return ''
-    #return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
+    return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
     """
 
     HTTP status code 200 OK for a successful PUT of an update to an existing resource. No response body needed. (Per Section 9.6, 204 No Content is even more appropriate.)
