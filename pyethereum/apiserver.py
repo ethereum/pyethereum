@@ -135,6 +135,36 @@ def transactions():
     HTTP status code 400 Bad Request for an unsuccessful PUT, with natural-language text (such as English) in the response body that explains why the PUT failed. (RFC 2616 Section 10.4)
     """
 
+
+@app.get(base_url + '/transactions/<arg>')
+def get_transactions(arg=None):
+    """
+    /transactions/<hex>          return transaction by hexhash
+    """
+    logger.debug('GET transactions/%s', arg)
+    try:
+        tx_hash = arg.decode('hex')
+    except TypeError:
+        bottle.abort(500, 'No hex  %s' % arg)
+    try: # index
+        tx, blk = chain_manager.index.get_transaction(tx_hash)
+    except KeyError:
+        # try miner
+        txs = chain_manager.miner.get_transactions()
+        found = [tx for tx in txs if tx.hex_hash() == arg]
+        if not found:
+            return bottle.abort(404, 'No Transaction  %s' % arg)
+        tx, blk = found[0], chain_manager.miner.block
+    # response
+    tx = tx.to_dict()
+    tx['block'] = blk.hex_hash()
+    if not chain_manager.in_main_branch(blk):
+        tx['confirmations'] = 0
+    else:
+        tx['confirmations'] = chain_manager.head.number - blk.number
+    return dict(transactions=[tx])
+
+
 # ######## Accounts ############
 @app.get(base_url + '/accounts/')
 def accounts():
