@@ -7,9 +7,12 @@ import bottle
 from pyethereum.chainmanager import chain_manager
 from pyethereum.peermanager import peer_manager
 import pyethereum.dispatch as dispatch
-from pyethereum.blocks import block_structure
+from pyethereum.blocks import block_structure, Block
 import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
+import pyethereum.processblock as processblock
+import pyethereum.utils as utils
+import pyethereum.rlp as rlp
 
 logger = logging.getLogger(__name__)
 base_url = '/api/v02a'
@@ -173,6 +176,61 @@ def get_pending():
     /pending/       return pending transactions
     """
     return dict(transactions=[tx.to_dict() for tx in chain_manager.miner.get_transactions()])
+
+
+
+# ########### Trace ############
+
+class TraceLogHandler(logging.Handler):
+    def __init__(self):
+        logging.Handler.__init__(self)
+        self.buffer = []
+
+    def emit(self, record):
+        self.buffer.append(record)
+
+
+@app.get(base_url + '/trace/<txhash>')
+def trace(txhash):
+    """
+    /trace/<hexhash>        return trace for transaction
+    """
+    logger.debug('GET trace/ %s', txhash)
+    try: # index
+        tx, blk = chain_manager.index.get_transaction(txhash.decode('hex'))
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
+
+    # get the state we had before this transaction
+    test_blk = Block.init_from_parent(blk.get_parent(),
+                                        blk.coinbase,
+                                        extra_data=blk.extra_data,
+                                        timestamp=blk.timestamp,
+                                        uncles=blk.uncles)
+    pre_state = test_blk.state_root
+    for i in range(blk.transaction_count):
+        tx_lst_serialized, sr, _ = blk.get_transaction(i)
+        if utils.sha3(rlp.encode(tx_lst_serialized)) == tx.hash:
+            break
+        else:
+            pre_state = sr
+    test_blk.state.root_hash = pre_state
+
+    # collect debug output
+    tl = TraceLogHandler()
+    tl.setLevel(logging.DEBUG)
+    processblock.logger.addHandler(tl)
+
+    # apply tx (thread? we don't want logs from other invocations)
+    processblock.apply_transaction(test_blk, tx)
+
+    # stop collecting debug output
+    processblock.logger.removeHandler(tl)
+
+    # format
+    formatter = logging.Formatter('%(name)s:%(message)s')
+    res = '\n'.join(formatter.format(l) for l in tl.buffer)
+    return dict(trace=res)
 
 
 

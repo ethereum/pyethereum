@@ -95,6 +95,11 @@ class APIClient(object):
     def getpending(self):
         return self.json_get_request(path='/pending/')
 
+    def trace(self, id):
+        res = self.json_get_request(path='/trace/%s' % id)
+        if 'trace' in res:
+          return res['trace']
+        return res
 
 doc = \
 """ethclient
@@ -115,7 +120,7 @@ Usage:
   pyethclient getblock [options] <blockid_hex_or_num>
   pyethclient gettx [options] <txid_hex>
   pyethclient getpending [options]
-
+  pyethclient trace [options] <txid_hex>
 
 Options:
   -h --help                 Show this screen
@@ -155,6 +160,7 @@ def main():
                     getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
                     gettx=(api.gettx, arguments['<txid_hex>']),
                     trace=(api.trace, arguments['<txid_hex>']),
+                    getpending=(api.getpending,)
                     )
     for k in cmd_map:
         if arguments.get(k):
