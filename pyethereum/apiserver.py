@@ -89,15 +89,31 @@ def blocks():
     logger.debug('blocks/')
     return make_blocks_response(chain_manager.get_chain(start='', count=20))
 
-
-@app.get(base_url + '/blocks/<blockhash>')
-def block(blockhash=None):
-    logger.debug('blocks/%s', blockhash)
-    blockhash = blockhash.decode('hex')
-    if blockhash in chain_manager:
-        return make_blocks_response([chain_manager.get(blockhash)])
-    else:
-        return bottle.abort(404, 'No block with id %s' % blockhash)
+@app.get(base_url + '/blocks/<arg>')
+def block(arg=None):
+    """
+    /blocks/            return N last blocks
+    /blocks/head        return head
+    /blocks/<int>       return block by number
+    /blocks/<hex>       return block by hexhash
+    """
+    logger.debug('blocks/%s', arg)
+    try:
+        if arg is None:
+            return blocks()
+        elif arg == 'head':
+            block = chain_manager.head
+        elif arg.isdigit():
+            block = chain_manager.get(chain_manager.index.get_block_by_number(int(arg)))
+        else:
+            try:
+                h = arg.decode('hex')
+            except TypeError:
+                raise KeyError
+            block = chain_manager.get(h)
+    except KeyError:
+        return bottle.abort(404, 'No block  %s' % arg)
+    return make_blocks_response([block])
 
 
 # ######## Transactions ############
