@@ -240,15 +240,6 @@ class Index(object):
             if blk.hash == self.get_block_by_number(blk.number):
                 break
 
-    # FIXME, DELETEME AFTER MIGRATION
-    def _update_tx(self, blk): # FIXME HELPER
-        "start from head and update tx"
-        while True:
-            self._add_transactions(blk)
-            if blk.number == 0:
-                break
-            blk = blk.get_parent()
-
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i in range(blk.transaction_count):
@@ -259,7 +250,6 @@ class Index(object):
             key = utils.sha3(tx)
             value = rlp.encode([blk.hash, i_enc])
             self.db.put(key, value)
-            print blk.number, key.encode('hex'), [blk.hex_hash(), i]
 
     def get_transaction(self, txhash):
         "return (tx, block)"
@@ -300,7 +290,6 @@ class ChainManager(StoppableLoopThread):
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         self.new_miner()
-        self.index._update_tx(self.head) # FIXME, DELETEME AFTER MIGRATION
 
 
 
