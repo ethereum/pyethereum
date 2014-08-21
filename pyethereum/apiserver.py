@@ -167,6 +167,15 @@ def get_transactions(arg=None):
     return dict(transactions=[tx])
 
 
+@app.get(base_url + '/pending/')
+def get_pending():
+    """
+    /pending/       return pending transactions
+    """
+    return dict(transactions=[tx.to_dict() for tx in chain_manager.miner.get_transactions()])
+
+
+
 # ######## Accounts ############
 @app.get(base_url + '/accounts/')
 def accounts():
