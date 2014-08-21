@@ -105,18 +105,18 @@ def block(arg=None):
         if arg is None:
             return blocks()
         elif arg == 'head':
-            block = chain_manager.head
+            blk = chain_manager.head
         elif arg.isdigit():
-            block = chain_manager.get(chain_manager.index.get_block_by_number(int(arg)))
+            blk = chain_manager.get(chain_manager.index.get_block_by_number(int(arg)))
         else:
             try:
                 h = arg.decode('hex')
             except TypeError:
                 raise KeyError
-            block = chain_manager.get(h)
+            blk = chain_manager.get(h)
     except KeyError:
-        return bottle.abort(404, 'No block  %s' % arg)
-    return make_blocks_response([block])
+        return bottle.abort(404, 'Unknown Block  %s' % arg)
+    return make_blocks_response([blk])
 
 
 # ######## Transactions ############
@@ -132,13 +132,6 @@ def add_transaction():
     tx = Transaction.hex_deserialize(hex_data)
     signals.local_transaction_received.send(sender=None, transaction=tx)
     return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
-    """
-
-    HTTP status code 200 OK for a successful PUT of an update to an existing resource. No response body needed. (Per Section 9.6, 204 No Content is even more appropriate.)
-    HTTP status code 201 Created for a successful PUT of a new resource, with URIs and metadata of the new resource echoed in the response body. (RFC 2616 Section 10.2.2)
-    HTTP status code 409 Conflict for a PUT that is unsuccessful due to a 3rd-party modification, with a list of differences between the attempted update and the current resource in the response body. (RFC 2616 Section 10.4.10)
-    HTTP status code 400 Bad Request for an unsuccessful PUT, with natural-language text (such as English) in the response body that explains why the PUT failed. (RFC 2616 Section 10.4)
-    """
 
 
 @app.get(base_url + '/transactions/<arg>')
@@ -158,7 +151,7 @@ def get_transactions(arg=None):
         txs = chain_manager.miner.get_transactions()
         found = [tx for tx in txs if tx.hex_hash() == arg]
         if not found:
-            return bottle.abort(404, 'No Transaction  %s' % arg)
+            return bottle.abort(404, 'Unknown Transaction  %s' % arg)
         tx, blk = found[0], chain_manager.miner.block
     # response
     tx = tx.to_dict()
