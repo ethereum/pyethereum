@@ -500,7 +500,10 @@ class ChainManager(StoppableLoopThread):
         return blocks
 
     def in_main_branch(self, block):
-        return block.hash == self.index.get_block_by_number(block.number)
+        try:
+            return block.hash == self.index.get_block_by_number(block.number)
+        except KeyError:
+            return False
 
     def get_descendants(self, block, count=1):
         logger.debug("get_descendants: %r ", block)
