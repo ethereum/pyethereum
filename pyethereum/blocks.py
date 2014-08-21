@@ -353,9 +353,12 @@ class Block(object):
         # returns [[tx_lst_serialized, state_root, gas_used_encoded],...]
         txlist = []
         for i in range(self.transaction_count):
-            txlist.append(rlp.decode(
-                self.transactions.get(rlp.encode(utils.encode_int(i)))))
+            txlist.append(self.get_transaction(i))
         return txlist
+
+    def get_transaction(self, num):
+        # returns [tx_lst_serialized, state_root, gas_used_encoded]
+        return rlp.decode(self.transactions.get(rlp.encode(utils.encode_int(num))))
 
     def get_transactions(self):
         return [transactions.Transaction.create(tx) for
@@ -532,27 +535,35 @@ class Block(object):
     def hex_serialize(self):
         return self.serialize().encode('hex')
 
-    def to_dict(self):
+    def to_dict(self, with_state=False, full_transactions=False):
+        """
+        serializes the block
+        with_state:             include state for all accounts
+        full_transactions:      include serialized tx (hashes otherwise)
+        """
         self.commit_state()
         b = {}
         for name, typ, default in block_structure:
             b[name] = utils.printers[typ](getattr(self, name))
-        b["state"] = {}
-        for address, v in self.state.to_dict().iteritems():
-            b["state"][address.encode('hex')] = self.account_to_dict(address)
         txlist = []
         for i in range(self.transaction_count):
-            td = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx = rlp.descend(td, 0)
-            msr = rlp.descend_to_val(td, 1)
-            gas = rlp.descend_to_val(td, 2)
-            txjson = transactions.Transaction.deserialize(tx).to_dict()
+            tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
+            tx, msr, gas = rlp.decode(tx_rlp)
+            if full_transactions:
+                txjson = transactions.Transaction.create(tx).to_dict()
+            else:
+                txjson = utils.sha3(rlp.descend(tx_rlp,0)).encode('hex') # tx hash
             txlist.append({
                 "tx": txjson,
                 "medstate": msr.encode('hex'),
                 "gas": str(utils.decode_int(gas))
             })
         b["transactions"] = txlist
+        if with_state:
+            state_dump = {}
+            for address, v in self.state.to_dict().iteritems():
+                state_dump[address.encode('hex')] = self.account_to_dict(address)
+            b['state'] = state_dump
         return b
 
     @property
