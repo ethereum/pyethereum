@@ -210,13 +210,25 @@ class Synchronizer(object):
 class Index(object):
     """"
     Collection of indexes
+
+    children:
+        - needed to get the uncles of a block
+    blocknumbers:
+        - needed to mark the longest chain (path to top)
+
+    transactions:
+        - optional to resolve txhash to block:tx
+
     """
-    def __init__(self, db):
+    def __init__(self, db, index_transactions = True):
         self.db = db
         self.children_of = indexdb.Index('ci')
+        self._index_transactions = index_transactions
 
     def add_block(self, blk):
         self.children_of.append(blk.prevhash, blk.hash)
+        if self._index_transactions:
+            self._add_transactions(blk)
 
     def update_blocknumbers(self, blk):
         "start from head and update until the existing indices match the block"
@@ -228,6 +240,34 @@ class Index(object):
             if blk.hash == self.get_block_by_number(blk.number):
                 break
 
+    # FIXME, DELETEME AFTER MIGRATION
+    def _update_tx(self, blk): # FIXME HELPER
+        "start from head and update tx"
+        while True:
+            self._add_transactions(blk)
+            if blk.number == 0:
+                break
+            blk = blk.get_parent()
+
+    def _add_transactions(self, blk):
+        "'tx_hash' -> 'rlp([blockhash,tx_number])"
+        for i in range(blk.transaction_count):
+            i_enc = utils.encode_int(i)
+            # work on rlp data to avoid unnecessary de/serialization
+            td = blk.transactions.get(rlp.encode(i_enc))
+            tx = rlp.descend(td, 0)
+            key = utils.sha3(tx)
+            value = rlp.encode([blk.hash, i_enc])
+            self.db.put(key, value)
+            print blk.number, key.encode('hex'), [blk.hex_hash(), i]
+
+    def get_transaction(self, txhash):
+        "return (tx, block)"
+        blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
+        blk = blocks.get_block(blockhash)
+        num = utils.decode_int(tx_num_enc)
+        tx_data, msr, gas  = blk.get_transaction(num)
+        return Transaction.create(tx_data), blk
 
     def get_block_by_number(self, number):
         "returns block hash"
@@ -249,7 +289,6 @@ class ChainManager(StoppableLoopThread):
         # initialized after configure
         self.miner = None
         self.blockchain = None
-        self._children_index = None
         self.synchronizer = Synchronizer(self)
 
     def configure(self, config, genesis=None):
@@ -261,6 +300,7 @@ class ChainManager(StoppableLoopThread):
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         self.new_miner()
+        self.index._update_tx(self.head) # FIXME, DELETEME AFTER MIGRATION
 
 
 
