@@ -161,7 +161,7 @@ class Signal(object):
 
         with self.lock:
             self._clear_dead_receivers()
-            for index in self.receivers:
+            for index in range(len(self.receivers)):
                 (r_key, _) = self.receivers[index]
                 if r_key == lookup_key:
                     del self.receivers[index]
