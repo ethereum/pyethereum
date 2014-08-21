@@ -12,7 +12,7 @@ import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 
 logger = logging.getLogger(__name__)
-base_url = '/api/v0alpha'
+base_url = '/api/v02a'
 
 app = bottle.Bottle()
 app.config['autojson'] = False
