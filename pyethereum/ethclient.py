@@ -54,7 +54,10 @@ class APIClient(object):
         #print 'GET', url
         r = requests.get(url)
         #print r.status_code, r.reason, r.url, r.headers
-        return r.json()
+        if r.status_code in [200, 201]:
+          return r.json()
+        else:
+            return dict((k, getattr(r, k)) for k in ('status_code', 'reason'))
 
     def account_to_dict(self, address):
         return self.json_get_request(path='/accounts/%s' % address)
@@ -83,6 +86,16 @@ class APIClient(object):
         tx = mktx(nonce, gasprice, startgas, to, value, data)
         return self.applytx(sign(tx, pkey_hex))
 
+    def getblock(self, id):
+        return self.json_get_request(path='/blocks/%s' % id)
+
+    def gettx(self, id):
+        return self.json_get_request(path='/transactions/%s' % id)
+
+    def getpending(self):
+        return self.json_get_request(path='/pending/')
+
+
 doc = \
 """ethclient
 
@@ -99,6 +112,10 @@ Usage:
   pyethclient sign <tx_hex> <pkey_hex>
   pyethclient privtoaddr <pkey_hex>
   pyethclient sha3 <data>
+  pyethclient getblock [options] <blockid_hex_or_num>
+  pyethclient gettx [options] <txid_hex>
+  pyethclient getpending [options]
+
 
 Options:
   -h --help                 Show this screen
@@ -135,6 +152,9 @@ def main():
                     mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
                     quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
                     sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
+                    getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
+                    gettx=(api.gettx, arguments['<txid_hex>']),
+                    trace=(api.trace, arguments['<txid_hex>']),
                     )
     for k in cmd_map:
         if arguments.get(k):
