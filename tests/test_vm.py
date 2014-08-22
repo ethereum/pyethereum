@@ -39,8 +39,8 @@ def vm_tests_fixtures():
         vm_fixture.update(json.load(open('fixtures/random.json', 'r')))
     except IOError:
         raise IOError("Could not read random.json from fixtures.")
-    #assert vm_fixture.keys() == ['boolean', 'suicide', 'random', 'arith', 'mktx'],\
-    #    "Tests changed, try updating the fixtures submodule"
+    assert set(vm_fixture.keys()) == set(['boolean', 'suicide', 'random', 'arith', 'mktx']),\
+        "Tests changed, try updating the fixtures submodule"
 
     return vm_fixture
 
