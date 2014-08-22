@@ -95,10 +95,21 @@ class APIClient(object):
     def getpending(self):
         return self.json_get_request(path='/pending/')
 
+    def tracejson(self, id):
+        res = self.json_get_request(path='/trace/%s' % id)
+        return res
+
     def trace(self, id):
         res = self.json_get_request(path='/trace/%s' % id)
         if 'trace' in res:
-          return res['trace']
+          out = []
+          for l in res['trace']:
+            name, data = l.items()[0]
+            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
+            items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
+            msg = ", ".join("%s=%s" % (k,v) for k,v in items)
+            out.append("%s: %s" %(name.ljust(15), msg))
+          return '\n'.join(out)
         return res
 
 doc = \
@@ -121,6 +132,7 @@ Usage:
   pyethclient gettx [options] <txid_hex>
   pyethclient getpending [options]
   pyethclient trace [options] <txid_hex>
+  pyethclient tracejson [options] <txid_hex>
 
 Options:
   -h --help                 Show this screen
@@ -160,6 +172,7 @@ def main():
                     getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
                     gettx=(api.gettx, arguments['<txid_hex>']),
                     trace=(api.trace, arguments['<txid_hex>']),
+                    tracejson=(api.tracejson, arguments['<txid_hex>']),
                     getpending=(api.getpending,)
                     )
     for k in cmd_map:
