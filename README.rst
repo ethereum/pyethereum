@@ -53,8 +53,7 @@ Coding
 
 Testing
 +++++++++
-#.  `behave <http://pythonhosted.org/behave/index.html>`_ and
-#.  `pytest <http://pytest.org/latest/>`_ are used for testing.
+`pytest <http://pytest.org/latest/>`_ is used for testing
 
 In order to run tests, you need to prepare the ``fixtures``-submodule
 (not necessary when using bootstrap)::
@@ -63,7 +62,7 @@ In order to run tests, you need to prepare the ``fixtures``-submodule
     git submodule update --recursive
 
 then run the tests either by calling
-``behave`` and ``py.test`` consecutively or by calling ``tox`` (which will do both).
+``py.test`` (or ``behave`` for a set of older tests) consecutively or by calling ``tox`` (which will do both).
 
 In order to update the ``fixtures``-submodule::
 
@@ -73,25 +72,11 @@ In order to update the ``fixtures``-submodule::
     cd ..
     git commit -m 'updated fixtures submodule'
 
-
-Tips for writing test code for *behave*
-
-1.  write test scenario in *xxx.feature*
-2.  run ``behave``, then behave will report the newly written scenario are
-    not implemented, and the code skeleton for the corresponding steps will
-    also be generated.
-3.  copy & paste the generated code skeleton into a file in the *steps*
-    directory and then write your test code based on it.
-4.  if you need setup/teardown for feature/scenario with specific tag of
-    *mytag*, create a file called mytag.py in the *hooks* directory
-
-Tips for debug
-
-1. for test specific scenario while ignoring all other ones, just add `@wip`
-   in the uppper line of the scenario.
-2. for debug, run::
-
-    $ BEHAVE_DEBUG_ON_ERROR=yes behave -w
+Tips for testing with the VM:
+1. You can get traces for a transaction using the API and ethclient, e.g.::
+    bin/pyethclient trace 522f583b94cb3a16deca41404ef404c2c1b3484070af2ec7971bc4e1a17c556e
+2. Use the ``-s`` modifier to see the log output of tests, e.g. ``py.test -s tests/test_vm.py``
+3. You can customize the level of VM logging detail by modifying PBLogger in processblock.py
 
 Logging:
 +++++++++
@@ -115,6 +100,11 @@ The ``eth.py`` script, understands a command line flag for easy debugging, e.g.:
     pyethereum/eth.py -L pyethereum.wire:DEBUG,:INFO ...<other args>
 
 will set the log-level for ``wire`` to ``DEBUG`` and the root logger to ``INFO``.
+
+    pyethereum/eth.py -L :DEBUG ...<other args>
+
+logs everything to the console.
+
 
 Buildout (optional)
 -------------------
