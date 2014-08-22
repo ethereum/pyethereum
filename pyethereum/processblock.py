@@ -12,25 +12,33 @@ import json
 import time
 logger = logging.getLogger(__name__)
 
-print_debug = 0
 
 
-def enable_debug():
-    global print_debug
-    print_debug = 1
+class PBLogger(object):
+    log_pre_state = True    # dump storage at account before execution
+    log_post_state = True   # dump storage at account after execution
+    log_block = False       # dump block after TX was applied
+    log_memory = False      # dump memory before each op
+    log_op = True           # log op, gas, stack before each op
+    log_json = False        # generate machine readable output
 
+    def __init__(self):
+        self.listeners = [] # register callbacks here
 
-def disable_debug():
-    global print_debug
-    print_debug = 0
+    def log(self, name, **kargs):
+        # call callbacks
+        for l in self.listeners:
+            l(name, kargs)
+        if self.log_json:
+            logger.debug(json.dumps({name:kargs}))
+        else:
+            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
+            items = sorted(kargs.items(), key=lambda x: order.get(x[0], 0))
+            msg = ", ".join("%s=%s" % (k,v) for k,v in items)
+            logger.debug("%s: %s", name.ljust(15), msg)
 
+pblogger = PBLogger()
 
-def logger_debug(*args, **kwargs):
-    logger.debug(*args)
-    threshold = kwargs.get('threshold', 1)
-    if print_debug >= threshold:
-        sys.stderr.write(args[0] % tuple(args[1:]) + '\n')
-        
 
 GSTEP = 1
 GSTOP = 0
@@ -150,11 +158,8 @@ def apply_transaction(block, tx):
         BlockGasLimitReached(
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    logger_debug(' ')
-    logger_debug('#'*40 + ' NEW TRANSACTION ' + '#'*40)
-    logger_debug(' ')
-    logger_debug('initial: %s', str(block.account_to_dict(tx.sender)))
 
+    pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
 
@@ -163,8 +168,9 @@ def apply_transaction(block, tx):
                                    tx.gasprice * tx.startgas)
     assert success
 
-    logger_debug('tx: %s', str(tx.to_dict()))
-    logger_debug('snapshot: %s', str(block.account_to_dict(tx.sender)))
+    if pblogger.log_pre_state:
+        pblogger.log('TX PRE STATE', account=tx.sender, state=block.account_to_dict(tx.sender))
+
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
     # MESSAGE
@@ -175,17 +181,19 @@ def apply_transaction(block, tx):
         if result > 0:
             result = utils.coerce_addr_to_hex(result)
     assert gas_remained >= 0
-    logger.debug(
-        'applied tx, result %r gas remained %r data/code %r', result,
-        gas_remained, ''.join(map(chr, data)).encode('hex'))
-    # logger.debug(json.dumps(block.to_dict(), indent=2))
+
+    pblogger.log("TX APPLIED", result=result, gas_remained=gas_remained,
+                                data=''.join(map(chr, data)).encode('hex'))
+    if pblogger.log_block:
+        pblogger.log('BLOCK', block=block.to_dict(with_state=True, full_transactions=True))
+
+
     if not result:  # 0 = OOG failure in both cases
-        logger_debug('tx out of gas')
-        logger_debug('d %s %s', tx.startgas, gas_remained)
+        pblogger.log('TX FAILED', reason='out of gas', startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
-        logger_debug('tx successful')
+        pblogger.log('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
         # sell remaining gas
         block.transfer_value(
@@ -196,7 +204,8 @@ def apply_transaction(block, tx):
         else:
             output = result
     block.commit_state()
-    logger_debug('post: %s', str(block.account_to_dict(tx.sender)))
+    if pblogger.log_post_state:
+        pblogger.log('TX POST STATE', account=tx.sender, state=block.account_to_dict(tx.sender))
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
@@ -227,7 +236,7 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg, code):
-    logger.debug("apply_msg:%r %r gas:%r", tx, msg, msg.gas)
+    pblogger.log("MSG APPLY", tx=tx.hex_hash(), to=msg.to, gas=msg.gas)
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
@@ -240,8 +249,8 @@ def apply_msg(block, tx, msg, code):
         o = apply_op(block, tx, msg, code, compustate)
         ops += 1
         if o is not None:
-            logger_debug("Time per op: %s", str((time.time() - t) * 1.0 / ops))
-            logger.debug('done %s', o)
+            pblogger.log('PERFORMAMCE', ops=ops, time_per_op=(time.time() - t) / ops)
+            pblogger.log('MSG APPLIED', result=o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, compustate.gas, []
@@ -346,24 +355,32 @@ def apply_op(block, tx, msg, code, compustate):
     # out of gas error
     fee = calcfee(block, tx, msg, compustate, op)
     if fee > compustate.gas:
-        logger_debug("Out of gas %s need %s", compustate.gas, fee)
-        logger_debug('Op: %s %s', op, list(reversed(compustate.stack)))
+        pblogger.log('OUT OF GAS', needed=fee, available=compustate.gas,
+                            op=op, stack=list(reversed(compustate.stack)))
         return OUT_OF_GAS
     stackargs = []
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
-    if op[:4] == 'PUSH':
-        ind = compustate.pc + 1
-        v = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
-        logger_debug('%s %s %s %s', compustate.pc, op, v, compustate.gas)
-    else:
-        logger_debug('%s %s %s %s', compustate.pc, op, stackargs,
-                     compustate.gas)
-    if print_debug >= 2:
+
+    if pblogger.log_op:
+        log_args = dict(pc=compustate.pc, op=op, stackargs=stackargs, gas=compustate.gas)
+        if op[:4] == 'PUSH':
+            ind = compustate.pc + 1
+            log_args['value'] = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
+        elif op == 'CALLDATACOPY':
+            log_args['data'] = msg.data.encode('hex')
+        elif op == 'DUP':
+            v = stackargs[0]
+            v = v if v < 2**255 else v - 2**256
+            log_args['value'] = v
+        pblogger.log('OP', **log_args)
+
+    if pblogger.log_memory:
         for i in range(0, len(compustate.memory), 16):
             memblk = compustate.memory[i:i+16]
             memline = ' '.join([chr(x).encode('hex') for x in memblk])
-            logger_debug('mem: %s', memline)
+            pblogger.log('MEM', mem=memline)
+
     # Apply operation
     oldpc = compustate.pc
     compustate.gas -= fee
@@ -455,7 +472,6 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        logger_debug('data: %s', msg.data.encode('hex'))
         if len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
@@ -491,12 +507,6 @@ def apply_op(block, tx, msg, code, compustate):
         # DUP POP POP Debug hint
         if get_op_data(code, oldpc + 1)[0] == 'POP' and \
            get_op_data(code, oldpc + 2)[0] == 'POP':
-            o = print_debug
-            enable_debug()
-            v = stackargs[0]
-            logger_debug("Debug: %s", v if v < 2**255 else v - 2**256)
-            if not o:
-                disable_debug()
             compustate.pc = oldpc + 3
         else:
             stk.append(stackargs[0])
@@ -545,11 +555,10 @@ def apply_op(block, tx, msg, code, compustate):
             mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         value = stackargs[0]
         data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
-        logger_debug("Sub-contract: %s %s %s",
-                     msg.to, value, data.encode('hex'))
-        addr, gas, code = create_contract(
-            block, tx, Message(msg.to, '', value, compustate.gas, data))
-        logger_debug("Output of contract creation: %s  %s ", addr, code)
+        pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
+        create_msg = Message(msg.to, '', value, compustate.gas, data)
+        addr, gas, code = create_contract(block, tx, create_msg)
+        pblogger.log('SUB CONTRACT OUT', address=addr, code=code)
         if addr:
             stk.append(addr)
             compustate.gas = gas
@@ -568,14 +577,10 @@ def apply_op(block, tx, msg, code, compustate):
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
-        logger_debug(
-            "Sub-call: %s %s %s %s %s ", utils.coerce_addr_to_hex(msg.to),
-            utils.coerce_addr_to_hex(to), value, gas, data.encode('hex'))
-        result, gas, data = apply_msg_send(
-            block, tx, Message(msg.to, to, value, gas, data))
-        logger_debug(
-            "Output of sub-call: %s %s length %s expected %s", result, data,
-            len(data), stackargs[6])
+        pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
+        call_msg = Message(msg.to, to, value, gas, data)
+        result, gas, data = apply_msg_send(block, tx, call_msg)
+        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=stackargs[6])
         if result == 0:
             stk.append(0)
         else:
