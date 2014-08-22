@@ -313,8 +313,7 @@ def configure_logging(loggerlevels=':DEBUG', verbosity=1):
         disable_existing_loggers=False,
         formatters=dict(
             debug=dict(
-                format='[%(asctime)s] %(name)s %(levelname)s %(threadName)s:'
-                ' %(message)s'
+                format='%(threadName)s:%(module)s: %(message)s'
             ),
             minimal=dict(
                 format='%(message)s'
