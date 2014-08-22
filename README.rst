@@ -72,10 +72,12 @@ In order to update the ``fixtures``-submodule::
     cd ..
     git commit -m 'updated fixtures submodule'
 
-Tips for testing with the VM:
+Tips for testing with the VM::
+
 1. You can get traces for a transaction using the API and ethclient, e.g.::
     bin/pyethclient trace 522f583b94cb3a16deca41404ef404c2c1b3484070af2ec7971bc4e1a17c556e
-2. Use the ``-s`` modifier to see the log output of tests, e.g. ``py.test -s tests/test_vm.py``
+2. Use the ``-s`` modifier to see the log output of tests, e.g.
+    ``py.test -s tests/test_vm.py``
 3. You can customize the level of VM logging detail by modifying PBLogger in processblock.py
 
 Logging:
