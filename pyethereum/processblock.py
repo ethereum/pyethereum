@@ -373,6 +373,10 @@ def apply_op(block, tx, msg, code, compustate):
             v = stackargs[0]
             v = v if v < 2**255 else v - 2**256
             log_args['value'] = v
+        elif op == 'SSTORE':
+            log_args['key'] = stackargs[0]
+            log_args['value'] = stackargs[1]
+
         pblogger.log('OP', **log_args)
 
     if pblogger.log_memory:
