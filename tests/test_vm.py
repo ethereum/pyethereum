@@ -6,8 +6,18 @@ import pyethereum.transactions as transactions
 import pyethereum.utils as u
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
+pblogger = pb.pblogger
+
+# customize VM log output to your needs
+# hint: use 'py.test' with the '-s' option to dump logs to the console
+pblogger.log_pre_state = True    # dump storage at account before execution
+pblogger.log_post_state = True   # dump storage at account after execution
+pblogger.log_block = False       # dump block after TX was applied
+pblogger.log_memory = False      # dump memory before each op
+pblogger.log_op = True           # log op, gas, stack before each op
+pblogger.log_json = False        # generate machine readable output
 
 
 def check_testdata(data_keys, expected_keys):
@@ -92,10 +102,9 @@ def do_test_vm(name):
             blk.set_storage_data(address,
                                  u.big_endian_to_int(k.decode('hex')),
                                  u.big_endian_to_int(v.decode('hex')))
-        logger.debug('PRE Balance: %r: %r', address, h['balance'])
+        pblogger.log('PRE Balance', address=address, balance=h['balance'])
 
     # execute transactions
-    pb.enable_debug()
     sender = exek['caller']  # a party that originates a call
     recvaddr = exek['address']
     tx = transactions.Transaction(
@@ -106,20 +115,17 @@ def do_test_vm(name):
         value=int(exek['value']),
         data=exek['data'][2:].decode('hex'))
     tx.sender = sender
-    logger.debug('TX %r > %r v:%r gas:%s @price:%s',
-                 sender, recvaddr, tx.value, tx.startgas, tx.gasprice)
+    pblogger.log('TX', tx=tx.hex_hash(), sender=sender, to=recvaddr, value=tx.value, startgas=tx.startgas, gasprice=tx.gasprice)
 
     # capture apply_message calls
     apply_message_calls = []
     orig_apply_msg = pb.apply_msg
 
     def apply_msg_wrapper(_block, _tx, msg, code):
-        pb.enable_debug()
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
                                         data=msg.data.encode('hex')))
         result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
-        pb.disable_debug()
         return result, gas_rem, data
 
     pb.apply_msg = apply_msg_wrapper

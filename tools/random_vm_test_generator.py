@@ -38,13 +38,11 @@ def gen_test(seed):
     i = 0
 
     def apply_msg_wrapper(_block, _tx, msg, code):
-        pb.enable_debug()
         apply_message_calls.append(dict(gasLimit=msg.gas,
                                         value=msg.value,
                                         desgination=msg.to,
                                         data=msg.data.encode('hex')))
         result, gas_rem, out = orig_apply_msg(_block, _tx, msg, code)
-        pb.disable_debug()
         return result, gas_rem, out
 
     pb.apply_msg = apply_msg_wrapper
@@ -83,7 +81,6 @@ def gen_test(seed):
                 "origin": tx.sender,
                 "value": str(VAL)
             }
-            pb.enable_debug()
             success, gas, o = pb.apply_msg(s.block, tx, msg, CODE)
             post = s.block.to_dict()['state']
             callcreates = apply_message_calls[1:]

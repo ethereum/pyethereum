@@ -71,11 +71,3 @@ class state():
 
     def revert(self, data):
         self.block = b.Block.deserialize(data)
-
-
-def enable_debug():
-    pb.enable_debug()
-
-
-def disable_debug():
-    pb.disable_debug()

@@ -26,12 +26,10 @@ def gen_test(code, val, data):
         orig_apply_msg = pb.apply_msg
 
         def apply_msg_wrapper(_block, _tx, msg, code):
-            pb.enable_debug()
             apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                             desgination=msg.to,
                                             data=msg.data.encode('hex')))
             result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
-            pb.disable_debug()
             return result, gas_rem, data
 
         pb.apply_msg = apply_msg_wrapper
