@@ -84,7 +84,12 @@ def load_json_req():
 
 # ######## Blocks ############
 def make_blocks_response(blocks):
-    return dict(blocks = [block.to_dict() for block in blocks])
+    res = []
+    for b in blocks:
+        h = b.to_dict()
+        h['hash'] = b.hex_hash()
+        res.append(h)
+    return dict(blocks=res)
 
 
 @app.get(base_url + '/blocks/')
