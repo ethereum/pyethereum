@@ -2,7 +2,7 @@ import os
 import pytest
 from pyethereum import tester
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
 gasprice = 0

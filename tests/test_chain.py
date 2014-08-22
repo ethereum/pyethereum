@@ -13,7 +13,7 @@ import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
 set_db()

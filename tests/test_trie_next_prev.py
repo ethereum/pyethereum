@@ -4,7 +4,7 @@ import tempfile
 import pyethereum.trie as trie
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
 

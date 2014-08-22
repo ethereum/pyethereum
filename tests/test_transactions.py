@@ -7,7 +7,7 @@ import pyethereum.rlp as rlp
 import serpent
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
 

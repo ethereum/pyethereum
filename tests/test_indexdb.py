@@ -6,7 +6,7 @@ import pyethereum.utils
 import pyethereum.db
 from tests.utils import set_db
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
 
