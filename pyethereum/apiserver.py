@@ -210,21 +210,20 @@ def trace(txhash):
     test_blk.state.root_hash = pre_state
 
     # collect debug output
-    tl = TraceLogHandler()
-    tl.setLevel(logging.DEBUG)
-    processblock.logger.addHandler(tl)
+    log = []
+    def log_receiver(name, data):
+        log.append({name:data})
+
+    processblock.pblogger.listeners.append(log_receiver)
 
     # apply tx (thread? we don't want logs from other invocations)
     processblock.apply_transaction(test_blk, tx)
 
     # stop collecting debug output
-    processblock.logger.removeHandler(tl)
+    processblock.pblogger.listeners.remove(log_receiver)
 
     # format
-    formatter = logging.Formatter('%(name)s:%(message)s')
-    res = '\n'.join(formatter.format(l) for l in tl.buffer)
-    return dict(trace=res)
-
+    return dict(tx=txhash, trace=log)
 
 
 # ######## Accounts ############
