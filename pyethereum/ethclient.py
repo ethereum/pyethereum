@@ -97,7 +97,7 @@ class APIClient(object):
 
     def tracejson(self, id):
         res = self.json_get_request(path='/trace/%s' % id)
-        return res
+        return json.dumps(res, indent=2)
 
     def trace(self, id):
         res = self.json_get_request(path='/trace/%s' % id)
@@ -111,6 +111,11 @@ class APIClient(object):
             out.append("%s: %s" %(name.ljust(15), msg))
           return '\n'.join(out)
         return res
+
+    def dump(self, id):
+        res = self.json_get_request(path='/dump/%s' % id)
+        return json.dumps(res, indent=2)
+
 
 doc = \
 """ethclient
@@ -133,6 +138,7 @@ Usage:
   pyethclient getpending [options]
   pyethclient trace [options] <txid_hex>
   pyethclient tracejson [options] <txid_hex>
+  pyethclient dump [options] <tx_blk_id_hex>
 
 Options:
   -h --help                 Show this screen
@@ -173,6 +179,7 @@ def main():
                     gettx=(api.gettx, arguments['<txid_hex>']),
                     trace=(api.trace, arguments['<txid_hex>']),
                     tracejson=(api.tracejson, arguments['<txid_hex>']),
+                    dump=(api.dump, arguments['<tx_blk_id_hex>']),
                     getpending=(api.getpending,)
                     )
     for k in cmd_map:
