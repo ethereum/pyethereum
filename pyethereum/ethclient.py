@@ -114,7 +114,7 @@ class APIClient(object):
 
     def dump(self, id):
         res = self.json_get_request(path='/dump/%s' % id)
-        return json.dumps(res, indent=2)
+        return json.dumps(res, sort_keys=True, indent=2)
 
 
 doc = \
