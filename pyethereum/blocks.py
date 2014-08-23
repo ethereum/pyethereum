@@ -134,6 +134,7 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
         self.suicides = []
+        self.postqueue = []
         self.caches = {
             'balance': {},
             'nonce': {},

@@ -40,14 +40,7 @@ class PBLogger(object):
 pblogger = PBLogger()
 
 
-GSTEP = 1
-GSTOP = 0
-GSHA3 = 20
-GSLOAD = 20
-GSSTORE = 100
-GBALANCE = 20
-GCREATE = 100
-GCALL = 20
+GDEFAULT = 1
 GMEMORY = 1
 GTXDATA = 5
 GTXCOST = 500
@@ -173,13 +166,17 @@ def apply_transaction(block, tx):
 
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
-    # MESSAGE
-    if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        result, gas_remained, data = apply_msg_send(block, tx, message)
-    else:  # CREATE
-        result, gas_remained, data = create_contract(block, tx, message)
-        if result > 0:
-            result = utils.coerce_addr_to_hex(result)
+
+    block.postqueue = [ message ]
+    while len(block.postqueue):
+        message = block.postqueue.pop(0)
+        # MESSAGE
+        if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
+            result, gas_remained, data = apply_msg_send(block, tx, message)
+        else:  # CREATE
+            result, gas_remained, data = create_contract(block, tx, message)
+            if result > 0:
+                result = utils.coerce_addr_to_hex(result)
     assert gas_remained >= 0
 
     pblogger.log("TX APPLIED", result=result, gas_remained=gas_remained,
@@ -280,80 +277,47 @@ def create_contract(block, tx, msg):
         return res, gas, dat
 
 
+def get_opcode(code, index):
+    return ord(code[index]) if index < len(code) else 0
+
+
 def get_op_data(code, index):
-    opcode = ord(code[index]) if index < len(code) else 0
-    if opcode < 96 or (opcode >= 240 and opcode <= 255):
-        if opcode in opcodes:
-            return opcodes[opcode]
-        else:
-            return 'INVALID', 0, 0
-    elif opcode < 128:
-        return 'PUSH' + str(opcode - 95), 0, 1
-    else:
-        return 'INVALID', 0, 0
+    return opcodes.get(get_opcode(code, index), ['INVALID', 0, 0, []])
 
 
 def ceil32(x):
     return x if x % 32 == 0 else x + 32 - (x % 32)
 
 
-def calcfee(block, tx, msg, compustate, op):
+def calcfee(block, tx, msg, compustate, op_data):
     stk, mem = compustate.stack, compustate.memory
-    if op == 'SHA3':
-        m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
-        return GSHA3 + m_extend / 32 * GMEMORY
-    elif op == 'SLOAD':
-        return GSLOAD
+    op, ins, outs, memuse, base_gas = op_data
+    m_extend = 0
+    for start, sz in memuse:
+        start = start if start >= 0 else stk[start]
+        sz = sz if sz >= 0 else stk[sz]
+        m_extend = max(m_extend, ceil32(start + sz) - len(mem))
+    COST = m_extend / 32 * GMEMORY + base_gas
+
+    if op == 'CALL' or op == 'POST':
+        return COST + stk[-1]
     elif op == 'SSTORE':
-        if not block.get_storage_data(msg.to, stk[-1]) and stk[-2]:
-            return 2 * GSSTORE
-        elif block.get_storage_data(msg.to, stk[-1]) and not stk[-2]:
-            return 0
-        else:
-            return GSSTORE
-    elif op == 'MLOAD':
-        m_extend = max(0, ceil32(stk[-1] + 32) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'MSTORE':
-        m_extend = max(0, ceil32(stk[-1] + 32) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'MSTORE8':
-        m_extend = max(0, ceil32(stk[-1] + 1) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'CALL':
-        m_extend = max(0,
-                       ceil32((stk[-4] + stk[-5]) % 2**64) - len(mem),
-                       ceil32((stk[-6] + stk[-7]) % 2**64) - len(mem))
-        return GCALL + stk[-1] + m_extend / 32 * GMEMORY
-    elif op == 'CREATE':
-        m_extend = max(0, ceil32(stk[-2] + stk[-3]) - len(mem))
-        return GCREATE + m_extend / 32 * GMEMORY
-    elif op == 'RETURN':
-        m_extend = max(0, ceil32(stk[-1] + stk[-2]) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'CALLDATACOPY':
-        m_extend = max(0, ceil32(stk[-1] + stk[-3]) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'CODECOPY':
-        m_extend = max(0, ceil32(stk[-1] + stk[-3]) - len(mem))
-        return GSTEP + m_extend / 32 * GMEMORY
-    elif op == 'BALANCE':
-        return GBALANCE
-    elif op == 'STOP' or op == 'INVALID' or op == 'SUICIDE':
-        return GSTOP
+        pre_occupied = COST if block.get_storage_data(msg.to, stk[-1]) else 0
+        post_occupied = COST if stk[-2] else 0
+        return COST + post_occupied - pre_occupied
     else:
-        return GSTEP
+        return COST
 
 # Does not include paying opfee
 
 
 def apply_op(block, tx, msg, code, compustate):
-    op, in_args, out_args = get_op_data(code, compustate.pc)
+    op, in_args, out_args, mem_grabs, base_gas = opdata = get_op_data(code, compustate.pc)
     # empty stack error
     if in_args > len(compustate.stack):
         return []
     # out of gas error
-    fee = calcfee(block, tx, msg, compustate, op)
+    fee = calcfee(block, tx, msg, compustate, opdata)
     if fee > compustate.gas:
         pblogger.log('OUT OF GAS', needed=fee, available=compustate.gas,
                             op=op, stack=list(reversed(compustate.stack)))
@@ -369,10 +333,6 @@ def apply_op(block, tx, msg, code, compustate):
             log_args['value'] = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
         elif op == 'CALLDATACOPY':
             log_args['data'] = msg.data.encode('hex')
-        elif op == 'DUP':
-            v = stackargs[0]
-            v = v if v < 2**255 else v - 2**256
-            log_args['value'] = v
         elif op == 'SSTORE':
             log_args['key'] = stackargs[0]
             log_args['value'] = stackargs[1]
@@ -452,6 +412,10 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
         else:
             stk.append((stackargs[1] / 256 ** (31 - stackargs[0])) % 256)
+    elif op == 'ADDMOD':
+        stk.append((stackargs[2] + stackargs[1]) % stackargs[0])
+    elif op == 'MULMOD':
+        stk.append((stackargs[2] * stackargs[1]) % stackargs[0])
     elif op == 'SHA3':
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
@@ -554,6 +518,15 @@ def apply_op(block, tx, msg, code, compustate):
         compustate.pc = oldpc + 1 + pushnum
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
         stk.append(utils.big_endian_to_int(dat))
+    elif op[:4] == 'DUP':
+        dupnum = int(op[4:]) - 1
+        stk.extend(reversed(stackargs))
+        stk.append(stackargs[dupnum])
+    elif op[:4] == 'SWAP':
+        swapnum = int(op[4:])
+        stk.append(stackargs[0])
+        stk.extend(reversed(stackargs[1:-1]))
+        stk.append(stackargs[-1])
     elif op == 'CREATE':
         if len(mem) < ceil32(stackargs[1] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
@@ -570,8 +543,6 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
             compustate.gas = 0
     elif op == 'CALL':
-        for i in range(3, 7):
-            stackargs[i] = stackargs[i] % 2**64
         if len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
         if len(mem) < ceil32(stackargs[5] + stackargs[6]):
@@ -596,6 +567,17 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
+    elif op == 'POST':
+        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+            mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
+        gas = stackargs[0]
+        to = utils.encode_int(stackargs[1])
+        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+        value = stackargs[2]
+        data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
+        pblogger.log('POST NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
+        post_msg = Message(msg.to, to, vaue, gas, data)
+        block.postqueue.append(post_msg)
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
