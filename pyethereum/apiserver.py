@@ -188,17 +188,8 @@ class TraceLogHandler(logging.Handler):
         self.buffer.append(record)
 
 
-@app.get(base_url + '/trace/<txhash>')
-def trace(txhash):
-    """
-    /trace/<hexhash>        return trace for transaction
-    """
-    logger.debug('GET trace/ %s', txhash)
-    try: # index
-        tx, blk = chain_manager.index.get_transaction(txhash.decode('hex'))
-    except (KeyError, TypeError):
-        return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
-
+def _get_block_before_tx(txhash):
+    tx, blk = chain_manager.index.get_transaction(txhash.decode('hex'))
     # get the state we had before this transaction
     test_blk = Block.init_from_parent(blk.get_parent(),
                                         blk.coinbase,
@@ -213,6 +204,18 @@ def trace(txhash):
         else:
             pre_state = sr
     test_blk.state.root_hash = pre_state
+    return test_blk, tx
+
+@app.get(base_url + '/trace/<txhash>')
+def trace(txhash):
+    """
+    /trace/<hexhash>        return trace for transaction
+    """
+    logger.debug('GET trace/ %s', txhash)
+    try: # index
+        test_blk, tx = _get_block_before_tx(txhash)
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
 
     # collect debug output
     log = []
@@ -229,6 +232,26 @@ def trace(txhash):
 
     # format
     return dict(tx=txhash, trace=log)
+
+
+@app.get(base_url + '/dump/<txblkhash>')
+def dump(txblkhash):
+    """
+    /dump/<hash>        return state dump after transaction or block
+    """
+    logger.debug('GET dump/ %s', txblkhash)
+    try:
+        blk = chain_manager.get(txblkhash.decode('hex'))
+    except:
+        try: # index
+            test_blk, tx = _get_block_before_tx(txblkhash)
+        except (KeyError, TypeError):
+            return bottle.abort(404, 'Unknown Transaction  %s' % txblkhash)
+        processblock.apply_transaction(test_blk, tx)
+        blk = test_blk
+    # format
+    return blk.to_dict(with_state=True)
+
 
 
 # ######## Accounts ############
