@@ -86,6 +86,9 @@ class Message(object):
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
 
+    def hash(self, block): # helper to identify msgs in logs
+        return utils.sha3("%s%s%s%s" %(block.number, block.gas_used, self.to, self.sender))
+
 class InvalidTransaction(Exception):
     pass
 
@@ -233,7 +236,8 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg, code):
-    pblogger.log("MSG APPLY", tx=tx.hex_hash(), to=msg.to, gas=msg.gas)
+    msg_id = msg.hash(block).encode('hex')
+    pblogger.log("MSG APPLY", msg=msg_id, tx=tx.hex_hash(), to=msg.to, gas=msg.gas)
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
@@ -247,7 +251,7 @@ def apply_msg(block, tx, msg, code):
         ops += 1
         if o is not None:
             pblogger.log('PERFORMAMCE', ops=ops, time_per_op=(time.time() - t) / ops)
-            pblogger.log('MSG APPLIED', result=o)
+            pblogger.log('MSG APPLIED', msg=msg_id, result=o)
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, compustate.gas, []
