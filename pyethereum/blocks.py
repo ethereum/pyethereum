@@ -6,6 +6,7 @@ import utils
 import processblock
 import transactions
 import logging
+import copy
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
@@ -476,6 +477,8 @@ class Block(object):
             'gas': self.gas_used,
             'txs': self.transactions,
             'txcount': self.transaction_count,
+            'postqueue': copy.copy(self.postqueue),
+            'suicides': copy.copy(self.suicides),
         }
 
     def revert(self, mysnapshot):
@@ -483,6 +486,8 @@ class Block(object):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self.postqueue = mysnapshot['postqueue']
+        self.suicides = mysnapshot['suicides']
         self.reset_cache()
 
     def finalize(self):
