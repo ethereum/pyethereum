@@ -148,7 +148,7 @@ def apply_transaction(block, tx):
 
     # check block gas limit
     if block.gas_used + tx.startgas > block.gas_limit:
-        BlockGasLimitReached(
+        raise BlockGasLimitReached(
             rp(block.gas_used + tx.startgas, block.gas_limit))
 
 
