@@ -309,12 +309,12 @@ def calcfee(block, tx, msg, compustate, op_data):
         return COST
 
 # Does not include paying opfee
-
-
 def apply_op(block, tx, msg, code, compustate):
     op, in_args, out_args, mem_grabs, base_gas = opdata = get_op_data(code, compustate.pc)
     # empty stack error
     if in_args > len(compustate.stack):
+        pblogger.log('INSUFFICIENT STACK ERROR', needed=in_args,
+                     available=len(compustate.stack))
         return []
     # out of gas error
     fee = calcfee(block, tx, msg, compustate, opdata)
@@ -518,12 +518,10 @@ def apply_op(block, tx, msg, code, compustate):
         compustate.pc = oldpc + 1 + pushnum
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
         stk.append(utils.big_endian_to_int(dat))
-    elif op[:4] == 'DUP':
-        dupnum = int(op[4:]) - 1
+    elif op[:3] == 'DUP':
         stk.extend(reversed(stackargs))
-        stk.append(stackargs[dupnum])
+        stk.append(stackargs[-1])
     elif op[:4] == 'SWAP':
-        swapnum = int(op[4:])
         stk.append(stackargs[0])
         stk.extend(reversed(stackargs[1:-1]))
         stk.append(stackargs[-1])

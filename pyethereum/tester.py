@@ -2,6 +2,8 @@ import pyethereum
 import shutil
 import tempfile
 import time
+import logging
+
 serpent = None
 
 u = pyethereum.utils
@@ -71,3 +73,7 @@ class state():
 
     def revert(self, data):
         self.block = b.Block.deserialize(data)
+
+
+def enable_logging():
+    logging.basicConfig(level=logging.DEBUG)

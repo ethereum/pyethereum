@@ -8,6 +8,50 @@ logger = logging.getLogger()
 gasprice = 0
 startgas = 10000
 
+sixten_code =\
+    '''
+(with 'x 10
+    (with 'y 20
+        (with 'z 30
+            (seq
+                (set 'a (add (mul (get 'y) (get 'z)) (get 'x)))
+                (return (ref 'a) 32)
+            )
+        )
+    )
+)
+'''
+
+
+def test_sixten():
+    s = tester.state()
+    c = s.contract('')
+    s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
+    o1 = s.send(tester.k0, c, 0, [])
+    assert o1 == [610]
+
+mul2_code = \
+    '''
+return(msg.data[0]*2)
+'''
+
+filename = "mul2_qwertyuioplkjhgfdsa.se"
+
+returnten_code = \
+    '''
+x = create("%s")
+return(call(x, 5))
+''' % filename
+
+
+def test_returnten():
+    s = tester.state()
+    open(filename, 'w').write(mul2_code)
+    c = s.contract(returnten_code)
+    o1 = s.send(tester.k0, c, 0, [])
+    os.remove(filename)
+    assert o1 == [10]
+
 namecoin_code =\
     '''
 if !contract.storage[msg.data[0]]:
