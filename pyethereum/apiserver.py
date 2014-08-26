@@ -211,7 +211,7 @@ def trace(txhash):
     """
     /trace/<hexhash>        return trace for transaction
     """
-    logger.debug('GET trace/ %s', txhash)
+    logger.debug('GET trace/%s', txhash)
     try: # index
         test_blk, tx = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
@@ -239,7 +239,7 @@ def dump(txblkhash):
     """
     /dump/<hash>        return state dump after transaction or block
     """
-    logger.debug('GET dump/ %s', txblkhash)
+    logger.debug('GET dump/%s', txblkhash)
     try:
         blk = chain_manager.get(txblkhash.decode('hex'))
     except:
