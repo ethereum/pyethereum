@@ -87,6 +87,7 @@ class state():
 
 
 def enable_logging():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+
 
 gas_limit = 100000

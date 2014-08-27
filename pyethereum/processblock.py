@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class PBLogger(object):
-    log_pre_state = True    # dump storage at account before execution
-    log_post_state = True   # dump storage at account after execution
+    log_op = True           # log op, gas, stack before each op
+    log_pre_state = False   # dump storage at account before execution
+    log_post_state = False  # dump storage at account after execution
     log_block = False       # dump block after TX was applied
     log_memory = False      # dump memory before each op
-    log_op = True           # log op, gas, stack before each op
     log_json = False        # generate machine readable output
 
     def __init__(self):
@@ -86,29 +86,27 @@ class Message(object):
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
 
+    def hash(self, block): # helper to identify msgs in logs
+        return utils.sha3("%s%s%s%s" %(block.number, block.gas_used, self.to, self.sender))
+
+
 class InvalidTransaction(Exception):
     pass
-
 
 class UnsignedTransaction(InvalidTransaction):
     pass
 
-
 class InvalidNonce(InvalidTransaction):
     pass
-
 
 class InsufficientBalance(InvalidTransaction):
     pass
 
-
 class InsufficientStartGas(InvalidTransaction):
     pass
 
-
 class BlockGasLimitReached(InvalidTransaction):
     pass
-
 
 class GasPriceTooLow(InvalidTransaction):
     pass
@@ -148,8 +146,7 @@ def apply_transaction(block, tx):
 
     # check block gas limit
     if block.gas_used + tx.startgas > block.gas_limit:
-        BlockGasLimitReached(
-            rp(block.gas_used + tx.startgas, block.gas_limit))
+        raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
 
     pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
@@ -160,9 +157,6 @@ def apply_transaction(block, tx):
     success = block.transfer_value(tx.sender, block.coinbase,
                                    tx.gasprice * tx.startgas)
     assert success
-
-    if pblogger.log_pre_state:
-        pblogger.log('TX PRE STATE', account=tx.sender, state=block.account_to_dict(tx.sender))
 
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
@@ -201,8 +195,6 @@ def apply_transaction(block, tx):
         else:
             output = result
     block.commit_state()
-    if pblogger.log_post_state:
-        pblogger.log('TX POST STATE', account=tx.sender, state=block.account_to_dict(tx.sender))
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
@@ -233,7 +225,10 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg, code):
-    pblogger.log("MSG APPLY", tx=tx.hex_hash(), to=msg.to, gas=msg.gas)
+    pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
+                                  gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
+    if pblogger.log_pre_state:
+        pblogger.log('MSG PRE STATE', account=msg.to, state=block.account_to_dict(msg.to))
     # Transfer value, instaquit if not enough
     o = block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
@@ -246,8 +241,12 @@ def apply_msg(block, tx, msg, code):
         o = apply_op(block, tx, msg, code, compustate)
         ops += 1
         if o is not None:
-            pblogger.log('PERFORMAMCE', ops=ops, time_per_op=(time.time() - t) / ops)
-            pblogger.log('MSG APPLIED', result=o)
+            pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
+                        ops=ops, time_per_op=(time.time() - t) / ops)
+            if pblogger.log_post_state:
+                    pblogger.log('MSG POST STATE', account=msg.to,
+                        state=block.account_to_dict(msg.to))
+
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
                 return 0, compustate.gas, []
@@ -333,10 +332,6 @@ def apply_op(block, tx, msg, code, compustate):
             log_args['value'] = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
         elif op == 'CALLDATACOPY':
             log_args['data'] = msg.data.encode('hex')
-        elif op == 'SSTORE':
-            log_args['key'] = stackargs[0]
-            log_args['value'] = stackargs[1]
-
         pblogger.log('OP', **log_args)
 
     if pblogger.log_memory:
