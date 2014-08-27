@@ -313,7 +313,7 @@ def apply_op(block, tx, msg, code, compustate):
     op, in_args, out_args, mem_grabs, base_gas = opdata = get_op_data(code, compustate.pc)
     # empty stack error
     if in_args > len(compustate.stack):
-        pblogger.log('INSUFFICIENT STACK ERROR', needed=in_args,
+        pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
         return []
     # out of gas error
@@ -413,9 +413,11 @@ def apply_op(block, tx, msg, code, compustate):
         else:
             stk.append((stackargs[1] / 256 ** (31 - stackargs[0])) % 256)
     elif op == 'ADDMOD':
-        stk.append((stackargs[2] + stackargs[1]) % stackargs[0])
+        stk.append((stackargs[0] + stackargs[1]) % stackargs[2]
+                   if stackargs[2] else 0)
     elif op == 'MULMOD':
-        stk.append((stackargs[2] * stackargs[1]) % stackargs[0])
+        stk.append((stackargs[0] * stackargs[1]) % stackargs[2]
+                   if stackargs[2] else 0)
     elif op == 'SHA3':
         if len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
@@ -471,14 +473,6 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append(block.gas_limit)
     elif op == 'POP':
         pass
-    elif op == 'DUP':
-        # DUP POP POP Debug hint
-        if get_op_data(code, oldpc + 1)[0] == 'POP' and \
-           get_op_data(code, oldpc + 2)[0] == 'POP':
-            compustate.pc = oldpc + 3
-        else:
-            stk.append(stackargs[0])
-            stk.append(stackargs[0])
     elif op == 'SWAP':
         stk.append(stackargs[0])
         stk.append(stackargs[1])
@@ -519,8 +513,18 @@ def apply_op(block, tx, msg, code, compustate):
         dat = code[oldpc + 1: oldpc + 1 + pushnum]
         stk.append(utils.big_endian_to_int(dat))
     elif op[:3] == 'DUP':
-        stk.extend(reversed(stackargs))
-        stk.append(stackargs[-1])
+        # DUP POP POP Debug hint
+        is_debug = 1
+        for i in range(len(stackargs)):
+            if get_op_data(code, oldpc + i + 1)[0] != 'POP':
+                is_debug = 0
+                break
+        if is_debug:
+            print(' '.join(map(repr, stackargs)))
+            compustate.pc = oldpc + 2 + len(stackargs)
+        else:
+            stk.extend(reversed(stackargs))
+            stk.append(stackargs[-1])
     elif op[:4] == 'SWAP':
         stk.append(stackargs[0])
         stk.extend(reversed(stackargs[1:-1]))

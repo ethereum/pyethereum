@@ -44,7 +44,7 @@ class state():
     def contract(self, code, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         evm = serpent.compile(code)
-        tx = t.contract(sendnonce, 1, 100000, endowment, evm)
+        tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
@@ -54,13 +54,24 @@ class state():
     def send(self, sender, to, value, data=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         evmdata = serpent.encode_datalist(data)
-        tx = t.Transaction(sendnonce, 1, 100000, to, value, evmdata)
+        tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
+        self.last_tx = tx
         tx.sign(sender)
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
         o = serpent.decode_datalist(r)
         return map(lambda x: x-2**256 if x > 2**255 else x, o)
+
+    def profile(self, sender, to, value, data=[]):
+        tm, g = time.time(), self.block.gas_used
+        o = self.send(sender, to, value, data)
+        intrinsic_gas_used = pb.GTXDATA * len(self.last_tx.data) + pb.GTXCOST
+        return {
+            "time": time.time() - tm,
+            "gas": self.block.gas_used - g - intrinsic_gas_used,
+            "output": o
+        }
 
     def mine(self, n=1, coinbase=a0):
         for i in range(n):
@@ -77,3 +88,5 @@ class state():
 
 def enable_logging():
     logging.basicConfig(level=logging.DEBUG)
+
+gas_limit = 100000
