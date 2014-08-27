@@ -68,9 +68,10 @@ acct_structure_rev = {}
 for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
+
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
-    sign = 1 if timestamp - parent.timestamp < 42 else -1
+    sign = 1 if timestamp - parent.timestamp < 9 else -1
     return parent.difficulty + offset * sign
 
 
@@ -176,8 +177,24 @@ class Block(object):
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
-        if len(self.uncles) != len(set(map(str, self.uncles))):
-            raise Exception("Uncle hash not uniqe in uncles list")
+        # Check uncle validity
+        ancestor_chain = [self.get_parent().get_parent()]
+        # Uncle can have a block from 2-7 blocks ago as its parent
+        for i in [3, 4, 5, 6, 7]:
+            ancestor_chain.append(ancestor_chain[-1].get_parent())
+        ineligible = []
+        # Uncles of this block cannot be direct ancestors and cannot also
+        # be uncles included 1-6 blocks ago
+        for ancestor in [self.get_parent()] + ancestor_chain[:-1]:
+            ineligible.extend(ancestor.uncles)
+        ineligible.extend([rlp.descend(b.serialize(), 0) for b in ancestor_chain])
+        for uncle in self.uncles:
+            t = self.get_block(utils.sha3(rlp.encode(uncle)))
+            if t.get_parent() not in ancestor_chain:
+                raise Exception("Uncle does not have a valid ancestor")
+            if uncle in ineligible:
+                raise Exception("Duplicate uncle!")
+            ineligible.append(uncle)
         if len(self.extra_data) > 1024:
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
