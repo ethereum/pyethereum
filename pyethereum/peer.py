@@ -150,12 +150,16 @@ class Peer(StoppableLoopThread):
                      peer_protocol_version, network_id, capabilities, listen_port,
                      node_id.encode('hex'))
 
+        if len(data) != 8:
+            return self.send_Disconnect(reason='Incompatible network protocols')
+
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
-            return self.send_Disconnect(
-                reason='Incompatible network protocols')
+            return self.send_Disconnect(reason='Incompatible network protocols')
 
         if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
+
+        total_difficulty, head_hash = idec(data[6]), data[7]
 
         # add to known peers list in handshake signal
         self.hello_received = True
@@ -289,6 +293,17 @@ class Peer(StoppableLoopThread):
 
     def _recv_NotInChain(self, data):
         pass
+
+    def send_GetBlockHashes(self, block_hash, max_blocks):
+        self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
+
+    def _recv_BlockHashes(self, data):
+        block_hashes = data
+
+    def send_GetBlocks(self, block_hashes):
+        self.send_packet(packeter.dump_GetBlocks(block_hashes))
+
+
 
     def loop_body(self):
         try:

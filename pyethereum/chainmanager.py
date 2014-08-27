@@ -141,16 +141,18 @@ class SynchronizationTask(object):
         [0x14, Parent1, Parent2, ..., ParentN, Count]
         Parent N being the parent with the lowest block_number
         """
-        logger.debug("SynchronizationTask.request for %r start:%r end:%r", self.peer, start, end)
-        # evenly divide the chain and select test blocks to be requested
-        num = end.number - start.number
-        num_slices = min(num, MAX_GET_CHAIN_SEND_HASHES)
-        blk_numbers = [int(start.number + i * float(num)/num_slices) for i in range(num_slices)]
-        logger.debug("SynchronizationTask.request numbers %r", blk_numbers)
-        slices = [self.chain_manager.index.get_block_by_number(n) for n in blk_numbers]
-        self.slices = slices
-        logger.debug("SynchronizationTask.request blocks %r", [x.encode('hex') for x in slices])
-        self.peer.send_GetChain(list(reversed(slices)), count=NUM_BLOCKS_PER_REQUEST)
+        logger.debug("SynchronizationTask DISABLED, FIXME")
+
+        # logger.debug("SynchronizationTask.request for %r start:%r end:%r", self.peer, start, end)
+        # # evenly divide the chain and select test blocks to be requested
+        # num = end.number - start.number
+        # num_slices = min(num, MAX_GET_CHAIN_SEND_HASHES)
+        # blk_numbers = [int(start.number + i * float(num)/num_slices) for i in range(num_slices)]
+        # logger.debug("SynchronizationTask.request numbers %r", blk_numbers)
+        # slices = [self.chain_manager.index.get_block_by_number(n) for n in blk_numbers]
+        # self.slices = slices
+        # logger.debug("SynchronizationTask.request blocks %r", [x.encode('hex') for x in slices])
+        # self.peer.send_GetChain(list(reversed(slices)), count=NUM_BLOCKS_PER_REQUEST)
 
 
     def received_blocks(self, transient_blocks):
