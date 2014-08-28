@@ -71,6 +71,8 @@ def _recv_Hello(self, data):
     print('HELLO RECEIVED')
     head_hash = data[7]
     print "head_hash", head_hash.encode('hex')
+    from peer import idec
+    print "head difficulty", idec(data[6])
     #self.send_GetBlocks([head_hash])
     assert not len(collected_blocks)
     self.send_GetBlockHashes(head_hash, NUM_BLOCKS_PER_REQUEST)
