@@ -388,14 +388,16 @@ class ChainManager(StoppableLoopThread):
                         if peer:
                             peer.send_Disconnect(reason='Wrong genesis block')
                     else:
-                        logger.debug('%s with unknown parent, peer:%r', t_block, peer)
+                        logger.debug('%s with unknown parent %s, peer:%r', t_block, t_block.prevhash.encode('hex'), peer)
                         if peer:
                             self.synchronizer.synchronize_branch(peer)
                     break
                 if block.hash in self:
                     logger.debug('Known %r', block)
                 else:
-                    if block.has_parent():
+                    if not block.validate_uncles():
+                        logger.debug('Invalid uncles %r', block)
+                    elif block.has_parent():
                         success = self.add_block(block)
                         if success:
                             logger.debug('Added %r', block)

@@ -137,7 +137,7 @@ if __name__ == "__main__":
         hexdata = hex_rlp_encoded_data.strip().decode('hex')
         data = rlp.decode(hexdata)
         blk = blocks.TransientBlock(hexdata)
-        print blk.number, blk.hash.encode('hex')
+        print blk.number, blk.hash.encode('hex'), '%d txs' % len(blk.transaction_list)
         chain_manager.receive_chain([blk])
         assert blk.hash in chain_manager
 

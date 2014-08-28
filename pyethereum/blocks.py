@@ -177,6 +177,15 @@ class Block(object):
                 "Transactions root not found in database! %r" % self)
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
+        if len(self.extra_data) > 1024:
+            raise Exception("Extra data cannot exceed 1024 bytes")
+        if self.coinbase == '':
+            raise Exception("Coinbase cannot be empty address")
+        if not self.is_genesis() and self.nonce and\
+                not self.check_proof_of_work(self.nonce):
+            raise Exception("PoW check failed")
+
+    def validate_uncles(self):
         # Check uncle validity
         ancestor_chain = [self]
         # Uncle can have a block from 2-7 blocks ago as its parent
@@ -193,17 +202,14 @@ class Block(object):
             t = self.get_block(utils.sha3(rlp.encode(uncle)))
             # uncle's parent cannot be the block's own parent
             if t.get_parent() not in ancestor_chain[2:]:
-                raise Exception("Uncle does not have a valid ancestor")
+                logger.debug("%r: Uncle does not have a valid ancestor" % self)
+                return False
             if uncle in ineligible:
-                raise Exception("Duplicate uncle!")
+                logger.debug("%r: Duplicate uncle!" % self)
+                return False
             ineligible.append(uncle)
-        if len(self.extra_data) > 1024:
-            raise Exception("Extra data cannot exceed 1024 bytes")
-        if self.coinbase == '':
-            raise Exception("Coinbase cannot be empty address")
-        if not self.is_genesis() and self.nonce and\
-                not self.check_proof_of_work(self.nonce):
-            raise Exception("PoW check failed")
+        return True
+
 
     def is_genesis(self):
         return self.prevhash == GENESIS_PREVHASH and \
