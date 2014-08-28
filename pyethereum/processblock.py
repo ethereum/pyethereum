@@ -47,7 +47,8 @@ GTXCOST = 500
 
 OUT_OF_GAS = -1
 
-CREATE_CONTRACT_ADDRESS = '0000000000000000000000000000000000000000'
+# contract creating transactions send to an empty address
+CREATE_CONTRACT_ADDRESS = ''
 
 
 def verify(block, parent):
