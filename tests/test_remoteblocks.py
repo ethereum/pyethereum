@@ -120,10 +120,8 @@ if __name__ == "__main__":
     raw_blocks_fn = sys.argv[1]
     test_db_path = sys.argv[2]
     skip = int(sys.argv[3])
-    if len(sys.argv) == 4 or sys.argv[4] != 'silent':
-        logging.basicConfig(level=logging.DEBUG)
-        global logger
-        logger = logging.getLogger()
+    if len(sys.argv) == 4 or sys.argv[4] == 'silent':
+        logging.basicConfig(level=logging.INFO)
 
     print utils
     utils.data_dir.set(test_db_path)
