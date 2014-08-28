@@ -10,7 +10,7 @@ import copy
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
-INITIAL_DIFFICULTY = 2 ** 22
+INITIAL_DIFFICULTY = 2 ** 17
 GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
@@ -71,7 +71,7 @@ for i, (name, typ, default) in enumerate(acct_structure):
 
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
-    sign = 1 if timestamp - parent.timestamp < 9 else -1
+    sign = 1 if timestamp - parent.timestamp < 42 else -1
     return parent.difficulty + offset * sign
 
 
@@ -178,19 +178,21 @@ class Block(object):
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             raise Exception("Uncle root hash does not match!")
         # Check uncle validity
-        ancestor_chain = [self.get_parent().get_parent()]
+        ancestor_chain = [self]
         # Uncle can have a block from 2-7 blocks ago as its parent
-        for i in [3, 4, 5, 6, 7]:
-            ancestor_chain.append(ancestor_chain[-1].get_parent())
+        for i in [1, 2, 3, 4, 5, 6, 7]:
+            if ancestor_chain[-1].number > 0:
+                ancestor_chain.append(ancestor_chain[-1].get_parent())
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago
-        for ancestor in [self.get_parent()] + ancestor_chain[:-1]:
+        for ancestor in ancestor_chain:
             ineligible.extend(ancestor.uncles)
         ineligible.extend([rlp.descend(b.serialize(), 0) for b in ancestor_chain])
         for uncle in self.uncles:
             t = self.get_block(utils.sha3(rlp.encode(uncle)))
-            if t.get_parent() not in ancestor_chain:
+            # uncle's parent cannot be the block's own parent
+            if t.get_parent() not in ancestor_chain[2:]:
                 raise Exception("Uncle does not have a valid ancestor")
             if uncle in ineligible:
                 raise Exception("Duplicate uncle!")
@@ -287,7 +289,7 @@ class Block(object):
         assert block.gas_used == kargs['gas_used']
         assert block.gas_limit == kargs['gas_limit']
         assert block.timestamp == kargs['timestamp']
-        assert block.difficulty == kargs['difficulty']
+        assert block.difficulty == kargs['difficulty'], (block.difficulty, kargs['difficulty'])
         assert block.number == kargs['number']
         assert block.extra_data == kargs['extra_data']
         assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
@@ -557,6 +559,12 @@ class Block(object):
 
     def hex_serialize(self):
         return self.serialize().encode('hex')
+
+    def serialize_header(self):
+        return rlp.encode(self.list_header())
+
+    def hex_serialize_header(self):
+        return rlp.encode(self.list_header()).encode('hex')
 
     def to_dict(self, with_state=False, full_transactions=False):
         """

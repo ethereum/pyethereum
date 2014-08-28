@@ -136,7 +136,6 @@ if __name__ == "__main__":
     for hex_rlp_encoded_data in fh:
         hexdata = hex_rlp_encoded_data.strip().decode('hex')
         data = rlp.decode(hexdata)
-        # print repr(data)
         blk = blocks.TransientBlock(hexdata)
         print blk.number, blk.hash.encode('hex')
         chain_manager.receive_chain([blk])
