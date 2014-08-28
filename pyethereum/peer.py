@@ -143,6 +143,7 @@ class Peer(StoppableLoopThread):
 
     def _recv_Hello(self, data):
         # check compatibility
+
         peer_protocol_version, network_id, client_id = idec(data[0]), idec(data[1]), data[2]
         capabilities, listen_port, node_id = idec(data[3]), idec(data[4]), data[5]
 
@@ -303,7 +304,8 @@ class Peer(StoppableLoopThread):
     def send_GetBlocks(self, block_hashes):
         self.send_packet(packeter.dump_GetBlocks(block_hashes))
 
-
+    def _recv_GetBlockHashes(self, data):
+        logger.warn('_recv_GetBlockHashes: not yet implemented %r', [b.encode('hex') for b in data])
 
     def loop_body(self):
         try:

@@ -11,7 +11,7 @@ print('IMPORTED BLOCKFETCHERPATCH')
 fn = 'blocks.0-2k.poc6.p27.hexdata'
 
 
-NUM_BLOCKS_PER_REQUEST = 1
+NUM_BLOCKS_PER_REQUEST = 20
 
 ##############
 import sys
@@ -34,8 +34,8 @@ def _recv_Blocks(self, data):
     print("RECEIVED BLOCKS", len(data)) # youngest to oldest
     for x in reversed(data):
         enc = rlp.encode(x)
-        #tb = blocks.TransientBlock(enc)
-        #print tb
+        tb = blocks.TransientBlock(enc)
+        print tb
         self.blk_counter += 1
         fh.write(enc.encode('hex') + '\n') # LOG line
         h = utils.sha3(enc)
@@ -59,11 +59,13 @@ def _recv_Hello(self, data):
     print('HELLO RECEIVED')
     head_hash = data[7]
     print "head_hash", head_hash.encode('hex')
+    #self.send_GetBlocks([head_hash])
     self.send_GetBlockHashes(head_hash, NUM_BLOCKS_PER_REQUEST)
 peer.Peer._recv_Hello = _recv_Hello
 
 def _recv_BlockHashes(self, data):
     print("RECEIVED BLOCKHASHES", len(data)) # youngest to oldest
+    print [x.encode('hex') for x in data]
     block_hashes = data # youngest to oldest
     self.send_GetBlocks(block_hashes)
 
