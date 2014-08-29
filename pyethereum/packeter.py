@@ -179,7 +179,8 @@ class Packeter(object):
                 self.config.getint('network', 'listen_port'),
                 self.NODE_ID,
                 blocks.genesis().hash, # chain head hash
-                0 # chain head total difficulty
+                0, # chain head total difficulty,
+                blocks.genesis().hash # genesis hash
                 ]
         return self.dump_packet(data)
 

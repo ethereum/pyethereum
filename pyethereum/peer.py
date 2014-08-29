@@ -138,21 +138,27 @@ class Peer(StoppableLoopThread):
         getattr(self, func_name)(data)
 
     def send_Hello(self):
-        self.send_packet(packeter.dump_Hello())
+        self.send_packet(packeteter.dump_Hello())
         self.hello_sent = True
 
     def _recv_Hello(self, data):
         # check compatibility
 
+        # old proto fields
         peer_protocol_version, network_id, client_id = idec(data[0]), idec(data[1]), data[2]
         capabilities, listen_port, node_id = idec(data[3]), idec(data[4]), data[5]
 
-        logger.debug('received Hello %s V:%r N:%r C:%r P:%r I:%s', client_id,
-                     peer_protocol_version, network_id, capabilities, listen_port,
-                     node_id.encode('hex'))
-
-        if len(data) != 8:
+        if len(data) != 9:
+            logger.debug('received Hello %s wrong PROTOCOL:%r NODE_ID:%r', client_id,
+                     peer_protocol_version, node_id.encode('hex'))
             return self.send_Disconnect(reason='Incompatible network protocols')
+
+        # post v27 proto
+        total_difficulty, head_hash = idec(data[6]), data[7]
+        genesis_hash = data[8]
+
+        logger.debug('received Hello %s PROTOCOL:%r NODE_ID:%r GENESIS:%r', client_id,
+                     peer_protocol_version, node_id.encode('hex'), genesis_hash.encode('hex'))
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
             return self.send_Disconnect(reason='Incompatible network protocols')
@@ -160,7 +166,10 @@ class Peer(StoppableLoopThread):
         if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        total_difficulty, head_hash = idec(data[6]), data[7]
+        if genesis_hash != blocks.genesis().hash:
+            return self.send_Disconnect(reason='Wrong genesis block')
+
+
 
         # add to known peers list in handshake signal
         self.hello_received = True
