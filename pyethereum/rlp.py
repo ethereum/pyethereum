@@ -14,7 +14,7 @@ First byte of an encoded item
 
 0xb8 == 184
     |
-    x: [55, ] long string, x-0xf8 == length of the length
+    x: [56, ] long string, x-0xf7 == length of the length
     |
 0xbf == 191
 
@@ -26,7 +26,7 @@ First byte of an encoded item
 
 0xf8 == 248
     |
-    x: [55, ] long list, x-0xf8 == length of the length
+    x: [56, ] long list, x-0xf7 == length of the length
     |
 0xff == 255
 '''
@@ -84,6 +84,7 @@ def __decode(s, pos=0):
     else:
         b = fchar - 247
         b2 = big_endian_to_int(s[pos + 1:pos + 1 + b])
+        assert b2 >= 56
         o = []
         pos += 1 + b
         pos_end = pos + b2
@@ -127,6 +128,7 @@ def next_item_pos(data, pos):
     else:
         b = (fchar % 64) - 55
         b2 = big_endian_to_int(data[pos + 1:pos + 1 + b])
+        assert b2 >= 56
         return pos + 1 + b + b2
 
 

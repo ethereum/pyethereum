@@ -256,7 +256,7 @@ class Index(object):
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
         blk = blocks.get_block(blockhash)
         num = utils.decode_int(tx_num_enc)
-        tx_data, msr, gas  = blk.get_transaction(num)
+        tx_data, msr, gas = blk.get_transaction(num)
         return Transaction.create(tx_data), blk
 
     def get_block_by_number(self, number):
