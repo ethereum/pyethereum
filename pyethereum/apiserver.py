@@ -88,6 +88,7 @@ def make_blocks_response(blocks):
     for b in blocks:
         h = b.to_dict()
         h['hash'] = b.hex_hash()
+        h['chain_difficulty'] = b.chain_difficulty()
         res.append(h)
     return dict(blocks=res)
 
