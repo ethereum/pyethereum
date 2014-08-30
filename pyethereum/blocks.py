@@ -206,8 +206,8 @@ class Block(object):
         # be uncles included 1-6 blocks ago
         for ancestor in ancestor_chain[1:]:
             ineligible.extend(ancestor.uncles)
-        ineligible.extend([rlp.descend(b.serialize(), 0) for b in ancestor_chain])
-        eligible_ancestor_hashes = map(lambda x: x.hash, ancestor_chain[2:])
+        ineligible.extend([b.list_header() for b in ancestor_chain])
+        eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
             t = TransientBlock(rlp.encode([uncle, [], []]))
             if not t.check_proof_of_work(t.nonce):
@@ -639,16 +639,17 @@ class Block(object):
             return False
 
     def chain_difficulty(self):
-            # calculate the summarized_difficulty (on the fly for now)
+        # calculate the summarized_difficulty
         if self.is_genesis():
             return self.difficulty
         elif 'difficulty:'+self.hex_hash() in self.state.db:
             return utils.decode_int(
                 self.state.db.get('difficulty:'+self.hex_hash()))
         else:
+            _idx, _typ, _ = block_structure_rev['difficulty']
             o = self.difficulty + self.get_parent().chain_difficulty()
-            self.state.db.put('difficulty:'+self.hex_hash(),
-                              utils.encode_int(o))
+            o += sum([utils.decoders[_typ](u[_idx]) for u in self.uncles])
+            self.state.db.put('difficulty:'+self.hex_hash(), utils.encode_int(o))
             return o
 
     def __eq__(self, other):
