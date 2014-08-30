@@ -18,12 +18,13 @@ GENESIS_GAS_LIMIT = 10 ** 6
 MIN_GAS_LIMIT = 125000
 GASLIMIT_EMA_FACTOR = 1024
 BLOCK_REWARD = 1500 * utils.denoms.finney
-UNCLE_REWARD = 3 * BLOCK_REWARD / 4
-NEPHEW_REWARD = BLOCK_REWARD / 8
+UNCLE_REWARD = 15 * BLOCK_REWARD / 16
+NEPHEW_REWARD = BLOCK_REWARD / 32
 BLOCK_DIFF_FACTOR = 1024
 GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
+DIFF_ADJUSTMENT_CUTOFF = 9
 
 GENESIS_INITIAL_ALLOC = \
     {"51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,  # (G)
@@ -71,7 +72,7 @@ for i, (name, typ, default) in enumerate(acct_structure):
 
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
-    sign = 1 if timestamp - parent.timestamp < 42 else -1
+    sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
     return parent.difficulty + offset * sign
 
 
@@ -199,7 +200,7 @@ class Block(object):
             ineligible.extend(ancestor.uncles)
         ineligible.extend([rlp.descend(b.serialize(), 0) for b in ancestor_chain])
         for uncle in self.uncles:
-            t = self.get_block(utils.sha3(rlp.encode(uncle)))
+            t = get_block(utils.sha3(rlp.encode(uncle)))
             # uncle's parent cannot be the block's own parent
             if t.get_parent() not in ancestor_chain[2:]:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)
