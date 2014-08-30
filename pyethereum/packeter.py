@@ -1,12 +1,12 @@
-import logging
-import rlp
-from utils import big_endian_to_int as idec
-from utils import int_to_big_endian4 as ienc4
-from utils import int_to_big_endian as ienc
-from utils import recursive_int_to_big_endian
-import dispatch
 import sys
 import signals
+import logging
+from pyethereum import rlp
+from pyethereum.utils import big_endian_to_int as idec
+from pyethereum.utils import int_to_big_endian4 as ienc4
+from pyethereum.utils import recursive_int_to_big_endian
+from pyethereum import blocks
+from pyethereum import dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +24,24 @@ def load_packet(packet):
 
 
 class Packeter(object):
-
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
-
     stateless!
-
     .. note::
-
         #.  Can only be used after the `config` method is called
     '''
     """
+    PROTOCOL_VERSION = 29
+    # is the node s Unique Identifier and is the 512-bit hash that serves to
+    # identify the node.
+    CLIENT_ID = 'Ethereum(py)/0.6.0/%s/Protocol:%d' % (sys.platform,
+                                                       PROTOCOL_VERSION)
+
+    NETWORK_ID = 0
+    SYNCHRONIZATION_TOKEN = 0x22400891
+    CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
+
 
     cmd_map = dict(((0x00, 'Hello'),
                    (0x01, 'Disconnect'),
@@ -45,9 +51,11 @@ class Packeter(object):
                    (0x11, 'Peers'),
                    (0x12, 'Transactions'),
                    (0x13, 'Blocks'),
-                   (0x14, 'GetChain'),
-                   (0x15, 'NotInChain'),
-                   (0x16, 'GetTransactions')))
+                   (0x16, 'GetTransactions'),
+                   (0x17, 'GetBlockHashes'),
+                   (0x18, 'BlockHashes'),
+                   (0x19, 'GetBlocks'),
+                   ))
     cmd_map_by_name = dict((v, k) for k, v in cmd_map.items())
 
     disconnect_reasons_map = dict((
@@ -63,15 +71,6 @@ class Packeter(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-    SYNCHRONIZATION_TOKEN = 0x22400891
-    PROTOCOL_VERSION = 23
-
-    # is the node s Unique Identifier and is the 512-bit hash that serves to
-    # identify the node.
-    NETWORK_ID = 0
-    CLIENT_ID = 'Ethereum(py)/0.5.2/%s/Protocol:%d' % (sys.platform,
-                                                       PROTOCOL_VERSION)
-    CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
 
     def __init__(self):
         pass
@@ -142,7 +141,7 @@ class Packeter(object):
         packet += payload
         return packet
 
-    def dump_Hello(self):
+    def dump_Hello(self, total_difficulty=0, head_hash=blocks.genesis().hash, genesis_hash=blocks.genesis().hash):
         """
         [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
         LISTEN_PORT, NODE_ID]
@@ -166,6 +165,7 @@ class Packeter(object):
             0x04 for block-chain querying.
         NODE_ID is optional and specifies a 512-bit hash, (potentially to be
             used as public key) that identifies this node.
+
         """
         data = [self.cmd_map_by_name['Hello'],
                 self.PROTOCOL_VERSION,
@@ -173,7 +173,10 @@ class Packeter(object):
                 self.CLIENT_ID,
                 self.CAPABILITIES,
                 self.config.getint('network', 'listen_port'),
-                self.NODE_ID
+                self.NODE_ID,
+                head_hash, # chain head hash
+                total_difficulty, # chain head total difficulty,
+                genesis_hash # genesis hash
                 ]
         return self.dump_packet(data)
 
@@ -228,24 +231,36 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Blocks']] + blocks_as_lists
         return self.dump_packet(data)
 
-    def dump_GetChain(self, parent_hashes=[], count=1):
+
+    def dump_GetBlockHashes(self, block_hash, max_blocks):
         """
-        [0x14, Parent1, Parent2, ..., ParentN, Count]
-        Request the peer to send Count (to be interpreted as an integer) blocks
-        in the current canonical block chain that are children of Parent1
-        (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-        the block chain, it should instead act as if the request were for
-        Parent2 &c. through to ParentN. If the designated parent is the present
-        block chain head, an empty reply should be sent. If none of the parents
-        are in the current canonical block chain, then NotInChain should be
-        sent along with ParentN (i.e. the last Parent in the parents list).
-        If no parents are passed, then a reply need not be made.
+        [0x17, [ hash : B_32, maxBlocks: P ]]
+        Requests a BlockHashes message of at most maxBlocks entries, of block hashes from
+        the blockchain, starting at the parent of block hash. Does not require the peer
+        to give maxBlocks hashes - they could give somewhat fewer.
         """
-        data = [self.cmd_map_by_name['GetChain']] + parent_hashes + [count]
+        data = [self.cmd_map_by_name['GetBlockHashes'], block_hash, max_blocks]
         return self.dump_packet(data)
 
-    def dump_NotInChain(self, block_hash):
-        data = [self.cmd_map_by_name['NotInChain'], block_hash]
+
+    def dump_BlockHashes(self, block_hashes):
+        """
+        [0x18, [ hash_0: B_32, hash_1: B_32, .... ]]
+        Gives a series of hashes of blocks (each the child of the next). This implies that
+        the blocks are ordered from youngest to oldest.
+        """
+        data = [self.cmd_map_by_name['BlockHashes']] + block_hashes
+        return self.dump_packet(data)
+
+
+    def dump_GetBlocks(self, block_hashes):
+        """
+        [0x19,[ hash_0: B_32, hash_1: B_32, .... ]]
+        Requests a Blocks message detailing a number of blocks to be sent, each referred to
+        by a hash. Note: Don't expect that the peer necessarily give you all these blocks
+        in a single message - you might have to re-request them.
+        """
+        data = [self.cmd_map_by_name['GetBlocks']] + block_hashes
         return self.dump_packet(data)
 
 

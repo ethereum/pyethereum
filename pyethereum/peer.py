@@ -22,6 +22,13 @@ MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND # Maximum number of blocks Blocks will eve
 
 logger = logging.getLogger(__name__)
 
+DUMP_NETWORK_DATA = False
+def format_log_data(data):
+    if DUMP_NETWORK_DATA:
+        return data.encode('hex')
+    else:
+        return data.encode('hex')[:8] + '...'
+
 
 class Peer(StoppableLoopThread):
 
@@ -41,6 +48,8 @@ class Peer(StoppableLoopThread):
         self.last_valid_packet_received = time.time()
         self.last_asked_for_peers = 0
         self.last_pinged = 0
+        self.hello_total_difficulty = None
+        self.hello_head_hash = None
 
         self.recv_buffer = ''
 
@@ -70,8 +79,7 @@ class Peer(StoppableLoopThread):
         self._connection.close()
 
     def send_packet(self, response):
-        logger.debug('sending packet to {0} >>> {1}'.format(
-            self, response.encode('hex')))
+        logger.debug('sending packet to {0} >>> {1}'.format(self, format_log_data(response)))
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -89,9 +97,7 @@ class Peer(StoppableLoopThread):
                 n = self.connection().send(packet)
                 packet = packet[n:]
             except socket.error as e:
-                logger.debug(
-                    '{0}: send packet failed, {1}'
-                    .format(self, str(e)))
+                logger.debug('{0}: send packet failed, {1}'.format(self, str(e)))
                 self.stop()
                 break
 
@@ -126,9 +132,7 @@ class Peer(StoppableLoopThread):
         self.last_valid_packet_received = time.time()
 
         logger.debug('receive from {0} <<< cmd: {1}: data: {2}'.format(
-            self, cmd,
-            rlp.encode(recursive_int_to_big_endian(data)).encode('hex')
-        ))
+            self, cmd, format_log_data(rlp.encode(recursive_int_to_big_endian(data)))))
 
         func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
@@ -137,24 +141,39 @@ class Peer(StoppableLoopThread):
 
         getattr(self, func_name)(data)
 
-    def send_Hello(self):
-        self.send_packet(packeter.dump_Hello())
+
+### Hello
+
+    def send_Hello(self, head_hash, head_total_difficulty, genesis_hash):
+        self.send_packet(packeter.dump_Hello(head_hash, head_total_difficulty, genesis_hash))
         self.hello_sent = True
 
     def _recv_Hello(self, data):
         # check compatibility
+
+        # old proto fields
         peer_protocol_version, network_id, client_id = idec(data[0]), idec(data[1]), data[2]
         capabilities, listen_port, node_id = idec(data[3]), idec(data[4]), data[5]
 
-        logger.debug('received Hello %s V:%r N:%r C:%r P:%r I:%s', client_id,
-                     peer_protocol_version, network_id, capabilities, listen_port,
-                     node_id.encode('hex'))
+        if len(data) != 9:
+            logger.debug('received Hello %s wrong PROTOCOL:%r NODE_ID:%r', client_id,
+                     peer_protocol_version, node_id.encode('hex'))
+            return self.send_Disconnect(reason='Incompatible network protocols')
+
+        # post v27 proto
+        total_difficulty, head_hash = idec(data[6]), data[7]
+        genesis_hash = data[8]
+
+        logger.debug('received Hello %s PROTOCOL:%r NODE_ID:%r GENESIS:%r', client_id,
+                     peer_protocol_version, node_id.encode('hex'), genesis_hash.encode('hex'))
 
         if peer_protocol_version != packeter.PROTOCOL_VERSION:
-            return self.send_Disconnect(
-                reason='Incompatible network protocols')
+            return self.send_Disconnect(reason='Incompatible network protocols')
 
         if network_id != packeter.NETWORK_ID:
+            return self.send_Disconnect(reason='Wrong genesis block')
+
+        if genesis_hash != blocks.genesis().hash:
             return self.send_Disconnect(reason='Wrong genesis block')
 
         # add to known peers list in handshake signal
@@ -162,12 +181,12 @@ class Peer(StoppableLoopThread):
         self.client_id = client_id
         self.node_id = node_id
         self.port = listen_port  # replace connection port with listen port
-
-        # reply with hello if not send
-        if not self.hello_sent:
-            self.send_Hello()
+        self.hello_head_hash = head_hash
+        self.hello_total_difficulty = total_difficulty
 
         signals.peer_handshake_success.send(sender=Peer, peer=self)
+
+### ping pong
 
     def send_Ping(self):
         self.send_packet(packeter.dump_Ping())
@@ -182,6 +201,7 @@ class Peer(StoppableLoopThread):
     def _recv_Pong(self, data):
         pass
 
+### disconnects
     reasons_to_forget = ('Bad protocol',
                         'Incompatible network protocols',
                         'Wrong genesis block')
@@ -205,6 +225,8 @@ class Peer(StoppableLoopThread):
         signals.peer_disconnect_requested.send(
                 sender=Peer, peer=self, forget=forget)
 
+### peers
+
     def send_GetPeers(self):
         self.send_packet(packeter.dump_GetPeers())
 
@@ -226,6 +248,8 @@ class Peer(StoppableLoopThread):
             addresses.append([ip, port, pid])
         signals.peer_addresses_received.send(sender=Peer, addresses=addresses)
 
+### transactions
+
     def send_GetTransactions(self):
         logger.info('asking for transactions')
         self.send_packet(packeter.dump_GetTransactions())
@@ -239,8 +263,9 @@ class Peer(StoppableLoopThread):
 
     def _recv_Transactions(self, data):
         logger.info('received transactions #%d', len(data))
-        signals.remote_transactions_received.send(
-            sender=Peer, transactions=data)
+        signals.remote_transactions_received.send(sender=Peer, transactions=data)
+
+### blocks
 
     def send_Blocks(self, blocks):
         assert len(blocks) <= MAX_BLOCKS_SEND
@@ -251,44 +276,29 @@ class Peer(StoppableLoopThread):
         transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data] # FIXME
         if len(transient_blocks) > MAX_BLOCKS_ACCEPTED:
             logger.warn('Peer sending too many blocks %d', len(transient_blocks))
-        signals.remote_blocks_received.send(
-            sender=Peer, peer=self, transient_blocks=transient_blocks)
+        signals.remote_blocks_received.send(sender=Peer, peer=self, transient_blocks=transient_blocks)
 
-    def send_GetChain(self, parents=[], count=1):
-        assert len(parents) <= MAX_GET_CHAIN_SEND_HASHES
-        assert count <= MAX_GET_CHAIN_ASK_BLOCKS
-        self.send_packet(packeter.dump_GetChain(parents, count))
+    def send_GetBlocks(self, block_hashes):
+        self.send_packet(packeter.dump_GetBlocks(block_hashes))
 
-    def _recv_GetChain(self, data):
-        """
-        [0x14, Parent1, Parent2, ..., ParentN, Count]
-        Request the peer to send Count (to be interpreted as an integer) blocks
-        in the current canonical block chain that are children of Parent1
-        (to be interpreted as a SHA3 block hash). If Parent1 is not present in
-        the block chain, it should instead act as if the request were for
-        Parent2 &c. through to ParentN. If the designated parent is the present
-        block chain head, an empty reply should be sent. If none of the parents
-        are in the current canonical block chain, then NotInChain should be
-        sent along with ParentN (i.e. the last Parent in the parents list).
-        If no parents are passed, then reply need not be made.
-        """
-        block_hashes = data[:-1]
-        count = idec(data[-1])
+    def _recv_GetBlocks(self, block_hashes):
+        signals.get_blocks_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
 
-        if count > MAX_GET_CHAIN_REQUEST_BLOCKS:
-            logger.warn('GetChain: Peer asking for too many blocks %d', count)
+###block hashes
 
-        if len(block_hashes) > MAX_GET_CHAIN_ACCEPT_HASHES:
-            logger.warn('GetChain: Peer sending too many block hashes %d', len(block_hashes))
+    def send_GetBlockHashes(self, block_hash, max_blocks):
+        self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
 
-        signals.local_chain_requested.send(
-            sender=Peer, peer=self, block_hashes=block_hashes, count=count)
+    def _recv_GetBlockHashes(self, block_hashes, count):
+        signals.get_block_hashes_received.send(sender=Peer, block_hashes=block_hashes, count=count, peer=self)
 
-    def send_NotInChain(self, block_hash):
-        self.send_packet(packeter.dump_NotInChain(block_hash))
+    def send_BlockHashes(self, block_hashes):
+        self.send_packet(packeter.dump_BlockHashes(block_hashes))
 
-    def _recv_NotInChain(self, data):
-        pass
+    def _recv_BlockHashes(self, block_hashes):
+        signals.remote_block_hashes_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
+
+
 
     def loop_body(self):
         try:

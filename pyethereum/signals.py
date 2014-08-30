@@ -21,11 +21,14 @@ peer_handshake_success = Signal(providing_args=["peer"])
 getpeers_received = Signal(providing_args=["peer"])
 gettransactions_received = Signal(providing_args=["peer"])
 
-remote_blocks_received = Signal(providing_args=["block_lst", "peer"])
-remote_chain_requested = Signal(providing_args=["parents", "count"])
-local_chain_requested = Signal(providing_args=["peer", "blocks", "count"])
-send_local_blocks = Signal(providing_args=["blocks"])
-
 local_transaction_received = Signal(providing_args=["transaction"])
 remote_transactions_received = Signal(providing_args=["transactions"])
 send_local_transactions = Signal(providing_args=["transaction"])
+
+remote_block_hashes_received = Signal(providing_args=["block_hashes", "peer"])
+get_block_hashes_received = Signal(providing_args=["block_hashes", "peer"])
+
+remote_blocks_received = Signal(providing_args=["block_lst", "peer"])
+get_blocks_received =  Signal(providing_args=["block_hashes", "count", "peer"])
+
+broadcast_new_block =  Signal(providing_args=["block"])

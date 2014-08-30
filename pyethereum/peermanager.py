@@ -9,7 +9,9 @@ from dispatch import receiver
 from stoppable import StoppableLoopThread
 import rlp
 import signals
+import blocks
 from peer import Peer
+from chainmanager import chain_manager
 
 DEFAULT_SOCKET_TIMEOUT = .5
 
@@ -111,7 +113,7 @@ class PeerManager(StoppableLoopThread):
         peer = self.add_peer(sock, ip, port)
 
         # Send Hello
-        peer.send_Hello()
+        peer.send_Hello(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
         return peer
 
     def get_peer_candidates(self):
@@ -205,10 +207,10 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
     peer_manager.add_peer(connection, ip, port)
 
 
-@receiver(signals.send_local_blocks)
-def send_blocks_handler(sender, blocks=[], **kwargs):
+@receiver(signals.broadcast_new_block)
+def send_blocks_handler(sender, block, **kwargs):
     for peer in peer_manager.connected_peers:
-        peer.send_Blocks(blocks)
+        peer.send_Blocks([block])
 
 
 @receiver(signals.getpeers_received)
@@ -246,12 +248,6 @@ def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]
     for peer in peer_manager.connected_peers:
         peer.send_Transactions(transactions)
-
-
-@receiver(signals.remote_chain_requested)
-def request_remote_chain(sender, parents=[], count=1, **kwargs):
-    for peer in peer_manager.connected_peers:
-        peer.send_GetChain(parents, count)
 
 
 @receiver(signals.peer_handshake_success)
