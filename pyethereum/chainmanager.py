@@ -465,10 +465,14 @@ class ChainManager(StoppableLoopThread):
         if not block.has_parent():
             return []
         parent = block.get_parent()
-        if not parent.has_parent():
-            return []
-        return [u for u in self.get_children(parent.get_parent())
-                if u != parent]
+        o = []
+        i = 0
+        while parent.has_parent() and i < 6:
+            grandparent = parent.get_parent()
+            o.extend([u for u in self.get_children(grandparent) if u != parent])
+            parent = grandparent
+            i += 1
+        return o
 
     def add_transaction(self, transaction):
         logger.debug("add transaction %r" % transaction)

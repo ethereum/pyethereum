@@ -184,8 +184,6 @@ class Block(object):
         if not self.transactions.root_hash_valid():
             raise Exception(
                 "Transactions root not found in database! %r" % self)
-        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
-            raise Exception("Uncle root hash does not match!")
         if len(self.extra_data) > 1024:
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
@@ -195,6 +193,8 @@ class Block(object):
             raise Exception("PoW check failed")
 
     def validate_uncles(self):
+        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+            return False
         # Check uncle validity
         ancestor_chain = [self]
         # Uncle can have a block from 2-7 blocks ago as its parent
