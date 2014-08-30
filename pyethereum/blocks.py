@@ -311,7 +311,7 @@ class Block(object):
 
     def mk_blank_acct(self):
         if not hasattr(self, '_blank_acct'):
-            codehash = utils.sha3('')
+            codehash = ''
             self.state.db.put(codehash, '')
             self._blank_acct = [utils.encode_int(0),
                                 utils.encode_int(0),
