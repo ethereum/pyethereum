@@ -216,7 +216,7 @@ class Block(object):
             if t.prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)
                 return False
-            if rlp.encode(uncle) in ineligible:
+            if uncle in ineligible:
                 logger.debug("%r: Duplicate uncle!" % self)
                 return False
             ineligible.append(uncle)
