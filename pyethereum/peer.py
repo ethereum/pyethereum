@@ -22,6 +22,13 @@ MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND # Maximum number of blocks Blocks will eve
 
 logger = logging.getLogger(__name__)
 
+DUMP_NETWORK_DATA = False
+def format_log_data(data):
+    if DUMP_NETWORK_DATA:
+        return data.encode('hex')
+    else:
+        return data.encode('hex')[:8] + '...'
+
 
 class Peer(StoppableLoopThread):
 
@@ -72,8 +79,7 @@ class Peer(StoppableLoopThread):
         self._connection.close()
 
     def send_packet(self, response):
-        logger.debug('sending packet to {0} >>> {1}'.format(
-            self, response.encode('hex')))
+        logger.debug('sending packet to {0} >>> {1}'.format(self, format_log_data(response)))
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -91,9 +97,7 @@ class Peer(StoppableLoopThread):
                 n = self.connection().send(packet)
                 packet = packet[n:]
             except socket.error as e:
-                logger.debug(
-                    '{0}: send packet failed, {1}'
-                    .format(self, str(e)))
+                logger.debug('{0}: send packet failed, {1}'.format(self, str(e)))
                 self.stop()
                 break
 
@@ -128,9 +132,7 @@ class Peer(StoppableLoopThread):
         self.last_valid_packet_received = time.time()
 
         logger.debug('receive from {0} <<< cmd: {1}: data: {2}'.format(
-            self, cmd,
-            rlp.encode(recursive_int_to_big_endian(data)).encode('hex')
-        ))
+            self, cmd, format_log_data(rlp.encode(recursive_int_to_big_endian(data)))))
 
         func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
@@ -280,7 +282,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetBlocks(block_hashes))
 
     def _recv_GetBlocks(self, block_hashes):
-        signals.get_blocks_received(block_hashes,self)
+        signals.get_blocks_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
 
 ###block hashes
 
@@ -288,13 +290,13 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
 
     def _recv_GetBlockHashes(self, block_hashes, count):
-        signals.get_block_hashes_received(block_hashes, count, self)
+        signals.get_block_hashes_received.send(sender=Peer, block_hashes=block_hashes, count=count, peer=self)
 
     def send_BlockHashes(self, block_hashes):
         self.send_packet(packeter.dump_BlockHashes(block_hashes))
 
     def _recv_BlockHashes(self, block_hashes):
-        signals.remote_block_hashes_received.send(block_hashes, self)
+        signals.remote_block_hashes_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
 
 
 

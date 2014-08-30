@@ -110,8 +110,6 @@ class ChainManager(StoppableLoopThread):
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         self.new_miner()
 
-
-
     @property
     def head(self):
         if 'HEAD' not in self.blockchain:
@@ -150,6 +148,7 @@ class ChainManager(StoppableLoopThread):
             self.index.add_block(genesis)
         self._store_block(genesis)
         self._update_head(genesis)
+        assert genesis.hash in self
 
     def loop_body(self):
         ts = time.time()
@@ -206,6 +205,8 @@ class ChainManager(StoppableLoopThread):
                         if peer:
                             peer.send_Disconnect(reason='Wrong genesis block')
                     else: # should be a single newly mined block
+                        assert t_block.prevhash not in self
+                        assert t_block.prevhash != blocks.genesis().hash
                         logger.debug('%s with unknown parent %s, peer:%r', t_block, t_block.prevhash.encode('hex'), peer)
                         if len(transient_blocks) != 1:
                             logger.warn('%s > 1 blocks sent!?',len(transient_blocks))
@@ -374,8 +375,8 @@ def config_chainmanager(sender, config, **kwargs):
 def new_peer_connected(sender, peer, **kwargs):
     logger.debug("received new_peer_connected")
     # reply with hello if not yet sent
-    if not self.hello_sent:
-        peer.send_Hello(chain_manager.head.hash, chain_manager.head.chain_difficulty())
+    if not peer.hello_sent:
+        peer.send_Hello(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
     # request chain
     with peer.lock:
         chain_manager.synchronizer.synchronize_hello(peer, peer.hello_head_hash, peer.hello_total_difficulty)
@@ -415,7 +416,7 @@ def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
 
 @receiver(signals.remote_block_hashes_received)
 def remote_block_hashes_received_handler(sender, block_hashes, peer, **kwargs):
-    logger.debug("recv %d remote block_hashes: %r", len(block_hashes), block_hashes)
+    logger.debug("recv %d remote block_hashes: %r", len(block_hashes), [b.encode('hex') for b in block_hashes])
     if block_hashes:
         chain_manager.synchronizer.received_block_hashes(peer, block_hashes)
 
