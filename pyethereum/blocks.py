@@ -206,12 +206,11 @@ class Block(object):
             if t.prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)
                 return False
-            if uncle in ineligible:
+            if rlp.encode(uncle) in ineligible:
                 logger.debug("%r: Duplicate uncle!" % self)
                 return False
             ineligible.append(uncle)
         return True
-
 
     def is_genesis(self):
         return self.prevhash == GENESIS_PREVHASH and \
