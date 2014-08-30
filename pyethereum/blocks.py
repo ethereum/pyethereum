@@ -196,13 +196,14 @@ class Block(object):
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago
-        for ancestor in ancestor_chain:
+        for ancestor in ancestor_chain[1:]:
             ineligible.extend(ancestor.uncles)
         ineligible.extend([rlp.descend(b.serialize(), 0) for b in ancestor_chain])
+        eligible_ancestor_hashes = map(lambda x: x.hash, ancestor_chain[2:])
         for uncle in self.uncles:
-            t = get_block(utils.sha3(rlp.encode(uncle)))
+            t = TransientBlock(rlp.encode([uncle, [], []]))
             # uncle's parent cannot be the block's own parent
-            if t.get_parent() not in ancestor_chain[2:]:
+            if t.prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)
                 return False
             if uncle in ineligible:
