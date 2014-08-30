@@ -96,16 +96,24 @@ class TransientBlock(object):
     def __init__(self, rlpdata):
         self.rlpdata = rlpdata
         self.hash = utils.sha3(rlpdata)
-        header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        self.header_args, transaction_list, uncles = rlp.decode(rlpdata)
         self.transaction_list = transaction_list  # rlp encoded transactions
         self.uncles = uncles
         for i, (name, typ, default) in enumerate(block_structure):
-            setattr(self, name, utils.decoders[typ](header_args[i]))
+            setattr(self, name, utils.decoders[typ](self.header_args[i]))
 
     def __repr__(self):
         return '<TransientBlock(#%d %s %s)>' %\
             (self.number, self.hash.encode('hex')[
              :4], self.prevhash.encode('hex')[:4])
+
+    def check_proof_of_work(self, nonce):
+        assert len(nonce) == 32
+        rlp_Hn = rlp.encode(self.header_args[:-1])
+        # BE(SHA3(SHA3(RLP(Hn)) o n))
+        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
+        l256 = utils.big_endian_to_int(h)
+        return l256 < 2 ** 256 / self.difficulty
 
 
 class Block(object):
@@ -202,6 +210,8 @@ class Block(object):
         eligible_ancestor_hashes = map(lambda x: x.hash, ancestor_chain[2:])
         for uncle in self.uncles:
             t = TransientBlock(rlp.encode([uncle, [], []]))
+            if not t.check_proof_of_work(t.nonce):
+                return False
             # uncle's parent cannot be the block's own parent
             if t.prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)

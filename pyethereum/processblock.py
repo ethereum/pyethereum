@@ -282,7 +282,8 @@ def get_opcode(code, index):
 
 
 def get_op_data(code, index):
-    return opcodes.get(get_opcode(code, index), ['INVALID', 0, 0, []])
+    opcode = ord(code[index]) if index < len(code) else 0
+    return opcodes.get(opcode, ['INVALID', 0, 0, [], 0])
 
 
 def ceil32(x):
