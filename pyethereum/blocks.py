@@ -7,6 +7,8 @@ import processblock
 import transactions
 import logging
 import copy
+from repoze.lru import lru_cache
+
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
@@ -613,7 +615,9 @@ class Block(object):
             b['state'] = state_dump
         return b
 
+
     @property
+    @lru_cache(500)
     def hash(self):
         return utils.sha3(self.serialize())
 
@@ -692,6 +696,8 @@ class Block(object):
 # should be probably be in chainmanager otherwise
 
 
+
+@lru_cache(500)
 def get_block(blockhash):
     return Block.deserialize(db.DB(utils.get_db_path()).get(blockhash))
 
