@@ -152,7 +152,6 @@ class Block(object):
             'balance': {},
             'nonce': {},
             'code': {},
-            'storage': {},
             'all': {}
         }
 
@@ -440,19 +439,19 @@ class Block(object):
         return trie.Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
-        if address in self.caches['storage']:
-            if index in self.caches['storage'][address]:
-                return self.caches['storage'][address][index]
+        if 'storage:'+address in self.caches:
+            if index in self.caches['storage:'+address]:
+                return self.caches['storage:'+address][index]
         t = self.get_storage(address)
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         val = rlp.decode(t.get(key))
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
-        if address not in self.caches['storage']:
-            self.caches['storage'][address] = {}
+        if 'storage:'+address not in self.caches:
+            self.caches['storage:'+address] = {}
             self.caches['all'][address] = True
-        self.caches['storage'][address][index] = val
+        self.caches['storage:'+address][index] = val
 
     def commit_state(self):
         for address in self.caches['all']:
@@ -461,7 +460,7 @@ class Block(object):
             for i, (key, typ, default) in enumerate(acct_structure):
                 if key == 'storage':
                     t = trie.Trie(utils.get_db_path(), acct[i])
-                    for k, v in self.caches[key].get(address, {}).iteritems():
+                    for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
                         if v:

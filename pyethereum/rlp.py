@@ -172,6 +172,8 @@ def encode_length(L, offset):
 
 
 def encode(s):
+    # if not s:
+    #     return '\x80' if s == '' else '\xc0'
     if isinstance(s, (str, unicode)):
         s = str(s)
         if len(s) == 1 and ord(s) < 128:
