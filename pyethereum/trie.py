@@ -195,20 +195,19 @@ class Trie(object):
     def clear(self):
         ''' clear all tree data
         '''
-        self._delete_child_stroage(self.root_node)
+        self._delete_child_storage(self.root_node)
         self._delete_node_storage(self.root_node)
-        self.db.commit()
         self.root_node = BLANK_NODE
 
-    def _delete_child_stroage(self, node):
+    def _delete_child_storage(self, node):
         node_type = self._get_node_type(node)
         if node_type == NODE_TYPE_BRANCH:
             for item in node[:16]:
-                self._delete_child_stroage(self._decode_to_node(item))
+                self._delete_child_storage(self._decode_to_node(item))
         elif is_key_value_type(node_type):
             node_type = self._get_node_type(node)
             if node_type == NODE_TYPE_EXTENSION:
-                self._delete_child_stroage(self._decode_to_node(node[1]))
+                self._delete_child_storage(self._decode_to_node(node[1]))
 
     def _encode_node(self, node):
         if node == BLANK_NODE:
@@ -467,7 +466,12 @@ class Trie(object):
         encoded = self._encode_node(node)
         if len(encoded) < 32:
             return
-        self.db.delete(encoded)
+        """
+        ===== FIXME ====
+        in the current trie implementation two nodes can share identical subtrees
+        thus we can not safely delete nodes for now
+        """
+        #self.db.delete(encoded) # FIXME
 
     def _delete(self, node, key):
         """ update item inside a node
@@ -603,7 +607,6 @@ class Trie(object):
             self.root_node,
             bin_to_nibbles(str(key)))
         self.get_root_hash()
-        self.db.commit()
 
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -725,7 +728,6 @@ class Trie(object):
             bin_to_nibbles(str(key)),
             value)
         self.get_root_hash()
-        self.db.commit()
 
     def root_hash_valid(self):
         if self.root_hash == BLANK_ROOT:
