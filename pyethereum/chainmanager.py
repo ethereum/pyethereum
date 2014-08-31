@@ -11,7 +11,6 @@ import blocks
 import processblock
 from transactions import Transaction
 from miner import Miner
-import indexdb
 import chainlogger
 from synchronizer import Synchronizer
 
@@ -34,18 +33,16 @@ class Index(object):
         - needed to get the uncles of a block
     blocknumbers:
         - needed to mark the longest chain (path to top)
-
     transactions:
         - optional to resolve txhash to block:tx
 
     """
-    def __init__(self, db, index_transactions=True):
+    def __init__(self, db, index_transactions=True, i_know_what_i_do=False):
         self.db = db
-        self.children_of = indexdb.Index('ci')
         self._index_transactions = index_transactions
 
     def add_block(self, blk):
-        self.children_of.append(blk.prevhash, blk.hash)
+        self.add_child(blk.prevhash, blk.hash)
         if self._index_transactions:
             self._add_transactions(blk)
 
@@ -82,9 +79,21 @@ class Index(object):
         "returns block hash"
         return self.db.get('blocknumber:%d' % number)
 
+    def _child_db_key(self, blk_hash):
+        return 'ci:' + blk_hash
+
+    def add_child(self, parent_hash, child_hash):
+        # only efficient for few children per block
+        children = self.get_children(parent_hash) + [child_hash]
+        assert children.count(child_hash) == 1
+        self.db.put(self._child_db_key(parent_hash), rlp.encode(children))
+
     def get_children(self, blk_hash):
         "returns block hashes"
-        return self.children_of.get(blk_hash)
+        key = self._child_db_key(blk_hash)
+        if key in self.db:
+            return rlp.decode(self.db.get(key))
+        return []
 
 
 class ChainManager(StoppableLoopThread):
