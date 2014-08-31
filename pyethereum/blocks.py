@@ -154,6 +154,7 @@ class Block(object):
             'code': {},
             'all': {}
         }
+        self.journal = []
 
         self.transactions = trie.Trie(utils.get_db_path(), tx_list_root)
         self.transaction_count = 0
@@ -311,7 +312,7 @@ class Block(object):
         assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
 
         assert block.tx_list_root == kargs['tx_list_root']
-        assert block.state.root_hash == kargs['state_root']
+        assert block.state.root_hash == kargs['state_root'], (block.state.root_hash, kargs['state_root'])
 
         return block
 
@@ -342,7 +343,7 @@ class Block(object):
         :param address: account address, can be binary or hex string
         :param param: parameter to get
         '''
-        if address in self.caches[param] and param != 'storage':
+        if param != 'storage' and address in self.caches[param]:
             return self.caches[param][address]
         return self.get_acct(address)[acct_structure_rev[param][0]]
 
@@ -354,8 +355,14 @@ class Block(object):
         :param value: new value
         '''
 #        logger.debug('set acct %r %r %d', address, param, value)
-        self.caches[param][address] = value
-        self.caches['all'][address] = True
+        self.set_and_journal(param, address, value)
+        self.set_and_journal('all', address, value)
+
+    def set_and_journal(self, cache, index, value):
+        prev = self.caches[cache].get(index, None)
+        if prev != value:
+            self.journal.append([cache, index, prev, value])
+            self.caches[cache][index] = value
 
     # _delta_item(bin or hex, int, int) -> success/fail
     def _delta_item(self, address, param, value):
@@ -450,10 +457,12 @@ class Block(object):
     def set_storage_data(self, address, index, val):
         if 'storage:'+address not in self.caches:
             self.caches['storage:'+address] = {}
-            self.caches['all'][address] = True
-        self.caches['storage:'+address][index] = val
+            self.set_and_journal('all', address, True)
+        self.set_and_journal('storage:'+address, index, val or None)
 
     def commit_state(self):
+        if not len(self.journal):
+            return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \
                 or self.mk_blank_acct()
@@ -463,7 +472,7 @@ class Block(object):
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
-                        if v:
+                        if v is not None:
                             t.update(enckey, val)
                         else:
                             t.delete(enckey)
@@ -481,18 +490,28 @@ class Block(object):
             address = address.decode('hex')
         self.state.delete(address)
 
-    def account_to_dict(self, address):
-        self.commit_state()
+    def account_to_dict(self, address, with_storage_root=False):
+        if with_storage_root:
+            assert len(self.journal) == 0
         med_dict = {}
         for i, val in enumerate(self.get_acct(address)):
             name, typ, default = acct_structure[i]
-            med_dict[acct_structure[i][0]] = utils.printers[typ](val)
+            key = acct_structure[i][0]
             if name == 'storage':
                 strie = trie.Trie(utils.get_db_path(), val)
-                med_dict['storage_root'] = strie.get_root_hash().encode('hex')
-        med_dict['storage'] = {'0x'+k.encode('hex'):
-                               '0x'+rlp.decode(v).encode('hex')
-                               for k, v in strie.to_dict().iteritems()}
+                if with_storage_root:
+                    med_dict['storage_root'] = strie.get_root_hash().encode('hex')
+            else:
+                med_dict[key] = self.caches[key].get(address, utils.printers[typ](val))
+        med_dict['storage'] = {}
+        for k, v in strie.to_dict().iteritems():
+            subcache = self.caches.get('storage:'+address, {})
+            v2 = subcache.get(utils.big_endian_to_int(k), None)
+            hexkey = '0x'+k.encode('hex')
+            if v2:
+                med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+            else:
+                med_dict['storage'][hexkey] = '0x'+v.encode('hex')
         return med_dict
 
     def reset_cache(self):
@@ -501,12 +520,11 @@ class Block(object):
             'balance': {},
             'nonce': {},
             'code': {},
-            'storage': {}
         }
+        self.journal = []
 
     # Revert computation
     def snapshot(self):
-        self.commit_state()
         return {
             'state': self.state.root_hash,
             'gas': self.gas_used,
@@ -514,9 +532,15 @@ class Block(object):
             'txcount': self.transaction_count,
             'postqueue': copy.copy(self.postqueue),
             'suicides': copy.copy(self.suicides),
+            'journal': self.journal, # pointer to reference, so is not static
+            'journal_size': len(self.journal)
         }
 
     def revert(self, mysnapshot):
+        self.journal = mysnapshot['journal']
+        while len(self.journal) > mysnapshot['journal_size']:
+            cache, index, prev, post = self.journal.pop()
+            self.caches[cache][index] = prev
         self.state.root_hash = mysnapshot['state']
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
@@ -581,13 +605,12 @@ class Block(object):
     def hex_serialize_header(self):
         return rlp.encode(self.list_header()).encode('hex')
 
-    def to_dict(self, with_state=False, full_transactions=False):
+    def to_dict(self, with_state=False, full_transactions=False, with_storage_roots=False):
         """
         serializes the block
         with_state:             include state for all accounts
         full_transactions:      include serialized tx (hashes otherwise)
         """
-        self.commit_state()
         b = {}
         for name, typ, default in block_structure:
             b[name] = utils.printers[typ](getattr(self, name))
@@ -598,7 +621,7 @@ class Block(object):
             if full_transactions:
                 txjson = transactions.Transaction.create(tx).to_dict()
             else:
-                txjson = utils.sha3(rlp.descend(tx_rlp,0)).encode('hex') # tx hash
+                txjson = utils.sha3(rlp.descend(tx_rlp, 0)).encode('hex')  # tx hash
             txlist.append({
                 "tx": txjson,
                 "medstate": msr.encode('hex'),
@@ -608,7 +631,8 @@ class Block(object):
         if with_state:
             state_dump = {}
             for address, v in self.state.to_dict().iteritems():
-                state_dump[address.encode('hex')] = self.account_to_dict(address)
+                state_dump[address.encode('hex')] = \
+                    self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         return b
 
