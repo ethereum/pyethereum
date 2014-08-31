@@ -191,3 +191,64 @@ def test_hedge():
     s.mine(10, tester.a3)
     o6 = s.send(tester.k0, c2, 0)
     assert o6 == [4]
+
+
+arither_code = '''
+init:
+    contract.storage[0] = 10
+code:
+    if msg.data[0] == 0:
+        contract.storage[0] += 1
+    elif msg.data[0] == 1:
+        contract.storage[0] *= 10
+        call(contract.address, 0)
+        contract.storage[0] *= 10
+    elif msg.data[0] == 2:
+        contract.storage[0] *= 10
+        postcall(tx.gas / 2, contract.address, 0)
+        contract.storage[0] *= 10
+    elif msg.data[0] == 3:
+        return(contract.storage[0])
+'''
+ 
+
+def test_post():
+    s = tester.state()
+    c = s.contract(arither_code)
+    s.send(tester.k0, c, 0, [1])
+    o2 = s.send(tester.k0, c, 0, [3])
+    assert o2 == [1010]
+    c = s.contract(arither_code)
+    s.send(tester.k0, c, 0, [2])
+    o2 = s.send(tester.k0, c, 0, [3])
+    assert o2 == [1001]
+
+
+suicider_code = '''
+if msg.data[0] == 0:
+    call(contract.address, 3)
+    i = 0
+    while i < msg.data[1]:
+        i += 1
+elif msg.data[0] == 1:
+    msg(tx.gas - 100, contract.address, 0, [0, msg.data[1]], 2)
+elif msg.data[0] == 2:
+    return(10)
+elif msg.data[0] == 3:
+    suicide(0)
+'''
+
+
+def test_suicider():
+    s = tester.state()
+    c = s.contract(suicider_code)
+    tester.gas_limit = 4000
+    s.send(tester.k0, c, 0, [1, 10])
+    o2 = s.send(tester.k0, c, 0, [2])
+    assert o2 == []
+    c = s.contract(suicider_code)
+    s.send(tester.k0, c, 0, [1, 4000])
+    o2 = s.send(tester.k0, c, 0, [2])
+    assert o2 == [10]
+
+test_suicider()

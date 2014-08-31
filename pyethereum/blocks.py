@@ -458,7 +458,7 @@ class Block(object):
         if 'storage:'+address not in self.caches:
             self.caches['storage:'+address] = {}
             self.set_and_journal('all', address, True)
-        self.set_and_journal('storage:'+address, index, val or None)
+        self.set_and_journal('storage:'+address, index, val)
 
     def commit_state(self):
         if not len(self.journal):
@@ -472,7 +472,7 @@ class Block(object):
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
-                        if v is not None:
+                        if v is not 0:
                             t.update(enckey, val)
                         else:
                             t.delete(enckey)
@@ -508,7 +508,7 @@ class Block(object):
             subcache = self.caches.get('storage:'+address, {})
             v2 = subcache.get(utils.big_endian_to_int(k), None)
             hexkey = '0x'+k.encode('hex')
-            if v2:
+            if v2 is not None:
                 med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
             else:
                 med_dict['storage'][hexkey] = '0x'+v.encode('hex')
@@ -531,8 +531,9 @@ class Block(object):
             'txs': self.transactions,
             'txcount': self.transaction_count,
             'postqueue': copy.copy(self.postqueue),
-            'suicides': copy.copy(self.suicides),
-            'journal': self.journal, # pointer to reference, so is not static
+            'suicides': self.suicides,
+            'suicides_size': len(self.suicides),
+            'journal': self.journal,  # pointer to reference, so is not static
             'journal_size': len(self.journal)
         }
 
@@ -540,14 +541,18 @@ class Block(object):
         self.journal = mysnapshot['journal']
         while len(self.journal) > mysnapshot['journal_size']:
             cache, index, prev, post = self.journal.pop()
-            self.caches[cache][index] = prev
+            if prev is not None:
+                self.caches[cache][index] = prev
+            else:
+                del self.caches[cache][index]
+        self.suicides = mysnapshot['suicides']
+        while len(self.suicides) > mysnapshot['suicides_size']:
+            self.suicides.pop()
         self.state.root_hash = mysnapshot['state']
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
         self.postqueue = mysnapshot['postqueue']
-        self.suicides = mysnapshot['suicides']
-        self.reset_cache()
 
     def finalize(self):
         """

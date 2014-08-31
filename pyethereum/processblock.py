@@ -163,6 +163,7 @@ def apply_transaction(block, tx):
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
 
     block.postqueue = [ message ]
+    primary_result = None
     while len(block.postqueue):
         message = block.postqueue.pop(0)
         # MESSAGE
@@ -172,6 +173,11 @@ def apply_transaction(block, tx):
             result, gas_remained, data = create_contract(block, tx, message)
             if result > 0:
                 result = utils.coerce_addr_to_hex(result)
+        if not primary_result:
+            primary_result = result, gas_remained, data
+
+    result, gas_remained, data = primary_result
+
     assert gas_remained >= 0
 
     pblogger.log("TX APPLIED", result=result, gas_remained=gas_remained,
@@ -518,6 +524,7 @@ def apply_op(block, tx, msg, code, compustate):
                 break
         if is_debug:
             print(' '.join(map(repr, stackargs)))
+            pblogger.log('DEBUG', vals=stackargs)
             compustate.pc = oldpc + 2 + len(stackargs)
         else:
             stk.extend(reversed(stackargs))
@@ -575,7 +582,7 @@ def apply_op(block, tx, msg, code, compustate):
         value = stackargs[2]
         data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
         pblogger.log('POST NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
-        post_msg = Message(msg.to, to, vaue, gas, data)
+        post_msg = Message(msg.to, to, value, gas, data)
         block.postqueue.append(post_msg)
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
