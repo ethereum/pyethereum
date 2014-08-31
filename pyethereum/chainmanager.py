@@ -130,7 +130,6 @@ class ChainManager(StoppableLoopThread):
         bh = block.hash
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
-        self.blockchain.commit()
         self.new_miner()  # reset mining
 
     def get(self, blockhash):
@@ -148,6 +147,8 @@ class ChainManager(StoppableLoopThread):
 
     def _store_block(self, block):
         self.blockchain.put(block.hash, block.serialize())
+
+    def commit(self):
         self.blockchain.commit()
 
     def _initialize_blockchain(self, genesis=None):
@@ -263,19 +264,22 @@ class ChainManager(StoppableLoopThread):
                 logger.debug('verification failed: %s', str(e))
                 return False
 
-        self.index.add_block(block)
-        self._store_block(block)
-
         if block.number < self.head.number:
             logger.debug("%r is older than head %r", block, self.head)
             # Q: Should we have any limitations on adding blocks?
+
+        self.index.add_block(block)
+        self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work for that number
         if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
             self._update_head(block)
 
+        self.commit() # batch commits all changes that came with the new block
+
         return True
+
 
     def get_children(self, block):
         return [self.get(c) for c in self.index.get_children(block.hash)]
