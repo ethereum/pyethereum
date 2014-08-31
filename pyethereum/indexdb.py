@@ -10,7 +10,9 @@ class Index(object):
     datastructure: namespace|key|valnum > val
     """
 
-    def __init__(self, namespace):
+    def __init__(self, namespace, i_know_what_im_doing=False):
+        if not i_know_what_im_doing:
+            raise Exception('depends on commited data in leveldb')
         self.namespace = namespace
         self.db = db.DB(get_index_path())
 
@@ -59,8 +61,8 @@ class AccountTxIndex(Index):
 
     "acct|txnonce > tx"
 
-    def __init__(self):
-        super(AccountTxIndex, self).__init__('tx')
+    def __init__(self, i_know_what_im_doing=False):
+        super(AccountTxIndex, self).__init__('tx', i_know_what_im_doing)
 
     def add_transaction(self, account, nonce, transaction_hash):
         self.add(account, nonce, transaction_hash)
