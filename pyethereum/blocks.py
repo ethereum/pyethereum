@@ -107,13 +107,14 @@ class TransientBlock(object):
             (self.number, self.hash.encode('hex')[
              :4], self.prevhash.encode('hex')[:4])
 
-    def check_proof_of_work(self, nonce):
-        assert len(nonce) == 32
-        rlp_Hn = rlp.encode(self.header_args[:-1])
-        # BE(SHA3(SHA3(RLP(Hn)) o n))
-        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
-        l256 = utils.big_endian_to_int(h)
-        return l256 < 2 ** 256 / self.difficulty
+
+def check_header_pow(header):
+    assert len(header[-1]) == 32
+    rlp_Hn = rlp.encode(header[:-1])
+    nonce = header[-1]
+    diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
+    h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
+    return utils.big_endian_to_int(h) < 2 ** 256 / diff
 
 
 class Block(object):
@@ -130,7 +131,8 @@ class Block(object):
                  gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
-                 uncles=[]):
+                 uncles=[],
+                 header=None):
 
         self.prevhash = prevhash
         self.uncles_hash = uncles_hash
@@ -189,7 +191,7 @@ class Block(object):
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
         if not self.is_genesis() and self.nonce and\
-                not self.check_proof_of_work(self.nonce):
+                not check_header_pow(header or self.list_header()):
             raise Exception("PoW check failed")
 
     def validate_uncles(self):
@@ -209,11 +211,11 @@ class Block(object):
         ineligible.extend([b.list_header() for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            t = TransientBlock(rlp.encode([uncle, [], []]))
-            if not t.check_proof_of_work(t.nonce):
+            if not check_header_pow(uncle):
                 return False
             # uncle's parent cannot be the block's own parent
-            if t.prevhash not in eligible_ancestor_hashes:
+            prevhash = uncle[block_structure_rev['prevhash'][0]]
+            if prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor" % self)
                 return False
             if uncle in ineligible:
@@ -227,12 +229,9 @@ class Block(object):
             self.nonce == GENESIS_NONCE
 
     def check_proof_of_work(self, nonce):
-        assert len(nonce) == 32
-        rlp_Hn = self.serialize_header_without_nonce()
-        # BE(SHA3(SHA3(RLP(Hn)) o n))
-        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
-        l256 = utils.big_endian_to_int(h)
-        return l256 < 2 ** 256 / self.difficulty
+        H = self.list_header()
+        H[-1] = nonce
+        return check_header_pow(H)
 
     @classmethod
     def deserialize_header(cls, header_data):
@@ -249,6 +248,7 @@ class Block(object):
     def deserialize(cls, rlpdata):
         header_args, transaction_list, uncles = rlp.decode(rlpdata)
         kargs = cls.deserialize_header(header_args)
+        kargs['header'] = header_args
         kargs['transaction_list'] = transaction_list
         kargs['uncles'] = uncles
 
@@ -306,7 +306,7 @@ class Block(object):
         assert block.gas_used == kargs['gas_used']
         assert block.gas_limit == kargs['gas_limit']
         assert block.timestamp == kargs['timestamp']
-        assert block.difficulty == kargs['difficulty'], (block.difficulty, kargs['difficulty'])
+        assert block.difficulty == kargs['difficulty']
         assert block.number == kargs['number']
         assert block.extra_data == kargs['extra_data']
         assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
@@ -559,7 +559,6 @@ class Block(object):
     tx_list_root = property(get_tx_list_root)
 
     def list_header(self, exclude=[]):
-        self.uncles_hash = utils.sha3(rlp.encode(self.uncles))
         header = []
         for name, typ, default in block_structure:
             # print name, typ, default , getattr(self, name)
