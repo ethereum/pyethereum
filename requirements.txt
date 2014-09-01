@@ -8,4 +8,4 @@ docopt
 six
 ethereum-serpent
 pytest
-epoze.lru
+repoze.lru
