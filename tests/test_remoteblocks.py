@@ -81,7 +81,7 @@ def do_cprofile(func):
         finally:
             s = StringIO.StringIO()
             ps = pstats.Stats(
-                profile, stream=s).sort_stats('time', 'cum')
+                profile, stream=s).sort_stats('cum', 'time')
             ps.print_stats()
             print s.getvalue()
 
