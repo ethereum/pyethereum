@@ -723,9 +723,7 @@ class Block(object):
 # put the next two functions into this module to support Block.get_parent
 # should be probably be in chainmanager otherwise
 
-
-
-#@lru_cache(500)
+@lru_cache(500)
 def get_block(blockhash):
     return Block.deserialize(db.DB(utils.get_db_path()).get(blockhash))
 
