@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class PBLogger(object):
-    log_op = True           # log op, gas, stack before each op
+    log_op = False           # log op, gas, stack before each op
     log_pre_state = False   # dump storage at account before execution
     log_post_state = False  # dump storage at account after execution
     log_block = False       # dump block after TX was applied

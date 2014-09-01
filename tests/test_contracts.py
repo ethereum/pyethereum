@@ -5,6 +5,16 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 
+# customize VM log output to your needs
+# hint: use 'py.test' with the '-s' option to dump logs to the console
+pblogger = tester.pb.pblogger
+pblogger.log_pre_state = True    # dump storage at account before execution
+pblogger.log_post_state = True   # dump storage at account after execution
+pblogger.log_block = False       # dump block after TX was applied
+pblogger.log_memory = False      # dump memory before each op
+pblogger.log_op = True           # log op, gas, stack before each op
+pblogger.log_json = False        # generate machine readable output
+
 gasprice = 0
 startgas = 10000
 
