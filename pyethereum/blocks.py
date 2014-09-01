@@ -616,7 +616,7 @@ class Block(object):
 
 
     @property
-    @lru_cache(500)
+#    @lru_cache(500)
     def hash(self):
         return utils.sha3(self.serialize())
 
@@ -696,7 +696,7 @@ class Block(object):
 
 
 
-@lru_cache(500)
+#@lru_cache(500)
 def get_block(blockhash):
     return Block.deserialize(db.DB(utils.get_db_path()).get(blockhash))
 
