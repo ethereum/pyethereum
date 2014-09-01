@@ -87,9 +87,6 @@ class Message(object):
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
 
-    def hash(self, block): # helper to identify msgs in logs
-        return utils.sha3("%s%s%s%s" %(block.number, block.gas_used, self.to, self.sender))
-
 
 class InvalidTransaction(Exception):
     pass
