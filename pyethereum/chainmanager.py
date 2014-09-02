@@ -271,6 +271,7 @@ class ChainManager(StoppableLoopThread):
         self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work for that number
+        #logger.debug('Head: %r @%s  New:%r @%d', self.head, self.head.chain_difficulty(), block, block.chain_difficulty())
         if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
             self._update_head(block)
