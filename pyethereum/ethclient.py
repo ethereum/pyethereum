@@ -5,7 +5,8 @@ import json
 from docopt import docopt
 import utils
 import transactions
-from apiserver import base_url as api_path
+
+api_path = '/api/v02a'
 
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 30203
