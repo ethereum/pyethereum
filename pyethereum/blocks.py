@@ -541,8 +541,10 @@ class Block(object):
 
     def revert(self, mysnapshot):
         self.journal = mysnapshot['journal']
+        logger.debug('reverting')
         while len(self.journal) > mysnapshot['journal_size']:
             cache, index, prev, post = self.journal.pop()
+            logger.debug('%r %r %r %r', cache, index, prev, post)
             if prev is not None:
                 self.caches[cache][index] = prev
             else:

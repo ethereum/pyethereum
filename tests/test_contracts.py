@@ -18,6 +18,8 @@ pblogger.log_json = False        # generate machine readable output
 gasprice = 0
 startgas = 10000
 
+# Test serpent compilation of variables using _with_, doing a simple
+# arithmetic calculation 20 * 30 + 10 = 610
 sixten_code =\
     '''
 (with 'x 10
@@ -39,6 +41,8 @@ def test_sixten():
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0, [])
     assert o1 == [610]
+
+# Test Serpent's import mechanism
 
 mul2_code = \
     '''
@@ -62,6 +66,9 @@ def test_returnten():
     os.remove(filename)
     assert o1 == [10]
 
+
+# Test a simple namecoin implementation
+
 namecoin_code =\
     '''
 if !contract.storage[msg.data[0]]:
@@ -84,6 +91,7 @@ def test_namecoin():
 
     assert s.block.to_dict()
 
+# Test a simple currency implementation
 
 currency_code = '''
 init:
@@ -118,6 +126,7 @@ def test_currency():
     o4 = s.send(tester.k0, c, 0, [tester.a2])
     assert o4 == [200]
 
+# Test a data feed
 
 data_feed_code = '''
 if !contract.storage[1000]:
@@ -151,6 +160,9 @@ def test_data_feeds():
     o6 = s.send(tester.k0, c, 0, [500, 726])
     assert o6 == [1]
     return s, c
+
+# Test an example hedging contract, using the data feed. This tests
+# contracts calling other contracts
 
 hedge_code = '''
 if !contract.storage[1000]:
@@ -186,23 +198,36 @@ else:
 def test_hedge():
     s, c = test_data_feeds()
     c2 = s.contract(hedge_code, sender=tester.k0)
+    # Have the first party register, sending 10^16 wei and
+    # asking for a hedge using currency code 500
     o1 = s.send(tester.k0, c2, 10**16, [c, 500])
     assert o1 == [1]
+    # Have the second party register. It should receive the
+    # amount of units of the second currency that it is
+    # entitled to. Note that from the previous test this is
+    # set to 726
     o2 = s.send(tester.k2, c2, 10**16)
     assert o2 == [2, 7260000000000000000]
     snapshot = s.snapshot()
+    # Set the price of the asset down to 300 wei
     o3 = s.send(tester.k0, c, 0, [500, 300])
     assert o3 == [1]
+    # Finalize the contract. Expect code 3, meaning a margin call
     o4 = s.send(tester.k0, c2, 0)
     assert o4 == [3]
     s.revert(snapshot)
+    # Don't change the price. Finalize, and expect code 5, meaning
+    # the time has not expired yet
     o5 = s.send(tester.k0, c2, 0)
     assert o5 == [5]
     s.mine(10, tester.a3)
+    # Mine ten blocks, and try. Expect code 4, meaning a normal execution
+    # where both get their share
     o6 = s.send(tester.k0, c2, 0)
     assert o6 == [4]
 
 
+# Test the LIFO nature of call and the FIFO nature of post
 arither_code = '''
 init:
     contract.storage[0] = 10
@@ -234,31 +259,74 @@ def test_post():
     assert o2 == [1001]
 
 
+# Test suicides and suicide reverts
 suicider_code = '''
 if msg.data[0] == 0:
+    contract.storage[15] = 40
     call(contract.address, 3)
     i = 0
     while i < msg.data[1]:
         i += 1
 elif msg.data[0] == 1:
+    contract.storage[15] = 20
     msg(tx.gas - 100, contract.address, 0, [0, msg.data[1]], 2)
 elif msg.data[0] == 2:
     return(10)
 elif msg.data[0] == 3:
     suicide(0)
+elif msg.data[0] == 4:
+    return(contract.storage[15])
 '''
 
 
 def test_suicider():
     s = tester.state()
     c = s.contract(suicider_code)
+    prev_gas_limit = tester.gas_limit
     tester.gas_limit = 4000
+    # Run normally: suicide processes, so the attempt to ping the
+    # contract fails
     s.send(tester.k0, c, 0, [1, 10])
     o2 = s.send(tester.k0, c, 0, [2])
     assert o2 == []
     c = s.contract(suicider_code)
+    # Run the suicider in such a way that it suicides in a sub-call,
+    # then runs out of gas, leading to a revert of the suicide and the
+    # storage mutation
     s.send(tester.k0, c, 0, [1, 4000])
+    # Check that the suicide got reverted
     o2 = s.send(tester.k0, c, 0, [2])
     assert o2 == [10]
+    # Check that the storage op got reverted
+    o3 = s.send(tester.k0, c, 0, [4])
+    assert o3 == [20]
+    tester.gas_limit = prev_gas_limit
 
-test_suicider()
+
+# Test reverts
+
+reverter_code = '''
+if msg.data[0] == 0:
+    msg(1000, contract.address, 0, 1)
+    msg(1000, contract.address, 0, 2)
+elif msg.data[0] == 1:
+    send(1, 9)
+    contract.storage[8080] = 4040
+    contract.storage[160160] = 2020
+elif msg.data[0] == 2:
+    send(2, 9)
+    contract.storage[8081] = 4039
+    contract.storage[160161] = 2019
+    call(contract.address, 2)
+    contract.storage["waste_some_gas"] = 0
+'''
+
+
+def test_reverter():
+    s = tester.state()
+    c = s.contract(reverter_code, endowment=10**15)
+    s.send(tester.k0, c, 0, [0])
+    assert s.block.get_storage_data(c, 8080) == 4040
+    assert s.block.get_balance('0'*39+'1') == 9
+    assert s.block.get_storage_data(c, 8081) == 0
+    assert s.block.get_balance('0'*39+'2') == 0
