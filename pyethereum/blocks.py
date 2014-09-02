@@ -97,8 +97,8 @@ class TransientBlock(object):
 
     def __init__(self, rlpdata):
         self.rlpdata = rlpdata
-        self.hash = utils.sha3(rlpdata)
         self.header_args, transaction_list, uncles = rlp.decode(rlpdata)
+        self.hash = utils.sha3(rlp.encode(self.header_args))
         self.transaction_list = transaction_list  # rlp encoded transactions
         self.uncles = uncles
         for i, (name, typ, default) in enumerate(block_structure):

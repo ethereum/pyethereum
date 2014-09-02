@@ -139,6 +139,13 @@ def test_failing_transfer():
     assert blk.get_balance(v) == b_v
     assert blk.get_balance(v2) == b_v2
 
+def test_transient_block():
+    blk = blocks.genesis()
+    tb_blk = blocks.TransientBlock(blk.serialize())
+    assert blk.hash == tb_blk.hash
+    assert blk.number == tb_blk.number
+
+
 
 def test_genesis():
     k, v, k2, v2 = accounts()
