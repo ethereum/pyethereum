@@ -9,7 +9,7 @@ class HashChainTask(object):
     - get hashes chain until we see a known block hash
     """
 
-    NUM_HASHES_PER_REQUEST = 200
+    NUM_HASHES_PER_REQUEST = 20000
     GENESIS_HASH = blocks.genesis().hash
 
     def __init__(self, chain_manager, peer, block_hash):
@@ -102,7 +102,7 @@ class Synchronizer(object):
 
     def synchronize_unknown_block(self, peer, block_hash):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
-        logger.debug('%r sync %r', peer, block_hash)
+        logger.debug('%r sync %r', peer, block_hash.encode('hex'))
         assert block_hash not in self.chain_manager
         if peer and not peer in self.synchronization_tasks:
             logger.debug('%r new sync task', peer)

@@ -423,7 +423,7 @@ def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
 
 @receiver(signals.remote_block_hashes_received)
 def remote_block_hashes_received_handler(sender, block_hashes, peer, **kwargs):
-    logger.debug("recv %d remote block_hashes: %r", len(block_hashes), [b.encode('hex') for b in block_hashes])
+    logger.debug("recv %d remote block_hashes: %r", len(block_hashes), [block_hashes[0].encode('hex'), '...', block_hashes[-1].encode('hex')])
     if block_hashes:
         chain_manager.synchronizer.received_block_hashes(peer, block_hashes)
 
