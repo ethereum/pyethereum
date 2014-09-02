@@ -27,6 +27,13 @@ def debug(label):
     return deb
 
 
+def bytearray_to_int(arr):
+    o = 0
+    for a in arr:
+        o = o * 256 + a
+    return o
+
+
 def sha3(seed):
     return sha3_256(seed).digest()
 

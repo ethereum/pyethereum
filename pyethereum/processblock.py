@@ -39,6 +39,8 @@ class PBLogger(object):
 
 pblogger = PBLogger()
 
+code_cache = {}
+
 
 GDEFAULT = 1
 GMEMORY = 1
@@ -240,9 +242,15 @@ def apply_msg(block, tx, msg, code):
     snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
     t, ops = time.time(), 0
+    if code in code_cache:
+        processed_code = code_cache[code]
+    else:
+        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, [], 0]) +
+                          [ord(c)] for c in code]
+        code_cache[code] = processed_code
     # Main loop
     while 1:
-        o = apply_op(block, tx, msg, code, compustate)
+        o = apply_op(block, tx, msg, processed_code, compustate)
         ops += 1
         if o is not None:
             pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
@@ -295,7 +303,7 @@ def ceil32(x):
 
 def calcfee(block, tx, msg, compustate, op_data):
     stk, mem = compustate.stack, compustate.memory
-    op, ins, outs, memuse, base_gas = op_data
+    op, ins, outs, memuse, base_gas, opcode = op_data
     m_extend = 0
     for start, sz in memuse:
         start = start if start >= 0 else stk[start]
@@ -313,15 +321,17 @@ def calcfee(block, tx, msg, compustate, op_data):
         return COST
 
 # Does not include paying opfee
-def apply_op(block, tx, msg, code, compustate):
-    op, in_args, out_args, mem_grabs, base_gas = opdata = get_op_data(code, compustate.pc)
+def apply_op(block, tx, msg, processed_code, compustate):
+    if compustate.pc >= len(processed_code):
+        return []
+    op, in_args, out_args, mem_grabs, base_gas, opcode = processed_code[compustate.pc]
     # empty stack error
     if in_args > len(compustate.stack):
         pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
         return []
     # out of gas error
-    fee = calcfee(block, tx, msg, compustate, opdata)
+    fee = calcfee(block, tx, msg, compustate, processed_code[compustate.pc])
     if fee > compustate.gas:
         pblogger.log('OUT OF GAS', needed=fee, available=compustate.gas,
                             op=op, stack=list(reversed(compustate.stack)))
@@ -334,7 +344,8 @@ def apply_op(block, tx, msg, code, compustate):
         log_args = dict(pc=compustate.pc, op=op, stackargs=stackargs, gas=compustate.gas)
         if op[:4] == 'PUSH':
             ind = compustate.pc + 1
-            log_args['value'] = utils.big_endian_to_int(code[ind: ind + int(op[4:])])
+            log_args['value'] = \
+                utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
         elif op == 'CALLDATACOPY':
             log_args['data'] = msg.data.encode('hex')
         pblogger.log('OP', **log_args)
@@ -455,8 +466,8 @@ def apply_op(block, tx, msg, code, compustate):
         if len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
-            if stackargs[1] + i < len(code):
-                mem[stackargs[0] + i] = ord(code[stackargs[1] + i])
+            if stackargs[1] + i < len(processed_code):
+                mem[stackargs[0] + i] = processed_code[stackargs[1] + i][-1]
             else:
                 mem[stackargs[0] + i] = 0
     elif op == 'PREVHASH':
@@ -510,13 +521,13 @@ def apply_op(block, tx, msg, code, compustate):
     elif op[:4] == 'PUSH':
         pushnum = int(op[4:])
         compustate.pc = oldpc + 1 + pushnum
-        dat = code[oldpc + 1: oldpc + 1 + pushnum]
-        stk.append(utils.big_endian_to_int(dat))
+        dat = [x[-1] for x in processed_code[oldpc + 1: oldpc + 1 + pushnum]]
+        stk.append(utils.bytearray_to_int(dat))
     elif op[:3] == 'DUP':
         # DUP POP POP Debug hint
         is_debug = 1
         for i in range(len(stackargs)):
-            if get_op_data(code, oldpc + i + 1)[0] != 'POP':
+            if oldpc + i + 1 < len(processed_code) and processed_code[oldpc + i + 1][0] != 'POP':
                 is_debug = 0
                 break
         if is_debug:
