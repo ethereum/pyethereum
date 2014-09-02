@@ -19,9 +19,11 @@ class HashChainTask(object):
         self.request(block_hash)
 
     def request(self, block_hash):
+        logger.debug('%r requesting block_hashes starting from %r', self.peer, block_hash.encode('hex'))
         self.peer.send_GetBlockHashes(block_hash, self.NUM_HASHES_PER_REQUEST)
 
     def received_block_hashes(self, block_hashes):
+        logger.warn('HashChainTask.received_block_hashes %d', len(block_hashes))
         if self.GENESIS_HASH in block_hashes:
             logger.warn('%r has different chain starting from genesis', self.peer)
         for bh in block_hashes:
@@ -29,6 +31,7 @@ class HashChainTask(object):
                 logger.debug('%r matching block hash found %r', self.peer, bh.encode('hex'))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
+            #logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
         self.request(bh)
 
 
@@ -129,7 +132,7 @@ class Synchronizer(object):
 
     def received_block_hashes(self, peer, block_hashes):
         if peer in self.synchronization_tasks:
-            logger.debug("Synchronizer.received_block_hashes for: %r", peer)
+            logger.debug("Synchronizer.received_block_hashes %d for: %r", len(block_hashes), peer)
             self.synchronization_tasks[peer].received_block_hashes(block_hashes)
 
     def received_blocks(self, peer, transient_blocks):
