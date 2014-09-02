@@ -301,7 +301,6 @@ def test_mine_block_with_transaction():
     assert tx not in blk.get_transactions()
 
 
-@pytest.mark.xfail # assert parent.state.db.db == self.state.db.db in get_parent !?
 def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
     set_db()

@@ -643,11 +643,13 @@ class Block(object):
             b['state'] = state_dump
         return b
 
+    def _hash(self):
+        return utils.sha3(self.serialize())
 
     @property
-#    @lru_cache(500)
     def hash(self):
-        return utils.sha3(self.serialize())
+        return self._hash()
+
 
     def hex_hash(self):
         return self.hash.encode('hex')
@@ -659,7 +661,7 @@ class Block(object):
             parent = get_block(self.prevhash)
         except KeyError:
             raise UnknownParentException(self.prevhash.encode('hex'))
-        assert parent.state.db.db == self.state.db.db
+        #assert parent.state.db.db == self.state.db.db
         return parent
 
     def has_parent(self):
@@ -684,7 +686,7 @@ class Block(object):
             return o
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.hash == other.hash
+        return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -720,12 +722,34 @@ class Block(object):
             transaction_list=[],
             uncles=uncles)
 
-# put the next two functions into this module to support Block.get_parent
-# should be probably be in chainmanager otherwise
+
+class CachedBlock(Block):
+    # note: immutable refers to: do not manipulate!
+    _hash_cached = None
+
+    def _set_acct_item(self): raise Exception('NotImplemented')
+    def _add_transaction_to_list(self): raise Exception('NotImplemented')
+    def set_state_root(self): raise Exception('NotImplemented')
+    def revert(self): raise Exception('NotImplemented')
+    def commit_state(self): pass
+
+    def _hash(self):
+        if not self._hash_cached:
+            self._hash_cached = Block._hash(self)
+        return self._hash_cached
+
+    @classmethod
+    def create_cached(cls, blk):
+        blk.__class__ = CachedBlock
+        return blk
 
 @lru_cache(500)
 def get_block(blockhash):
-    return Block.deserialize(db.DB(utils.get_db_path()).get(blockhash))
+    """
+    Assumtion: blocks loaded from the db are not manipulated
+                -> can be cached including hash
+    """
+    return CachedBlock.create_cached(Block.deserialize(db.DB(utils.get_db_path()).get(blockhash)))
 
 
 def has_block(blockhash):
