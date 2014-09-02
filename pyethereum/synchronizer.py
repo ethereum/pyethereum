@@ -9,7 +9,7 @@ class HashChainTask(object):
     - get hashes chain until we see a known block hash
     """
 
-    NUM_HASHES_PER_REQUEST = 20000
+    NUM_HASHES_PER_REQUEST = 2000
     GENESIS_HASH = blocks.genesis().hash
 
     def __init__(self, chain_manager, peer, block_hash):
