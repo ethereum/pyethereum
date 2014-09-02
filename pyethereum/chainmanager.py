@@ -11,7 +11,6 @@ import blocks
 import processblock
 from transactions import Transaction
 from miner import Miner
-import chainlogger
 from synchronizer import Synchronizer
 
 from peer import MAX_GET_CHAIN_SEND_HASHES
@@ -339,15 +338,6 @@ class ChainManager(StoppableLoopThread):
         assert block.hash in self
         block_numbers = range(block.number+1, min(self.head.number, block.number+count))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
-
-    def log_chain(self):
-        num = self.head.number + 1
-        for b in reversed(self.get_chain(count=num)):
-            #chainlogger.log_block(b)
-            logger.debug(b)
-            for tx in b.get_transactions():
-                logger.debug('\t%r', tx)
-
 
 chain_manager = ChainManager()
 
