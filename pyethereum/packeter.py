@@ -32,7 +32,7 @@ class Packeter(object):
         #.  Can only be used after the `config` method is called
     '''
     """
-    PROTOCOL_VERSION = 29
+    PROTOCOL_VERSION = 30
     # is the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
     CLIENT_ID = 'Ethereum(py)/0.6.0/%s/Protocol:%d' % (sys.platform,
