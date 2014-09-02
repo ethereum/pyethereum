@@ -644,7 +644,7 @@ class Block(object):
         return b
 
     def _hash(self):
-        return utils.sha3(self.serialize())
+        return utils.sha3(self.serialize_header())
 
     @property
     def hash(self):
