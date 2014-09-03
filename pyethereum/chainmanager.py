@@ -1,6 +1,6 @@
 import logging
 import time
-import struct
+from operator import attrgetter
 from dispatch import receiver
 from stoppable import StoppableLoopThread
 import signals
@@ -213,6 +213,7 @@ class ChainManager(StoppableLoopThread):
         with self.lock:
             old_head = self.head
             # assuming to receive chain order w/ oldest block first
+            transient_blocks.sort(key=attrgetter('number'))
             assert transient_blocks[0].number <= transient_blocks[-1].number
 
             # notify syncer

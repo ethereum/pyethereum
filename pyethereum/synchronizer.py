@@ -23,11 +23,12 @@ class HashChainTask(object):
 
     def received_block_hashes(self, block_hashes):
         logger.warn('HashChainTask.received_block_hashes %d', len(block_hashes))
-        if self.chain_manager.genesis.hash in block_hashes:
+        if block_hashes and self.chain_manager.genesis.hash == block_hashes[-1]:
             logger.warn('%r has different chain starting from genesis', self.peer)
         for bh in block_hashes:
             if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
-                logger.debug('%r matching block hash found %r', self.peer, bh.encode('hex'))
+                logger.debug('%r matching block hash found %r, %d blocks to fetch',
+                                self.peer, bh.encode('hex'), len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
             #logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
@@ -110,7 +111,7 @@ class Synchronizer(object):
     def synchronize_unknown_block(self, peer, block_hash, force=False):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
         logger.debug('%r sync %r', peer, block_hash.encode('hex'))
-        if block_hash == self.chain_manager.genesis.hash or block_hash not in self.chain_manager:
+        if block_hash == self.chain_manager.genesis.hash or block_hash in self.chain_manager:
             logger.debug('%r known_hash %r, skipping', peer, block_hash.encode('hex'))
             return
 
