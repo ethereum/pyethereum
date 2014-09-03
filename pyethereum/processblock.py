@@ -20,6 +20,7 @@ class PBLogger(object):
     log_post_state = False  # dump storage at account after execution
     log_block = False       # dump block after TX was applied
     log_memory = False      # dump memory before each op
+    log_stack = False       # dump stack before each op
     log_json = False        # generate machine readable output
 
     def __init__(self):
@@ -47,6 +48,8 @@ GMEMORY = 1
 GSTORAGE = 100
 GTXDATA = 5
 GTXCOST = 500
+TT255 = 2**255
+TT256 = 2**256
 
 OUT_OF_GAS = -1
 
@@ -320,6 +323,10 @@ def mem_extend(mem, compustate, op, newsize):
     return True
 
 
+def to_signed(i):
+    return i if i < TT255 else i - TT256
+
+
 # Does not include paying opfee
 def apply_op(block, tx, msg, processed_code, compustate):
     if compustate.pc >= len(processed_code):
@@ -334,12 +341,15 @@ def apply_op(block, tx, msg, processed_code, compustate):
     fee = base_gas
     if fee > compustate.gas:
         return out_of_gas_exception('base_gas', fee, compustate, op)
-    stackargs = []
-    for i in range(in_args):
-        stackargs.append(compustate.stack.pop())
+
+    if pblogger.log_stack:
+        pblogger.log('STK', stk=list(reversed(compustate.stack)))
 
     if pblogger.log_op:
-        log_args = dict(pc=compustate.pc, op=op, stackargs=stackargs, gas=compustate.gas)
+        log_args = dict(pc=compustate.pc,
+                        op=op,
+                        stackargs=compustate.stack[-1:-in_args-1:-1],
+                        gas=compustate.gas)
         if op[:4] == 'PUSH':
             ind = compustate.pc + 1
             log_args['value'] = \
@@ -363,79 +373,69 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if op == 'STOP' or op == 'INVALID':
         return []
     elif op == 'ADD':
-        stk.append((stackargs[0] + stackargs[1]) % 2 ** 256)
+        stk.append((stk.pop() + stk.pop()) % TT256)
     elif op == 'SUB':
-        stk.append((stackargs[0] - stackargs[1]) % 2 ** 256)
+        stk.append((stk.pop() - stk.pop()) % TT256)
     elif op == 'MUL':
-        stk.append((stackargs[0] * stackargs[1]) % 2 ** 256)
+        stk.append((stk.pop() * stk.pop()) % TT256)
     elif op == 'DIV':
-        stk.append(0 if stackargs[1] == 0 else stackargs[0] / stackargs[1])
+        s0, s1 = stk.pop(), stk.pop()
+        stk.append(0 if s1 == 0 else s0 / s1)
     elif op == 'MOD':
-        stk.append(0 if stackargs[1] == 0 else stackargs[0] % stackargs[1])
+        s0, s1 = stk.pop(), stk.pop()
+        stk.append(0 if s1 == 0 else s0 % s1)
     elif op == 'SDIV':
-        if stackargs[0] >= 2 ** 255:
-            stackargs[0] -= 2 ** 256
-        if stackargs[1] >= 2 ** 255:
-            stackargs[1] -= 2 ** 256
-        stk.append(0 if stackargs[1] == 0 else
-                   (stackargs[0] / stackargs[1]) % 2 ** 256)
+        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
+        stk.append(0 if s1 == 0 else (s0 / s1) % TT256)
     elif op == 'SMOD':
-        if stackargs[0] >= 2 ** 255:
-            stackargs[0] -= 2 ** 256
-        if stackargs[1] >= 2 ** 255:
-            stackargs[1] -= 2 ** 256
-        stk.append(0 if stackargs[1] == 0 else
-                   (stackargs[0] % stackargs[1]) % 2 ** 256)
+        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
+        stk.append(0 if s1 == 0 else (s0 % s1) % TT256)
     elif op == 'EXP':
-        stk.append(pow(stackargs[0], stackargs[1], 2 ** 256))
+        stk.append(pow(stk.pop(), stk.pop(), TT256))
     elif op == 'NEG':
-        stk.append(-stackargs[0] % 2**256)
+        stk.append(-stk.pop() % TT256)
     elif op == 'LT':
-        stk.append(1 if stackargs[0] < stackargs[1] else 0)
+        stk.append(1 if stk.pop() < stk.pop() else 0)
     elif op == 'GT':
-        stk.append(1 if stackargs[0] > stackargs[1] else 0)
+        stk.append(1 if stk.pop() > stk.pop() else 0)
     elif op == 'SLT':
-        if stackargs[0] >= 2 ** 255:
-            stackargs[0] -= 2 ** 256
-        if stackargs[1] >= 2 ** 255:
-            stackargs[1] -= 2 ** 256
-        stk.append(1 if stackargs[0] < stackargs[1] else 0)
+        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
+        stk.append(1 if s0 < s1 else 0)
     elif op == 'SGT':
-        if stackargs[0] >= 2 ** 255:
-            stackargs[0] -= 2 ** 256
-        if stackargs[1] >= 2 ** 255:
-            stackargs[1] -= 2 ** 256
-        stk.append(1 if stackargs[0] > stackargs[1] else 0)
+        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
+        stk.append(1 if s0 > s1 else 0)
     elif op == 'EQ':
-        stk.append(1 if stackargs[0] == stackargs[1] else 0)
+        stk.append(1 if stk.pop() == stk.pop() else 0)
     elif op == 'NOT':
-        stk.append(0 if stackargs[0] else 1)
+        stk.append(0 if stk.pop() else 1)
     elif op == 'AND':
-        stk.append(stackargs[0] & stackargs[1])
+        stk.append(stk.pop() & stk.pop())
     elif op == 'OR':
-        stk.append(stackargs[0] | stackargs[1])
+        stk.append(stk.pop() | stk.pop())
     elif op == 'XOR':
-        stk.append(stackargs[0] ^ stackargs[1])
+        stk.append(stk.pop() ^ stk.pop())
     elif op == 'BYTE':
-        if stackargs[0] >= 32:
+        s0, s1 = stk.pop(), stk.pop()
+        if s0 >= 32:
             stk.append(0)
         else:
-            stk.append((stackargs[1] / 256 ** (31 - stackargs[0])) % 256)
+            stk.append((s1 / 256 ** (31 - s0)) % 256)
     elif op == 'ADDMOD':
-        stk.append((stackargs[0] + stackargs[1]) % stackargs[2]
-                   if stackargs[2] else 0)
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        stk.append((s0 + s1) % s2 if s2 else 0)
     elif op == 'MULMOD':
-        stk.append((stackargs[0] * stackargs[1]) % stackargs[2]
-                   if stackargs[2] else 0)
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        stk.append((s0 * s1) % s2 if s2 else 0)
     elif op == 'SHA3':
-        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[1]):
+        s0, s1 = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + s1):
             return OUT_OF_GAS
-        data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
+        data = ''.join(map(chr, mem[s0: s0 + s1]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
     elif op == 'ADDRESS':
         stk.append(utils.coerce_to_int(msg.to))
     elif op == 'BALANCE':
-        stk.append(block.get_balance(utils.coerce_addr_to_hex(stackargs[0])))
+        stk.append(block.get_balance(utils.coerce_addr_to_hex(stk.pop())))
     elif op == 'ORIGIN':
         stk.append(utils.coerce_to_int(tx.sender))
     elif op == 'CALLER':
@@ -443,31 +443,34 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CALLVALUE':
         stk.append(msg.value)
     elif op == 'CALLDATALOAD':
-        if stackargs[0] >= len(msg.data):
+        s0 = stk.pop()
+        if s0 >= len(msg.data):
             stk.append(0)
         else:
-            dat = msg.data[stackargs[0]:stackargs[0] + 32]
+            dat = msg.data[s0: s0 + 32]
             stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[2]):
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + s2):
             return OUT_OF_GAS
-        for i in range(stackargs[2]):
-            if stackargs[1] + i < len(msg.data):
-                mem[stackargs[0] + i] = ord(msg.data[stackargs[1] + i])
+        for i in range(s2):
+            if s1 + i < len(msg.data):
+                mem[s0 + i] = ord(msg.data[s1 + i])
             else:
-                mem[stackargs[0] + i] = 0
+                mem[s0 + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
-        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[2]):
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + s2):
             return OUT_OF_GAS
-        for i in range(stackargs[2]):
-            if stackargs[1] + i < len(processed_code):
-                mem[stackargs[0] + i] = processed_code[stackargs[1] + i][-1]
+        for i in range(s2):
+            if s1 + i < len(processed_code):
+                mem[s0 + i] = processed_code[s1 + i][-1]
             else:
-                mem[stackargs[0] + i] = 0
+                mem[s0 + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
@@ -481,41 +484,43 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'GASLIMIT':
         stk.append(block.gas_limit)
     elif op == 'POP':
-        pass
-    elif op == 'SWAP':
-        stk.append(stackargs[0])
-        stk.append(stackargs[1])
+        stk.pop()
     elif op == 'MLOAD':
-        if not mem_extend(mem, compustate, op, stackargs[0] + 32):
+        s0 = stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + 32):
             return OUT_OF_GAS
-        data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + 32]))
+        data = ''.join(map(chr, mem[s0: s0 + 32]))
         stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
-        if not mem_extend(mem, compustate, op, stackargs[0] + 32):
+        s0, s1 = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + 32):
             return OUT_OF_GAS
-        v = stackargs[1]
+        v = s1
         for i in range(31, -1, -1):
-            mem[stackargs[0] + i] = v % 256
+            mem[s0 + i] = v % 256
             v /= 256
     elif op == 'MSTORE8':
-        if not mem_extend(mem, compustate, op, stackargs[0] + 1):
+        s0, s1 = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + 1):
             return OUT_OF_GAS
-        mem[stackargs[0]] = stackargs[1] % 256
+        mem[s0] = s1 % 256
     elif op == 'SLOAD':
-        stk.append(block.get_storage_data(msg.to, stackargs[0]))
+        stk.append(block.get_storage_data(msg.to, stk.pop()))
     elif op == 'SSTORE':
-        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, stackargs[0]) else 0
-        post_occupied = GSTORAGE if stackargs[1] else 0
+        s0, s1 = stk.pop(), stk.pop()
+        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, s0) else 0
+        post_occupied = GSTORAGE if s1 else 0
         gascost = GSTORAGE + post_occupied - pre_occupied
         if compustate.gas < gascost:
             out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
         compustate.gas -= gascost
-        block.set_storage_data(msg.to, stackargs[0], stackargs[1])
+        block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP':
-        compustate.pc = stackargs[0]
+        compustate.pc = stk.pop()
     elif op == 'JUMPI':
-        if stackargs[1]:
-            compustate.pc = stackargs[0]
+        s0, s1 = stk.pop(), stk.pop()
+        if s1:
+            compustate.pc = s0
     elif op == 'PC':
         stk.append(compustate.pc)
     elif op == 'MSIZE':
@@ -528,28 +533,30 @@ def apply_op(block, tx, msg, processed_code, compustate):
         dat = [x[-1] for x in processed_code[oldpc + 1: oldpc + 1 + pushnum]]
         stk.append(utils.bytearray_to_int(dat))
     elif op[:3] == 'DUP':
+        depth = int(op[3:])
         # DUP POP POP Debug hint
         is_debug = 1
-        for i in range(len(stackargs)):
+        for i in range(depth):
             if oldpc + i + 1 < len(processed_code) and processed_code[oldpc + i + 1][0] != 'POP':
                 is_debug = 0
                 break
         if is_debug:
+            stackargs = [stk.pop() for i in range(depth)]
             print(' '.join(map(repr, stackargs)))
-            pblogger.log('DEBUG', vals=stackargs)
-            compustate.pc = oldpc + 2 + len(stackargs)
-        else:
             stk.extend(reversed(stackargs))
             stk.append(stackargs[-1])
+        else:
+            stk.append(stk[-depth])
     elif op[:4] == 'SWAP':
-        stk.append(stackargs[0])
-        stk.extend(reversed(stackargs[1:-1]))
-        stk.append(stackargs[-1])
+        depth = int(op[4:])
+        temp = stk[-depth-1]
+        stk[-depth-1] = stk[-1]
+        stk[-1] = temp
     elif op == 'CREATE':
-        if not mem_extend(mem, compustate, op, stackargs[1] + stackargs[2]):
+        value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, mstart + msz):
             return OUT_OF_GAS
-        value = stackargs[0]
-        data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
+        data = ''.join(map(chr, mem[mstart: mstart + msz]))
         pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
         create_msg = Message(msg.to, '', value, compustate.gas, data)
         addr, gas, code = create_contract(block, tx, create_msg)
@@ -561,48 +568,49 @@ def apply_op(block, tx, msg, processed_code, compustate):
             stk.append(0)
             compustate.gas = 0
     elif op == 'CALL':
-        new_memsize = max(stackargs[3] + stackargs[4], stackargs[5], stackargs[6])
+        gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
+            stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+        new_memsize = max(meminstart + meminsz, memoutstart + memoutsz)
         if not mem_extend(mem, compustate, op, new_memsize):
             return OUT_OF_GAS
-        gas = stackargs[0]
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
         compustate.gas -= gas
-        to = utils.encode_int(stackargs[1])
+        to = utils.encode_int(to)
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        value = stackargs[2]
-        data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
+        data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
         pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
         call_msg = Message(msg.to, to, value, gas, data)
         result, gas, data = apply_msg_send(block, tx, call_msg)
-        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=stackargs[6])
+        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz)
         if result == 0:
             stk.append(0)
         else:
             stk.append(1)
             compustate.gas += gas
-            for i in range(min(len(data), stackargs[6])):
-                mem[stackargs[5] + i] = data[i]
+            for i in range(min(len(data), memoutsz)):
+                mem[memoutstart + i] = data[i]
     elif op == 'RETURN':
-        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[1]):
+        s0, s1 = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0 + s1):
             return OUT_OF_GAS
-        return mem[stackargs[0]:stackargs[0] + stackargs[1]]
+        return mem[s0: s0 + s1]
     elif op == 'POST':
-        if not mem_extend(mem, compustate, op, stackargs[3] + stackargs[4]):
+        gas, to, value, meminstart, meminsz = \
+            stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, meminstart + meminsz):
             return OUT_OF_GAS
-        gas = stackargs[0]
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
         compustate.gas -= gas
-        to = utils.encode_int(stackargs[1])
+        to = utils.encode_int(to)
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        value = stackargs[2]
-        data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
+        data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
         pblogger.log('POST NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
         post_msg = Message(msg.to, to, value, gas, data)
         block.postqueue.append(post_msg)
     elif op == 'SUICIDE':
-        to = utils.encode_int(stackargs[0])
+        to = utils.encode_int(stk.pop())
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         block.transfer_value(msg.to, to, block.get_balance(msg.to))
         block.suicides.append(msg.to)
