@@ -385,7 +385,7 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
     found = []
     if not block_hash in chain_manager:
         logger.debug("unknown block: %r", block_hash.encode('hex'))
-        return
+        peer.send_BlockHashes([])
     last = chain_manager.get(block_hash)
     while len(found) < max_hashes:
         if last.has_parent():
@@ -399,10 +399,8 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
 
 @receiver(signals.get_blocks_received)
 def handle_get_blocks(sender, block_hashes, peer, **kwargs):
-    logger.debug("handle_get_blocks: %d", count)
-    max_hashes = min(count, MAX_GET_CHAIN_SEND_HASHES)
+    logger.debug("handle_get_blocks: %d", len(block_hashes))
     found = []
-    last = chain_manager.get(block_hash)
     for bh in block_hashes[:MAX_GET_CHAIN_REQUEST_BLOCKS]:
         if bh in chain_manager:
             found.append(chain_manager.get(bh))

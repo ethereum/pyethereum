@@ -110,7 +110,10 @@ class Synchronizer(object):
     def synchronize_unknown_block(self, peer, block_hash, force=False):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
         logger.debug('%r sync %r', peer, block_hash.encode('hex'))
-        assert block_hash not in self.chain_manager
+        if block_hash == self.chain_manager.genesis.hash or block_hash not in self.chain_manager:
+            logger.debug('%r known_hash %r, skipping', peer, block_hash.encode('hex'))
+            return
+
         if peer and (not peer in self.synchronization_tasks) or force:
             logger.debug('%r new sync task', peer)
             self.synchronization_tasks[peer] = SynchronizationTask(self.chain_manager, peer, block_hash)
@@ -120,10 +123,6 @@ class Synchronizer(object):
     def synchronize_status(self, peer, block_hash, total_difficulty):
         "Case: unknown head with sufficient difficulty"
         logger.debug('%r status  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
-        if block_hash == blocks.genesis().hash:
-            logger.debug('%r head == genesis, skipping', peer)
-            return
-        assert block_hash not in self.chain_manager
 
         # guesstimate the max difficulty difference possible for a sucessfully competing chain
         # worst case if skip it: we are on a stale chain until the other catched up
