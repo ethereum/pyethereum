@@ -32,7 +32,7 @@ class Packeter(object):
 
     """
     NETWORK_PROTOCOL_VERSION = 0
-    ETHEREUM_PROTOCOL_VERSION = 30
+    ETHEREUM_PROTOCOL_VERSION = 31
     CLIENT_VERSION = 'Ethereum(py)/0.6.1/%s/EthProtocol:%d' % (sys.platform, ETHEREUM_PROTOCOL_VERSION)
     #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
     NODE_ID = sha3('') # set in config

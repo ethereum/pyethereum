@@ -121,7 +121,11 @@ class Synchronizer(object):
     def synchronize_status(self, peer, block_hash, total_difficulty):
         "Case: unknown head with sufficient difficulty"
         logger.debug('%r status  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
+        if block_hash == blocks.genesis().hash:
+            logger.debug('%r head == genesis, skipping', peer)
+            return
         assert block_hash not in self.chain_manager
+
         # guesstimate the max difficulty difference possible for a sucessfully competing chain
         # worst case if skip it: we are on a stale chain until the other catched up
         # assume difficulty is constant

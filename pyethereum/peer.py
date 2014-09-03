@@ -197,7 +197,7 @@ class Peer(StoppableLoopThread):
                                 head_hash.encode('hex'), genesis_hash.encode('hex'))
 
         if ethereum_protocol_version != packeter.ETHEREUM_PROTOCOL_VERSION:
-            return self.send_Disconnect(reason='Incompatible ethereum protocols')
+            return self.send_Disconnect(reason='Incompatible network protocols')
 
         if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
