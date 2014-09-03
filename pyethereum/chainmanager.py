@@ -192,18 +192,18 @@ class ChainManager(StoppableLoopThread):
         "new miner is initialized if HEAD is updated"
         # prepare uncles
         uncles = set(self.get_uncles(self.head))
-        logger.debug('%d uncles for next block', len(uncles))
+        logger.debug('%d uncles for next block %r', len(uncles), uncles)
         ineligible = set() # hashes
         blk = self.head
-        for i in range(7):
-            if blk.has_parent():
-                blk = blk.get_parent()
+        for i in range(8):
             for u in blk.uncles: # assuming uncle headres
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
-                    ineligible.add(self.get(u))
-        uncles.difference_update(ineligible)
-        logger.debug('%d uncles after filtering', len(uncles))
+                    logger.debug('ineligible uncle %r', u.encode('hex'))
+                    uncles.discard(self.get(u))
+            if blk.has_parent():
+                blk = blk.get_parent()
+        logger.debug('%d uncles after filtering %r', len(uncles), uncles)
 
         miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:

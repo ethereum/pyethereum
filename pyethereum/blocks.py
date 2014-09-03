@@ -218,10 +218,10 @@ class Block(object):
             # uncle's parent cannot be the block's own parent
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
-                logger.debug("%r: Uncle does not have a valid ancestor" % self)
+                logger.debug("%r: Uncle does not have a valid ancestor", self)
                 return False
             if uncle in ineligible:
-                logger.debug("%r: Duplicate uncle!" % self)
+                logger.debug("%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)
         return True
