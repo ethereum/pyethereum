@@ -312,8 +312,9 @@ class Peer(StoppableLoopThread):
     def send_GetBlockHashes(self, block_hash, max_blocks):
         self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
 
-    def _recv_GetBlockHashes(self, block_hashes, count):
-        signals.get_block_hashes_received.send(sender=Peer, block_hashes=block_hashes, count=count, peer=self)
+    def _recv_GetBlockHashes(self, data):
+        block_hash, count = data[0], idec(data[1])
+        signals.get_block_hashes_received.send(sender=Peer, block_hash=block_hash, count=count, peer=self)
 
     def send_BlockHashes(self, block_hashes):
         self.send_packet(packeter.dump_BlockHashes(block_hashes))

@@ -40,12 +40,12 @@ class Packeter(object):
     SYNCHRONIZATION_TOKEN = 0x22400891
     CAPABILITIES = ['eth'] # + ['shh']  ethereum protocol  whisper protocol
 
-    cmd_map = dict(((0x00, 'Hello'), # FIXME: AZ sends Hello as 0x00!?
-                   (0x02, 'Disconnect'),
-                   (0x03, 'Ping'),
-                   (0x04, 'Pong'),
-                   (0x05, 'GetPeers'),
-                   (0x06, 'Peers'),
+    cmd_map = dict(((0x00, 'Hello'),
+                   (0x01, 'Disconnect'),
+                   (0x02, 'Ping'),
+                   (0x03, 'Pong'),
+                   (0x04, 'GetPeers'),
+                   (0x05, 'Peers'),
                    (0x10, 'Status'),
                    (0x11, 'GetTransactions'),
                    (0x12, 'Transactions'),
@@ -96,7 +96,7 @@ class Packeter(object):
         header = idec(packet[:4])
         if header != cls.SYNCHRONIZATION_TOKEN:
             return False, 'check header failed, skipping message,'\
-                'sync token was hex: {0:x}'.format(header)
+                'sync token was hex: %s' % hex(header)
 
         try:
             payload_len = idec(packet[4:8])

@@ -379,6 +379,9 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
     logger.debug("handle_get_block_hashes: %r %d", block_hash.encode('hex'), count)
     max_hashes = min(count, MAX_GET_CHAIN_SEND_HASHES)
     found = []
+    if not block_hash in chain_manager:
+        logger.debug("unknown block: %r", block_hash.encode('hex'))
+        return
     last = chain_manager.get(block_hash)
     while len(found) < max_hashes:
         if last.has_parent():
