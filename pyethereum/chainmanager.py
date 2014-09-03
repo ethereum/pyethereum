@@ -190,7 +190,21 @@ class ChainManager(StoppableLoopThread):
 
     def new_miner(self):
         "new miner is initialized if HEAD is updated"
-        uncles = self.get_uncles(self.head)
+        # prepare uncles
+        uncles = set(self.get_uncles(self.head))
+        logger.debug('%d uncles for next block', len(uncles))
+        ineligible = set() # hashes
+        blk = self.head
+        for i in range(7):
+            if blk.has_parent():
+                blk = blk.get_parent()
+            for u in blk.uncles: # assuming uncle headres
+                u = utils.sha3(rlp.encode(u))
+                if u in self:
+                    ineligible.add(self.get(u))
+        uncles.difference_update(ineligible)
+        logger.debug('%d uncles after filtering', len(uncles))
+
         miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:
             for tx in self.miner.get_transactions():
@@ -202,9 +216,11 @@ class ChainManager(StoppableLoopThread):
             block = self.miner.mine()
             if block:
                 # create new block
-                self.add_block(block)
-                logger.debug("broadcasting new %r" % block)
-                signals.broadcast_new_block.send(sender=None, block=block)
+                if self.add_block(block):
+                    logger.debug("broadcasting new %r" % block)
+                    signals.broadcast_new_block.send(sender=None, block=block)
+                else:
+                    self.new_miner()
 
     def receive_chain(self, transient_blocks, peer=None):
         with self.lock:
