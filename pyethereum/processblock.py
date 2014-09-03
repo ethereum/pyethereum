@@ -303,7 +303,7 @@ def calcfee(block, tx, msg, compustate, op_data):
         m_extend = max(m_extend, ceil32(start + sz) - len(mem))
     COST = m_extend / 32 * GMEMORY + base_gas
 
-    if op == 'CALL' or op == 'POST':
+    if op == 'CALL' or op == 'POST' or op == 'CALL_STATELESS':
         return COST + stk[-1]
     elif op == 'SSTORE':
         pre_occupied = COST if block.get_storage_data(msg.to, stk[-1]) else 0
@@ -581,6 +581,28 @@ def apply_op(block, tx, msg, code, compustate):
         pblogger.log('POST NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
         post_msg = Message(msg.to, to, value, gas, data)
         block.postqueue.append(post_msg)
+    elif op == 'CALL_STATELESS':
+        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+            mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
+        if len(mem) < ceil32(stackargs[5] + stackargs[6]):
+            mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
+        gas = stackargs[0]
+        to = utils.encode_int(stackargs[1])
+        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+        value = stackargs[2]
+        data = ''.join(map(chr, mem[stackargs[3]:stackargs[3] + stackargs[4]]))
+        pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
+        call_msg = Message(msg.to, msg.to, value, gas, data)
+        result, gas, data = apply_msg(block, tx, call_msg, block.get_code(to))
+        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=stackargs[6])
+        if result == 0:
+            stk.append(0)
+        else:
+            stk.append(1)
+            compustate.gas += gas
+            for i in range(min(len(data), stackargs[6])):
+                mem[stackargs[5] + i] = data[i]
+
     elif op == 'SUICIDE':
         to = utils.encode_int(stackargs[0])
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')

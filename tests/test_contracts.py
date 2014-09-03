@@ -330,3 +330,31 @@ def test_reverter():
     assert s.block.get_balance('0'*39+'1') == 9
     assert s.block.get_storage_data(c, 8081) == 0
     assert s.block.get_balance('0'*39+'2') == 0
+
+# Test stateless contracts
+
+add1_code = \
+    '''
+contract.storage[1] += msg.data[0]
+'''
+
+filename2 = "stateless_qwertyuioplkjhgfdsa.se"
+
+stateless_test_code = \
+    '''
+x = create("%s")
+call(x, 6)
+call_stateless(x, 4)
+call_stateless(x, 60)
+call(x, 40)
+return(contract.storage[1])
+''' % filename2
+
+
+def test_stateless():
+    s = tester.state()
+    open(filename2, 'w').write(add1_code)
+    c = s.contract(stateless_test_code)
+    o1 = s.send(tester.k0, c, 0, [])
+    os.remove(filename2)
+    assert o1 == [64]
