@@ -6,7 +6,6 @@ from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
 from pyethereum.utils import sha3
-from pyethereum import blocks
 from pyethereum import dispatch
 
 logger = logging.getLogger(__name__)
@@ -190,7 +189,7 @@ class Packeter(object):
         return self.dump_packet(data)
 
 
-    def dump_Status(self, total_difficulty=0, head_hash=blocks.genesis().hash, genesis_hash=blocks.genesis().hash):
+    def dump_Status(self, total_difficulty, head_hash, genesis_hash):
         """
         0x10 Status: [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
 

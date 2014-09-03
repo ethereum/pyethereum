@@ -10,7 +10,6 @@ class HashChainTask(object):
     """
 
     NUM_HASHES_PER_REQUEST = 2000
-    GENESIS_HASH = blocks.genesis().hash
 
     def __init__(self, chain_manager, peer, block_hash):
         self.chain_manager = chain_manager
@@ -24,10 +23,10 @@ class HashChainTask(object):
 
     def received_block_hashes(self, block_hashes):
         logger.warn('HashChainTask.received_block_hashes %d', len(block_hashes))
-        if self.GENESIS_HASH in block_hashes:
+        if self.chain_manager.genesis.hash in block_hashes:
             logger.warn('%r has different chain starting from genesis', self.peer)
         for bh in block_hashes:
-            if bh in self.chain_manager or bh == self.GENESIS_HASH:
+            if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
                 logger.debug('%r matching block hash found %r', self.peer, bh.encode('hex'))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)

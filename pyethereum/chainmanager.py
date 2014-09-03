@@ -134,6 +134,10 @@ class ChainManager(StoppableLoopThread):
         self.new_miner()
 
     @property
+    def genesis(self):
+        return blocks.genesis()
+
+    @property
     def head(self):
         if 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
