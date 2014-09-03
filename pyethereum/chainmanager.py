@@ -36,7 +36,7 @@ class Index(object):
         - optional to resolve txhash to block:tx
 
     """
-    def __init__(self, db, index_transactions=True, i_know_what_i_do=False):
+    def __init__(self, db, index_transactions=True):
         self.db = db
         self._index_transactions = index_transactions
 
@@ -45,15 +45,32 @@ class Index(object):
         if self._index_transactions:
             self._add_transactions(blk)
 
+
+    # block by number #########
+
+    def _block_by_number_key(self, number):
+        return 'blocknumber:%d' % number
+
     def update_blocknumbers(self, blk):
         "start from head and update until the existing indices match the block"
         while True:
-            self.db.put('blocknumber:%d' % blk.number, blk.hash)
+            self.db.put(self._block_by_number_key(blk.number), blk.hash)
             if blk.number == 0:
                 break
             blk = blk.get_parent()
-            if blk.hash == self.get_block_by_number(blk.number):
+            if self.has_block_by_number(blk.number) and \
+                    self.get_block_by_number(blk.number) == blk.hash:
                 break
+
+    def has_block_by_number(self, number):
+        return self._block_by_number_key(number) in self.db
+
+    def get_block_by_number(self, number):
+        "returns block hash"
+        return self.db.get(self._block_by_number_key(number))
+
+
+    # transactions #############
 
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
@@ -74,9 +91,7 @@ class Index(object):
         tx_data, msr, gas = blk.get_transaction(num)
         return Transaction.create(tx_data), blk
 
-    def get_block_by_number(self, number):
-        "returns block hash"
-        return self.db.get('blocknumber:%d' % number)
+    # children ##############
 
     def _child_db_key(self, blk_hash):
         return 'ci:' + blk_hash
@@ -126,7 +141,10 @@ class ChainManager(StoppableLoopThread):
         return blocks.get_block(ptr)
 
     def _update_head(self, block):
-        bh = block.hash
+        if not block.is_genesis():
+            assert self.head.chain_difficulty() < block.chain_difficulty()
+            if block.get_parent() != self.head:
+                logger.debug('New Head %r is on a different branch. Old was:%r', block, self.head)
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
         self.new_miner()  # reset mining
@@ -205,9 +223,10 @@ class ChainManager(StoppableLoopThread):
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
                     # if this fails, we need to rewind state
-                    logger.debug(
-                        'Malicious %r w/ invalid Transaction %r', t_block, e)
-                    continue
+                    logger.debug('%r w/ invalid Transaction %r', t_block, e)
+                    # stop current syncing of this chain and skip the child blocks
+                    self.synchronizer.stop_synchronization(peer)
+                    return
                 except blocks.UnknownParentException:
                     if t_block.prevhash == blocks.GENESIS_PREVHASH:
                         logger.debug('Rec Incompatible Genesis %r', t_block)
@@ -218,7 +237,12 @@ class ChainManager(StoppableLoopThread):
                         assert t_block.prevhash != blocks.genesis().hash
                         logger.debug('%s with unknown parent %s, peer:%r', t_block, t_block.prevhash.encode('hex'), peer)
                         if len(transient_blocks) != 1:
-                            logger.warn('%s > 1 blocks sent!?',len(transient_blocks))
+                            # strange situation here.
+                            # we receive more than 1 block, so it's not a single newly mined one
+                            # sync/network/... failed to add the needed parent at some point
+                            # well, this happens whenever we can't validate a block!
+                            # we should disconnect!
+                            logger.warn('%s received, but unknown parent.',len(transient_blocks))
                         if peer:
                             # request chain for newest known hash
                             self.synchronizer.synchronize_unknown_block(peer, transient_blocks[-1].hash)
@@ -275,7 +299,9 @@ class ChainManager(StoppableLoopThread):
         if block.chain_difficulty() > self.head.chain_difficulty():
             logger.debug('New Head %r', block)
             self._update_head(block)
-
+        elif block.number > self.head.number:
+            logger.warn('%r has higher blk number than head %r but lower chain_difficulty of %d vs %d',
+                                block, self.head, block.chain_difficulty(), self.head.chain_difficulty())
         self.commit() # batch commits all changes that came with the new block
 
         return True
