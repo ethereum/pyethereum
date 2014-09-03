@@ -92,7 +92,8 @@ class PeerManager(StoppableLoopThread):
         if not peer.stopped():
             peer.stop()
         with self.lock:
-            self.connected_peers.remove(peer)
+            if peer in self.connected_peers:
+                self.connected_peers.remove(peer)
         # connect new peers if there are no candidates
 
     def _create_peer_sock(self):
