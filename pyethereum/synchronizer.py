@@ -84,7 +84,7 @@ class SynchronizationTask(object):
 class Synchronizer(object):
     """"
     Cases:
-        on "recv_Hello": received unknown head_hash w/ sufficient difficulty
+        on "recv_Status": received unknown head_hash w/ sufficient difficulty
         on "recv_Blocks": received block w/o parent (new block mined, competing chain discovered)
 
     Naive Strategy:
@@ -103,20 +103,24 @@ class Synchronizer(object):
         self.chain_manager = chain_manager
         self.synchronization_tasks = {} # peer > syncer # syncer.unknown_hash as marker for task
 
-    def synchronize_unknown_block(self, peer, block_hash):
+    def stop_synchronization(self, peer):
+        logger.debug('%r sync stopped', peer)
+        if peer in self.synchronization_tasks:
+            del self.synchronization_tasks[peer]
+
+    def synchronize_unknown_block(self, peer, block_hash, force=False):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
         logger.debug('%r sync %r', peer, block_hash.encode('hex'))
         assert block_hash not in self.chain_manager
-        if peer and not peer in self.synchronization_tasks:
+        if peer and (not peer in self.synchronization_tasks) or force:
             logger.debug('%r new sync task', peer)
             self.synchronization_tasks[peer] = SynchronizationTask(self.chain_manager, peer, block_hash)
         else:
             logger.debug('%r already has a synctask, sorry', peer)
 
-
-    def synchronize_hello(self, peer, block_hash, total_difficulty):
+    def synchronize_status(self, peer, block_hash, total_difficulty):
         "Case: unknown head with sufficient difficulty"
-        logger.debug('%r Hello  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
+        logger.debug('%r status  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
         assert block_hash not in self.chain_manager
         # guesstimate the max difficulty difference possible for a sucessfully competing chain
         # worst case if skip it: we are on a stale chain until the other catched up

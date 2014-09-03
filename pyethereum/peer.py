@@ -40,20 +40,23 @@ class Peer(StoppableLoopThread):
         self.ip = ip
         # None if peer was created in response to external connect
         self.port = port
-        self.client_id = ''
+        self.client_version = ''
         self.node_id = ''
-        self.response_queue = Queue.Queue()
+        self.capabilities = [] # ['eth', 'shh']
+
         self.hello_received = False
         self.hello_sent = False
         self.last_valid_packet_received = time.time()
         self.last_asked_for_peers = 0
         self.last_pinged = 0
-        self.hello_total_difficulty = None
-        self.hello_head_hash = None
+        self.status_received = False
+        self.status_sent = False
+        self.status_total_difficulty = None
+        self.status_head_hash = None
 
         self.recv_buffer = ''
+        self.response_queue = Queue.Queue()
 
-        # connect signals
 
     def __repr__(self):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
@@ -142,33 +145,59 @@ class Peer(StoppableLoopThread):
         getattr(self, func_name)(data)
 
 
-### Hello
+    # Handshake
 
-    def send_Hello(self, head_hash, head_total_difficulty, genesis_hash):
-        self.send_packet(packeter.dump_Hello(head_hash, head_total_difficulty, genesis_hash))
+    def has_ethereum_capabilities(self):
+        return 'eth' in self.capabilities
+
+    def send_Hello(self):
+        logger.debug('%r sending Hello', self)
+        self.send_packet(packeter.dump_Hello())
         self.hello_sent = True
 
     def _recv_Hello(self, data):
+        # 0x01 Hello: [0x01: P, protocolVersion: P, clientVersion: B, [cap0: B, cap1: B, ...], listenPort: P, id: B_64]
+        _decode = (idec, str, list, idec, str)
+        data = [_decode[i](x) for i,x in enumerate(data)]
+
+        network_protocol_version, client_version = data[0], data[1]
+        self.capabilities, listen_port, node_id = data[2], data[3], data[4]
+
+        logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
+                     self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
+
+        if network_protocol_version != packeter.NETWORK_PROTOCOL_VERSION:
+            return self.send_Disconnect(reason='Incompatible network protocols')
+
+        self.hello_received = True
+        self.client_version = client_version
+        self.node_id = node_id
+        self.port = listen_port # replace connection port with listen port
+
+        if not self.hello_sent:
+            self.send_Hello()
+        signals.peer_handshake_success.send(sender=Peer, peer=self)
+
+### Status
+
+    def send_Status(self, head_hash, head_total_difficulty, genesis_hash):
+        self.send_packet(packeter.dump_Status(head_hash, head_total_difficulty, genesis_hash))
+        self.status_sent = True
+
+    def _recv_Status(self, data):
+        # [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
         # check compatibility
 
         # old proto fields
-        peer_protocol_version, network_id, client_id = idec(data[0]), idec(data[1]), data[2]
-        capabilities, listen_port, node_id = idec(data[3]), idec(data[4]), data[5]
+        ethereum_protocol_version, network_id = idec(data[0]), idec(data[1])
+        total_difficulty, head_hash, genesis_hash  = idec(data[2]), data[3], data[4]
 
-        if len(data) != 9:
-            logger.debug('received Hello %s wrong PROTOCOL:%r NODE_ID:%r', client_id,
-                     peer_protocol_version, node_id.encode('hex'))
-            return self.send_Disconnect(reason='Incompatible network protocols')
+        logger.debug('%r, received Status ETHPROTOCOL:%r TD:%d HEAD:%r GENESIS:%r',
+                                self, ethereum_protocol_version, total_difficulty,
+                                head_hash.encode('hex'), genesis_hash.encode('hex'))
 
-        # post v27 proto
-        total_difficulty, head_hash = idec(data[6]), data[7]
-        genesis_hash = data[8]
-
-        logger.debug('received Hello %s PROTOCOL:%r NODE_ID:%r GENESIS:%r', client_id,
-                     peer_protocol_version, node_id.encode('hex'), genesis_hash.encode('hex'))
-
-        if peer_protocol_version != packeter.PROTOCOL_VERSION:
-            return self.send_Disconnect(reason='Incompatible network protocols')
+        if ethereum_protocol_version != packeter.ETHEREUM_PROTOCOL_VERSION:
+            return self.send_Disconnect(reason='Incompatible ethereum protocols')
 
         if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
@@ -176,15 +205,10 @@ class Peer(StoppableLoopThread):
         if genesis_hash != blocks.genesis().hash:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        # add to known peers list in handshake signal
-        self.hello_received = True
-        self.client_id = client_id
-        self.node_id = node_id
-        self.port = listen_port  # replace connection port with listen port
-        self.hello_head_hash = head_hash
-        self.hello_total_difficulty = total_difficulty
-
-        signals.peer_handshake_success.send(sender=Peer, peer=self)
+        self.status_received = True
+        self.status_head_hash = head_hash
+        self.status_total_difficulty = total_difficulty
+        signals.peer_status_received.send(sender=Peer, peer=self)
 
 ### ping pong
 
@@ -207,8 +231,7 @@ class Peer(StoppableLoopThread):
                         'Wrong genesis block')
 
     def send_Disconnect(self, reason=None):
-        logger.info('disconnecting {0}, reason: {1}'.format(
-            str(self), reason or ''))
+        logger.info('%r sending disconnect: %r', self, reason)
         self.send_packet(packeter.dump_Disconnect(reason=reason))
         # end connection
         time.sleep(2)
@@ -218,12 +241,12 @@ class Peer(StoppableLoopThread):
     def _recv_Disconnect(self, data):
         if len(data):
             reason = packeter.disconnect_reasons_map_by_id[idec(data[0])]
-            logger.info('{0} sent disconnect, {1} '.format(repr(self), reason))
+            logger.info('%r received disconnect: %r', self, reason)
             forget = reason in self.reasons_to_forget
         else:
             forget = None
-        signals.peer_disconnect_requested.send(
-                sender=Peer, peer=self, forget=forget)
+            logger.info('%r received disconnect: w/o reason', self)
+        signals.peer_disconnect_requested.send(sender=Peer, peer=self, forget=forget)
 
 ### peers
 
