@@ -117,6 +117,7 @@ class PeerManager(StoppableLoopThread):
         logger.debug('connected {0}:{1}'.format(ip, port))
         peer = self.add_peer(sock, ip, port)
 
+        peer.send_Hello()
         return peer
 
     def get_peer_candidates(self):

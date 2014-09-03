@@ -183,13 +183,15 @@ class Peer(StoppableLoopThread):
 ### Status
 
     def send_Status(self, head_hash, head_total_difficulty, genesis_hash):
-        self.send_packet(packeter.dump_Status(head_hash, head_total_difficulty, genesis_hash))
+        logger.debug('sending status TD:%d HEAD:%r GENESIS:%r',
+                        head_total_difficulty, head_hash.encode('hex'), genesis_hash.encode('hex'))
+
+        self.send_packet(packeter.dump_Status(head_total_difficulty, head_hash, genesis_hash))
         self.status_sent = True
 
     def _recv_Status(self, data):
         # [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
         # check compatibility
-
         try:
             ethereum_protocol_version, network_id = idec(data[0]), idec(data[1])
             total_difficulty, head_hash, genesis_hash  = idec(data[2]), data[3], data[4]
