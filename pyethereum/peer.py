@@ -158,10 +158,12 @@ class Peer(StoppableLoopThread):
     def _recv_Hello(self, data):
         # 0x01 Hello: [0x01: P, protocolVersion: P, clientVersion: B, [cap0: B, cap1: B, ...], listenPort: P, id: B_64]
         _decode = (idec, str, list, idec, str)
-        data = [_decode[i](x) for i,x in enumerate(data)]
-
-        network_protocol_version, client_version = data[0], data[1]
-        self.capabilities, listen_port, node_id = data[2], data[3], data[4]
+        try:
+            data = [_decode[i](x) for i,x in enumerate(data)]
+            network_protocol_version, client_version = data[0], data[1]
+            self.capabilities, listen_port, node_id = data[2], data[3], data[4]
+        except IndexError:
+            return self.send_Disconnect(reason='Incompatible network protocols')
 
         logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
                      self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
@@ -188,9 +190,11 @@ class Peer(StoppableLoopThread):
         # [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
         # check compatibility
 
-        # old proto fields
-        ethereum_protocol_version, network_id = idec(data[0]), idec(data[1])
-        total_difficulty, head_hash, genesis_hash  = idec(data[2]), data[3], data[4]
+        try:
+            ethereum_protocol_version, network_id = idec(data[0]), idec(data[1])
+            total_difficulty, head_hash, genesis_hash  = idec(data[2]), data[3], data[4]
+        except IndexError:
+            return self.send_Disconnect(reason='Incompatible network protocols')
 
         logger.debug('%r, received Status ETHPROTOCOL:%r TD:%d HEAD:%r GENESIS:%r',
                                 self, ethereum_protocol_version, total_difficulty,
