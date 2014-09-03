@@ -504,9 +504,9 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'SLOAD':
         stk.append(block.get_storage_data(msg.to, stackargs[0]))
     elif op == 'SSTORE':
-        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, stk[-1]) else 0
-        post_occupied = GSTORAGE if stk[-2] else 0
-        gascost = post_occupied - pre_occupied
+        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, stackargs[0]) else 0
+        post_occupied = GSTORAGE if stackargs[1] else 0
+        gascost = GSTORAGE + post_occupied - pre_occupied
         if compustate.gas < gascost:
             out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
         compustate.gas -= gascost
