@@ -419,7 +419,7 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append((stackargs[0] * stackargs[1]) % stackargs[2]
                    if stackargs[2] else 0)
     elif op == 'SHA3':
-        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
+        if stackargs[1] and len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
@@ -442,7 +442,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
+        if stackargs[2] and len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[1] + i < len(msg.data):
@@ -452,7 +452,7 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
-        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
+        if stackargs[2] and len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
         for i in range(stackargs[2]):
             if stackargs[1] + i < len(code):
@@ -531,7 +531,7 @@ def apply_op(block, tx, msg, code, compustate):
         stk.extend(reversed(stackargs[1:-1]))
         stk.append(stackargs[-1])
     elif op == 'CREATE':
-        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
+        if stackargs[2] and len(mem) < ceil32(stackargs[1] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
         value = stackargs[0]
         data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
@@ -546,9 +546,9 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
             compustate.gas = 0
     elif op == 'CALL':
-        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+        if stackargs[4] and len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
-        if len(mem) < ceil32(stackargs[5] + stackargs[6]):
+        if stackargs[6] and len(mem) < ceil32(stackargs[5] + stackargs[6]):
             mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
         gas = stackargs[0]
         to = utils.encode_int(stackargs[1])
@@ -567,11 +567,11 @@ def apply_op(block, tx, msg, code, compustate):
             for i in range(min(len(data), stackargs[6])):
                 mem[stackargs[5] + i] = data[i]
     elif op == 'RETURN':
-        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
+        if stackargs[1] and len(mem) < ceil32(stackargs[0] + stackargs[1]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'POST':
-        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+        if stackargs[4] and len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
         gas = stackargs[0]
         to = utils.encode_int(stackargs[1])
@@ -582,9 +582,9 @@ def apply_op(block, tx, msg, code, compustate):
         post_msg = Message(msg.to, to, value, gas, data)
         block.postqueue.append(post_msg)
     elif op == 'CALL_STATELESS':
-        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
+        if stackargs[4] and len(mem) < ceil32(stackargs[3] + stackargs[4]):
             mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
-        if len(mem) < ceil32(stackargs[5] + stackargs[6]):
+        if stackargs[6] and len(mem) < ceil32(stackargs[5] + stackargs[6]):
             mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
         gas = stackargs[0]
         to = utils.encode_int(stackargs[1])
