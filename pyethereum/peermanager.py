@@ -11,7 +11,7 @@ import rlp
 import signals
 import blocks
 from peer import Peer
-from chainmanager import chain_manager
+
 
 DEFAULT_SOCKET_TIMEOUT = .5
 
@@ -84,6 +84,10 @@ class PeerManager(StoppableLoopThread):
         return set((p.ip, p.port, p.node_id) for p in self.connected_peers
                    if p.hello_received)
 
+    @property
+    def connected_ethereum_peers(self):
+        return [p for p in self.connected_peers if p.has_ethereum_capabilities()]
+
     def remove_peer(self, peer):
         if not peer.stopped():
             peer.stop()
@@ -112,8 +116,6 @@ class PeerManager(StoppableLoopThread):
         logger.debug('connected {0}:{1}'.format(ip, port))
         peer = self.add_peer(sock, ip, port)
 
-        # Send Hello
-        peer.send_Hello(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
         return peer
 
     def get_peer_candidates(self):
@@ -149,6 +151,7 @@ class PeerManager(StoppableLoopThread):
                 peer.send_Ping()
 
     def _connect_peers(self):
+        # FIXME: prefer has_ethereum_capabilities
         num_peers = self.config.getint('network', 'num_peers')
         candidates = self.get_peer_candidates()
         if len(self.connected_peers) < num_peers:
@@ -209,7 +212,7 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
 
 @receiver(signals.broadcast_new_block)
 def send_blocks_handler(sender, block, **kwargs):
-    for peer in peer_manager.connected_peers:
+    for peer in peer_manager.connected_ethereum_peers:
         peer.send_Blocks([block])
 
 
@@ -246,7 +249,7 @@ def peer_addresses_received_handler(sender, addresses, **kwargs):
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]
-    for peer in peer_manager.connected_peers:
+    for peer in peer_manager.connected_ethereum_peers:
         peer.send_Transactions(transactions)
 
 

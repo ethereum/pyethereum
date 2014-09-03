@@ -17,6 +17,7 @@ peer_disconnect_requested = Signal(providing_args=["peer", "forget"])
 
 peer_addresses_received = Signal(providing_args=["addresses"])
 peer_handshake_success = Signal(providing_args=["peer"])
+peer_status_received = Signal(providing_args=["peer"])
 
 getpeers_received = Signal(providing_args=["peer"])
 gettransactions_received = Signal(providing_args=["peer"])

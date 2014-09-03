@@ -5,6 +5,7 @@ from pyethereum import rlp
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
+from pyethereum.utils import sha3
 from pyethereum import blocks
 from pyethereum import dispatch
 
@@ -27,34 +28,31 @@ class Packeter(object):
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
-    stateless!
-    .. note::
-        #.  Can only be used after the `config` method is called
-    '''
-    """
-    PROTOCOL_VERSION = 30
-    # is the node s Unique Identifier and is the 512-bit hash that serves to
-    # identify the node.
-    CLIENT_ID = 'Ethereum(py)/0.6.0/%s/Protocol:%d' % (sys.platform,
-                                                       PROTOCOL_VERSION)
+    https://github.com/ethereum/cpp-ethereum/wiki/%C3%90%CE%9EVP2P-Networking
 
+    """
+    NETWORK_PROTOCOL_VERSION = 0
+    ETHEREUM_PROTOCOL_VERSION = 30
+    CLIENT_VERSION = 'Ethereum(py)/0.6.1/%s/EthProtocol:%d' % (sys.platform, ETHEREUM_PROTOCOL_VERSION)
+    #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
+    NODE_ID = sha3('') # set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
-    CAPABILITIES = 0x01 + 0x02 + 0x04  # node discovery + transaction relaying
+    CAPABILITIES = ['eth'] # + ['shh']  ethereum protocol  whisper protocol
 
-
-    cmd_map = dict(((0x00, 'Hello'),
-                   (0x01, 'Disconnect'),
-                   (0x02, 'Ping'),
-                   (0x03, 'Pong'),
-                   (0x10, 'GetPeers'),
-                   (0x11, 'Peers'),
+    cmd_map = dict(((0x00, 'Hello'), # FIXME: AZ sends Hello as 0x00!?
+                   (0x02, 'Disconnect'),
+                   (0x03, 'Ping'),
+                   (0x04, 'Pong'),
+                   (0x05, 'GetPeers'),
+                   (0x06, 'Peers'),
+                   (0x10, 'Status'),
+                   (0x11, 'GetTransactions'),
                    (0x12, 'Transactions'),
-                   (0x13, 'Blocks'),
-                   (0x16, 'GetTransactions'),
-                   (0x17, 'GetBlockHashes'),
-                   (0x18, 'BlockHashes'),
-                   (0x19, 'GetBlocks'),
+                   (0x13, 'GetBlockHashes'),
+                   (0x14, 'BlockHashes'),
+                   (0x15, 'GetBlocks'),
+                   (0x16, 'Blocks'),
                    ))
     cmd_map_by_name = dict((v, k) for k, v in cmd_map.items())
 
@@ -77,7 +75,7 @@ class Packeter(object):
 
     def configure(self, config):
         self.config = config
-        self.CLIENT_ID = self.config.get('network', 'client_id') \
+        self.CLIENT_ID = self.config.get('network', 'client_version') \
             or self.CLIENT_ID
         self.NODE_ID = self.config.get('network', 'node_id')
 
@@ -113,8 +111,9 @@ class Packeter(object):
         except Exception as e:
             return False, str(e)
 
+        #logger.debug('load packet, cmd:%d %r', idec(payload[0]), Packeter.cmd_map.get(idec(payload[0]),'unknown'))
         if (not len(payload)) or (idec(payload[0]) not in cls.cmd_map):
-            return False, 'check cmd failed'
+            return False, 'check cmd %r failed' % idec(payload[0])
 
         cmd = Packeter.cmd_map.get(idec(payload[0]))
         remain = packet[8 + payload_len:]
@@ -141,42 +140,22 @@ class Packeter(object):
         packet += payload
         return packet
 
-    def dump_Hello(self, total_difficulty=0, head_hash=blocks.genesis().hash, genesis_hash=blocks.genesis().hash):
+    def dump_Hello(self):
         """
-        [0x00, PROTOCOL_VERSION, NETWORK_ID, CLIENT_ID, CAPABILITIES,
-        LISTEN_PORT, NODE_ID]
-        First packet sent over the connection, and sent once by both sides.
-        No other messages may be sent until a Hello is received.
-        PROTOCOL_VERSION is one of:
-            0x00 for PoC-1;
-            0x01 for PoC-2;
-            0x07 for PoC-3.
-            0x08 sent by Ethereum(++)/v0.3.11/brew/Darwin/unknown
-        NETWORK_ID should be 0.
-        CLIENT_ID Specifies the client software identity, as a human-readable
-            string (e.g. "Ethereum(++)/1.0.0").
-        LISTEN_PORT specifies the port that the client is listening on
-            (on the interface that the present connection traverses).
-            If 0 it indicates the client is not listening.
-        CAPABILITIES specifies the capabilities of the client as a set of
-            flags; presently three bits are used:
-            0x01 for peers discovery,
-            0x02 for transaction relaying,
-            0x04 for block-chain querying.
-        NODE_ID is optional and specifies a 512-bit hash, (potentially to be
-            used as public key) that identifies this node.
+        0x01 Hello: [0x01: P, protocolVersion: P, clientVersion: B, [cap0: B, cap1: B, ...], listenPort: P, id: B_64]
 
+        protocolVersion: The underlying network protocol. 0
+        clientVersion: The underlying client. A user-readable string.
+        capN: A peer-network capability code, readable ASCII and 3 letters. Currently only "eth" and "shh" are known.
+        listenPort: The port on which the peer is listening for an incoming connection.
+        id: The identity and public key of the peer.
         """
         data = [self.cmd_map_by_name['Hello'],
-                self.PROTOCOL_VERSION,
-                self.NETWORK_ID,
-                self.CLIENT_ID,
+                self.NETWORK_PROTOCOL_VERSION,
+                self.CLIENT_VERSION,
                 self.CAPABILITIES,
                 self.config.getint('network', 'listen_port'),
-                self.NODE_ID,
-                head_hash, # chain head hash
-                total_difficulty, # chain head total difficulty,
-                genesis_hash # genesis hash
+                self.NODE_ID
                 ]
         return self.dump_packet(data)
 
@@ -209,6 +188,27 @@ class Packeter(object):
             ip = ''.join(chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)
+
+
+    def dump_Status(self, total_difficulty=0, head_hash=blocks.genesis().hash, genesis_hash=blocks.genesis().hash):
+        """
+        0x10 Status: [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
+
+        protocolVersion: The version of the Ethereum protocol this peer implements. 30 at present.
+        networkID: The network version of Ethereum for this peer. 0 for the official testnet.
+        totalDifficulty: Total Difficulty of the best chain. Integer, as found in block header.
+        latestHash: The hash of the block with the highest validated total difficulty.
+        GenesisHash: The hash of the Genesis block.
+        """
+        data = [self.cmd_map_by_name['Status'],
+                self.ETHEREUM_PROTOCOL_VERSION,
+                self.NETWORK_ID,
+                total_difficulty, # chain head total difficulty,
+                head_hash, # chain head hash
+                genesis_hash # genesis hash
+                ]
+        return self.dump_packet(data)
+
 
     def dump_Transactions(self, transactions):
         data = [self.cmd_map_by_name['Transactions']] + transactions

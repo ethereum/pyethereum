@@ -84,7 +84,7 @@ class SynchronizationTask(object):
 class Synchronizer(object):
     """"
     Cases:
-        on "recv_Hello": received unknown head_hash w/ sufficient difficulty
+        on "recv_Status": received unknown head_hash w/ sufficient difficulty
         on "recv_Blocks": received block w/o parent (new block mined, competing chain discovered)
 
     Naive Strategy:
@@ -118,9 +118,9 @@ class Synchronizer(object):
         else:
             logger.debug('%r already has a synctask, sorry', peer)
 
-    def synchronize_hello(self, peer, block_hash, total_difficulty):
+    def synchronize_status(self, peer, block_hash, total_difficulty):
         "Case: unknown head with sufficient difficulty"
-        logger.debug('%r Hello  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
+        logger.debug('%r status  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
         assert block_hash not in self.chain_manager
         # guesstimate the max difficulty difference possible for a sucessfully competing chain
         # worst case if skip it: we are on a stale chain until the other catched up

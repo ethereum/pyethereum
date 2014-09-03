@@ -366,8 +366,13 @@ class ChainManager(StoppableLoopThread):
         block_numbers = range(block.number+1, min(self.head.number, block.number+count))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
 
+
+
 chain_manager = ChainManager()
 
+
+
+# receivers ###########
 
 @receiver(signals.get_block_hashes_received)
 def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
@@ -405,19 +410,25 @@ def handle_get_blocks(sender, block_hashes, peer, **kwargs):
 def config_chainmanager(sender, config, **kwargs):
     chain_manager.configure(config)
 
-@receiver(signals.peer_handshake_success)
-def new_peer_connected(sender, peer, **kwargs):
-    logger.debug("received new_peer_connected")
-    # reply with hello if not yet sent
-    if not peer.hello_sent:
-        peer.send_Hello(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+@receiver(signals.peer_status_received)
+def peer_status_received(sender, peer, **kwargs):
+    logger.debug("%r received status", peer)
     # request chain
     with peer.lock:
-        chain_manager.synchronizer.synchronize_hello(peer, peer.hello_head_hash, peer.hello_total_difficulty)
+        chain_manager.synchronizer.synchronize_status(peer, peer.status_head_hash, peer.status_total_difficulty)
     # request transactions
     with peer.lock:
-        logger.debug("send get transactions")
+        logger.debug("%r asking for transactions", peer)
         peer.send_GetTransactions()
+
+
+@receiver(signals.peer_handshake_success)
+def peer_handshake(sender, peer, **kwargs):
+    # reply with status if not yet sent
+    if peer.has_ethereum_capabilities() and not peer.status_sent:
+        logger.debug("%r handshake, sending status", peer)
+        peer.send_Status(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, **kwargs):

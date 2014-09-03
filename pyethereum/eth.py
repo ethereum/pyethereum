@@ -34,7 +34,7 @@ def create_default_config():
     config.set('network', 'num_peers', '5')
     config.set('network', 'remote_port', '30303')
     config.set('network', 'remote_host', '')
-    config.set('network', 'client_id', Packeter.CLIENT_ID)
+    config.set('network', 'client_version', Packeter.CLIENT_VERSION)
     config.set('network', 'node_id', sha3(str(uuid.uuid1())).encode('hex'))
 
     config.add_section('api')
@@ -56,7 +56,7 @@ def create_default_config():
 
 def create_config():
     config = create_default_config()
-    parser = ArgumentParser(version=Packeter.CLIENT_ID)
+    parser = ArgumentParser(version=Packeter.CLIENT_VERSION)
     parser.add_argument(
         "-l", "--listen",
         dest="listen_port",
