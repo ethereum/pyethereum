@@ -122,6 +122,7 @@ class ChainManager(StoppableLoopThread):
         self.miner = None
         self.blockchain = None
         self.synchronizer = Synchronizer(self)
+        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
 
     def configure(self, config, genesis=None):
         self.config = config
@@ -132,10 +133,6 @@ class ChainManager(StoppableLoopThread):
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
         self.new_miner()
-
-    @property
-    def genesis(self):
-        return blocks.genesis()
 
     @property
     def head(self):
