@@ -42,6 +42,7 @@ pblogger = PBLogger()
 
 GDEFAULT = 1
 GMEMORY = 1
+GSTORAGE = 100
 GTXDATA = 5
 GTXCOST = 500
 
@@ -293,24 +294,23 @@ def ceil32(x):
     return x if x % 32 == 0 else x + 32 - (x % 32)
 
 
-def calcfee(block, tx, msg, compustate, op_data):
-    stk, mem = compustate.stack, compustate.memory
-    op, ins, outs, memuse, base_gas = op_data
-    m_extend = 0
-    for start, sz in memuse:
-        start = start if start >= 0 else stk[start]
-        sz = sz if sz >= 0 else stk[sz]
-        m_extend = max(m_extend, ceil32(start + sz) - len(mem))
-    COST = m_extend / 32 * GMEMORY + base_gas
+def out_of_gas_exception(expense, fee, compustate, op):
+    pblogger.log('OUT OF GAS', expense=expense, needed=fee, available=compustate.gas,
+                 op=op, stack=list(reversed(compustate.stack)))
+    return OUT_OF_GAS
 
-    if op == 'CALL' or op == 'POST':
-        return COST + stk[-1]
-    elif op == 'SSTORE':
-        pre_occupied = COST if block.get_storage_data(msg.to, stk[-1]) else 0
-        post_occupied = COST if stk[-2] else 0
-        return COST + post_occupied - pre_occupied
-    else:
-        return COST
+
+def mem_extend(mem, compustate, op, newsize):
+    if len(mem) < ceil32(newsize):
+        m_extend = newsize - len(mem)
+        mem.extend([0] * m_extend)
+        memfee = GMEMORY * (m_extend / 32)
+        compustate.gas -= memfee
+        if compustate.gas < 0:
+            out_of_gas_exception('mem_extend', memfee, compustate, op)
+            return False
+    return True
+
 
 # Does not include paying opfee
 def apply_op(block, tx, msg, code, compustate):
@@ -321,11 +321,9 @@ def apply_op(block, tx, msg, code, compustate):
                      available=len(compustate.stack))
         return []
     # out of gas error
-    fee = calcfee(block, tx, msg, compustate, opdata)
+    fee = base_gas
     if fee > compustate.gas:
-        pblogger.log('OUT OF GAS', needed=fee, available=compustate.gas,
-                            op=op, stack=list(reversed(compustate.stack)))
-        return OUT_OF_GAS
+        return out_of_gas_exception('base_gas', fee, compustate, op)
     stackargs = []
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
@@ -419,8 +417,8 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append((stackargs[0] * stackargs[1]) % stackargs[2]
                    if stackargs[2] else 0)
     elif op == 'SHA3':
-        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
-            mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[1]):
+            return OUT_OF_GAS
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + stackargs[1]]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
     elif op == 'ADDRESS':
@@ -442,8 +440,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
-            mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[2]):
+            return OUT_OF_GAS
         for i in range(stackargs[2]):
             if stackargs[1] + i < len(msg.data):
                 mem[stackargs[0] + i] = ord(msg.data[stackargs[1] + i])
@@ -452,8 +450,8 @@ def apply_op(block, tx, msg, code, compustate):
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'CODECOPY':
-        if len(mem) < ceil32(stackargs[0] + stackargs[2]):
-            mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[2]):
+            return OUT_OF_GAS
         for i in range(stackargs[2]):
             if stackargs[1] + i < len(code):
                 mem[stackargs[0] + i] = ord(code[stackargs[1] + i])
@@ -477,24 +475,30 @@ def apply_op(block, tx, msg, code, compustate):
         stk.append(stackargs[0])
         stk.append(stackargs[1])
     elif op == 'MLOAD':
-        if len(mem) < ceil32(stackargs[0] + 32):
-            mem.extend([0] * (ceil32(stackargs[0] + 32) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + 32):
+            return OUT_OF_GAS
         data = ''.join(map(chr, mem[stackargs[0]:stackargs[0] + 32]))
         stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
-        if len(mem) < ceil32(stackargs[0] + 32):
-            mem.extend([0] * (ceil32(stackargs[0] + 32) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + 32):
+            return OUT_OF_GAS
         v = stackargs[1]
         for i in range(31, -1, -1):
             mem[stackargs[0] + i] = v % 256
             v /= 256
     elif op == 'MSTORE8':
-        if len(mem) < ceil32(stackargs[0] + 1):
-            mem.extend([0] * (ceil32(stackargs[0] + 1) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + 1):
+            return OUT_OF_GAS
         mem[stackargs[0]] = stackargs[1] % 256
     elif op == 'SLOAD':
         stk.append(block.get_storage_data(msg.to, stackargs[0]))
     elif op == 'SSTORE':
+        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, stk[-1]) else 0
+        post_occupied = GSTORAGE if stk[-2] else 0
+        gascost = post_occupied - pre_occupied
+        if compustate.gas < gascost:
+            out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
+        compustate.gas -= gascost
         block.set_storage_data(msg.to, stackargs[0], stackargs[1])
     elif op == 'JUMP':
         compustate.pc = stackargs[0]
@@ -531,8 +535,8 @@ def apply_op(block, tx, msg, code, compustate):
         stk.extend(reversed(stackargs[1:-1]))
         stk.append(stackargs[-1])
     elif op == 'CREATE':
-        if len(mem) < ceil32(stackargs[1] + stackargs[2]):
-            mem.extend([0] * (ceil32(stackargs[1] + stackargs[2]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[1] + stackargs[2]):
+            return OUT_OF_GAS
         value = stackargs[0]
         data = ''.join(map(chr, mem[stackargs[1]:stackargs[1] + stackargs[2]]))
         pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
@@ -546,11 +550,13 @@ def apply_op(block, tx, msg, code, compustate):
             stk.append(0)
             compustate.gas = 0
     elif op == 'CALL':
-        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
-            mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
-        if len(mem) < ceil32(stackargs[5] + stackargs[6]):
-            mem.extend([0] * (ceil32(stackargs[5] + stackargs[6]) - len(mem)))
+        new_memsize = max(stackargs[3] + stackargs[4], stackargs[5], stackargs[6])
+        if not mem_extend(mem, compustate, op, new_memsize):
+            return OUT_OF_GAS
         gas = stackargs[0]
+        if compustate.gas < gas:
+            return out_of_gas_exception('subcall gas', gas, compustate, op)
+        compustate.gas -= gas
         to = utils.encode_int(stackargs[1])
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         value = stackargs[2]
@@ -567,13 +573,16 @@ def apply_op(block, tx, msg, code, compustate):
             for i in range(min(len(data), stackargs[6])):
                 mem[stackargs[5] + i] = data[i]
     elif op == 'RETURN':
-        if len(mem) < ceil32(stackargs[0] + stackargs[1]):
-            mem.extend([0] * (ceil32(stackargs[0] + stackargs[1]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[0] + stackargs[1]):
+            return OUT_OF_GAS
         return mem[stackargs[0]:stackargs[0] + stackargs[1]]
     elif op == 'POST':
-        if len(mem) < ceil32(stackargs[3] + stackargs[4]):
-            mem.extend([0] * (ceil32(stackargs[3] + stackargs[4]) - len(mem)))
+        if not mem_extend(mem, compustate, op, stackargs[3] + stackargs[4]):
+            return OUT_OF_GAS
         gas = stackargs[0]
+        if compustate.gas < gas:
+            return out_of_gas_exception('subcall gas', gas, compustate, op)
+        compustate.gas -= gas
         to = utils.encode_int(stackargs[1])
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         value = stackargs[2]
