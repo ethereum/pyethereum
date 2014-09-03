@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class PBLogger(object):
-    log_op = False           # log op, gas, stack before each op
+    log_apply_op = False    # general flag for logging inside apply_op
+    log_op = False          # log op, gas, stack before each op
     log_pre_state = False   # dump storage at account before execution
     log_post_state = False  # dump storage at account after execution
     log_block = False       # dump block after TX was applied
@@ -331,41 +332,40 @@ def to_signed(i):
 def apply_op(block, tx, msg, processed_code, compustate):
     if compustate.pc >= len(processed_code):
         return []
-    op, in_args, out_args, mem_grabs, base_gas, opcode = processed_code[compustate.pc]
+    op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
     # empty stack error
     if in_args > len(compustate.stack):
         pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
         return []
     # out of gas error
-    fee = base_gas
     if fee > compustate.gas:
         return out_of_gas_exception('base_gas', fee, compustate, op)
 
-    if pblogger.log_stack:
-        pblogger.log('STK', stk=list(reversed(compustate.stack)))
+    if pblogger.log_apply_op:
+        if pblogger.log_stack:
+            pblogger.log('STK', stk=list(reversed(compustate.stack)))
 
-    if pblogger.log_op:
-        log_args = dict(pc=compustate.pc,
-                        op=op,
-                        stackargs=compustate.stack[-1:-in_args-1:-1],
-                        gas=compustate.gas)
-        if op[:4] == 'PUSH':
-            ind = compustate.pc + 1
-            log_args['value'] = \
-                utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
-        elif op == 'CALLDATACOPY':
-            log_args['data'] = msg.data.encode('hex')
-        pblogger.log('OP', **log_args)
+        if pblogger.log_op:
+            log_args = dict(pc=compustate.pc,
+                            op=op,
+                            stackargs=compustate.stack[-1:-in_args-1:-1],
+                            gas=compustate.gas)
+            if op[:4] == 'PUSH':
+                ind = compustate.pc + 1
+                log_args['value'] = \
+                    utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
+            elif op == 'CALLDATACOPY':
+                log_args['data'] = msg.data.encode('hex')
+            pblogger.log('OP', **log_args)
 
-    if pblogger.log_memory:
-        for i in range(0, len(compustate.memory), 16):
-            memblk = compustate.memory[i:i+16]
-            memline = ' '.join([chr(x).encode('hex') for x in memblk])
-            pblogger.log('MEM', mem=memline)
+        if pblogger.log_memory:
+            for i in range(0, len(compustate.memory), 16):
+                memblk = compustate.memory[i:i+16]
+                memline = ' '.join([chr(x).encode('hex') for x in memblk])
+                pblogger.log('MEM', mem=memline)
 
     # Apply operation
-    oldpc = compustate.pc
     compustate.gas -= fee
     compustate.pc += 1
     stk = compustate.stack
@@ -529,15 +529,16 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(compustate.gas)  # AFTER subtracting cost 1
     elif op[:4] == 'PUSH':
         pushnum = int(op[4:])
-        compustate.pc = oldpc + 1 + pushnum
-        dat = [x[-1] for x in processed_code[oldpc + 1: oldpc + 1 + pushnum]]
+        dat = [x[-1] for x in processed_code[compustate.pc: compustate.pc + pushnum]]
+        compustate.pc += pushnum
         stk.append(utils.bytearray_to_int(dat))
     elif op[:3] == 'DUP':
         depth = int(op[3:])
         # DUP POP POP Debug hint
         is_debug = 1
         for i in range(depth):
-            if oldpc + i + 1 < len(processed_code) and processed_code[oldpc + i + 1][0] != 'POP':
+            if compustate.pc + i < len(processed_code) and \
+                    processed_code[compustate.pc + i][0] != 'POP':
                 is_debug = 0
                 break
         if is_debug:
