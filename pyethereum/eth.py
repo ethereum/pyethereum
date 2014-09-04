@@ -3,7 +3,6 @@ import sys
 import time
 import uuid
 import signal
-import ConfigParser
 from argparse import ArgumentParser
 import logging
 import logging.config
@@ -20,125 +19,78 @@ from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
-
+from pyethereum.config import get_default_config, read_config, dump_config
 
 logger = logging.getLogger(__name__)
 
 
-def create_default_config():
-    config = ConfigParser.ConfigParser()
-    # set some defaults, which may be overwritten
-    config.add_section('network')
-    config.set('network', 'listen_host', '0.0.0.0')
-    config.set('network', 'listen_port', '30303')
-    config.set('network', 'num_peers', '5')
-    config.set('network', 'remote_port', '30303')
-    config.set('network', 'remote_host', '')
-    config.set('network', 'client_version', Packeter.CLIENT_VERSION)
-    config.set('network', 'node_id', sha3(str(uuid.uuid1())).encode('hex'))
-
-    config.add_section('api')
-    config.set('api', 'listen_host', '127.0.0.1')
-    config.set('api', 'listen_port', '30203')
-
-    config.add_section('misc')
-    config.set('misc', 'verbosity', '1')
-    config.set('misc', 'config_file', None)
-    config.set('misc', 'logging', None)
-    config.set('misc', 'data_dir', data_dir.path)
-    config.set('misc', 'mining', '10')
-
-    config.add_section('wallet')
-    config.set('wallet', 'coinbase', '0' * 40)
-
-    return config
-
-
-def create_config():
-    config = create_default_config()
-    parser = ArgumentParser(version=Packeter.CLIENT_VERSION)
+def parse_arguments():
+    config = get_default_config()
+    parser = ArgumentParser(version=config.get('network', 'client_version'))
     parser.add_argument(
         "-l", "--listen",
         dest="listen_port",
-        default=config.get('network', 'listen_port'),
         help="<port>  Listen on the given port for incoming"
         " connected (default: 30303).")
     parser.add_argument(
         "-a", "--address",
         dest="coinbase",
-        help="Set the coinbase (mining payout) address",
-        default=config.get('wallet', 'coinbase'))
+        help="Set the coinbase (mining payout) address")
     parser.add_argument(
         "-d", "--data_dir",
         dest="data_dir",
-        help="<path>  Load database from path (default: %s)" % config.get(
-            'misc', 'data_dir'),
-        default=config.get('misc', 'data_dir'))
+        help="<path>  Load database from path (default: %s)" %  \
+                        config.get('misc', 'data_dir'))
     parser.add_argument(
         "-r", "--remote",
         dest="remote_host",
-        help="<host> Connect to remote host"
-        " (try: 54.201.28.117 or 54.204.10.41)")
+        help="<host> Connect to remote host (default: 54.76.56.74)")
     parser.add_argument(
         "-p", "--port",
         dest="remote_port",
-        default=config.get('network', 'remote_port'),
-        help="<port> Connect to remote port (default: 30303)"
-    )
+        help="<port> Connect to remote port (default: 30303)")
     parser.add_argument(
         "-V", "--verbose",
         dest="verbosity",
-        default=config.get('misc', 'verbosity'),
         help="<0 - 3>  Set the log verbosity from 0 to 3 (default: 1)")
     parser.add_argument(
         "-m", "--mining",
         dest="mining",
-        default=config.get('misc', 'mining'),
         help="<0 - 100> Percent CPU used for mining 0==off (default: 10)")
     parser.add_argument(
         "-L", "--logging",
         dest="logging",
-        default=config.get('misc', 'logging'),
+#        default=config.get('misc', 'logging'),
         help="<logger1:LEVEL,logger2:LEVEL> set the console log level for"
         " logger1, logger2, etc. Empty loggername means root-logger,"
         " e.g. 'pyethereum.wire:DEBUG,:INFO'. Overrides '-V'")
     parser.add_argument(
         "-x", "--peers",
         dest="num_peers",
-        default=config.get('network', 'num_peers'),
         help="<number> Attempt to connect to given number of peers"
         "(default: 5)")
     parser.add_argument("-C", "--config",
                         dest="config_file",
                         help="read coniguration")
 
-    options = parser.parse_args()
+    return parser.parse_args()
 
-    # set network options
-    for attr in ('listen_port', 'remote_host', 'remote_port', 'num_peers'):
-        config.set('network', attr, getattr(
-            options, attr) or config.get('network', attr))
-    # set misc options
-    for attr in ('verbosity', 'config_file', 'logging', 'data_dir', 'mining'):
-        config.set(
-            'misc', attr, getattr(options, attr) or config.get('misc', attr))
+def create_config():
+    options = parse_arguments()
 
-    # set wallet options
-    for attr in ('coinbase',):
-        config.set(
-            'wallet', attr, getattr(options, attr) or config.get('wallet', attr))
+    # 1) read the default config at "~/.ethereum"
+    config = read_config()
 
-    if config.get('misc', 'config_file'):
-        config.read(config.get('misc', 'config_file'))
+    # 2) read config from file
+    if getattr(options, 'config_file'):
+        print "reading config", getattr(options, 'config_file')
+        config.read(getattr(options, 'config_file'))
 
-    # set datadir
-    if config.get('misc', 'data_dir'):
-        data_dir.set(config.get('misc', 'data_dir'))
-
-    # configure logging
-    configure_logging(
-        config.get('misc', 'logging') or '',
-        verbosity=config.getint('misc', 'verbosity'))
+    # 3) apply cmd line options to config
+    for section in config.sections():
+        for a,v in config.items(section):
+            if getattr(options, a, None) is not None:
+                config.set(section, a, getattr(options,a))
 
     return config
 
@@ -146,11 +98,18 @@ def create_config():
 def main():
     config = create_config()
 
+    # configure logging
+    configure_logging(config.get('misc', 'logging') or '',
+                    verbosity=config.getint('misc', 'verbosity'))
+
+
     try:
         import pyethereum.monkeypatch
         logger.info("Loaded your customizations from monkeypatch.py")
     except ImportError, e:
         pass
+
+    logger.debug("Config Ready:%s", dump_config(config))
 
     config_ready.send(sender=None, config=config)
     # import after logger config is ready
