@@ -13,12 +13,14 @@ enable_full_qualified_import()
 
 from pyethereum.utils import configure_logging
 from pyethereum.utils import data_dir
+from pyethereum.utils import get_db_path
 from pyethereum.utils import sha3
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
+from pyethereum.db import DB
 from pyethereum.config import get_default_config, read_config, dump_config
 
 logger = logging.getLogger(__name__)
@@ -75,6 +77,28 @@ def parse_arguments():
 
     return parser.parse_args()
 
+
+def check_chain_version(config):
+    key = '__chain_version__'
+    chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
+    data_dir.set(config.get('misc', 'data_dir'))
+    db_path = get_db_path()
+    print db_path
+    db = DB(db_path)
+    if not key in db:
+        db.put(key, chain_version)
+    if db.get(key) != chain_version:
+        print \
+"""
+ATTENTION --------------------------------------------------------------------
+the chain in the db (V:%r) doesn't match the the software version (V:%r)
+This may lead to unexpected errors.
+Consider to delete the db directory: %s
+--------- --------------------------------------------------------------------
+""" % (db.get(key), chain_version, db_path)
+        time.sleep(5)
+
+
 def create_config():
     options = parse_arguments()
 
@@ -83,7 +107,6 @@ def create_config():
 
     # 2) read config from file
     if getattr(options, 'config_file'):
-        print "reading config", getattr(options, 'config_file')
         config.read(getattr(options, 'config_file'))
 
     # 3) apply cmd line options to config
@@ -97,6 +120,7 @@ def create_config():
 
 def main():
     config = create_config()
+    check_chain_version(config)
 
     # configure logging
     configure_logging(config.get('misc', 'logging') or '',
