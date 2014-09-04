@@ -45,6 +45,7 @@ dev_requirements
 To install the dependencies necessary for development (testing, ...), run::
 
     pip install -r dev_requirements.txt
+    python setup.py install
 
 Coding
 +++++++
