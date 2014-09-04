@@ -192,18 +192,18 @@ class ChainManager(StoppableLoopThread):
         "new miner is initialized if HEAD is updated"
         # prepare uncles
         uncles = set(self.get_uncles(self.head))
-        logger.debug('%d uncles for next block %r', len(uncles), uncles)
+#        logger.debug('%d uncles for next block %r', len(uncles), uncles)
         ineligible = set() # hashes
         blk = self.head
         for i in range(8):
             for u in blk.uncles: # assuming uncle headres
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
-                    logger.debug('ineligible uncle %r', u.encode('hex'))
+#                    logger.debug('ineligible uncle %r', u.encode('hex'))
                     uncles.discard(self.get(u))
             if blk.has_parent():
                 blk = blk.get_parent()
-        logger.debug('%d uncles after filtering %r', len(uncles), uncles)
+#        logger.debug('%d uncles after filtering %r', len(uncles), uncles)
 
         miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:
@@ -296,7 +296,7 @@ class ChainManager(StoppableLoopThread):
         # FIXME: Forward blocks w/ valid PoW asap
         if block.has_parent():
             try:
-                logger.debug('verifying: %s', block)
+                #logger.debug('verifying: %s', block)
                 #logger.debug('GETTING ACCOUNT FOR COINBASE:')
                 #acct = block.get_acct(block.coinbase)
                 #logger.debug('GOT ACCOUNT FOR COINBASE: %r', acct)
