@@ -50,28 +50,37 @@ OUT_OF_GAS = -1
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = ''
 
+class VerificationFailed(Exception):
+    pass
 
 def verify(block, parent):
-    assert block.timestamp >= parent.timestamp
-    assert block.timestamp <= time.time() + 900
+    def must_equal(what, a, b):
+        if not a == b: raise VerificationFailed(what, a, '==', b)
+
+    if not block.timestamp >= parent.timestamp:
+        raise VerificationFailed('timestamp', block.timestamp, '>=', parent.timestamp)
+    if not block.timestamp <= time.time() + 900:
+        raise VerificationFailed('timestamps', block.timestamp, '<=', time.time() + 900)
+
     block2 = blocks.Block.init_from_parent(parent,
                                            block.coinbase,
                                            extra_data=block.extra_data,
                                            timestamp=block.timestamp,
                                            uncles=block.uncles)
-    assert block2.difficulty == block.difficulty
-    assert block2.gas_limit == block.gas_limit
+    must_equal('difficulty', block2.difficulty, block.difficulty)
+    must_equal('gas limit', block2.gas_limit, block.gas_limit)
     for i in range(block.transaction_count):
         tx, s, g = rlp.decode(
             block.transactions.get(rlp.encode(utils.encode_int(i))))
         tx = transactions.Transaction.create(tx)
-        assert tx.startgas + block2.gas_used <= block.gas_limit
+        if not tx.startgas + block2.gas_used <= block.gas_limit:
+            raise VerificationFailed('gas_limit', tx.startgas + block2.gas_used, '<=', block.gas_limit)
         apply_transaction(block2, tx)
-        assert s == block2.state.root_hash
-        assert g == utils.encode_int(block2.gas_used)
+        must_equal('tx state root', s, block2.state.root_hash)
+        must_equal('tx gas used', g, utils.encode_int(block2.gas_used))
     block2.finalize()
-    assert block2.state.root_hash == block.state.root_hash
-    assert block2.gas_used == block.gas_used
+    must_equal('block state root', block2.state.root_hash, block.state.root_hash)
+    must_equal('block gas used', block2.gas_used, block.gas_used)
     return True
 
 
