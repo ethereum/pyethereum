@@ -70,6 +70,10 @@ class APIClient(object):
         return self.account_to_dict(address)['code']
 
     def getnonce(self, address):
+        ptxs =  self.getpending()['transactions']
+        nonce = max([0] + [int(tx['nonce']) for tx in ptxs if tx['sender'] == address])
+        if nonce:
+            return nonce + 1
         return int(self.account_to_dict(address)['nonce'])
 
     def getstate(self, address):
