@@ -449,8 +449,8 @@ def apply_op(block, tx, msg, code, compustate):
                 mem[stackargs[0] + i] = ord(msg.data[stackargs[1] + i])
             else:
                 mem[stackargs[0] + i] = 0
-    elif op == 'GASPRICE':
-        stk.append(tx.gasprice)
+    elif op == 'CODESIZE':
+        stk.append(len(code))
     elif op == 'CODECOPY':
         if stackargs[2] and len(mem) < ceil32(stackargs[0] + stackargs[2]):
             mem.extend([0] * (ceil32(stackargs[0] + stackargs[2]) - len(mem)))
@@ -459,6 +459,19 @@ def apply_op(block, tx, msg, code, compustate):
                 mem[stackargs[0] + i] = ord(code[stackargs[1] + i])
             else:
                 mem[stackargs[0] + i] = 0
+    elif op == 'GASPRICE':
+        stk.append(tx.gasprice)
+    elif op == 'EXTCODESIZE':
+        stk.append(len(block.get_code(stackargs[0]) or ''))
+    elif op == 'EXTCODECOPY':
+        extcode = block.get_code(stackargs[0]) or ''
+        if stackargs[3] and len(mem) < ceil32(stackargs[1] + stackargs[3]):
+            mem.extend([0] * (ceil32(stackargs[1] + stackargs[3]) - len(mem)))
+        for i in range(stackargs[2]):
+            if stackargs[2] + i < len(extcode):
+                mem[stackargs[1] + i] = ord(extcode[stackargs[2] + i])
+            else:
+                mem[stackargs[1] + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
