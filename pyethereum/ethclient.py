@@ -7,11 +7,15 @@ from docopt import docopt
 import utils
 import transactions
 from . import __version__
+from . config import read_config
 
-api_path = '/api/v02a'
+config = read_config()
 
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 30203
+api_path = config.get('api', 'api_path')
+assert api_path.startswith('/') and not api_path.endswith('/')
+
+DEFAULT_HOST = config.get('api', 'listen_host')
+DEFAULT_PORT = config.getint('api', 'listen_port')
 DEFAULT_GASPRICE = 10**12
 DEFAULT_STARTGAS = 10000
 
