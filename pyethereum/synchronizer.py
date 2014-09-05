@@ -22,9 +22,9 @@ class HashChainTask(object):
         self.peer.send_GetBlockHashes(block_hash, self.NUM_HASHES_PER_REQUEST)
 
     def received_block_hashes(self, block_hashes):
-        logger.warn('HashChainTask.received_block_hashes %d', len(block_hashes))
+        logger.debug('HashChainTask.received_block_hashes %d', len(block_hashes))
         if block_hashes and self.chain_manager.genesis.hash == block_hashes[-1]:
-            logger.warn('%r has different chain starting from genesis', self.peer)
+            logger.debug('%r has different chain starting from genesis', self.peer)
         for bh in block_hashes:
             if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
                 logger.debug('%r matching block hash found %r, %d blocks to fetch',
