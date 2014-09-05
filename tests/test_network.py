@@ -130,5 +130,5 @@ def test_hallo():
 
 def test_version():
     # see documentation in _version.py on how to update
-    if not 'TOX_ENV' in os.environ:
+    if __version__.count('.') >= 2:
         assert str(packeter.Packeter.ETHEREUM_PROTOCOL_VERSION) in __version__
