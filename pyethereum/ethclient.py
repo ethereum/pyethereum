@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 import sys
 import requests
@@ -5,6 +6,7 @@ import json
 from docopt import docopt
 import utils
 import transactions
+from . import __version__
 
 api_path = '/api/v02a'
 
@@ -158,7 +160,7 @@ Options:
 
 
 def main():
-    arguments = docopt(doc, version='pyethclient 0.1')
+    arguments = docopt(doc, version='pyethclient %s' % __version__)
     #print(arguments)
 
     host = arguments.get('--host') or DEFAULT_HOST
