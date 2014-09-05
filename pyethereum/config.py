@@ -99,7 +99,8 @@ def read_config(cfg_path = default_config_path()):
     # create default if not existent
     if not os.path.exists(cfg_path):
         open(cfg_path, 'w').write(config_template)
-    config = ConfigParser.ConfigParser()
+    # extend on the default config
+    config = get_default_config()
     config.read(cfg_path)
     return config
 
