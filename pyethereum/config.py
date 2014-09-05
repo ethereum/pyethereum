@@ -51,6 +51,9 @@ node_id = {1}
 listen_host = 0.0.0.0
 listen_port = 30203
 
+# path to server the api at
+api_path = /api/v02a
+
 
 # MISC OIPTIONS #########
 [misc]
