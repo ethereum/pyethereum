@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 import sys
 import requests
@@ -5,11 +6,16 @@ import json
 from docopt import docopt
 import utils
 import transactions
+from . import __version__
+from . config import read_config
 
-api_path = '/api/v02a'
+config = read_config()
 
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 30203
+api_path = config.get('api', 'api_path')
+assert api_path.startswith('/') and not api_path.endswith('/')
+
+DEFAULT_HOST = config.get('api', 'listen_host')
+DEFAULT_PORT = config.getint('api', 'listen_port')
 DEFAULT_GASPRICE = 10**12
 DEFAULT_STARTGAS = 10000
 
@@ -70,6 +76,10 @@ class APIClient(object):
         return self.account_to_dict(address)['code']
 
     def getnonce(self, address):
+        ptxs =  self.getpending()['transactions']
+        nonce = max([0] + [int(tx['nonce']) for tx in ptxs if tx['sender'] == address])
+        if nonce:
+            return nonce + 1
         return int(self.account_to_dict(address)['nonce'])
 
     def getstate(self, address):
@@ -154,7 +164,7 @@ Options:
 
 
 def main():
-    arguments = docopt(doc, version='pyethclient 0.1')
+    arguments = docopt(doc, version='pyethclient %s' % __version__)
     #print(arguments)
 
     host = arguments.get('--host') or DEFAULT_HOST

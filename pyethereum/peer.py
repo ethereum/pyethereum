@@ -280,18 +280,18 @@ class Peer(StoppableLoopThread):
 ### transactions
 
     def send_GetTransactions(self):
-        logger.info('asking for transactions')
+        logger.debug('asking for transactions')
         self.send_packet(packeter.dump_GetTransactions())
 
     def _recv_GetTransactions(self, data):
-        logger.info('asking for transactions')
+        logger.debug('asked for transactions')
         signals.gettransactions_received.send(sender=Peer, peer=self)
 
     def send_Transactions(self, transactions):
         self.send_packet(packeter.dump_Transactions(transactions))
 
     def _recv_Transactions(self, data):
-        logger.info('received transactions #%d', len(data))
+        logger.debug('received transactions #%d', len(data))
         signals.remote_transactions_received.send(sender=Peer, transactions=data)
 
 ### blocks

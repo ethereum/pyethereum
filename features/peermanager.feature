@@ -132,17 +132,6 @@ Feature: peer manager
     And _connect_peers is called
     Then for each connected peer, send_GetPeers should be called
 
-  Scenario: receive a valid Hello packet and confirm listen port
-    Given a peer in connected_peers
-    When Hello is received from the peer
-    Then the peers port and node id should be reset to their correct values
-    And peer_manager._known_peers should contain the peer
-
-  Scenario: receive a list of peers from another peer
-    Given a peer in connected_peers
-    When _recv_Peers is called
-    Then all received peers should be added to _known_peers and saved to peers.json
-
   Scenario: peer has incompatible protocol version
     Given a known connected peer with incompatible protocol version
     When send_Disconnect is called with reason "Incompatible"

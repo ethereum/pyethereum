@@ -8,7 +8,7 @@ import pyethereum.rlp as rlp
 import pyethereum.trie as trie
 import pyethereum.utils as utils
 from pyethereum.db import DB as DB
-from pyethereum.eth import create_default_config
+from pyethereum.config import get_default_config
 import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
 
@@ -90,7 +90,7 @@ def get_transaction(gasprice=0, nonce=0):
 @pytest.fixture(scope="module")
 def get_chainmanager(genesis=None):
     cm = chainmanager.ChainManager()
-    cm.configure(config=create_default_config(), genesis=genesis)
+    cm.configure(config=get_default_config(), genesis=genesis)
     return cm
 
 

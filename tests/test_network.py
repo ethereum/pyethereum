@@ -8,9 +8,11 @@ import pyethereum.peer as peer
 import pyethereum.signals as signals
 import pyethereum.peermanager as peermanager
 from pyethereum.db import DB as DB
-from pyethereum.eth import create_default_config
+from pyethereum.config import get_default_config
 import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
+from pyethereum import __version__
+
 idec = utils.big_endian_to_int
 
 import logging
@@ -89,19 +91,19 @@ def get_peers():
     cnxB = cnxA.get_remote_connection()
     peerA = Peer(connection=cnxA, ip='0.0.0.1', port=1)
     peerB = Peer(connection=cnxB, ip='0.0.0.2', port=2)
-    signals.config_ready.send(sender=None, config=create_default_config())
+    signals.config_ready.send(sender=None, config=get_default_config())
     return peerA, peerB
 
 @pytest.fixture(scope="module")
 def get_packeter():
     p = packeter.Packeter()
-    p.configure(create_default_config())
+    p.configure(get_default_config())
     return p
 
 @pytest.fixture(scope="module")
 def get_chainmanager(genesis=None):
     cm = chainmanager.ChainManager()
-    cm.configure(config=create_default_config(), genesis=genesis)
+    cm.configure(config=get_default_config(), genesis=genesis)
     return cm
 
 def test_status():
@@ -125,3 +127,8 @@ def test_hallo():
     peerA, peerB = get_peers()
     peerA.send_Hello()
     peerB.recv()
+
+def test_version():
+    # see documentation in _version.py on how to update
+    if not 'TOX_ENV' in os.environ:
+        assert str(packeter.Packeter.ETHEREUM_PROTOCOL_VERSION) in __version__

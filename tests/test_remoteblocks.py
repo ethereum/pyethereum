@@ -104,7 +104,7 @@ def test_profiled():
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     utils.data_dir.set(test_db_path)
     chain_manager = chainmanager.ChainManager()
-    chain_manager.configure(config=eth.create_default_config(), genesis=None)
+    chain_manager.configure(config=eth.get_default_config(), genesis=None)
 
     fh = open(raw_blocks_fn)
     for i in range(skip):

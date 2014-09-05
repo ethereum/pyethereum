@@ -13,9 +13,9 @@ from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
+from ._version import get_versions
 
 logger = logging.getLogger(__name__)
-base_url = '/api/v02a'
 
 app = bottle.Bottle()
 app.config['autojson'] = False
@@ -33,24 +33,26 @@ class ApiServer(threading.Thread):
     def configure(self, config):
         self.listen_host = config.get('api', 'listen_host')
         self.port = config.getint('api', 'listen_port')
+        # add api_path to bottle to be used in the middleware
+        api_path = config.get('api', 'api_path')
+        assert api_path.startswith('/') and not api_path.endswith('/')
+        app.api_path = api_path
 
     def run(self):
-        middleware = CorsMiddleware(app)
-        bottle.run(middleware, server='waitress',
-                   host=self.listen_host, port=self.port)
+        middleware = Middleware(app)
+        bottle.run(middleware, server='waitress', host=self.listen_host, port=self.port)
 
 # ###### create server ######
 
 api_server = ApiServer()
-
 
 @dispatch.receiver(signals.config_ready)
 def config_api_server(sender, config, **kwargs):
     api_server.configure(config)
 
 
-# #######cors##############
-class CorsMiddleware:
+# ####### CORS, LOFFING AND REWRITE MIDDLEWARE ##############
+class Middleware:
     HEADERS = [
         ('Access-Control-Allow-Origin', '*'),
         ('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'),
@@ -62,14 +64,19 @@ class CorsMiddleware:
         self.app = app
 
     def __call__(self, environ, start_response):
+        # strip api prefix from path
+        orig_path = environ['PATH_INFO']
+        if orig_path.startswith(self.app.api_path):
+            environ['PATH_INFO'] = orig_path.replace(self.app.api_path, '', 1)
+
+        logger.debug('%r: %s => %s', environ['REQUEST_METHOD'], orig_path, environ['PATH_INFO'])
+
         if environ["REQUEST_METHOD"] == "OPTIONS":
-            start_response('200 OK',
-                           CorsMiddleware.HEADERS + [('Content-Length', "0")])
+            start_response('200 OK', self.HEADERS + [('Content-Length', "0")])
             return ""
         else:
             def my_start_response(status, headers, exc_info=None):
-                headers.extend(CorsMiddleware.HEADERS)
-
+                headers.extend(self.HEADERS)
                 return start_response(status, headers, exc_info)
             return self.app(environ, my_start_response)
 
@@ -80,6 +87,15 @@ def load_json_req():
     if not json_body:
         json_body = json.load(bottle.request.body)
     return json_body
+
+
+# ######## Version ###########
+@app.get('/version/')
+def version():
+    logger.debug('version')
+    v = get_versions()
+    v['name'] = 'pyethereum'
+    return dict(version=v)
 
 
 # ######## Blocks ############
@@ -93,12 +109,12 @@ def make_blocks_response(blocks):
     return dict(blocks=res)
 
 
-@app.get(base_url + '/blocks/')
+@app.get('/blocks/')
 def blocks():
     logger.debug('blocks/')
     return make_blocks_response(chain_manager.get_chain(start='', count=20))
 
-@app.get(base_url + '/blocks/<arg>')
+@app.get('/blocks/<arg>')
 def block(arg=None):
     """
     /blocks/            return N last blocks
@@ -129,23 +145,25 @@ def block(arg=None):
 def make_transaction_response(txs):
     return dict(transactions = [tx.to_dict() for tx in txs])
 
-@app.put(base_url + '/transactions/')
+@app.put('/transactions/')
 def add_transaction():
     # request.json FIXME / post json encoded data? i.e. the representation of
     # a tx
     hex_data = bottle.request.body.read()
-    logger.debug('PUT transactions/ %s', hex_data)
     tx = Transaction.hex_deserialize(hex_data)
-    signals.local_transaction_received.send(sender=None, transaction=tx)
-    return bottle.redirect(base_url + '/transactions/' + tx.hex_hash())
+    #signals.local_transaction_received.send(sender=None, transaction=tx)
+    res = chain_manager.add_transaction(tx)
+    if res:
+        return bottle.redirect('/transactions/' + tx.hex_hash())
+    else:
+        bottle.abort(400, 'Invalid Transaction %s' % tx.hex_hash())
 
 
-@app.get(base_url + '/transactions/<arg>')
+@app.get('/transactions/<arg>')
 def get_transactions(arg=None):
     """
     /transactions/<hex>          return transaction by hexhash
     """
-    logger.debug('GET transactions/%s', arg)
     try:
         tx_hash = arg.decode('hex')
     except TypeError:
@@ -169,7 +187,7 @@ def get_transactions(arg=None):
     return dict(transactions=[tx])
 
 
-@app.get(base_url + '/pending/')
+@app.get('/pending/')
 def get_pending():
     """
     /pending/       return pending transactions
@@ -207,12 +225,11 @@ def _get_block_before_tx(txhash):
     test_blk.state.root_hash = pre_state
     return test_blk, tx
 
-@app.get(base_url + '/trace/<txhash>')
+@app.get('/trace/<txhash>')
 def trace(txhash):
     """
     /trace/<hexhash>        return trace for transaction
     """
-    logger.debug('GET trace/%s', txhash)
     try: # index
         test_blk, tx = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
@@ -235,12 +252,11 @@ def trace(txhash):
     return dict(tx=txhash, trace=log)
 
 
-@app.get(base_url + '/dump/<txblkhash>')
+@app.get('/dump/<txblkhash>')
 def dump(txblkhash):
     """
     /dump/<hash>        return state dump after transaction or block
     """
-    logger.debug('GET dump/%s', txblkhash)
     try:
         blk = chain_manager.get(txblkhash.decode('hex'))
     except:
@@ -256,11 +272,8 @@ def dump(txblkhash):
 
 
 # ######## Accounts ############
-@app.get(base_url + '/accounts/')
-def accounts():
-    logger.debug('accounts')
 
-@app.get(base_url + '/accounts/<address>')
+@app.get('/accounts/<address>')
 def account(address=None):
     logger.debug('accounts/%s', address)
     data = chain_manager.head.account_to_dict(address)
@@ -276,11 +289,11 @@ def make_peers_response(peers):
     return dict(peers=objs)
 
 
-@app.get(base_url + '/peers/connected')
+@app.get('/peers/connected')
 def connected_peers():
     return make_peers_response(peer_manager.get_connected_peer_addresses())
 
 
-@app.get(base_url + '/peers/known')
+@app.get('/peers/known')
 def known_peers():
     return make_peers_response(peer_manager.get_known_peer_addresses())

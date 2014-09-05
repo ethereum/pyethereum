@@ -257,5 +257,5 @@ def send_transactions(sender, transactions=[], **kwargs):
 
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):
-    logger.debug("received new_peer_connected")
+    logger.info("%r handshaked", peer)
     peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)
