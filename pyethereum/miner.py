@@ -33,8 +33,7 @@ class Miner():
         # revert finalization
         self.block.state_root = self.pre_finalize_state_root
         try:
-            success, output = processblock.apply_transaction(
-                self.block, transaction)
+            success, output = processblock.apply_transaction(self.block, transaction)
         except processblock.InvalidTransaction as e:
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state must not have changed
@@ -52,8 +51,7 @@ class Miner():
         else:
             assert transaction in self.block.get_transactions()
             logger.debug(
-                'transaction %r applied to %r res: %r',
-                transaction, self.block, output)
+                'transaction %r applied to %r res: %r', transaction, self.block, output)
             assert old_state_root != self.block.state_root
             return True
 

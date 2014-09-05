@@ -164,7 +164,6 @@ def get_transactions(arg=None):
     """
     /transactions/<hex>          return transaction by hexhash
     """
-    logger.debug('GET transactions/%s', arg)
     try:
         tx_hash = arg.decode('hex')
     except TypeError:
@@ -231,7 +230,6 @@ def trace(txhash):
     """
     /trace/<hexhash>        return trace for transaction
     """
-    logger.debug('GET trace/%s', txhash)
     try: # index
         test_blk, tx = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
@@ -259,7 +257,6 @@ def dump(txblkhash):
     """
     /dump/<hash>        return state dump after transaction or block
     """
-    logger.debug('GET dump/%s', txblkhash)
     try:
         blk = chain_manager.get(txblkhash.decode('hex'))
     except:
@@ -275,9 +272,6 @@ def dump(txblkhash):
 
 
 # ######## Accounts ############
-@app.get('/accounts/')
-def accounts():
-    logger.debug('accounts')
 
 @app.get('/accounts/<address>')
 def account(address=None):
