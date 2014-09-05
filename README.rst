@@ -19,7 +19,9 @@ Installation:
 
 
 ``git clone https://github.com/ethereum/pyethereum/``
+
 ``python setup.py install``
+
 ``pip install -r requirements.txt``
 
 
@@ -44,19 +46,11 @@ Tutorial coming soon!
 For developers
 ---------------
 
-See our [developer notes](https://github.com/ethereum/pyethereum/wiki/Developer-Notes)
+See our `developer notes <https://github.com/ethereum/pyethereum/wiki/Developer-Notes>`_
 
 
 Licence
 ========
 See LICENCE
 
-Credits
-========
 `Ethereum <https://ethereum.org/>`_ is based on a design by Vitalik Buterin.
-
-Implementation of the python ethereum client is mainly done by
-
-- Chen Houwu
-- Heiko Hees
-- Vitalik Buterin
