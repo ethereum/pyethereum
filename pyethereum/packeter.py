@@ -7,6 +7,7 @@ from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
 from pyethereum.utils import sha3
 from pyethereum import dispatch
+from . import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class Packeter(object):
     """
     NETWORK_PROTOCOL_VERSION = 0
     ETHEREUM_PROTOCOL_VERSION = 32
-    CLIENT_VERSION = 'Ethereum(py)/0.6.1/%s/EthProtocol:%d' % (sys.platform, ETHEREUM_PROTOCOL_VERSION)
+    CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
     NODE_ID = sha3('') # set in config
     NETWORK_ID = 0

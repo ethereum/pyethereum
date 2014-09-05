@@ -22,13 +22,13 @@ from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
 from pyethereum.db import DB
 from pyethereum.config import get_default_config, read_config, dump_config
-
+from . import __version__
 logger = logging.getLogger(__name__)
 
 
 def parse_arguments():
     config = get_default_config()
-    parser = ArgumentParser(version=config.get('network', 'client_version'))
+    parser = ArgumentParser(version=__version__)
     parser.add_argument(
         "-l", "--listen",
         dest="listen_port",
@@ -83,7 +83,6 @@ def check_chain_version(config):
     chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
     data_dir.set(config.get('misc', 'data_dir'))
     db_path = get_db_path()
-    print db_path
     db = DB(db_path)
     if not key in db:
         db.put(key, chain_version)
@@ -120,12 +119,11 @@ def create_config():
 
 def main():
     config = create_config()
-    check_chain_version(config)
 
     # configure logging
     configure_logging(config.get('misc', 'logging') or '',
                     verbosity=config.getint('misc', 'verbosity'))
-
+    logger.info('----------- Starting pyethereum %s --------------', __version__)
 
     try:
         import pyethereum.monkeypatch
@@ -134,19 +132,26 @@ def main():
         pass
 
     logger.debug("Config Ready:%s", dump_config(config))
-
     config_ready.send(sender=None, config=config)
-    # import after logger config is ready
+
+    # initialize chain
+    check_chain_version(config)
     from pyethereum.chainmanager import chain_manager
 
+    # P2P TCP SERVER
     try:
         tcp_server.start()
     except IOError as e:
         logger.error("Could not start TCP server: \"{0}\"".format(str(e)))
         sys.exit(1)
 
+    # PEER MANAGER THREAD
     peer_manager.start()
+
+    # CHAIN MANAGER THREAD
     chain_manager.start()
+
+    # API SERVER THREAD
     api_server.start()
 
     # handle termination signals
@@ -167,12 +172,10 @@ def main():
 
     # loop
     while not peer_manager.stopped():
-        time.sleep(0.01)
+        time.sleep(0.001)
 
     logger.info('exiting')
-
     peer_manager.join()
-
     logger.debug('main thread finished')
 
 if __name__ == '__main__':

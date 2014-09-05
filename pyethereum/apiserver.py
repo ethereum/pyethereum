@@ -13,6 +13,7 @@ from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
+from ._version import get_versions
 
 logger = logging.getLogger(__name__)
 base_url = '/api/v02a'
@@ -80,6 +81,15 @@ def load_json_req():
     if not json_body:
         json_body = json.load(bottle.request.body)
     return json_body
+
+
+# ######## Version ###########
+@app.get(base_url + '/version')
+def version():
+    logger.debug('version')
+    v = get_versions()
+    v['name'] = 'pyethereum'
+    return dict(version=v)
 
 
 # ######## Blocks ############

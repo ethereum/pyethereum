@@ -11,6 +11,8 @@ from pyethereum.db import DB as DB
 from pyethereum.eth import create_default_config
 import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
+from pyethereum import __version__
+
 idec = utils.big_endian_to_int
 
 import logging
@@ -125,3 +127,7 @@ def test_hallo():
     peerA, peerB = get_peers()
     peerA.send_Hello()
     peerB.recv()
+
+def test_version():
+    # see documentation in _version.py on how to update
+    assert str(packeter.Packeter.ETHEREUM_PROTOCOL_VERSION) in __version__
