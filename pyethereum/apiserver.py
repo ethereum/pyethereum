@@ -150,10 +150,13 @@ def add_transaction():
     # request.json FIXME / post json encoded data? i.e. the representation of
     # a tx
     hex_data = bottle.request.body.read()
-    logger.debug('PUT transactions/ %s', hex_data)
     tx = Transaction.hex_deserialize(hex_data)
-    signals.local_transaction_received.send(sender=None, transaction=tx)
-    return bottle.redirect('/transactions/' + tx.hex_hash())
+    #signals.local_transaction_received.send(sender=None, transaction=tx)
+    res = chain_manager.add_transaction(tx)
+    if res:
+        return bottle.redirect('/transactions/' + tx.hex_hash())
+    else:
+        bottle.abort(400, 'Invalid Transaction %s' % tx.hex_hash())
 
 
 @app.get('/transactions/<arg>')

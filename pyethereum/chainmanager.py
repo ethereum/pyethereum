@@ -349,6 +349,7 @@ class ChainManager(StoppableLoopThread):
                 logger.debug("broadcasting valid %r" % transaction)
                 signals.send_local_transactions.send(
                     sender=None, transactions=[transaction])
+            return res
 
     def get_transactions(self):
         logger.debug("get_transactions called")
