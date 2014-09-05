@@ -16,7 +16,7 @@ setup(name="pyethereum",
       install_requires=[
           'six', 'leveldb', 'bitcoin', 'pysha3',
           'miniupnpc', 'ethereum-serpent', 'pytest',
-          'bottle', 'waitress', 'docopt'],
+          'bottle', 'waitress', 'docopt', 'repoze.lru'],
       entry_points=dict(console_scripts=console_scripts),
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass())
