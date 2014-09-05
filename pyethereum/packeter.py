@@ -75,8 +75,8 @@ class Packeter(object):
 
     def configure(self, config):
         self.config = config
-        self.CLIENT_ID = self.config.get('network', 'client_version') \
-            or self.CLIENT_ID
+        self.CLIENT_VERSION = self.config.get('network', 'client_version') \
+            or self.CLIENT_VERSION
         self.NODE_ID = self.config.get('network', 'node_id')
 
     @classmethod
