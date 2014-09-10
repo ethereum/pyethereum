@@ -383,3 +383,12 @@ def test_array2():
     s = tester.state()
     c = s.contract(array_code2)
     assert [1] == s.send(tester.k0, c, 0, [])
+
+array_code3="""
+a = array(3)
+return(a, 3)
+"""
+def test_array3():
+    s = tester.state()
+    c = s.contract(array_code3)
+    assert [0,0,0] == s.send(tester.k0, c, 0, [])
