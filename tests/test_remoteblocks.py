@@ -2,10 +2,8 @@ from pyethereum import blocks
 from pyethereum import processblock
 from pyethereum import rlp
 from pyethereum import transactions
-from pyethereum import chainmanager
+from pyethereum.config import get_default_config
 import pyethereum.utils as utils
-from remoteblocksdata import data_poc5v23_1
-from pyethereum import eth
 import logging
 import pytest
 from tests.utils import set_db
@@ -102,9 +100,10 @@ def test_profiled():
 
 
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
+    from pyethereum import chainmanager
     utils.data_dir.set(test_db_path)
     chain_manager = chainmanager.ChainManager()
-    chain_manager.configure(config=eth.get_default_config(), genesis=None)
+    chain_manager.configure(config=get_default_config(), genesis=None)
 
     fh = open(raw_blocks_fn)
     for i in range(skip):

@@ -6,10 +6,10 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.rlp as rlp
 import pyethereum.trie as trie
+import pyethereum.miner as miner
 import pyethereum.utils as utils
 from pyethereum.db import DB as DB
 from pyethereum.config import get_default_config
-import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
 
 import logging
@@ -70,7 +70,7 @@ def mkquickgenesis(initial_alloc={}):
 def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
     # advance one block
     coinbase = coinbase or parent.coinbase
-    m = chainmanager.Miner(parent, uncles=uncles, coinbase=coinbase)
+    m = miner.Miner(parent, uncles=uncles, coinbase=coinbase)
     for tx in transactions:
         m.add_transaction(tx)
     blk = m.mine(steps=1000 ** 2)
@@ -89,6 +89,7 @@ def get_transaction(gasprice=0, nonce=0):
 
 @pytest.fixture(scope="module")
 def get_chainmanager(genesis=None):
+    import pyethereum.chainmanager as chainmanager
     cm = chainmanager.ChainManager()
     cm.configure(config=get_default_config(), genesis=genesis)
     return cm
