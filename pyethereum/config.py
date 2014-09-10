@@ -33,7 +33,7 @@ remote_port = 30303
 
 # Listen on the given host/port for incoming connections
 listen_host = 0.0.0.0
-listen_port = 30302
+listen_port = 30303
 
 # Number of peer to connections to establish
 num_peers = 10

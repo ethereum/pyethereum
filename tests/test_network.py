@@ -9,7 +9,6 @@ import pyethereum.signals as signals
 import pyethereum.peermanager as peermanager
 from pyethereum.db import DB as DB
 from pyethereum.config import get_default_config
-import pyethereum.chainmanager as chainmanager
 from tests.utils import set_db
 from pyethereum import __version__
 
@@ -102,6 +101,7 @@ def get_packeter():
 
 @pytest.fixture(scope="module")
 def get_chainmanager(genesis=None):
+    import pyethereum.chainmanager as chainmanager
     cm = chainmanager.ChainManager()
     cm.configure(config=get_default_config(), genesis=genesis)
     return cm

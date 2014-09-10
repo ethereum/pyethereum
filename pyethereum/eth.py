@@ -21,13 +21,19 @@ from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
 from pyethereum.db import DB
-from pyethereum.config import get_default_config, read_config, dump_config
+import pyethereum.config as konfig
 from . import __version__
 logger = logging.getLogger(__name__)
 
+try:
+    import pyethereum.monkeypatch
+    logger.info("Loaded your customizations from monkeypatch.py")
+except ImportError, e:
+    pass
+
 
 def parse_arguments():
-    config = get_default_config()
+    config = konfig.get_default_config()
     parser = ArgumentParser(version=__version__)
     parser.add_argument(
         "-l", "--listen",
@@ -102,7 +108,7 @@ def create_config():
     options = parse_arguments()
 
     # 1) read the default config at "~/.ethereum"
-    config = read_config()
+    config = konfig.read_config()
 
     # 2) read config from file
     if getattr(options, 'config_file'):
@@ -125,13 +131,7 @@ def main():
                     verbosity=config.getint('misc', 'verbosity'))
     logger.info('----------- Starting pyethereum %s --------------', __version__)
 
-    try:
-        import pyethereum.monkeypatch
-        logger.info("Loaded your customizations from monkeypatch.py")
-    except ImportError, e:
-        pass
-
-    logger.debug("Config Ready:%s", dump_config(config))
+    logger.debug("Config Ready:%s", konfig.dump_config(config))
     config_ready.send(sender=None, config=config)
 
     # initialize chain
