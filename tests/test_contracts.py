@@ -358,3 +358,16 @@ def test_stateless():
     o1 = s.send(tester.k0, c, 0, [])
     os.remove(filename2)
     assert o1 == [64]
+
+
+# https://github.com/ethereum/serpent/issues/8
+array_code = '''
+a = array(1)
+a[0] = 1
+return(a, 1)
+'''
+
+def test_post():
+    s = tester.state()
+    c = s.contract(array_code)
+    assert [1] == s.send(tester.k0, c, 0, [])
