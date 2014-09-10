@@ -245,7 +245,7 @@ code:
     elif msg.data[0] == 3:
         return(contract.storage[0])
 '''
- 
+
 
 def test_post():
     s = tester.state()
@@ -370,4 +370,16 @@ return(a, 1)
 def test_array():
     s = tester.state()
     c = s.contract(array_code)
+    assert [1] == s.send(tester.k0, c, 0, [])
+
+array_code2 = '''
+a = array(1)
+something = 2
+a[0] = 1
+return(a, 1)
+'''
+
+def test_array2():
+    s = tester.state()
+    c = s.contract(array_code2)
     assert [1] == s.send(tester.k0, c, 0, [])
