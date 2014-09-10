@@ -367,7 +367,7 @@ a[0] = 1
 return(a, 1)
 '''
 
-def test_post():
+def test_array():
     s = tester.state()
     c = s.contract(array_code)
     assert [1] == s.send(tester.k0, c, 0, [])
