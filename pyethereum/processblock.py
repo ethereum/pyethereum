@@ -255,7 +255,8 @@ def apply_msg(block, tx, msg, code):
         ops += 1
         if o is not None:
             pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
-                        ops=ops, time_per_op=(time.time() - t) / ops)
+                        sender=msg.sender, to=msg.to, ops=ops,
+                        time_per_op=(time.time() - t) / ops)
             if pblogger.log_post_state:
                     pblogger.log('MSG POST STATE', account=msg.to,
                         state=block.account_to_dict(msg.to))
