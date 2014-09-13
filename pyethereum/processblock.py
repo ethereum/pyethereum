@@ -20,6 +20,8 @@ class PBLogger(object):
     log_post_state = False  # dump storage at account after execution
     log_block = False       # dump block after TX was applied
     log_memory = False      # dump memory before each op
+    log_stack = False       # dump stack before each op
+    log_storage = False     # dump storage before each op
     log_json = False        # generate machine readable output
 
     def __init__(self):
@@ -330,6 +332,10 @@ def apply_op(block, tx, msg, code, compustate):
         pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
         return []
+
+    if pblogger.log_stack:
+        pblogger.log('STK', stk=compustate.stack)
+
     # out of gas error
     fee = calcfee(block, tx, msg, compustate, opdata)
     if fee > compustate.gas:
@@ -340,6 +346,15 @@ def apply_op(block, tx, msg, code, compustate):
     for i in range(in_args):
         stackargs.append(compustate.stack.pop())
 
+    if pblogger.log_memory:
+        for i in range(0, len(compustate.memory), 16):
+            memblk = compustate.memory[i:i+16]
+            memline = ' '.join([chr(x).encode('hex') for x in memblk])
+            pblogger.log('MEM', mem=memline)
+
+    if pblogger.log_storage:
+        pblogger.log('STORAGE', storage=block.account_to_dict(msg.to)['storage'])
+
     if pblogger.log_op:
         log_args = dict(pc=compustate.pc, op=op, stackargs=stackargs, gas=compustate.gas)
         if op[:4] == 'PUSH':
@@ -348,12 +363,6 @@ def apply_op(block, tx, msg, code, compustate):
         elif op == 'CALLDATACOPY':
             log_args['data'] = msg.data.encode('hex')
         pblogger.log('OP', **log_args)
-
-    if pblogger.log_memory:
-        for i in range(0, len(compustate.memory), 16):
-            memblk = compustate.memory[i:i+16]
-            memline = ' '.join([chr(x).encode('hex') for x in memblk])
-            pblogger.log('MEM', mem=memline)
 
     # Apply operation
     oldpc = compustate.pc

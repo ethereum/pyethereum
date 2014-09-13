@@ -474,7 +474,7 @@ class Block(object):
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
-                        if v is not 0:
+                        if v:
                             t.update(enckey, val)
                         else:
                             t.delete(enckey)
@@ -506,14 +506,17 @@ class Block(object):
             else:
                 med_dict[key] = self.caches[key].get(address, utils.printers[typ](val))
         med_dict['storage'] = {}
-        for k, v in strie.to_dict().iteritems():
+        d = strie.to_dict()
+        for k in d.keys() + self.caches['all'].keys():
+            v = d.get(k, None)
             subcache = self.caches.get('storage:'+address, {})
             v2 = subcache.get(utils.big_endian_to_int(k), None)
             hexkey = '0x'+k.encode('hex')
             if v2 is not None:
-                med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
-            else:
-                med_dict['storage'][hexkey] = '0x'+v.encode('hex')
+                if v2 != 0:
+                    med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+            elif v is not None:
+                med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
         return med_dict
 
     def reset_cache(self):
