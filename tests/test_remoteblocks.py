@@ -21,6 +21,7 @@ pblogger.log_stack = True      # dump stack before each op
 pblogger.log_storage = True      # dump storage before each op
 pblogger.log_op = True           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
+pblogger.log_apply_op = True     # log anything per operation at all
 
 
 
