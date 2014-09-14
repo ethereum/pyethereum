@@ -13,7 +13,7 @@ import blocks
 from peer import Peer
 
 
-DEFAULT_SOCKET_TIMEOUT = .5
+DEFAULT_SOCKET_TIMEOUT = 1.
 
 logger = logging.getLogger(__name__)
 
