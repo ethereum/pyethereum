@@ -160,7 +160,7 @@ class Trie(object):
             pass
         elif self.proof_mode == RECORDING:
             self.proof_nodes.append(node)
-        elif self.proof_nodes == VERIFYING:
+        elif self.proof_mode == VERIFYING:
             if node not in self.proof_nodes:
                 raise InvalidSPVProof("Proof invalid!")
 

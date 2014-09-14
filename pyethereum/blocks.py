@@ -28,6 +28,10 @@ BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 DIFF_ADJUSTMENT_CUTOFF = 5
 
+RECORDING = 1
+NONE = 0
+VERIFYING = -1
+
 GENESIS_INITIAL_ALLOC = \
     {"51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,  # (G)
      "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
@@ -162,6 +166,8 @@ class Block(object):
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
+        self.proof_mode = None
+        self.proof_nodes = []
 
         if transaction_list:
             # support init with transactions only if state is known
@@ -452,8 +458,12 @@ class Block(object):
             if index in self.caches['storage:'+address]:
                 return self.caches['storage:'+address][index]
         t = self.get_storage(address)
+        t.proof_mode = self.proof_mode
+        t.proof_nodes = self.proof_nodes
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         val = rlp.decode(t.get(key))
+        if self.proof_mode == RECORDING:
+            self.proof_nodes.extend(t.proof_nodes)
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
@@ -471,6 +481,8 @@ class Block(object):
             for i, (key, typ, default) in enumerate(acct_structure):
                 if key == 'storage':
                     t = trie.Trie(utils.get_db_path(), acct[i])
+                    t.proof_mode = self.proof_mode
+                    t.proof_nodes = self.proof_nodes
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
@@ -479,11 +491,16 @@ class Block(object):
                         else:
                             t.delete(enckey)
                     acct[i] = t.root_hash
+                    if self.proof_mode == RECORDING:
+                        self.proof_nodes.extend(t.proof_nodes)
                 else:
                     if address in self.caches[key]:
                         v = self.caches[key].get(address, default)
                         acct[i] = utils.encoders[acct_structure[i][1]](v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
+        if self.proof_mode == RECORDING:
+            self.proof_nodes.extend(self.state.proof_nodes)
+            self.state.proof_nodes = []
         self.reset_cache()
 
     def del_account(self, address):
@@ -726,6 +743,12 @@ class Block(object):
             nonce='',
             transaction_list=[],
             uncles=uncles)
+
+    def set_proof_mode(self, pm, pmnodes=None):
+        self.proof_mode = pm
+        self.state.proof_mode = pm
+        self.proof_nodes = pmnodes or []
+        self.state.proof_nodes = pmnodes or []
 
 
 class CachedBlock(Block):

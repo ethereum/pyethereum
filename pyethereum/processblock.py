@@ -225,6 +225,25 @@ def apply_transaction(block, tx):
     return success, output if success else ''
 
 
+def mk_transaction_spv_proof(block, tx):
+    block.set_proof_mode(blocks.RECORDING)
+    apply_transaction(block, tx)
+    o = block.proof_nodes
+    block.set_proof_mode(blocks.NONE)
+    return o
+
+
+def verify_transaction_spv_proof(block, tx, proof):
+    block.set_proof_mode(blocks.VERIFYING, proof)
+    try:
+        apply_transaction(block, tx)
+        block.set_proof_mode(blocks.NONE)
+        return True
+    except Exception, e:
+        print e
+        return False
+
+
 class Compustate():
 
     def __init__(self, **kwargs):
