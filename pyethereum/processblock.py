@@ -502,7 +502,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             else:
                 mem[s0 + i] = 0
     elif op == 'EXTCODESIZE':
-        stk.append(len(block.get_code(stackargs[0]) or ''))
+        stk.append(len(block.get_code(stk.pop()) or ''))
     elif op == 'EXTCODECOPY':
         addr, s1, s2, s3 = stk.pop(), stk.pop(), stk.pop(), stk.pop()
         extcode = block.get_code(addr) or ''
