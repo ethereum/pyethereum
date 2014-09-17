@@ -222,7 +222,7 @@ def test_hedge():
     # the time has not expired yet
     o5 = s.send(tester.k0, c2, 0)
     assert o5 == [5]
-    s.mine(10, tester.a3)
+    s.mine(100, tester.a3)
     # Mine ten blocks, and try. Expect code 4, meaning a normal execution
     # where both get their share
     o6 = s.send(tester.k0, c2, 0)
