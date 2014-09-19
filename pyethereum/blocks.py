@@ -299,8 +299,12 @@ class Block(object):
             #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
             logger.debug('d %s %s', _gas_used_encoded, block.gas_used)
-            assert utils.decode_int(_gas_used_encoded) == block.gas_used
-            assert _state_root == block.state.root_hash
+            assert utils.decode_int(_gas_used_encoded) == block.gas_used, \
+                "Gas mismatch (%d, %d) on block: %r" % \
+                (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
+            assert _state_root == block.state.root_hash, \
+                "State root mismatch: %r" % \
+                (block.state_root_hash, _state_root, block.to_dict(False, True, True))
 
         block.finalize()
 

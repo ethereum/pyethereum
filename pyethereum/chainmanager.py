@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 from operator import attrgetter
 from dispatch import receiver
 from stoppable import StoppableLoopThread
@@ -306,7 +307,10 @@ class ChainManager(StoppableLoopThread):
                 #logger.debug('GOT ACCOUNT FOR COINBASE: %r', acct)
                 processblock.verify(block, block.get_parent())
             except processblock.VerificationFailed as e:
-                logger.debug('%r', e)
+                logger.debug('### VERIFICATION FAILED ### %r', e)
+                f = os.path.join(utils.data_dir, 'badblock.log')
+                open(f, 'w').write(str(block.hex_serialize()))
+                print block.hex_serialize()
                 return False
 
         if block.number < self.head.number:
