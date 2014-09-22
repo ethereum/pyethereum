@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class PBLogger(object):
-    log_op = False           # log op, gas, stack before each op
-    log_pre_state = False   # dump storage at account before execution
-    log_post_state = False  # dump storage at account after execution
-    log_block = False       # dump block after TX was applied
-    log_memory = False      # dump memory before each op
-    log_json = False        # generate machine readable output
+    log_op = True           # log op, gas, stack before each op
+    log_pre_state = True   # dump storage at account before execution
+    log_post_state = True  # dump storage at account after execution
+    log_block = True       # dump block after TX was applied
+    log_memory = True      # dump memory before each op
+    log_json = True        # generate machine readable output
 
     def __init__(self):
         self.listeners = [] # register callbacks here
