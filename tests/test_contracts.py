@@ -1,6 +1,7 @@
 import os
 import pytest
 from pyethereum import tester
+import serpent
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
@@ -19,6 +20,18 @@ pblogger.log_json = False        # generate machine readable output
 
 gasprice = 0
 startgas = 10000
+
+
+# Test EVM contracts
+serpent_code = 'return(msg.data[0] ^ msg.data[1])'
+evm_code = serpent.compile(serpent_code)
+
+def test_evm():
+    s = tester.state()
+    c = s.evm(evm_code)
+    o = s.send(tester.k0, c, 0, [2, 5])
+    assert o == [32]
+
 
 # Test serpent compilation of variables using _with_, doing a simple
 # arithmetic calculation 20 * 30 + 10 = 610
