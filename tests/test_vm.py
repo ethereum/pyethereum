@@ -47,16 +47,18 @@ def test_random():
 def test_generic():
     do_test_vm('vmtests')
 
-def test_AllArithmetic():
+def test_Arithmetic():
     do_test_vm('vmArithmeticTest')
 
+def test_BitwiseLogicOperation():
+    do_test_vm('vmBitwiseLogicOperationTest')
 
 def do_test_vm(name):
     logger.debug('running test:%r', name)
     for testname in vm_tests_fixtures(name).keys():
 
         logger.debug('running test:%r', testname)
-        
+               
         params = vm_tests_fixtures(name)[testname]
 
         pre = params['pre']
@@ -152,10 +154,16 @@ def do_test_vm(name):
             state.pop('storage_root', None)  # attribute not present in vmtest fixtures
 
             # check hex values in same format
-           
-            data['storage'] = {  "0x%0.2X" % int(k,0) : v[0] for k,v in data['storage'].items() if k[:2]=='0x'}
-            data['storage'] = { k : "0x%0.2X" % int(v,0) for k,v in data['storage'].items() if v[:2]=='0x'}
-            state['storage'] = { "0x%0.2X" % int(k,0) : v for k,v in state['storage'].items() if k[:2]=='0x'}
-            state['storage'] = { k : "0x%0.2X" % int(v,0) for k,v in state['storage'].items() if v[:2]=='0x'}
+
+            def newFormat(x):
+                if x == '0x':
+                    return '0x00'
+		elif x[:2] == '0x':
+		    return "0x%0.2X" % int(x,0)
+     
+            data['storage'] = {  newFormat(k) : newFormat(v[0]) for k,v in data['storage'].items() }
+            state['storage'] = { newFormat(k) : newFormat(v) for k,v in state['storage'].items()}   
+
+            #if len(state['storage'])==0: continue
 
             assert data == state
