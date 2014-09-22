@@ -52,8 +52,11 @@ class state():
         shutil.rmtree(self.temp_data_dir)
 
     def contract(self, code, sender=k0, endowment=0):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         evm = serpent.compile(code)
+        return self.evm(evm, sender, endowment)
+
+    def evm(self, evm, sender=k0, endowment=0):
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         (s, a) = pb.apply_transaction(self.block, tx)
