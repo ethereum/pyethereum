@@ -31,7 +31,9 @@ class HashChainTask(object):
                                 self.peer, bh.encode('hex'), len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
-            #logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
+            # logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
+        if len(block_hashes) < self.NUM_HASHES_PER_REQUEST:
+            return list(reversed(self.hash_chain))
         self.request(bh)
 
 

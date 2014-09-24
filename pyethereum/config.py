@@ -28,7 +28,7 @@ config_template = \
 [network]
 
 # Connect to remote host/port
-remote_host = 54.76.56.74
+remote_host = 65.34.194.20
 remote_port = 30303
 
 # Listen on the given host/port for incoming connections
@@ -76,7 +76,7 @@ verbosity = 3
 #       :WARN
 #   get every message from module chainmanager and all warnings
 #       pyethereum.chainmanager:DEBUG,:WARN
-logging = :INFO
+logging = pyethereum.chainmanager:DEBUG,:INFO
 
 
 # WALLET OPTIONS ##################

@@ -483,7 +483,7 @@ def gettransactions_received_handler(sender, peer, **kwargs):
 
 @receiver(signals.remote_blocks_received)
 def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
-    logger.debug("recv %d remote blocks: %r", len(transient_blocks), transient_blocks)
+    logger.debug("recv %d remote blocks: %r", len(transient_blocks), map(lambda x: x.number, transient_blocks))
     if transient_blocks:
         chain_manager.receive_chain(transient_blocks, peer)
 

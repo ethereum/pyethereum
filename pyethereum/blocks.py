@@ -7,6 +7,7 @@ import processblock
 import transactions
 import logging
 import copy
+import sys
 from repoze.lru import lru_cache
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -204,6 +205,7 @@ class Block(object):
 
     def validate_uncles(self):
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+            sys.stderr.write(utils.sha3(rlp.encode(self.uncles)).encode('hex') + '   ' + self.uncles_hash.encode('hex') + '\n\n\n')
             return False
         # Check uncle validity
         ancestor_chain = [self]
@@ -220,13 +222,16 @@ class Block(object):
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
             if not check_header_pow(uncle):
+                sys.stderr.write('1\n\n')
                 return False
             # uncle's parent cannot be the block's own parent
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor", self)
+                sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' + str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
                 return False
             if uncle in ineligible:
+                sys.stderr.write('3\n\n')
                 logger.debug("%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)

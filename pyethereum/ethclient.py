@@ -97,6 +97,11 @@ class APIClient(object):
         tx = mktx(nonce, gasprice, startgas, to, value, data)
         return self.applytx(sign(tx, pkey_hex))
 
+    def quickcontract(self, gasprice, startgas, value, code, pkey_hex):
+        nonce = self.getnonce(privtoaddr(pkey_hex))
+        tx = contract(nonce, gasprice, startgas, value, code)
+        return self.applytx(sign(tx, pkey_hex))
+
     def getblock(self, id):
         return self.json_get_request(path='/blocks/%s' % id)
 
@@ -140,6 +145,7 @@ Usage:
   pyethclient mktx <nonce> <to> <value> <data_hex>
   pyethclient quicktx <to> <value> <data_hex> <pkey_hex>
   pyethclient mkcontract <nonce> <value> <code_hex>
+  pyethclient quickcontract <value> <code_hex> <pkey_hex>
   pyethclient applytx [options] <tx_hex>
   pyethclient sign <tx_hex> <pkey_hex>
   pyethclient privtoaddr <pkey_hex>
@@ -185,6 +191,7 @@ def main():
                     mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments['<value>'], arguments['<code_hex>']),
                     mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
                     quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
+                    quickcontract=(api.quickcontract, gasprice, startgas, arguments['<value>'], arguments['<code_hex>'], arguments['<pkey_hex>']),
                     sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
                     getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
                     gettx=(api.gettx, arguments['<txid_hex>']),
