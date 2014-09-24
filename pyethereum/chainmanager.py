@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 32 # MAX_GET_CHAIN_REQUEST_BLOCKS
-MAX_GET_CHAIN_SEND_HASHES = 32 # lower for less traffic
+NUM_BLOCKS_PER_REQUEST = 256 # MAX_GET_CHAIN_REQUEST_BLOCKS
+MAX_GET_CHAIN_SEND_HASHES = 256 # lower for less traffic
 
 
 class Index(object):
