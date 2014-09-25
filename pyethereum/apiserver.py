@@ -141,6 +141,20 @@ def block(arg=None):
     return make_blocks_response([blk])
 
 
+@app.get('/blocks/<arg>/children')
+def block_children(arg=None):
+    """
+    /blocks/<hex>/children       return list of children hashes
+    """
+    logger.debug('blocks/%s/children', arg)
+    try:
+        h = arg.decode('hex')
+        children = chain_manager.index.get_children(h)
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Block  %s' % arg)
+    return dict(children=[c.encode('hex') for c in children])
+
+
 # ######## Transactions ############
 def make_transaction_response(txs):
     return dict(transactions = [tx.to_dict() for tx in txs])
