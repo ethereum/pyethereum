@@ -102,7 +102,7 @@ def version():
 def make_blocks_response(blocks):
     res = []
     for b in blocks:
-        h = b.to_dict()
+        h = b.to_dict(with_uncles=True)
         h['hash'] = b.hex_hash()
         h['chain_difficulty'] = b.chain_difficulty()
         res.append(h)
@@ -139,6 +139,20 @@ def block(arg=None):
     except KeyError:
         return bottle.abort(404, 'Unknown Block  %s' % arg)
     return make_blocks_response([blk])
+
+
+@app.get('/blocks/<arg>/children')
+def block_children(arg=None):
+    """
+    /blocks/<hex>/children       return list of children hashes
+    """
+    logger.debug('blocks/%s/children', arg)
+    try:
+        h = arg.decode('hex')
+        children = chain_manager.index.get_children(h)
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Block  %s' % arg)
+    return dict(children=[c.encode('hex') for c in children])
 
 
 # ######## Transactions ############
@@ -321,7 +335,7 @@ def dump(txblkhash):
         processblock.apply_transaction(test_blk, tx)
         blk = test_blk
     # format
-    return blk.to_dict(with_state=True)
+    return blk.to_dict(with_state=True, with_uncles=True)
 
 
 

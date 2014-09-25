@@ -644,11 +644,13 @@ class Block(object):
     def hex_serialize_header(self):
         return rlp.encode(self.list_header()).encode('hex')
 
-    def to_dict(self, with_state=False, full_transactions=False, with_storage_roots=False):
+    def to_dict(self, with_state=False, full_transactions=False,
+                      with_storage_roots=False, with_uncles=False):
         """
         serializes the block
         with_state:             include state for all accounts
         full_transactions:      include serialized tx (hashes otherwise)
+        with_uncles:            include uncle hashes
         """
         b = {}
         for name, typ, default in block_structure:
@@ -673,6 +675,9 @@ class Block(object):
                 state_dump[address.encode('hex')] = \
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
+        if with_uncles:
+            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex') for u in self.uncles]
+
         return b
 
     def _hash(self):
