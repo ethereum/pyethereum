@@ -105,6 +105,9 @@ class APIClient(object):
     def getblock(self, id):
         return self.json_get_request(path='/blocks/%s' % id)
 
+    def getchildren(self, id):
+        return self.json_get_request(path='/blocks/%s/children' % id)
+
     def gettx(self, id):
         return self.json_get_request(path='/transactions/%s' % id)
 
