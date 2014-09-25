@@ -163,13 +163,18 @@ Options:
   -H --host=<host>          API server host [default: %s]
   -p --port=<port>          API server port [default: %d]
   -g --gasprice=<gasprice>  maximum gas price [default: %d]
-  -s --startgas=<startgas>  gas provided [default: %d]
+  -G --startgas=<startgas>  gas provided [default: %d]
+  -s --stdin                take arguments from stdin
   -n --nonce                by default the next nonce is looked up
 """ % (DEFAULT_HOST, DEFAULT_PORT, DEFAULT_GASPRICE, DEFAULT_STARTGAS)
 
 
-
 def main():
+    # Take arguments from stdin with -s
+    if len(sys.argv) and sys.argv[1] == '-s':
+        sys.argv = [sys.argv[0], sys.argv[2]] + \
+            sys.stdin.read().strip().split(' ') + sys.argv[3:]
+    # Get command line arguments
     arguments = docopt(doc, version='pyethclient %s' % __version__)
     #print(arguments)
 
