@@ -518,7 +518,7 @@ class Block(object):
             address = address.decode('hex')
         self.state.delete(address)
 
-    def account_to_dict(self, address, with_storage_root=False):
+    def account_to_dict(self, address, with_storage_root=False, with_storage=True):
         if with_storage_root:
             assert len(self.journal) == 0
         med_dict = {}
@@ -531,18 +531,19 @@ class Block(object):
                     med_dict['storage_root'] = strie.get_root_hash().encode('hex')
             else:
                 med_dict[key] = self.caches[key].get(address, utils.printers[typ](val))
-        med_dict['storage'] = {}
-        d = strie.to_dict()
-        for k in d.keys() + self.caches['all'].keys():
-            v = d.get(k, None)
-            subcache = self.caches.get('storage:'+address, {})
-            v2 = subcache.get(utils.big_endian_to_int(k), None)
-            hexkey = '0x'+k.encode('hex')
-            if v2 is not None:
-                if v2 != 0:
-                    med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
-            elif v is not None:
-                med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
+        if with_storage:
+            med_dict['storage'] = {}
+            d = strie.to_dict()
+            for k in d.keys() + self.caches['all'].keys():
+                v = d.get(k, None)
+                subcache = self.caches.get('storage:'+address, {})
+                v2 = subcache.get(utils.big_endian_to_int(k), None)
+                hexkey = '0x'+k.encode('hex')
+                if v2 is not None:
+                    if v2 != 0:
+                        med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+                elif v is not None:
+                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
         return med_dict
 
     def reset_cache(self):

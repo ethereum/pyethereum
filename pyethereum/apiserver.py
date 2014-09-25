@@ -252,6 +252,24 @@ def trace(txhash):
     return dict(tx=txhash, trace=log)
 
 
+# Fetch state data
+
+@app.get('/acct/<addr>')
+def getacct(addr):
+    """
+    /acct/<addr>        return account details
+    """
+    return chain_manager.head.account_to_dict(addr)
+
+
+@app.get('/acct/<addr>/<index>')
+def getacctdata(addr, index):
+    """
+    /acct/<addr>/<index>        return storage item
+    """
+    return chain_manager.head.get_storage_data(addr, int(index))
+
+
 @app.get('/dump/<txblkhash>')
 def dump(txblkhash):
     """

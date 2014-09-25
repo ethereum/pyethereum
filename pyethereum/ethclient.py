@@ -6,6 +6,7 @@ import json
 from docopt import docopt
 import utils
 import transactions
+import rlp
 from . import __version__
 from . config import read_config
 
@@ -98,9 +99,14 @@ class APIClient(object):
         return self.applytx(sign(tx, pkey_hex))
 
     def quickcontract(self, gasprice, startgas, value, code, pkey_hex):
-        nonce = self.getnonce(privtoaddr(pkey_hex))
+        sender = privtoaddr(pkey_hex)
+        nonce = self.getnonce(sender)
         tx = contract(nonce, gasprice, startgas, value, code)
-        return self.applytx(sign(tx, pkey_hex))
+        formatted_rlp = [sender.decode('hex'), utils.int_to_big_endian(nonce)]
+        addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
+        o = self.applytx(sign(tx, pkey_hex))
+        o['addr'] = addr
+        return o
 
     def getblock(self, id):
         return self.json_get_request(path='/blocks/%s' % id)
@@ -171,7 +177,7 @@ Options:
 
 def main():
     # Take arguments from stdin with -s
-    if len(sys.argv) and sys.argv[1] == '-s':
+    if len(sys.argv) > 1 and sys.argv[1] == '-s':
         sys.argv = [sys.argv[0], sys.argv[2]] + \
             sys.stdin.read().strip().split(' ') + sys.argv[3:]
     # Get command line arguments
