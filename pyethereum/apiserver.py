@@ -102,7 +102,7 @@ def version():
 def make_blocks_response(blocks):
     res = []
     for b in blocks:
-        h = b.to_dict()
+        h = b.to_dict(with_uncles=True)
         h['hash'] = b.hex_hash()
         h['chain_difficulty'] = b.chain_difficulty()
         res.append(h)
@@ -267,7 +267,7 @@ def dump(txblkhash):
         processblock.apply_transaction(test_blk, tx)
         blk = test_blk
     # format
-    return blk.to_dict(with_state=True)
+    return blk.to_dict(with_state=True, with_uncles=True)
 
 
 
