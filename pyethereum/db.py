@@ -12,7 +12,7 @@ class DB(object):
     def __init__(self, dbfile):
         self.dbfile = os.path.abspath(dbfile)
         if dbfile not in databases:
-            logger.debug('Opening new db:%r', dbfile)
+            logger.debug('Opening db #%d @%r', len(databases)+1, dbfile)
             databases[dbfile] = (leveldb.LevelDB(dbfile), dict(), threading.Lock())
         self.db, self.uncommitted, self.lock = databases[dbfile]
 #        logger.debug('%r initialized', self)
