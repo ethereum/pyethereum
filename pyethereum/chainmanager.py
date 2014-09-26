@@ -117,13 +117,15 @@ class ChainManager(StoppableLoopThread):
     Manages the chain and requests to it.
     """
 
+    # initialized after configure:
+    genesis = None
+    index = None
+    miner = None
+    blockchain = None
+    synchronizer = None
+
     def __init__(self):
         super(ChainManager, self).__init__()
-        # initialized after configure
-        self.miner = None
-        self.blockchain = None
-        self.synchronizer = Synchronizer(self)
-        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
 
     def configure(self, config, genesis=None):
         self.config = config
@@ -133,7 +135,9 @@ class ChainManager(StoppableLoopThread):
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
         self.new_miner()
+        self.synchronizer = Synchronizer(self)
 
     @property
     def head(self):
