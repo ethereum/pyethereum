@@ -29,7 +29,7 @@ config_template = \
 
 # Connect to remote host/port
 # poc-6.ethdev.com:30300
-remote_host = 65.34.194.20
+remote_host = 207.12.89.101
 remote_port = 30303
 
 # Listen on the given host/port for incoming connections
