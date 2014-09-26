@@ -80,6 +80,14 @@ class Packeter(object):
         self.NODE_ID = self.config.get('network', 'node_id')
 
     @classmethod
+    def packet_size(cls, packet):
+        return idec(packet[4:8]) + 8
+
+    @classmethod
+    def packet_cmd(cls, packet):
+        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200],0)))
+
+    @classmethod
     def load_packet(cls, packet):
         '''
         Though TCP provides a connection-oriented medium, Ethereum nodes
