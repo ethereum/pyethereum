@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import time
 import uuid
@@ -87,7 +88,6 @@ def parse_arguments():
 def check_chain_version(config):
     key = '__chain_version__'
     chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
-    data_dir.set(config.get('misc', 'data_dir'))
     db_path = get_db_path()
     db = DB(db_path)
     if not key in db:
@@ -111,8 +111,11 @@ def create_config():
     config = konfig.read_config()
 
     # 2) read config from file
-    if getattr(options, 'config_file'):
-        config.read(getattr(options, 'config_file'))
+    cfg_fn = getattr(options, 'config_file')
+    if cfg_fn:
+        if not os.path.exists(cfg_fn):
+            konfig.read_config(cfg_fn) # creates default
+        config.read(cfg_fn)
 
     # 3) apply cmd line options to config
     for section in config.sections():
