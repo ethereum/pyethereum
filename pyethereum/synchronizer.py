@@ -32,8 +32,6 @@ class HashChainTask(object):
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
             # logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
-        if len(block_hashes) < self.NUM_HASHES_PER_REQUEST:
-            return list(reversed(self.hash_chain))
         self.request(bh)
 
 
@@ -64,7 +62,7 @@ class SynchronizationTask(object):
             self.request_blocks()
 
     def received_blocks(self, transient_blocks):
-        logger.debug('%r received %d of %d missing blocks', self.peer, len(transient_blocks), len(self.hash_chain))
+        logger.debug('%r received %d blocks. %d missing', self.peer, len(transient_blocks), len(self.hash_chain))
         for tb in transient_blocks:
             if len(self.hash_chain) and self.hash_chain[0] == tb.hash:
                 self.hash_chain.pop(0)
