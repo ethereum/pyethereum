@@ -21,6 +21,8 @@ from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
+from pyethereum.chainmanager import chain_manager
+
 from pyethereum.db import DB
 import pyethereum.config as konfig
 from . import __version__
@@ -123,6 +125,8 @@ def create_config():
             if getattr(options, a, None) is not None:
                 config.set(section, a, getattr(options,a))
 
+    # set datadir
+    data_dir.set(config.get('misc', 'data_dir'))
     return config
 
 
@@ -139,7 +143,6 @@ def main():
 
     # initialize chain
     check_chain_version(config)
-    from pyethereum.chainmanager import chain_manager
 
     # P2P TCP SERVER
     try:
