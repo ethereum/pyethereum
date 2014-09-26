@@ -22,14 +22,6 @@ MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND # Maximum number of blocks Blocks will eve
 
 logger = logging.getLogger(__name__)
 
-DUMP_NETWORK_DATA = False
-def format_log_data(data):
-    if DUMP_NETWORK_DATA:
-        return data.encode('hex')
-    else:
-        return data.encode('hex')[:8] + '...'
-
-
 class Peer(StoppableLoopThread):
 
     def __init__(self, connection, ip, port):
@@ -77,12 +69,11 @@ class Peer(StoppableLoopThread):
         try:
             self._connection.shutdown(socket.SHUT_RDWR)
         except socket.error as e:
-            logger.debug(
-                "shutting down failed {0} \"{1}\"".format(repr(self), str(e)))
+            logger.debug("shutting down failed %r '%s'", self, e)
         self._connection.close()
 
     def send_packet(self, response):
-        logger.debug('sending packet to {0} >>> {1}'.format(self, format_log_data(response)))
+        logger.debug('sending %r >>> %s', self, packeter.packet_cmd(response))
         self.response_queue.put(response)
 
     def _process_send(self):
@@ -133,15 +124,11 @@ class Peer(StoppableLoopThread):
 
         # good peer
         self.last_valid_packet_received = time.time()
-
-        logger.debug('receive from {0} <<< cmd: {1}: data: {2}'.format(
-            self, cmd, format_log_data(rlp.encode(recursive_int_to_big_endian(data)))))
-
+        logger.debug('receive %r <<< %s (%d)', self, cmd, len(data))
         func_name = "_recv_{0}".format(cmd)
         if not hasattr(self, func_name):
-            logger.warn('unknown cmd \'{0}\''.format(func_name))
+            logger.warn('unknown cmd "%s"', cmd)
             return
-
         getattr(self, func_name)(data)
 
 
