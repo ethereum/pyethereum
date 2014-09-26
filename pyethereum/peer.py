@@ -84,35 +84,37 @@ class Peer(StoppableLoopThread):
         try:
             packet = self.response_queue.get(block=False)
         except Queue.Empty:
-            packet = ''
-
-        while packet:
-            try:
-                n = self.connection().send(packet)
-                packet = packet[n:]
-            except socket.error as e:
-                logger.debug('{0}: send packet failed, {1}'.format(self, str(e)))
-                self.stop()
-                break
-
-        if packet:
+            return 0
+        try:
+            self.connection().sendall(packet)
             return len(packet)
-        else:
+        except socket.error as e:
+            logger.debug('%r: send packet failed, %s', self, e)
+            self.stop()
             return 0
 
     def _process_recv(self):
         '''
         :return: size of processed data
         '''
+        # receive complete message
+        processed_length = 0
         while True:
             try:
+                #print 'receiving'
                 self.recv_buffer += self.connection().recv(2048)
-            except socket.error:
+            except socket.error: # Timeout
+                #print 'timeout'
                 break
-        length = len(self.recv_buffer)
-        while self.recv_buffer:
-            self._process_recv_buffer()
-        return length
+            # check if we have a complete packet
+            length = len(self.recv_buffer)
+            # length > packet_header and length > expected packet size
+            while len(self.recv_buffer) >= 8 and len(self.recv_buffer) >= packeter.packet_size(self.recv_buffer):
+                processed_length += packeter.packet_size(self.recv_buffer)
+                self._process_recv_buffer()
+
+        return processed_length
+
 
     def _process_recv_buffer(self):
         try:
