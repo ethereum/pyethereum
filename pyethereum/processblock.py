@@ -383,7 +383,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 pblogger.log('MEM', mem=memline)
 
         if pblogger.log_storage:
-            pblogger.log('STORAGE', storage=block.account_to_dict(msg.to))
+            pblogger.log('STORAGE', storage=block.account_to_dict(msg.to)['storage'])
 
         if pblogger.log_op:
             log_args = dict(pc=compustate.pc,

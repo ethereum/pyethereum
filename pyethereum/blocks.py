@@ -308,7 +308,7 @@ class Block(object):
                 "Gas mismatch (%d, %d) on block: %r" % \
                 (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
             assert _state_root == block.state.root_hash, \
-                "State root mismatch: %r" % \
+                "State root mismatch: %r %r %r" % \
                 (block.state.root_hash, _state_root, block.to_dict(False, True, True))
 
         block.finalize()
@@ -534,9 +534,10 @@ class Block(object):
         if with_storage:
             med_dict['storage'] = {}
             d = strie.to_dict()
-            for k in d.keys() + self.caches['all'].keys():
+            subcache = self.caches.get('storage:'+address, {})
+            subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32) for kk in subcache.keys()]
+            for k in d.keys() + subkeys:
                 v = d.get(k, None)
-                subcache = self.caches.get('storage:'+address, {})
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
                 hexkey = '0x'+k.encode('hex')
                 if v2 is not None:
