@@ -74,7 +74,7 @@ verbosity = 3
 #       :WARN
 #   get every message from module chainmanager and all warnings
 #       pyethereum.chainmanager:DEBUG,:WARN
-logging = pyethereum.chainmanager:DEBUG,:INFO
+logging = pyethereum.chainmanager:DEBUG,pyethereum.synchronizer:DEBUG,:INFO
 
 
 # WALLET OPTIONS ##################
