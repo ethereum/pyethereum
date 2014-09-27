@@ -309,7 +309,7 @@ class Block(object):
                 (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
             assert _state_root == block.state.root_hash, \
                 "State root mismatch: %r" % \
-                (block.state_root_hash, _state_root, block.to_dict(False, True, True))
+                (block.state.root_hash, _state_root, block.to_dict(False, True, True))
 
         block.finalize()
 
