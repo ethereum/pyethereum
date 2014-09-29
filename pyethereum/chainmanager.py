@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 from operator import attrgetter
 from dispatch import receiver
 from stoppable import StoppableLoopThread
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 32 # MAX_GET_CHAIN_REQUEST_BLOCKS
-MAX_GET_CHAIN_SEND_HASHES = 32 # lower for less traffic
+NUM_BLOCKS_PER_REQUEST = 256 # MAX_GET_CHAIN_REQUEST_BLOCKS
+
 
 
 class Index(object):
@@ -116,13 +117,15 @@ class ChainManager(StoppableLoopThread):
     Manages the chain and requests to it.
     """
 
+    # initialized after configure:
+    genesis = None
+    index = None
+    miner = None
+    blockchain = None
+    synchronizer = None
+
     def __init__(self):
         super(ChainManager, self).__init__()
-        # initialized after configure
-        self.miner = None
-        self.blockchain = None
-        self.synchronizer = Synchronizer(self)
-        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
 
     def configure(self, config, genesis=None):
         self.config = config
@@ -132,7 +135,9 @@ class ChainManager(StoppableLoopThread):
         if genesis:
             self._initialize_blockchain(genesis)
         logger.debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
         self.new_miner()
+        self.synchronizer = Synchronizer(self)
 
     @property
     def head(self):
@@ -306,7 +311,10 @@ class ChainManager(StoppableLoopThread):
                 #logger.debug('GOT ACCOUNT FOR COINBASE: %r', acct)
                 processblock.verify(block, block.get_parent())
             except processblock.VerificationFailed as e:
-                logger.debug('%r', e)
+                logger.debug('### VERIFICATION FAILED ### %r', e)
+                f = os.path.join(utils.data_dir, 'badblock.log')
+                open(f, 'w').write(str(block.hex_serialize()))
+                print block.hex_serialize()
                 return False
 
         if block.number < self.head.number:
@@ -479,7 +487,7 @@ def gettransactions_received_handler(sender, peer, **kwargs):
 
 @receiver(signals.remote_blocks_received)
 def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
-    logger.debug("recv %d remote blocks: %r", len(transient_blocks), transient_blocks)
+    logger.debug("recv %d remote blocks: %r", len(transient_blocks), map(lambda x: x.number, transient_blocks))
     if transient_blocks:
         chain_manager.receive_chain(transient_blocks, peer)
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import time
 import uuid
@@ -20,6 +21,8 @@ from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
 from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
+from pyethereum.chainmanager import chain_manager
+
 from pyethereum.db import DB
 import pyethereum.config as konfig
 from . import __version__
@@ -87,7 +90,6 @@ def parse_arguments():
 def check_chain_version(config):
     key = '__chain_version__'
     chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
-    data_dir.set(config.get('misc', 'data_dir'))
     db_path = get_db_path()
     db = DB(db_path)
     if not key in db:
@@ -111,8 +113,11 @@ def create_config():
     config = konfig.read_config()
 
     # 2) read config from file
-    if getattr(options, 'config_file'):
-        config.read(getattr(options, 'config_file'))
+    cfg_fn = getattr(options, 'config_file')
+    if cfg_fn:
+        if not os.path.exists(cfg_fn):
+            konfig.read_config(cfg_fn) # creates default
+        config.read(cfg_fn)
 
     # 3) apply cmd line options to config
     for section in config.sections():
@@ -120,6 +125,8 @@ def create_config():
             if getattr(options, a, None) is not None:
                 config.set(section, a, getattr(options,a))
 
+    # set datadir
+    data_dir.set(config.get('misc', 'data_dir'))
     return config
 
 
@@ -136,7 +143,6 @@ def main():
 
     # initialize chain
     check_chain_version(config)
-    from pyethereum.chainmanager import chain_manager
 
     # P2P TCP SERVER
     try:

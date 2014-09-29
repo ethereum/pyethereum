@@ -13,7 +13,8 @@ import blocks
 from peer import Peer
 
 
-DEFAULT_SOCKET_TIMEOUT = 1.
+DEFAULT_SOCKET_TIMEOUT = 0.01
+CONNECT_SOCKET_TIMEOUT = 5.
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class PeerManager(StoppableLoopThread):
     def _create_peer_sock(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(1)  # relaxed timeout for connecting
+        sock.settimeout(CONNECT_SOCKET_TIMEOUT)  # relaxed timeout for connecting
         return sock
 
     def connect_peer(self, host, port):

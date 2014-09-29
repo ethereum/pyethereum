@@ -6,6 +6,7 @@ import json
 from docopt import docopt
 import utils
 import transactions
+import rlp
 from . import __version__
 from . config import read_config
 
@@ -97,8 +98,21 @@ class APIClient(object):
         tx = mktx(nonce, gasprice, startgas, to, value, data)
         return self.applytx(sign(tx, pkey_hex))
 
+    def quickcontract(self, gasprice, startgas, value, code, pkey_hex):
+        sender = privtoaddr(pkey_hex)
+        nonce = self.getnonce(sender)
+        tx = contract(nonce, gasprice, startgas, value, code)
+        formatted_rlp = [sender.decode('hex'), utils.int_to_big_endian(nonce)]
+        addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
+        o = self.applytx(sign(tx, pkey_hex))
+        o['addr'] = addr
+        return o
+
     def getblock(self, id):
         return self.json_get_request(path='/blocks/%s' % id)
+
+    def getchildren(self, id):
+        return self.json_get_request(path='/blocks/%s/children' % id)
 
     def gettx(self, id):
         return self.json_get_request(path='/transactions/%s' % id)
@@ -140,6 +154,7 @@ Usage:
   pyethclient mktx <nonce> <to> <value> <data_hex>
   pyethclient quicktx <to> <value> <data_hex> <pkey_hex>
   pyethclient mkcontract <nonce> <value> <code_hex>
+  pyethclient quickcontract <value> <code_hex> <pkey_hex>
   pyethclient applytx [options] <tx_hex>
   pyethclient sign <tx_hex> <pkey_hex>
   pyethclient privtoaddr <pkey_hex>
@@ -157,13 +172,18 @@ Options:
   -H --host=<host>          API server host [default: %s]
   -p --port=<port>          API server port [default: %d]
   -g --gasprice=<gasprice>  maximum gas price [default: %d]
-  -s --startgas=<startgas>  gas provided [default: %d]
+  -G --startgas=<startgas>  gas provided [default: %d]
+  -s --stdin                take arguments from stdin
   -n --nonce                by default the next nonce is looked up
 """ % (DEFAULT_HOST, DEFAULT_PORT, DEFAULT_GASPRICE, DEFAULT_STARTGAS)
 
 
-
 def main():
+    # Take arguments from stdin with -s
+    if len(sys.argv) > 1 and sys.argv[1] == '-s':
+        sys.argv = [sys.argv[0], sys.argv[2]] + \
+            sys.stdin.read().strip().split(' ') + sys.argv[3:]
+    # Get command line arguments
     arguments = docopt(doc, version='pyethclient %s' % __version__)
     #print(arguments)
 
@@ -185,6 +205,7 @@ def main():
                     mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments['<value>'], arguments['<code_hex>']),
                     mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
                     quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
+                    quickcontract=(api.quickcontract, gasprice, startgas, arguments['<value>'], arguments['<code_hex>'], arguments['<pkey_hex>']),
                     sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
                     getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
                     gettx=(api.gettx, arguments['<txid_hex>']),

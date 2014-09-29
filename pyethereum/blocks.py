@@ -7,6 +7,7 @@ import processblock
 import transactions
 import logging
 import copy
+import sys
 from repoze.lru import lru_cache
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -204,6 +205,7 @@ class Block(object):
 
     def validate_uncles(self):
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+            sys.stderr.write(utils.sha3(rlp.encode(self.uncles)).encode('hex') + '   ' + self.uncles_hash.encode('hex') + '\n\n\n')
             return False
         # Check uncle validity
         ancestor_chain = [self]
@@ -220,13 +222,16 @@ class Block(object):
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
             if not check_header_pow(uncle):
+                sys.stderr.write('1\n\n')
                 return False
             # uncle's parent cannot be the block's own parent
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor", self)
+                sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' + str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
                 return False
             if uncle in ineligible:
+                sys.stderr.write('3\n\n')
                 logger.debug("%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)
@@ -299,8 +304,12 @@ class Block(object):
             #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
             logger.debug('d %s %s', _gas_used_encoded, block.gas_used)
-            assert utils.decode_int(_gas_used_encoded) == block.gas_used
-            assert _state_root == block.state.root_hash
+            assert utils.decode_int(_gas_used_encoded) == block.gas_used, \
+                "Gas mismatch (%d, %d) on block: %r" % \
+                (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
+            assert _state_root == block.state.root_hash, \
+                "State root mismatch: %r %r %r" % \
+                (block.state.root_hash, _state_root, block.to_dict(False, True, True))
 
         block.finalize()
 
@@ -509,7 +518,7 @@ class Block(object):
             address = address.decode('hex')
         self.state.delete(address)
 
-    def account_to_dict(self, address, with_storage_root=False):
+    def account_to_dict(self, address, with_storage_root=False, with_storage=True):
         if with_storage_root:
             assert len(self.journal) == 0
         med_dict = {}
@@ -522,18 +531,20 @@ class Block(object):
                     med_dict['storage_root'] = strie.get_root_hash().encode('hex')
             else:
                 med_dict[key] = self.caches[key].get(address, utils.printers[typ](val))
-        med_dict['storage'] = {}
-        d = strie.to_dict()
-        for k in d.keys() + self.caches['all'].keys():
-            v = d.get(k, None)
+        if with_storage:
+            med_dict['storage'] = {}
+            d = strie.to_dict()
             subcache = self.caches.get('storage:'+address, {})
-            v2 = subcache.get(utils.big_endian_to_int(k), None)
-            hexkey = '0x'+k.encode('hex')
-            if v2 is not None:
-                if v2 != 0:
-                    med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
-            elif v is not None:
-                med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
+            subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32) for kk in subcache.keys()]
+            for k in d.keys() + subkeys:
+                v = d.get(k, None)
+                v2 = subcache.get(utils.big_endian_to_int(k), None)
+                hexkey = '0x'+k.encode('hex')
+                if v2 is not None:
+                    if v2 != 0:
+                        med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+                elif v is not None:
+                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
         return med_dict
 
     def reset_cache(self):
@@ -634,11 +645,13 @@ class Block(object):
     def hex_serialize_header(self):
         return rlp.encode(self.list_header()).encode('hex')
 
-    def to_dict(self, with_state=False, full_transactions=False, with_storage_roots=False):
+    def to_dict(self, with_state=False, full_transactions=False,
+                      with_storage_roots=False, with_uncles=False):
         """
         serializes the block
         with_state:             include state for all accounts
         full_transactions:      include serialized tx (hashes otherwise)
+        with_uncles:            include uncle hashes
         """
         b = {}
         for name, typ, default in block_structure:
@@ -663,6 +676,9 @@ class Block(object):
                 state_dump[address.encode('hex')] = \
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
+        if with_uncles:
+            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex') for u in self.uncles]
+
         return b
 
     def _hash(self):

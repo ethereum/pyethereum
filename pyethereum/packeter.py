@@ -32,7 +32,7 @@ class Packeter(object):
 
     """
     NETWORK_PROTOCOL_VERSION = 0
-    ETHEREUM_PROTOCOL_VERSION = 32
+    ETHEREUM_PROTOCOL_VERSION = 33 # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
     NODE_ID = sha3('') # set in config
@@ -78,6 +78,14 @@ class Packeter(object):
         self.CLIENT_VERSION = self.config.get('network', 'client_version') \
             or self.CLIENT_VERSION
         self.NODE_ID = self.config.get('network', 'node_id')
+
+    @classmethod
+    def packet_size(cls, packet):
+        return idec(packet[4:8]) + 8
+
+    @classmethod
+    def packet_cmd(cls, packet):
+        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200],0)))
 
     @classmethod
     def load_packet(cls, packet):

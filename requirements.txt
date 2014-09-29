@@ -8,4 +8,5 @@ docopt
 six
 ethereum-serpent
 pytest
+requests
 repoze.lru

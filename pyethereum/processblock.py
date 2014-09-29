@@ -376,6 +376,15 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if pblogger.log_stack:
             pblogger.log('STK', stk=list(reversed(compustate.stack)))
 
+        if pblogger.log_memory:
+            for i in range(0, len(compustate.memory), 16):
+                memblk = compustate.memory[i:i+16]
+                memline = ' '.join([chr(x).encode('hex') for x in memblk])
+                pblogger.log('MEM', mem=memline)
+
+        if pblogger.log_storage:
+            pblogger.log('STORAGE', storage=block.account_to_dict(msg.to)['storage'])
+
         if pblogger.log_op:
             log_args = dict(pc=compustate.pc,
                             op=op,
@@ -388,12 +397,6 @@ def apply_op(block, tx, msg, processed_code, compustate):
             elif op == 'CALLDATACOPY':
                 log_args['data'] = msg.data.encode('hex')
             pblogger.log('OP', **log_args)
-
-        if pblogger.log_memory:
-            for i in range(0, len(compustate.memory), 16):
-                memblk = compustate.memory[i:i+16]
-                memline = ' '.join([chr(x).encode('hex') for x in memblk])
-                pblogger.log('MEM', mem=memline)
 
     # Apply operation
     compustate.gas -= fee

@@ -102,7 +102,7 @@ def version():
 def make_blocks_response(blocks):
     res = []
     for b in blocks:
-        h = b.to_dict()
+        h = b.to_dict(with_uncles=True)
         h['hash'] = b.hex_hash()
         h['chain_difficulty'] = b.chain_difficulty()
         res.append(h)
@@ -141,6 +141,20 @@ def block(arg=None):
     return make_blocks_response([blk])
 
 
+@app.get('/blocks/<arg>/children')
+def block_children(arg=None):
+    """
+    /blocks/<hex>/children       return list of children hashes
+    """
+    logger.debug('blocks/%s/children', arg)
+    try:
+        h = arg.decode('hex')
+        children = chain_manager.index.get_children(h)
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Block  %s' % arg)
+    return dict(children=[c.encode('hex') for c in children])
+
+
 # ######## Transactions ############
 def make_transaction_response(txs):
     return dict(transactions = [tx.to_dict() for tx in txs])
@@ -159,11 +173,7 @@ def add_transaction():
         bottle.abort(400, 'Invalid Transaction %s' % tx.hex_hash())
 
 
-@app.get('/transactions/<arg>')
-def get_transactions(arg=None):
-    """
-    /transactions/<hex>          return transaction by hexhash
-    """
+def get_transaction_and_block(arg=None):
     try:
         tx_hash = arg.decode('hex')
     except TypeError:
@@ -178,6 +188,15 @@ def get_transactions(arg=None):
             return bottle.abort(404, 'Unknown Transaction  %s' % arg)
         tx, blk = found[0], chain_manager.miner.block
     # response
+    return tx, blk
+
+
+@app.get('/transactions/<arg>')
+def get_txdetails(arg=None):
+    """
+    /transactions/<hex>          return transaction by hexhash
+    """
+    tx, blk = get_transaction_and_block(arg)
     tx = tx.to_dict()
     tx['block'] = blk.hex_hash()
     if not chain_manager.in_main_branch(blk):
@@ -185,6 +204,15 @@ def get_transactions(arg=None):
     else:
         tx['confirmations'] = chain_manager.head.number - blk.number
     return dict(transactions=[tx])
+
+
+@app.get('/rawtx/<arg>')
+def get_rawtx(arg=None):
+    """
+    /rawtx/<hex>          return transaction hex by hexhash
+    """
+    tx, blk = get_transaction_and_block(arg)
+    return tx.hex_serialize()
 
 
 @app.get('/pending/')
@@ -225,11 +253,8 @@ def _get_block_before_tx(txhash):
     test_blk.state.root_hash = pre_state
     return test_blk, tx
 
-@app.get('/trace/<txhash>')
-def trace(txhash):
-    """
-    /trace/<hexhash>        return trace for transaction
-    """
+
+def get_trace(txhash):
     try: # index
         test_blk, tx = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
@@ -252,6 +277,49 @@ def trace(txhash):
     return dict(tx=txhash, trace=log)
 
 
+@app.get('/trace/<txhash>')
+def trace(txhash):
+    """
+    /trace/<hexhash>        return basic trace for transaction
+    """
+    return get_trace(txhash)
+
+
+@app.get('/dtrace/<params>/<txhash>')
+def dtrace(params, txhash):
+    """
+    /trace/<params>/<hexhash>  return detailed trace for transaction, params
+                               4-char binary string for op, stack, memory,
+                               storage (eg. 1011 = op, mem, storage only)
+    """
+    if len(params) != 4:
+        return bottle.abort(404, 'Params must be binary string of length 4')
+    processblock.pblogger.log_apply_op = True
+    processblock.pblogger.log_op = (params[0] != '0')
+    processblock.pblogger.log_stack = (params[1] != '0')
+    processblock.pblogger.log_memory = (params[2] != '0')
+    processblock.pblogger.log_storage = (params[3] != '0')
+    return get_trace(txhash)
+
+
+# Fetch state data
+
+@app.get('/acct/<addr>')
+def getacct(addr):
+    """
+    /acct/<addr>        return account details
+    """
+    return chain_manager.head.account_to_dict(addr)
+
+
+@app.get('/storage/<addr>/<index>')
+def getacctdata(addr, index):
+    """
+    /storage/<addr>/<index>        return storage item
+    """
+    return str(chain_manager.head.get_storage_data(addr, int(index)))
+
+
 @app.get('/dump/<txblkhash>')
 def dump(txblkhash):
     """
@@ -267,7 +335,7 @@ def dump(txblkhash):
         processblock.apply_transaction(test_blk, tx)
         blk = test_blk
     # format
-    return blk.to_dict(with_state=True)
+    return blk.to_dict(with_state=True, with_uncles=True)
 
 
 

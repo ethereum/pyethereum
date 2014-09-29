@@ -28,7 +28,8 @@ config_template = \
 [network]
 
 # Connect to remote host/port
-remote_host = 54.76.56.74
+# poc-6.ethdev.com:30300
+remote_host = 207.12.89.101
 remote_port = 30303
 
 # Listen on the given host/port for incoming connections
@@ -38,11 +39,8 @@ listen_port = 30303
 # Number of peer to connections to establish
 num_peers = 10
 
-# Name of the client
-client_version = {0}
-
 # unique id of this node
-node_id = {1}
+node_id = {0}
 
 # API OPTIONS ###########
 [api]
@@ -59,7 +57,7 @@ api_path = /api/v02a
 [misc]
 
 # Load database from path
-data_dir = {2}
+data_dir = {1}
 
 # percent cpu devoted to mining 0=off
 mining = 30
@@ -76,7 +74,7 @@ verbosity = 3
 #       :WARN
 #   get every message from module chainmanager and all warnings
 #       pyethereum.chainmanager:DEBUG,:WARN
-logging = :INFO
+logging = pyethereum.chainmanager:DEBUG,pyethereum.synchronizer:DEBUG,:INFO
 
 
 # WALLET OPTIONS ##################
@@ -86,7 +84,7 @@ logging = :INFO
 coinbase = 6c386a4b26f73c802f34673f7248bb118f97424a
 
 
-""".format(default_client_version(), default_node_id(), default_data_dir())
+""".format(default_node_id(), default_data_dir())
 
 
 def get_default_config():
@@ -95,7 +93,7 @@ def get_default_config():
     f.seek(0)
     config = ConfigParser.ConfigParser()
     config.readfp(f)
-    assert config.get('misc', 'verbosity')
+    config.set('network', 'client_version', default_client_version())
     return config
 
 def read_config(cfg_path = default_config_path()):
