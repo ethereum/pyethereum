@@ -47,17 +47,29 @@ def test_random():
 def test_generic():
     do_test_vm('vmtests')
 
+def test_Arithmetic():
+    do_test_vm('vmArithmeticTest')
+
 def test_BitwiseLogicOperation():
     do_test_vm('vmBitwiseLogicOperationTest')
 
-def test_Arithmetic():
-    do_test_vm('vmArithmeticTest')
+def test_Sha3():
+    do_test_vm('vmSha3Test')
 
 def test_EnvironmentalInfo():
     do_test_vm('vmEnvironmentalInfoTest')
 
-def test_Sha3():
-    do_test_vm('vmSha3Test')
+def test_BlockInfo():
+    do_test_vm('vmBlockInfoTest')
+
+def test_IOandFlowOperations():
+    do_test_vm('vmIOandFlowOperationsTest')
+
+def test_PushDupSwapInfo():
+    do_test_vm('vmPushDupSwapTest')
+
+def test_SystemOperationsInfo():
+    do_test_vm('vmSystemOperationsTest')
 
 
 
@@ -145,7 +157,7 @@ def do_test_vm(name):
         apply_message_calls.pop(0)
         blk.commit_state()
     
-        #assert success
+        assert success
         assert len(callcreates) == len(apply_message_calls)
     
         # check against callcreates
