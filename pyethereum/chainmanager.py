@@ -495,5 +495,7 @@ def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
 def remote_block_hashes_received_handler(sender, block_hashes, peer, **kwargs):
     if block_hashes:
         logger.debug("recv %d remote block_hashes: %r", len(block_hashes), [block_hashes[0].encode('hex'), '...', block_hashes[-1].encode('hex')])
-        chain_manager.synchronizer.received_block_hashes(peer, block_hashes)
+    else:
+        logger.debug("recv 0 remore block hashes, signifying genesis block")
+    chain_manager.synchronizer.received_block_hashes(peer, block_hashes)
 

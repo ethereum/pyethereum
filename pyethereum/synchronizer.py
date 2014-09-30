@@ -2,6 +2,7 @@
 from operator import attrgetter
 import logging
 import blocks
+import sys
 logger = logging.getLogger(__name__)
 
 class HashChainTask(object):
@@ -31,6 +32,8 @@ class HashChainTask(object):
                                 self.peer, bh.encode('hex'), len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
+        if len(block_hashes) == 0:
+            return list(reversed(self.hash_chain))
             # logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
         self.request(bh)
 
