@@ -31,6 +31,11 @@ First byte of an encoded item
 0xff == 255
 '''
 
+class EncodingError(Exception):
+    pass
+
+class DecodingError(Exception):
+    pass
 
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
@@ -104,7 +109,7 @@ def decode(s):
 def into(data, pos):
     fchar = ord(data[pos])
     if fchar < 192:
-        raise Exception("Cannot descend further")
+        raise DecodingError("Cannot descend further")
     elif fchar < 248:
         return pos + 1
     else:
@@ -152,7 +157,7 @@ def descend(data, *indices):
         for j in range(i):
             pos = next_item_pos(data, pos)
             if pos >= finish_pos:
-                raise Exception("End of list")
+                raise DecodingError("End of list")
     finish_pos = next_item_pos(data, pos)
     return data[pos: finish_pos]
 
@@ -168,7 +173,7 @@ def encode_length(L, offset):
         BL = int_to_big_endian(L)
         return chr(len(BL) + offset + 55) + BL
     else:
-        raise Exception("input too long")
+        raise EncodingError("input too long")
 
 
 def encode(s):

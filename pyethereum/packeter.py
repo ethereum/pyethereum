@@ -85,7 +85,11 @@ class Packeter(object):
 
     @classmethod
     def packet_cmd(cls, packet):
-        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200],0)))
+        try:
+            v = idec(rlp.descend(packet[8:200],0))
+        except rlp.DecodingError:
+            v = -1
+        return Packeter.cmd_map.get(v, 'invalid')
 
     @classmethod
     def load_packet(cls, packet):
