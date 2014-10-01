@@ -17,7 +17,7 @@ def step_impl(context):
 def step_impl(context):
     context.peer.run()
 
-
+# FIXME, this is broken!
 @then(u'the packet sent through connection should be the given packet')  # noqa
 def step_impl(context):
     assert context.sent_packets == [context.packet]
