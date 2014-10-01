@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
-NUM_BLOCKS_PER_REQUEST = 256 # MAX_GET_CHAIN_REQUEST_BLOCKS
+NUM_BLOCKS_PER_REQUEST = 256  # MAX_GET_CHAIN_REQUEST_BLOCKS
 
 
 
@@ -202,10 +202,10 @@ class ChainManager(StoppableLoopThread):
         # prepare uncles
         uncles = set(self.get_uncles(self.head))
 #        logger.debug('%d uncles for next block %r', len(uncles), uncles)
-        ineligible = set() # hashes
+        ineligible = set()  # hashes
         blk = self.head
         for i in range(8):
-            for u in blk.uncles: # assuming uncle headres
+            for u in blk.uncles:  # assuming uncle headres
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
 #                    logger.debug('ineligible uncle %r', u.encode('hex'))
@@ -241,7 +241,7 @@ class ChainManager(StoppableLoopThread):
             # notify syncer
             self.synchronizer.received_blocks(peer, transient_blocks)
 
-            for t_block in transient_blocks: # oldest to newest
+            for t_block in transient_blocks:  # oldest to newest
                 logger.debug('Deserializing %r', t_block)
                 #logger.debug(t_block.rlpdata.encode('hex'))
                 try:
@@ -259,7 +259,7 @@ class ChainManager(StoppableLoopThread):
                         logger.debug('Rec Incompatible Genesis %r', t_block)
                         if peer:
                             peer.send_Disconnect(reason='Wrong genesis block')
-                    else: # should be a single newly mined block
+                    else:  # should be a single newly mined block
                         assert t_block.prevhash not in self
                         assert t_block.prevhash != blocks.genesis().hash
                         logger.debug('%s with unknown parent %s, peer:%r', t_block, t_block.prevhash.encode('hex'), peer)
@@ -269,7 +269,7 @@ class ChainManager(StoppableLoopThread):
                             # sync/network/... failed to add the needed parent at some point
                             # well, this happens whenever we can't validate a block!
                             # we should disconnect!
-                            logger.warn('%s received, but unknown parent.',len(transient_blocks))
+                            logger.warn('%s received, but unknown parent.', len(transient_blocks))
                         if peer:
                             # request chain for newest known hash
                             self.synchronizer.synchronize_unknown_block(peer, transient_blocks[-1].hash)
@@ -331,8 +331,8 @@ class ChainManager(StoppableLoopThread):
             self._update_head(block)
         elif block.number > self.head.number:
             logger.warn('%r has higher blk number than head %r but lower chain_difficulty of %d vs %d',
-                                block, self.head, block.chain_difficulty(), self.head.chain_difficulty())
-        self.commit() # batch commits all changes that came with the new block
+                        block, self.head, block.chain_difficulty(), self.head.chain_difficulty())
+        self.commit()  # batch commits all changes that came with the new block
 
         return True
 

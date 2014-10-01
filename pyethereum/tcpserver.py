@@ -56,7 +56,7 @@ def upnp_add(port):
             break
         if external_port >= 65535:
             break
-        external_port = external_port + 1
+        external_port += 1
 
     if not found:
         logger.debug('No redirect candidate %s TCP => %s port %u TCP',

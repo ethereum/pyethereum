@@ -17,10 +17,10 @@ import tempfile
 def read_config(fn=None):
     print "Read config called"
     cfg = pyethereum.config.get_default_config()
-    cfg.set('network', 'num_peers', '2') # set to 2 as, the bootsrapping server does not talk 'eth'
+    cfg.set('network', 'num_peers', '2')  # set to 2 as, the bootsrapping server does not talk 'eth'
     #cfg.set('network', 'remote_host', '77.101.50.246')
-    cfg.set('misc', 'data_dir', tempfile.mktemp() )
-    cfg.set('misc', 'mining', '0' )
+    cfg.set('misc', 'data_dir', tempfile.mktemp())
+    cfg.set('misc', 'mining', '0')
     return cfg
 
 pyethereum.config.read_config = read_config
@@ -40,7 +40,7 @@ import pyethereum.peer as peer
 MIN_BLOCKS = 2
 NUM_BLOCKS_PER_REQUEST = 200
 
-fh = open(fn,'w')
+fh = open(fn, 'w')
 peer.Peer.blk_counter = 0
 peer.Peer.blk_requested = set()
 
@@ -62,7 +62,7 @@ def _recv_Blocks(self, data):
         else:
             if self.lowest_block - 1 == tb.number:
                 self.lowest_block = tb.number
-            else: # i.e. newly mined block sent
+            else:  # i.e. newly mined block sent
                 return
         if tb not in collected_blocks:
             collected_blocks.append(tb)
@@ -71,7 +71,7 @@ def _recv_Blocks(self, data):
             print 'done'
             for tb in sorted(collected_blocks, key=attrgetter('number')):
                 print 'writing', tb
-                fh.write(tb.rlpdata.encode('hex') + '\n') # LOG line
+                fh.write(tb.rlpdata.encode('hex') + '\n')  # LOG line
             sys.exit(0)
     # fetch more
     print("ASKING FOR MORE HASHES", tb.hash.encode('hex'), tb.number)
@@ -94,9 +94,9 @@ def _recv_Status(self, data):
 peer.Peer._recv_Status = _recv_Status
 
 def _recv_BlockHashes(self, data):
-    print("RECEIVED BLOCKHASHES", len(data)) # youngest to oldest
+    print("RECEIVED BLOCKHASHES", len(data))  # youngest to oldest
     #print [x.encode('hex') for x in data]
-    block_hashes = data # youngest to oldest
+    block_hashes = data  # youngest to oldest
     self.send_GetBlocks(block_hashes)
 
 peer.Peer._recv_BlockHashes = _recv_BlockHashes

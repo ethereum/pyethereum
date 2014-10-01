@@ -26,18 +26,18 @@ class PBLogger(object):
     log_json = False        # generate machine readable output
 
     def __init__(self):
-        self.listeners = [] # register callbacks here
+        self.listeners = []  # register callbacks here
 
     def log(self, name, **kargs):
         # call callbacks
         for l in self.listeners:
             l(name, kargs)
         if self.log_json:
-            logger.debug(json.dumps({name:kargs}))
+            logger.debug(json.dumps({name: kargs}))
         else:
             order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
             items = sorted(kargs.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k,v) for k,v in items)
+            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
             logger.debug("%s: %s", name.ljust(15), msg)
 
 pblogger = PBLogger()
@@ -63,7 +63,7 @@ class VerificationFailed(Exception):
 
 def verify(block, parent):
     def must_equal(what, a, b):
-        if not a == b: raise VerificationFailed(what, a, '==', b)
+        if a != b: raise VerificationFailed(what, a, '==', b)
 
     if not block.timestamp >= parent.timestamp:
         raise VerificationFailed('timestamp', block.timestamp, '>=', parent.timestamp)
@@ -195,7 +195,7 @@ def apply_transaction(block, tx):
     assert gas_remained >= 0
 
     pblogger.log("TX APPLIED", result=result, gas_remained=gas_remained,
-                                data=''.join(map(chr, data)).encode('hex'))
+                 data=''.join(map(chr, data)).encode('hex'))
     if pblogger.log_block:
         pblogger.log('BLOCK', block=block.to_dict(with_state=True, full_transactions=True))
 
@@ -266,7 +266,7 @@ def decode_datalist(arr):
 
 def apply_msg(block, tx, msg, code):
     pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
-                                  gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
+                 gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
     if pblogger.log_pre_state:
         pblogger.log('MSG PRE STATE', account=msg.to, state=block.account_to_dict(msg.to))
     # Transfer value, instaquit if not enough
@@ -288,11 +288,11 @@ def apply_msg(block, tx, msg, code):
         ops += 1
         if o is not None:
             pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
-                        sender=msg.sender, to=msg.to, ops=ops,
-                        time_per_op=(time.time() - t) / ops)
+                         sender=msg.sender, to=msg.to, ops=ops,
+                         time_per_op=(time.time() - t) / ops)
             if pblogger.log_post_state:
                     pblogger.log('MSG POST STATE', account=msg.to,
-                        state=block.account_to_dict(msg.to))
+                                 state=block.account_to_dict(msg.to))
 
             if o == OUT_OF_GAS:
                 block.revert(snapshot)

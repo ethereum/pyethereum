@@ -18,7 +18,7 @@ CONNECT_SOCKET_TIMEOUT = 5.
 
 logger = logging.getLogger(__name__)
 
-def is_valid_ip(ip): # FIXME, IPV6
+def is_valid_ip(ip):  # FIXME, IPV6
     return ip.count('.') == 3
 
 
@@ -138,7 +138,7 @@ class PeerManager(StoppableLoopThread):
         dt_seen = now - peer.last_valid_packet_received
 
         # if ping was sent and not returned within last second
-        if dt_ping < dt_seen and dt_ping > self.max_ping_wait:
+        if self.max_ping_wait < dt_ping < dt_seen:
             logger.debug(
                 '{0} last ping: {1} last seen: {2}'
                 .format(peer, dt_ping, dt_seen))

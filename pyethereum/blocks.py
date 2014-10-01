@@ -771,10 +771,10 @@ class CachedBlock(Block):
     # note: immutable refers to: do not manipulate!
     _hash_cached = None
 
-    def _set_acct_item(self): raise Exception('NotImplemented')
-    def _add_transaction_to_list(self): raise Exception('NotImplemented')
-    def set_state_root(self): raise Exception('NotImplemented')
-    def revert(self): raise Exception('NotImplemented')
+    def _set_acct_item(self): raise NotImplementedError
+    def _add_transaction_to_list(self): raise NotImplementedError
+    def set_state_root(self): raise NotImplementedError
+    def revert(self): raise NotImplementedError
     def commit_state(self): pass
 
     def _hash(self):

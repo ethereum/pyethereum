@@ -12,12 +12,12 @@ import rlp
 import blocks
 
 
-MAX_GET_CHAIN_ACCEPT_HASHES = 2048 # Maximum number of send hashes GetChain will accept
-MAX_GET_CHAIN_SEND_HASHES = 2048 # Maximum number of hashes GetChain will ever send
-MAX_GET_CHAIN_ASK_BLOCKS = 512 # Maximum number of blocks GetChain will ever ask for
-MAX_GET_CHAIN_REQUEST_BLOCKS = 512 # Maximum number of requested blocks GetChain will accept
-MAX_BLOCKS_SEND = MAX_GET_CHAIN_REQUEST_BLOCKS # Maximum number of blocks Blocks will ever send
-MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND # Maximum number of blocks Blocks will ever accept
+MAX_GET_CHAIN_ACCEPT_HASHES = 2048  # Maximum number of send hashes GetChain will accept
+MAX_GET_CHAIN_SEND_HASHES = 2048  # Maximum number of hashes GetChain will ever send
+MAX_GET_CHAIN_ASK_BLOCKS = 512  # Maximum number of blocks GetChain will ever ask for
+MAX_GET_CHAIN_REQUEST_BLOCKS = 512  # Maximum number of requested blocks GetChain will accept
+MAX_BLOCKS_SEND = MAX_GET_CHAIN_REQUEST_BLOCKS  # Maximum number of blocks Blocks will ever send
+MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND  # Maximum number of blocks Blocks will ever accept
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class Peer(StoppableLoopThread):
         self.port = port
         self.client_version = ''
         self.node_id = ''
-        self.capabilities = [] # ['eth', 'shh']
+        self.capabilities = []  # ['eth', 'shh']
 
         self.hello_received = False
         self.hello_sent = False
@@ -103,7 +103,7 @@ class Peer(StoppableLoopThread):
             try:
                 #print 'receiving'
                 self.recv_buffer += self.connection().recv(2048)
-            except socket.error: # Timeout
+            except socket.error:  # Timeout
                 #print 'timeout'
                 break
             # check if we have a complete packet
@@ -148,7 +148,7 @@ class Peer(StoppableLoopThread):
         # 0x01 Hello: [0x01: P, protocolVersion: P, clientVersion: B, [cap0: B, cap1: B, ...], listenPort: P, id: B_64]
         _decode = (idec, str, list, idec, str)
         try:
-            data = [_decode[i](x) for i,x in enumerate(data)]
+            data = [_decode[i](x) for i, x in enumerate(data)]
             network_protocol_version, client_version = data[0], data[1]
             self.capabilities, listen_port, node_id = data[2], data[3], data[4]
         except IndexError:
@@ -163,7 +163,7 @@ class Peer(StoppableLoopThread):
         self.hello_received = True
         self.client_version = client_version
         self.node_id = node_id
-        self.port = listen_port # replace connection port with listen port
+        self.port = listen_port  # replace connection port with listen port
 
         if not self.hello_sent:
             self.send_Hello()
@@ -173,7 +173,7 @@ class Peer(StoppableLoopThread):
 
     def send_Status(self, head_hash, head_total_difficulty, genesis_hash):
         logger.debug('sending status TD:%d HEAD:%r GENESIS:%r',
-                        head_total_difficulty, head_hash.encode('hex'), genesis_hash.encode('hex'))
+                     head_total_difficulty, head_hash.encode('hex'), genesis_hash.encode('hex'))
 
         self.send_packet(packeter.dump_Status(head_total_difficulty, head_hash, genesis_hash))
         self.status_sent = True
@@ -183,13 +183,13 @@ class Peer(StoppableLoopThread):
         # check compatibility
         try:
             ethereum_protocol_version, network_id = idec(data[0]), idec(data[1])
-            total_difficulty, head_hash, genesis_hash  = idec(data[2]), data[3], data[4]
+            total_difficulty, head_hash, genesis_hash = idec(data[2]), data[3], data[4]
         except IndexError:
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         logger.debug('%r, received Status ETHPROTOCOL:%r TD:%d HEAD:%r GENESIS:%r',
-                                self, ethereum_protocol_version, total_difficulty,
-                                head_hash.encode('hex'), genesis_hash.encode('hex'))
+                     self, ethereum_protocol_version, total_difficulty,
+                     head_hash.encode('hex'), genesis_hash.encode('hex'))
 
         if ethereum_protocol_version != packeter.ETHEREUM_PROTOCOL_VERSION:
             return self.send_Disconnect(reason='Incompatible network protocols')
@@ -222,8 +222,8 @@ class Peer(StoppableLoopThread):
 
 ### disconnects
     reasons_to_forget = ('Bad protocol',
-                        'Incompatible network protocols',
-                        'Wrong genesis block')
+                         'Incompatible network protocols',
+                         'Wrong genesis block')
 
     def send_Disconnect(self, reason=None):
         logger.info('%r sending disconnect: %r', self, reason)
@@ -291,7 +291,7 @@ class Peer(StoppableLoopThread):
 
     def _recv_Blocks(self, data):
         # open('raw_remote_blocks_hex.txt', 'a').write(rlp.encode(data).encode('hex') + '\n') # LOG line
-        transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data] # FIXME
+        transient_blocks = [blocks.TransientBlock(rlp.encode(b)) for b in data]  # FIXME
         if len(transient_blocks) > MAX_BLOCKS_ACCEPTED:
             logger.warn('Peer sending too many blocks %d', len(transient_blocks))
         signals.remote_blocks_received.send(sender=Peer, peer=self, transient_blocks=transient_blocks)

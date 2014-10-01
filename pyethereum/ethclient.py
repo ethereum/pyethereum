@@ -53,7 +53,7 @@ class APIClient(object):
         self.host = host
         self.port = port
         assert api_path.startswith('/') and not api_path.endswith('/')
-        self.base_url = "http://%s:%d%s" %(host, port, api_path)
+        self.base_url = "http://%s:%d%s" % (host, port, api_path)
 
 
     def json_get_request(self, path):
@@ -63,7 +63,7 @@ class APIClient(object):
         r = requests.get(url)
         #print r.status_code, r.reason, r.url, r.headers
         if r.status_code in [200, 201]:
-          return r.json()
+            return r.json()
         else:
             return dict((k, getattr(r, k)) for k in ('status_code', 'reason'))
 
@@ -77,7 +77,7 @@ class APIClient(object):
         return self.account_to_dict(address)['code']
 
     def getnonce(self, address):
-        ptxs =  self.getpending()['transactions']
+        ptxs = self.getpending()['transactions']
         nonce = max([0] + [int(tx['nonce']) for tx in ptxs if tx['sender'] == address])
         if nonce:
             return nonce + 1
@@ -132,8 +132,8 @@ class APIClient(object):
             name, data = l.items()[0]
             order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
             items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k,v) for k,v in items)
-            out.append("%s: %s" %(name.ljust(15), msg))
+            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
+            out.append("%s: %s" % (name.ljust(15), msg))
           return '\n'.join(out)
         return res
 
