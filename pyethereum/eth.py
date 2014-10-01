@@ -116,14 +116,14 @@ def create_config():
     cfg_fn = getattr(options, 'config_file')
     if cfg_fn:
         if not os.path.exists(cfg_fn):
-            konfig.read_config(cfg_fn) # creates default
+            konfig.read_config(cfg_fn)  # creates default
         config.read(cfg_fn)
 
     # 3) apply cmd line options to config
     for section in config.sections():
-        for a,v in config.items(section):
+        for a, v in config.items(section):
             if getattr(options, a, None) is not None:
-                config.set(section, a, getattr(options,a))
+                config.set(section, a, getattr(options, a))
 
     # set datadir
     data_dir.set(config.get('misc', 'data_dir'))
@@ -135,7 +135,7 @@ def main():
 
     # configure logging
     configure_logging(config.get('misc', 'logging') or '',
-                    verbosity=config.getint('misc', 'verbosity'))
+                      verbosity=config.getint('misc', 'verbosity'))
     logger.info('----------- Starting pyethereum %s --------------', __version__)
 
     logger.debug("Config Ready:%s", konfig.dump_config(config))

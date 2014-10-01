@@ -30,6 +30,6 @@ remote_block_hashes_received = Signal(providing_args=["block_hashes", "peer"])
 get_block_hashes_received = Signal(providing_args=["block_hashes", "peer"])
 
 remote_blocks_received = Signal(providing_args=["block_lst", "peer"])
-get_blocks_received =  Signal(providing_args=["block_hashes", "count", "peer"])
+get_blocks_received = Signal(providing_args=["block_hashes", "count", "peer"])
 
 broadcast_new_block =  Signal(providing_args=["block"])

@@ -157,7 +157,7 @@ def block_children(arg=None):
 
 # ######## Transactions ############
 def make_transaction_response(txs):
-    return dict(transactions = [tx.to_dict() for tx in txs])
+    return dict(transactions=[tx.to_dict() for tx in txs])
 
 @app.put('/transactions/')
 def add_transaction():
@@ -178,7 +178,7 @@ def get_transaction_and_block(arg=None):
         tx_hash = arg.decode('hex')
     except TypeError:
         bottle.abort(500, 'No hex  %s' % arg)
-    try: # index
+    try:  # index
         tx, blk = chain_manager.index.get_transaction(tx_hash)
     except KeyError:
         # try miner
@@ -239,10 +239,10 @@ def _get_block_before_tx(txhash):
     tx, blk = chain_manager.index.get_transaction(txhash.decode('hex'))
     # get the state we had before this transaction
     test_blk = Block.init_from_parent(blk.get_parent(),
-                                        blk.coinbase,
-                                        extra_data=blk.extra_data,
-                                        timestamp=blk.timestamp,
-                                        uncles=blk.uncles)
+                                      blk.coinbase,
+                                      extra_data=blk.extra_data,
+                                      timestamp=blk.timestamp,
+                                      uncles=blk.uncles)
     pre_state = test_blk.state_root
     for i in range(blk.transaction_count):
         tx_lst_serialized, sr, _ = blk.get_transaction(i)
@@ -255,7 +255,7 @@ def _get_block_before_tx(txhash):
 
 
 def get_trace(txhash):
-    try: # index
+    try:  # index
         test_blk, tx = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
@@ -263,7 +263,7 @@ def get_trace(txhash):
     # collect debug output
     log = []
     def log_receiver(name, data):
-        log.append({name:data})
+        log.append({name: data})
 
     processblock.pblogger.listeners.append(log_receiver)
 
@@ -328,7 +328,7 @@ def dump(txblkhash):
     try:
         blk = chain_manager.get(txblkhash.decode('hex'))
     except:
-        try: # index
+        try:  # index
             test_blk, tx = _get_block_before_tx(txblkhash)
         except (KeyError, TypeError):
             return bottle.abort(404, 'Unknown Transaction  %s' % txblkhash)

@@ -16,7 +16,7 @@ def default_config_path():
     return os.path.join(default_data_dir(), 'config.txt')
 
 def default_client_version():
-    return Packeter.CLIENT_VERSION # FIXME
+    return Packeter.CLIENT_VERSION  # FIXME
 
 def default_node_id():
     return sha3(str(uuid.uuid1())).encode('hex')
@@ -96,7 +96,7 @@ def get_default_config():
     config.set('network', 'client_version', default_client_version())
     return config
 
-def read_config(cfg_path = default_config_path()):
+def read_config(cfg_path=default_config_path()):
     # create default if not existent
     if not os.path.exists(cfg_path):
         open(cfg_path, 'w').write(config_template)
@@ -108,6 +108,6 @@ def read_config(cfg_path = default_config_path()):
 def dump_config(config):
     r = ['']
     for section in config.sections():
-        for a,v in config.items(section):
-            r.append('[%s] %s = %r' %( section, a, v))
+        for a, v in config.items(section):
+            r.append('[%s] %s = %r' % (section, a, v))
     return '\n'.join(r)

@@ -78,7 +78,7 @@ class EphemDB(object):
     def delete(self, key):
         del self.db[key]
 
-    def commit():
+    def commit(self):
         pass
 
     def _has_key(self, key):

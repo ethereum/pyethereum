@@ -80,7 +80,7 @@ def __decode(s, pos=0):
             obj, pos = __decode(s, pos)
             o.append(obj)
         assert pos == pos_end, "read beyond list boundary in __decode"
-        return (o, pos)
+        return o, pos
     else:
         b = fchar - 247
         b2 = big_endian_to_int(s[pos + 1:pos + 1 + b])
@@ -92,7 +92,7 @@ def __decode(s, pos=0):
             obj, pos = __decode(s, pos)
             o.append(obj)
         assert pos == pos_end, "read beyond list boundary in __decode"
-        return (o, pos)
+        return o, pos
 
 
 def decode(s):

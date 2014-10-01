@@ -238,7 +238,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
 
         @wraps(f)
         def wrapper(*args, **kwargs):
-            local['call_number'] = local['call_number'] + 1
+            local['call_number'] += 1
             tmp_args = args[1:] if ignore_first_arg and len(args) else args
             this_call_number = local['call_number']
             print('{0}#{1} args: {2}, {3}'.format(
@@ -315,7 +315,7 @@ def db_get(key):
 def dump_state(trie):
     res = ''
     for k, v in trie.to_dict().items():
-        res+= '%r:%r\n'%(k.encode('hex'), v.encode('hex'))
+        res += '%r:%r\n' % (k.encode('hex'), v.encode('hex'))
     return res
 
 def configure_logging(loggerlevels=':DEBUG', verbosity=1):

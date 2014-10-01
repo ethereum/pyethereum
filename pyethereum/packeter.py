@@ -32,13 +32,13 @@ class Packeter(object):
 
     """
     NETWORK_PROTOCOL_VERSION = 0
-    ETHEREUM_PROTOCOL_VERSION = 33 # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
+    ETHEREUM_PROTOCOL_VERSION = 33  # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
-    NODE_ID = sha3('') # set in config
+    NODE_ID = sha3('')  # set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
-    CAPABILITIES = ['eth'] # + ['shh']  ethereum protocol  whisper protocol
+    CAPABILITIES = ['eth']  # + ['shh']  ethereum protocol  whisper protocol
 
     cmd_map = dict(((0x00, 'Hello'),
                    (0x01, 'Disconnect'),
@@ -85,7 +85,7 @@ class Packeter(object):
 
     @classmethod
     def packet_cmd(cls, packet):
-        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200],0)))
+        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200], 0)))
 
     @classmethod
     def load_packet(cls, packet):
@@ -211,9 +211,9 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Status'],
                 self.ETHEREUM_PROTOCOL_VERSION,
                 self.NETWORK_ID,
-                total_difficulty, # chain head total difficulty,
-                head_hash, # chain head hash
-                genesis_hash # genesis hash
+                total_difficulty,  # chain head total difficulty,
+                head_hash,  # chain head hash
+                genesis_hash  # genesis hash
                 ]
         return self.dump_packet(data)
 

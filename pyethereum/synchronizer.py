@@ -15,7 +15,7 @@ class HashChainTask(object):
     def __init__(self, chain_manager, peer, block_hash):
         self.chain_manager = chain_manager
         self.peer = peer
-        self.hash_chain = [] # [youngest, ..., oldest]
+        self.hash_chain = []  # [youngest, ..., oldest]
         self.request(block_hash)
 
     def request(self, block_hash):
@@ -29,7 +29,7 @@ class HashChainTask(object):
         for bh in block_hashes:
             if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
                 logger.debug('%r matching block hash found %r, %d blocks to fetch',
-                                self.peer, bh.encode('hex'), len(self.hash_chain))
+                             self.peer, bh.encode('hex'), len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
         if len(block_hashes) == 0:
@@ -53,7 +53,7 @@ class SynchronizationTask(object):
     def __init__(self, chain_manager, peer, block_hash):
         self.chain_manager = chain_manager
         self.peer = peer
-        self.hash_chain = [] # [oldest to youngest]
+        self.hash_chain = []  # [oldest to youngest]
         logger.debug('%r syncing %r', self.peer, block_hash.encode('hex'))
         self.hash_chain_task = HashChainTask(self.chain_manager, self.peer, block_hash)
 
@@ -76,7 +76,7 @@ class SynchronizationTask(object):
             # still blocks to fetch
             logger.debug('%r still missing %d blocks', self.peer, len(self.hash_chain))
             self.request_blocks()
-        else: # done
+        else:  # done
             return True
 
     def request_blocks(self):
@@ -104,7 +104,7 @@ class Synchronizer(object):
 
     def __init__(self, chain_manager):
         self.chain_manager = chain_manager
-        self.synchronization_tasks = {} # peer > syncer # syncer.unknown_hash as marker for task
+        self.synchronization_tasks = {}  # peer > syncer # syncer.unknown_hash as marker for task
 
     def stop_synchronization(self, peer):
         logger.debug('%r sync stopped', peer)
