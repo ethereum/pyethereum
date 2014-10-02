@@ -1,5 +1,4 @@
 behave
-mock
 coveralls
-
 ethereum-serpent
+mock
