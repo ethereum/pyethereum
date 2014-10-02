@@ -109,6 +109,7 @@ class Transaction(object):
         for name, typ, default in tx_structure:
             h[name] = utils.printers[typ](getattr(self, name))
         h['sender'] = self.sender
+        h['hash'] = self.hash.encode('hex')
         return h
 
     def __eq__(self, other):

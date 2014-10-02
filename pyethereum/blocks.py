@@ -305,11 +305,13 @@ class Block(object):
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
             logger.debug('d %s %s', _gas_used_encoded, block.gas_used)
             assert utils.decode_int(_gas_used_encoded) == block.gas_used, \
-                "Gas mismatch (%d, %d) on block: %r" % \
+                "Gas mismatch (ours %d, theirs %d) on block: %r" % \
                 (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
             assert _state_root == block.state.root_hash, \
-                "State root mismatch: %r %r %r" % \
-                (block.state.root_hash, _state_root, block.to_dict(False, True, True))
+                "State root mismatch (ours %r theirs %r) on block: %r" % \
+                (block.state.root_hash.encode('hex'),
+                 _state_root.encode('hex'),
+                 block.to_dict(False, True, True))
 
         block.finalize()
 
@@ -373,7 +375,7 @@ class Block(object):
         '''
 #        logger.debug('set acct %r %r %d', address, param, value)
         self.set_and_journal(param, address, value)
-        self.set_and_journal('all', address, value)
+        self.set_and_journal('all', address, True)
 
     def set_and_journal(self, cache, index, value):
         prev = self.caches[cache].get(index, None)
@@ -482,7 +484,9 @@ class Block(object):
         self.set_and_journal('storage:'+address, index, val)
 
     def commit_state(self):
+        changes = []
         if not len(self.journal):
+            processblock.pblogger.log('delta', changes=[])
             return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \
@@ -495,6 +499,7 @@ class Block(object):
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
+                        changes.append(['storage', address, k, v])
                         if v:
                             t.update(enckey, val)
                         else:
@@ -505,11 +510,14 @@ class Block(object):
                 else:
                     if address in self.caches[key]:
                         v = self.caches[key].get(address, default)
+                        changes.append([key, address, v])
                         acct[i] = utils.encoders[acct_structure[i][1]](v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
         if self.proof_mode == RECORDING:
             self.proof_nodes.extend(self.state.proof_nodes)
             self.state.proof_nodes = []
+        if processblock.pblogger.log_state_delta:
+            processblock.pblogger.log('delta', changes=changes)
         self.reset_cache()
 
     def del_account(self, address):

@@ -24,6 +24,7 @@ class PBLogger(object):
     log_stack = False       # dump stack before each op
     log_storage = False     # dump storage before each op
     log_json = False        # generate machine readable output
+    log_state_delta = True  # dump state delta post tx execution
 
     def __init__(self):
         self.listeners = []  # register callbacks here
