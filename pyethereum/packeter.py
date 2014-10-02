@@ -69,7 +69,6 @@ class Packeter(object):
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
-
     def __init__(self):
         pass
 
@@ -85,15 +84,11 @@ class Packeter(object):
 
     @classmethod
     def packet_cmd(cls, packet):
-<<<<<<< HEAD
-        return Packeter.cmd_map.get(idec(rlp.descend(packet[8:200], 0)))
-=======
         try:
-            v = idec(rlp.descend(packet[8:200],0))
+            v = idec(rlp.descend(packet[8:200], 0))
         except rlp.DecodingError:
             v = -1
         return Packeter.cmd_map.get(v, 'invalid')
->>>>>>> a63372fb7a908fd9f7d9a4848b54cfdbe5c21773
 
     @classmethod
     def load_packet(cls, packet):
