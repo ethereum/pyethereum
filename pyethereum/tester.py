@@ -66,7 +66,7 @@ class state():
 
     def send(self, sender, to, value, data=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(data)
+        evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -88,7 +88,7 @@ class state():
 
     def mkspv(self, sender, to, value, data=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(data)
+        evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -96,7 +96,7 @@ class state():
 
     def verifyspv(self, sender, to, value, data=[], proof=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(data)
+        evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)

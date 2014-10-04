@@ -568,7 +568,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if s1:
             compustate.pc = s0
     elif op == 'PC':
-        stk.append(compustate.pc)
+        stk.append(compustate.pc - 1)
     elif op == 'MSIZE':
         stk.append(len(mem))
     elif op == 'GAS':
