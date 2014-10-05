@@ -52,6 +52,11 @@ test_boolean = lambda: do_test_vm('vmtests', 'suicide')
 test_boolean = lambda: do_test_vm('vmtests', 'arith')
 test_boolean = lambda: do_test_vm('vmtests', 'mktx')
 test_add = lambda: do_test_vm('vmArithmeticTest')
+test_bitwise = lambda: do_test_vm('vmBitwiseLogicOperationTest')
+test_blockinfo = lambda: do_test_vm('vmBlockInfoTest')
+test_blockinfo = lambda: do_test_vm('vmEnvironmentalInfoTest')
+test_blockinfo = lambda: do_test_vm('vmPushDupSwapTest')
+test_blockinfo = lambda: do_test_vm('vmSha3Test')
 
 
 def do_test_vm(filename, testname=None, limit=99999999):
@@ -142,7 +147,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
     # check against callcreates
     for i, callcreate in enumerate(callcreates):
         amc = apply_message_calls[i]
-        assert callcreate['data'] == '0x'+amc['data'].encode('hex')
+        assert callcreate['data'] == '0x'+amc['data']
         assert callcreate['gasLimit'] == str(amc['gasLimit'])
         assert callcreate['value'] == str(amc['value'])
         assert callcreate['destination'] == amc['destination']

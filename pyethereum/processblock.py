@@ -346,12 +346,13 @@ def out_of_gas_exception(expense, fee, compustate, op):
 def mem_extend(mem, compustate, op, newsize):
     if len(mem) < ceil32(newsize):
         m_extend = ceil32(newsize) - len(mem)
-        mem.extend([0] * m_extend)
         memfee = GMEMORY * (m_extend / 32)
-        compustate.gas -= memfee
-        if compustate.gas < 0:
+        if compustate.gas < memfee:
             out_of_gas_exception('mem_extend', memfee, compustate, op)
+            compustate.gas = 0
             return False
+        compustate.gas -= memfee
+        mem.extend([0] * m_extend)
     return True
 
 
@@ -363,15 +364,23 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if compustate.pc >= len(processed_code):
         return []
     op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+
+    # out of gas error
+    if fee > compustate.gas:
+        return out_of_gas_exception('base_gas', fee, compustate, op)
+
+    # Apply operation
+    compustate.gas -= fee
+    compustate.pc += 1
+    stk = compustate.stack
+    mem = compustate.memory
+
     # empty stack error
     if in_args > len(compustate.stack):
         pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
         return []
 
-    # out of gas error
-    if fee > compustate.gas:
-        return out_of_gas_exception('base_gas', fee, compustate, op)
 
     if pblogger.log_apply_op:
         if pblogger.log_stack:
@@ -387,23 +396,18 @@ def apply_op(block, tx, msg, processed_code, compustate):
             pblogger.log('STORAGE', storage=block.account_to_dict(msg.to)['storage'])
 
         if pblogger.log_op:
-            log_args = dict(pc=compustate.pc,
+            log_args = dict(pc=compustate.pc - 1,
                             op=op,
                             stackargs=compustate.stack[-1:-in_args-1:-1],
                             gas=compustate.gas)
             if op[:4] == 'PUSH':
-                ind = compustate.pc + 1
+                ind = compustate.pc
                 log_args['value'] = \
                     utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
             elif op == 'CALLDATACOPY':
                 log_args['data'] = msg.data.encode('hex')
             pblogger.log('OP', **log_args)
 
-    # Apply operation
-    compustate.gas -= fee
-    compustate.pc += 1
-    stk = compustate.stack
-    mem = compustate.memory
     if op == 'STOP' or op == 'INVALID':
         return []
     elif op == 'ADD':
@@ -494,8 +498,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 mem[s0 + i] = ord(msg.data[s1 + i])
             else:
                 mem[s0 + i] = 0
-    elif op == 'GASPRICE':
-        stk.append(tx.gasprice)
+    elif op == 'CODESIZE':
+        stk.append(len(processed_code))
     elif op == 'CODECOPY':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0 + s2):
@@ -505,11 +509,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 mem[s0 + i] = processed_code[s1 + i][-1]
             else:
                 mem[s0 + i] = 0
+    elif op == 'GASPRICE':
+        stk.append(tx.gasprice)
     elif op == 'EXTCODESIZE':
-        stk.append(len(block.get_code(stk.pop()) or ''))
+        stk.append(len(block.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
     elif op == 'EXTCODECOPY':
         addr, s1, s2, s3 = stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        extcode = block.get_code(addr) or ''
+        extcode = block.get_code(utils.coerce_addr_to_hex(addr)) or ''
         if not mem_extend(mem, compustate, op, s1 + s3):
             return OUT_OF_GAS
         for i in range(s3):

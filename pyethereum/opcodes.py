@@ -39,6 +39,8 @@ opcodes = {
     0x38: ['CODESIZE', 0, 1, [], 1],
     0x39: ['CODECOPY', 3, 0, [[-1, -3]], 1],
     0x3a: ['GASPRICE', 0, 1, [], 1],
+    0x3b: ['EXTCODESIZE', 1, 1, [], 1],
+    0x3c: ['EXTCODECOPY', 4, 0, [[-2, -4]], 1],
     0x40: ['PREVHASH', 0, 1, [], 1],
     0x41: ['COINBASE', 0, 1, [], 1],
     0x42: ['TIMESTAMP', 0, 1, [], 1],
