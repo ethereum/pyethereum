@@ -526,7 +526,8 @@ class Block(object):
             address = address.decode('hex')
         self.state.delete(address)
 
-    def account_to_dict(self, address, with_storage_root=False, with_storage=True):
+    def account_to_dict(self, address, with_storage_root=False,
+                        with_storage=True, for_vmtest=False):
         if with_storage_root:
             assert len(self.journal) == 0
         med_dict = {}
@@ -547,12 +548,15 @@ class Block(object):
             for k in d.keys() + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x'+k.encode('hex')
+                v3 = None
+                hexkey = '0x'+utils.zunpad(k).encode('hex')
                 if v2 is not None:
                     if v2 != 0:
-                        med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+                        v3 = '0x'+utils.int_to_big_endian(v2).encode('hex')
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
+                    v3 = '0x'+rlp.decode(v).encode('hex')
+                if v3 is not None:
+                    med_dict['storage'][hexkey] = [v3] if for_vmtest else v3
         return med_dict
 
     def reset_cache(self):

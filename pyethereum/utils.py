@@ -48,6 +48,13 @@ def zpad(x, l):
     return '\x00' * max(0, l - len(x)) + x
 
 
+def zunpad(x):
+    i = 0
+    while i < len(x) and x[i] == '\x00':
+        i += 1
+    return x[i:]
+
+
 def coerce_addr_to_bin(x):
     if isinstance(x, (int, long)):
         return zpad(int_to_big_endian(x), 20).encode('hex')

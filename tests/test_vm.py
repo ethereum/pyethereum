@@ -4,6 +4,8 @@ import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
+import os
+import sys
 
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
@@ -30,42 +32,35 @@ def vm_tests_fixtures():
     """Read vm tests from fixtures"""
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
+    filenames = os.listdir(os.path.join('fixtures', 'vmtests'))
+    files = [os.path.join('fixtures', 'vmtests', f) for f in filenames]
+    vm_fixtures = {}
     try:
-        vm_fixture = json.load(open('fixtures/vmtests.json', 'r'))
+        for f, fn in zip(files, filenames):
+            if f[-5:] == '.json':
+                vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures",
             "Make sure you did 'git submodule init'")
-    try:
-        vm_fixture.update(json.load(open('fixtures/random.json', 'r')))
-    except IOError:
-        raise IOError("Could not read random.json from fixtures.")
-    assert set(vm_fixture.keys()) == set(['boolean', 'suicide', 'random', 'arith', 'mktx']),\
-        "Tests changed, try updating the fixtures submodule"
+    #assert set(vm_fixture.keys()) == set(['boolean', 'suicide', 'random', 'arith', 'mktx']),\
+    #    "Tests changed, try updating the fixtures submodule"
+    return vm_fixtures
 
-    return vm_fixture
-
-def test_random():
-    do_test_vm('random')
-
-def test_boolean():
-    do_test_vm('boolean')
+test_random = lambda: do_test_vm('random', 'random')
+test_boolean = lambda: do_test_vm('vmtests', 'boolean')
+test_boolean = lambda: do_test_vm('vmtests', 'suicide')
+test_boolean = lambda: do_test_vm('vmtests', 'arith')
+test_boolean = lambda: do_test_vm('vmtests', 'mktx')
+test_add = lambda: do_test_vm('vmArithmeticTest')
 
 
-def test_suicide():
-    do_test_vm('suicide')
-
-
-def test_arith():
-    do_test_vm('arith')
-
-
-def test_mktx():
-    do_test_vm('mktx')
-
-
-def do_test_vm(name):
-    logger.debug('running test:%r', name)
-    params = vm_tests_fixtures()[name]
+def do_test_vm(filename, testname=None, limit=99999999):
+    if testname is None:
+        for testname in vm_tests_fixtures()[filename].keys()[:limit]:
+            do_test_vm(filename, testname)
+        return
+    logger.debug('running test:%r in %r', testname, filename)
+    params = vm_tests_fixtures()[filename][testname]
 
     pre = params['pre']
     exek = params['exec']
@@ -115,6 +110,8 @@ def do_test_vm(name):
         value=int(exek['value']),
         data=exek['data'][2:].decode('hex'))
     tx.sender = sender
+    pblogger.log_apply_op = True
+    pblogger.log_op = True
     pblogger.log('TX', tx=tx.hex_hash(), sender=sender, to=recvaddr, value=tx.value, startgas=tx.startgas, gasprice=tx.gasprice)
 
     # capture apply_message calls
@@ -155,6 +152,6 @@ def do_test_vm(name):
 
     # check state
     for address, data in post.items():
-        state = blk.account_to_dict(address)
+        state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)  # attribute not present in vmtest fixtures
         assert data == state
