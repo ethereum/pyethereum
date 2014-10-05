@@ -225,10 +225,8 @@ class ChainManager(StoppableLoopThread):
             block = self.miner.mine()
             if block:
                 # create new block
-                if self.add_block(block):
-                    logger.debug("broadcasting new %r" % block)
-                    signals.broadcast_new_block.send(sender=None, block=block)
-                else:
+                if not self.add_block(block, forward=True):
+                    logger.debug("newly mined %r is invalid!?" % block)
                     self.new_miner()
 
     def receive_chain(self, transient_blocks, peer=None):
@@ -278,11 +276,12 @@ class ChainManager(StoppableLoopThread):
                     logger.debug('Known %r', block)
                 else:
                     assert block.has_parent()
-                    success = self.add_block(block)
+                    forward = len(transient_blocks)==1 # assume single block is newly mined block
+                    success = self.add_block(block, forward=forward)
                     if success:
                         logger.debug('Added %r', block)
 
-    def add_block(self, block):
+    def add_block(self, block, forward=False):
         "returns True if block was added sucessfully"
         # make sure we know the parent
         if not block.has_parent() and not block.is_genesis():
@@ -301,8 +300,11 @@ class ChainManager(StoppableLoopThread):
                 not block.is_genesis():
             logger.debug('Invalid nonce %r', block)
             return False
+        # Forward block w/ valid PoW asap (if not syncing)
+        if forward:
+            signals.broadcast_new_block.send(sender=None, block=block)
+            logger.debug("broadcasting new %r" % block)
 
-        # FIXME: Forward blocks w/ valid PoW asap
         if block.has_parent():
             try:
                 #logger.debug('verifying: %s', block)
