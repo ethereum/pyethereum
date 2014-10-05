@@ -280,7 +280,7 @@ def apply_msg(block, tx, msg, code):
     if code in code_cache:
         processed_code = code_cache[code]
     else:
-        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, [], 0]) +
+        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, [], 1]) +
                           [ord(c)] for c in code]
         code_cache[code] = processed_code
     # Main loop

@@ -56,7 +56,7 @@ test_bitwise = lambda: do_test_vm('vmBitwiseLogicOperationTest')
 test_blockinfo = lambda: do_test_vm('vmBlockInfoTest')
 test_blockinfo = lambda: do_test_vm('vmEnvironmentalInfoTest')
 test_blockinfo = lambda: do_test_vm('vmPushDupSwapTest')
-test_blockinfo = lambda: do_test_vm('vmSha3Test')
+test_blockinfo = lambda: do_test_vm('vmIOandFlowOperationsTest')
 
 
 def do_test_vm(filename, testname=None, limit=99999999):
