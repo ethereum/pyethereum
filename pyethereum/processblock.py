@@ -11,6 +11,7 @@ import logging
 import json
 import time
 logger = logging.getLogger(__name__)
+sys.setrecursionlimit(100000)
 
 
 
@@ -343,16 +344,18 @@ def out_of_gas_exception(expense, fee, compustate, op):
     return OUT_OF_GAS
 
 
-def mem_extend(mem, compustate, op, newsize):
-    if len(mem) < ceil32(newsize):
-        m_extend = ceil32(newsize) - len(mem)
-        memfee = GMEMORY * (m_extend / 32)
-        if compustate.gas < memfee:
-            out_of_gas_exception('mem_extend', memfee, compustate, op)
-            compustate.gas = 0
-            return False
-        compustate.gas -= memfee
-        mem.extend([0] * m_extend)
+def mem_extend(mem, compustate, op, start, sz):
+    if sz:
+        newsize = start + sz
+        if len(mem) < ceil32(newsize):
+            m_extend = ceil32(newsize) - len(mem)
+            memfee = GMEMORY * (m_extend / 32)
+            if compustate.gas < memfee:
+                out_of_gas_exception('mem_extend', memfee, compustate, op)
+                compustate.gas = 0
+                return False
+            compustate.gas -= memfee
+            mem.extend([0] * m_extend)
     return True
 
 
@@ -399,7 +402,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             log_args = dict(pc=compustate.pc - 1,
                             op=op,
                             stackargs=compustate.stack[-1:-in_args-1:-1],
-                            gas=compustate.gas)
+                            gas=compustate.gas + fee)
             if op[:4] == 'PUSH':
                 ind = compustate.pc
                 log_args['value'] = \
@@ -466,7 +469,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append((s0 * s1) % s2 if s2 else 0)
     elif op == 'SHA3':
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + s1):
+        if not mem_extend(mem, compustate, op, s0, s1):
             return OUT_OF_GAS
         data = ''.join(map(chr, mem[s0: s0 + s1]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
@@ -491,7 +494,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + s2):
+        if not mem_extend(mem, compustate, op, s0, s2):
             return OUT_OF_GAS
         for i in range(s2):
             if s1 + i < len(msg.data):
@@ -502,7 +505,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(len(processed_code))
     elif op == 'CODECOPY':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + s2):
+        if not mem_extend(mem, compustate, op, s0, s2):
             return OUT_OF_GAS
         for i in range(s2):
             if s1 + i < len(processed_code):
@@ -516,7 +519,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'EXTCODECOPY':
         addr, s1, s2, s3 = stk.pop(), stk.pop(), stk.pop(), stk.pop()
         extcode = block.get_code(utils.coerce_addr_to_hex(addr)) or ''
-        if not mem_extend(mem, compustate, op, s1 + s3):
+        if not mem_extend(mem, compustate, op, s1, s3):
             return OUT_OF_GAS
         for i in range(s3):
             if s2 + i < len(extcode):
@@ -539,13 +542,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.pop()
     elif op == 'MLOAD':
         s0 = stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + 32):
+        if not mem_extend(mem, compustate, op, s0, 32):
             return OUT_OF_GAS
         data = ''.join(map(chr, mem[s0: s0 + 32]))
         stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + 32):
+        if not mem_extend(mem, compustate, op, s0, 32):
             return OUT_OF_GAS
         v = s1
         for i in range(31, -1, -1):
@@ -553,7 +556,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             v /= 256
     elif op == 'MSTORE8':
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + 1):
+        if not mem_extend(mem, compustate, op, s0, 1):
             return OUT_OF_GAS
         mem[s0] = s1 % 256
     elif op == 'SLOAD':
@@ -607,7 +610,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk[-1] = temp
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, mstart + msz):
+        if not mem_extend(mem, compustate, op, mstart, msz):
             return OUT_OF_GAS
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
         pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
@@ -623,8 +626,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CALL':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        new_memsize = max(meminstart + meminsz, memoutstart + memoutsz)
-        if not mem_extend(mem, compustate, op, new_memsize):
+        if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
+                not mem_extend(mem, compustate, op, memoutstart, memoutsz):
             return OUT_OF_GAS
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
@@ -645,13 +648,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 mem[memoutstart + i] = data[i]
     elif op == 'RETURN':
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0 + s1):
+        if not mem_extend(mem, compustate, op, s0, s1):
             return OUT_OF_GAS
         return mem[s0: s0 + s1]
     elif op == 'POST':
         gas, to, value, meminstart, meminsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, meminstart + meminsz):
+        if not mem_extend(mem, compustate, op, meminstart, meminsz):
             return OUT_OF_GAS
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
@@ -665,8 +668,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CALL_STATELESS':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        new_memsize = max(meminstart + meminsz, memoutstart + memoutsz)
-        if not mem_extend(mem, compustate, op, new_memsize):
+        if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
+                not mem_extend(mem, compustate, op, memoutstart, memoutsz):
             return OUT_OF_GAS
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
