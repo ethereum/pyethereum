@@ -557,15 +557,13 @@ class Block(object):
             for k in d.keys() + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                v3 = None
                 hexkey = '0x'+utils.zunpad(k).encode('hex')
                 if v2 is not None:
                     if v2 != 0:
-                        v3 = '0x'+utils.int_to_big_endian(v2).encode('hex')
+                        med_dict['storage'][hexkey] = \
+                            '0x'+utils.int_to_big_endian(v2).encode('hex')
                 elif v is not None:
-                    v3 = '0x'+rlp.decode(v).encode('hex')
-                if v3 is not None:
-                    med_dict['storage'][hexkey] = [v3] if for_vmtest else v3
+                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
         return med_dict
 
     def reset_cache(self):

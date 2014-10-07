@@ -607,7 +607,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         post_occupied = GSTORAGE if s1 else 0
         gascost = GSTORAGE + post_occupied - pre_occupied
         if compustate.gas < gascost:
-            out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
+            return out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
         compustate.gas -= gascost
         block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP':
@@ -652,17 +652,20 @@ def apply_op(block, tx, msg, processed_code, compustate):
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):
             return OUT_OF_GAS
-        data = ''.join(map(chr, mem[mstart: mstart + msz]))
-        pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
-        create_msg = Message(msg.to, '', value, compustate.gas, data)
-        addr, gas, code = create_contract(block, tx, create_msg)
-        pblogger.log('SUB CONTRACT OUT', address=addr, code=code)
-        if addr:
-            stk.append(addr)
-            compustate.gas = gas
+        if block.get_balance(msg.to) >= value:
+            data = ''.join(map(chr, mem[mstart: mstart + msz]))
+            pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
+            create_msg = Message(msg.to, '', value, compustate.gas, data)
+            addr, gas, code = create_contract(block, tx, create_msg)
+            pblogger.log('SUB CONTRACT OUT', address=addr, code=code)
+            if addr:
+                stk.append(addr)
+                compustate.gas = gas
+            else:
+                stk.append(0)
+                compustate.gas = 0
         else:
             stk.append(0)
-            compustate.gas = 0
     elif op == 'CALL':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
@@ -672,20 +675,23 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if compustate.gas < gas:
             return out_of_gas_exception('subcall gas', gas, compustate, op)
         compustate.gas -= gas
-        to = utils.encode_int(to)
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-        pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
-        call_msg = Message(msg.to, to, value, gas, data)
-        result, gas, data = apply_msg_send(block, tx, call_msg)
-        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz)
-        if result == 0:
-            stk.append(0)
+        if block.get_balance(msg.to) >= value:
+            to = utils.encode_int(to)
+            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+            data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
+            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'), csg=compustate.gas)
+            call_msg = Message(msg.to, to, value, gas, data)
+            result, gas, data = apply_msg_send(block, tx, call_msg)
+            pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz, csg=compustate.gas)
+            if result == 0:
+                stk.append(0)
+            else:
+                stk.append(1)
+                compustate.gas += gas
+                for i in range(min(len(data), memoutsz)):
+                    mem[memoutstart + i] = data[i]
         else:
-            stk.append(1)
-            compustate.gas += gas
-            for i in range(min(len(data), memoutsz)):
-                mem[memoutstart + i] = data[i]
+            stk.append(0)
     elif op == 'RETURN':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s1):

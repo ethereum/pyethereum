@@ -62,8 +62,6 @@ test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
     'CallRecursiveBomb',
-    'CallToNameRegistratorOutOfGas',
-    'createNameRegistratorValueTooHigh',
 ]
 
 
