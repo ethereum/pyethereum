@@ -154,7 +154,6 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
         self.suicides = []
-        self.postqueue = []
         self.caches = {
             'balance': {},
             'nonce': {},
@@ -582,7 +581,6 @@ class Block(object):
             'gas': self.gas_used,
             'txs': self.transactions,
             'txcount': self.transaction_count,
-            'postqueue': copy.copy(self.postqueue),
             'suicides': self.suicides,
             'suicides_size': len(self.suicides),
             'journal': self.journal,  # pointer to reference, so is not static
@@ -606,7 +604,6 @@ class Block(object):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
-        self.postqueue = mysnapshot['postqueue']
 
     def finalize(self):
         """

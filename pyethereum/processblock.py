@@ -178,21 +178,13 @@ def apply_transaction(block, tx):
     message_gas = tx.startgas - intrinsic_gas_used
     message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
 
-    block.postqueue = [ message ]
-    primary_result = None
-    while len(block.postqueue):
-        message = block.postqueue.pop(0)
-        # MESSAGE
-        if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-            result, gas_remained, data = apply_msg_send(block, tx, message)
-        else:  # CREATE
-            result, gas_remained, data = create_contract(block, tx, message)
-            if result > 0:
-                result = utils.coerce_addr_to_hex(result)
-        if not primary_result:
-            primary_result = result, gas_remained, data
-
-    result, gas_remained, data = primary_result
+    # MESSAGE
+    if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
+        result, gas_remained, data = apply_msg_send(block, tx, message)
+    else:  # CREATE
+        result, gas_remained, data = create_contract(block, tx, message)
+        if result > 0:
+            result = utils.coerce_addr_to_hex(result)
 
     assert gas_remained >= 0
 
@@ -612,10 +604,20 @@ def apply_op(block, tx, msg, processed_code, compustate):
         block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP':
         compustate.pc = stk.pop()
+        if compustate.pc >= len(processed_code):
+            return []
+        op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+        if op != 'JUMPDEST':
+            return []
     elif op == 'JUMPI':
         s0, s1 = stk.pop(), stk.pop()
         if s1:
             compustate.pc = s0
+            if compustate.pc >= len(processed_code):
+                return []
+            op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+            if op != 'JUMPDEST':
+                return []
     elif op == 'PC':
         stk.append(compustate.pc - 1)
     elif op == 'MSIZE':
@@ -697,21 +699,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if not mem_extend(mem, compustate, op, s0, s1):
             return OUT_OF_GAS
         return mem[s0: s0 + s1]
-    elif op == 'POST':
-        gas, to, value, meminstart, meminsz = \
-            stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, meminstart, meminsz):
-            return OUT_OF_GAS
-        if compustate.gas < gas:
-            return out_of_gas_exception('subcall gas', gas, compustate, op)
-        compustate.gas -= gas
-        to = utils.encode_int(to)
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-        pblogger.log('POST NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
-        post_msg = Message(msg.to, to, value, gas, data)
-        block.postqueue.append(post_msg)
-    elif op == 'CALL_STATELESS':
+    elif op == 'CALL_CODE':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
