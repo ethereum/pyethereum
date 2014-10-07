@@ -61,7 +61,7 @@ test_sha3 = lambda: do_test_vm('vmSha3Test')
 test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
-    'CallRecursiveBomb',
+    'CallToNameRegistratorOutOfGas',
 ]
 
 
@@ -132,11 +132,15 @@ def do_test_vm(filename, testname=None, limit=99999999):
     apply_message_calls = []
     orig_apply_msg = pb.apply_msg
 
-    def apply_msg_wrapper(_block, _tx, msg, code):
+    def apply_msg_wrapper(_block, _tx, msg, code, toplevel=False):
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
                                         data=msg.data.encode('hex')))
+        if not toplevel:
+            pb.apply_msg = orig_apply_msg
         result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
+        if not toplevel:
+            pb.apply_msg = apply_msg_wrapper
         return result, gas_rem, data
 
     pb.apply_msg = apply_msg_wrapper
@@ -145,7 +149,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
     blk.delta_balance(exek['caller'], tx.value)
     blk.delta_balance(exek['address'], -tx.value)
     success, gas_remained, output = \
-        pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'))
+        pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'), toplevel=True)
     while len(blk.postqueue):
         msg2 = blk.postqueue.pop(0)
         pb.apply_msg(blk, tx, msg2, blk.get_code(msg2.to))
