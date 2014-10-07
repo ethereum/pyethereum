@@ -85,12 +85,12 @@ class Index(object):
             self.db.put(key, value)
 
     def get_transaction(self, txhash):
-        "return (tx, block)"
+        "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
         blk = blocks.get_block(blockhash)
         num = utils.decode_int(tx_num_enc)
         tx_data, msr, gas = blk.get_transaction(num)
-        return Transaction.create(tx_data), blk
+        return Transaction.create(tx_data), blk, num
 
     # children ##############
 

@@ -236,7 +236,7 @@ class TraceLogHandler(logging.Handler):
 
 
 def _get_block_before_tx(txhash):
-    tx, blk = chain_manager.index.get_transaction(txhash.decode('hex'))
+    tx, blk, i = chain_manager.index.get_transaction(txhash.decode('hex'))
     # get the state we had before this transaction
     test_blk = Block.init_from_parent(blk.get_parent(),
                                       blk.coinbase,
@@ -251,12 +251,12 @@ def _get_block_before_tx(txhash):
         else:
             pre_state = sr
     test_blk.state.root_hash = pre_state
-    return test_blk, tx
+    return test_blk, tx, i
 
 
 def get_trace(txhash):
     try:  # index
-        test_blk, tx = _get_block_before_tx(txhash)
+        test_blk, tx, i = _get_block_before_tx(txhash)
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
 
@@ -302,6 +302,32 @@ def dtrace(params, txhash):
     return get_trace(txhash)
 
 
+# SPV proofs
+
+
+@app.get('/spv/tx/<txhash>')
+def spvtrace(txhash):
+    try:  # index
+        tx, blk, i = chain_manager.index.get_transaction(txhash.decode('hex'))
+    except (KeyError, TypeError):
+        return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
+
+    return processblock.mk_independent_transaction_spv_proof(blk, i).encode('hex')
+
+
+@app.get('/spv/acct/<addr>')
+def spvaddr(addr):
+    return chain_manager.head.state.produce_spv_proof(addr.decode('hex'))
+
+
+@app.get('/spv/storage/<addr>/<index>')
+def spvstorage(addr, index):
+    prf1 = chain_manager.head.state.produce_spv_proof(addr.decode('hex'))
+    storetree = chain_manager.head.get_storage(addr)
+    prf2 = storetree.produce_spv_proof(utils.zpad(utils.encode_int(index), 32))
+    return rlp.encode(prf1 + prf2).encode('hex')
+
+
 # Fetch state data
 
 @app.get('/acct/<addr>')
@@ -329,7 +355,7 @@ def dump(txblkhash):
         blk = chain_manager.get(txblkhash.decode('hex'))
     except:
         try:  # index
-            test_blk, tx = _get_block_before_tx(txblkhash)
+            test_blk, tx, i = _get_block_before_tx(txblkhash)
         except (KeyError, TypeError):
             return bottle.abort(404, 'Unknown Transaction  %s' % txblkhash)
         processblock.apply_transaction(test_blk, tx)

@@ -170,13 +170,20 @@ class Block(object):
         self.proof_mode = None
         self.proof_nodes = []
 
-        if transaction_list:
+        # If transaction_list is None, then it's a block header imported for
+        # SPV purposes
+        if transaction_list is not None:
             # support init with transactions only if state is known
             assert self.state.root_hash_valid()
             for tx_lst_serialized, state_root, gas_used_encoded \
                     in transaction_list:
                 self._add_transaction_to_list(
                     tx_lst_serialized, state_root, gas_used_encoded)
+            if tx_list_root != self.transactions.root_hash:
+                raise Exception("Transaction list root hash does not match!")
+            if not self.is_genesis() and self.nonce and\
+                    not check_header_pow(header or self.list_header()):
+                raise Exception("PoW check failed")
 
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db
@@ -190,8 +197,6 @@ class Block(object):
         if not self.state.root_hash_valid():
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
-        if tx_list_root != self.transactions.root_hash:
-            raise Exception("Transaction list root hash does not match!")
         if not self.transactions.root_hash_valid():
             raise Exception(
                 "Transactions root not found in database! %r" % self)
@@ -199,13 +204,10 @@ class Block(object):
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
-        if not self.is_genesis() and self.nonce and\
-                not check_header_pow(header or self.list_header()):
-            raise Exception("PoW check failed")
+
 
     def validate_uncles(self):
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
-            sys.stderr.write(utils.sha3(rlp.encode(self.uncles)).encode('hex') + '   ' + self.uncles_hash.encode('hex') + '\n\n\n')
             return False
         # Check uncle validity
         ancestor_chain = [self]
@@ -277,6 +279,13 @@ class Block(object):
             except KeyError:
                 raise UnknownParentException(kargs['prevhash'].encode('hex'))
             return parent.deserialize_child(rlpdata)
+
+    @classmethod
+    def init_from_header(cls, rlpdata):
+        kargs = cls.deserialize_header(rlpdata)
+        kargs['transaction_list'] = None
+        kargs['uncles'] = None
+        return Block(**kargs)
 
     def deserialize_child(self, rlpdata):
         """
@@ -552,9 +561,11 @@ class Block(object):
                 hexkey = '0x'+utils.zunpad(k).encode('hex')
                 if v2 is not None:
                     if v2 != 0:
-                        med_dict['storage'][hexkey] = '0x'+utils.int_to_big_endian(v2).encode('hex')
+                        v3 = '0x'+utils.int_to_big_endian(v2).encode('hex')
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
+                    v3 = '0x'+rlp.decode(v).encode('hex')
+                if v3 is not None:
+                    med_dict['storage'][hexkey] = [v3] if for_vmtest else v3
         return med_dict
 
     def reset_cache(self):
