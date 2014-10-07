@@ -402,7 +402,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
             log_args = dict(pc=compustate.pc - 1,
                             op=op,
                             stackargs=compustate.stack[-1:-in_args-1:-1],
-                            gas=compustate.gas + fee)
+                            gas=compustate.gas + fee,
+                            balance=block.get_balance(msg.to))
             if op[:4] == 'PUSH':
                 ind = compustate.pc
                 log_args['value'] = \

@@ -61,24 +61,9 @@ test_sha3 = lambda: do_test_vm('vmSha3Test')
 test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
-    'createNameRegistratorValueTooHigh',
-    'callstatelessToNameRegistrator0',
     'CallRecursiveBomb',
-    'CallToReturn1',
-    'CallToNameRegistrator0',
     'CallToNameRegistratorOutOfGas',
-    'CallToNameRegistratorNotMuchMemory0',
-    'CallToNameRegistratorNotMuchMemory1',
-    'PostToNameRegistrator0',
-    'createNameRegistratorOutOfMemoryBonds0',
-    'createNameRegistratorOutOfMemoryBonds1',
-    'callstatelessToReturn1',
-    'PostToReturn1',
-    'return0',
-    'return1',
-    'return2',
-    'createNameRegistrator',
-    'sstore_load_2',
+    'createNameRegistratorValueTooHigh',
 ]
 
 
@@ -165,12 +150,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
         pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'))
     while len(blk.postqueue):
         msg2 = blk.postqueue.pop(0)
-        amc2 = apply_message_calls
-        apply_message_calls = []
         pb.apply_msg(blk, tx, msg2, blk.get_code(msg2.to))
-        apply_message_calls.pop(0)
-        amc2.extend(apply_message_calls)
-        apply_message_calls = amc2
     pb.apply_msg = orig_apply_msg
     apply_message_calls.pop(0)
     blk.commit_state()
