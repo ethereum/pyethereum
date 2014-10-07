@@ -61,7 +61,7 @@ test_sha3 = lambda: do_test_vm('vmSha3Test')
 test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
-    'CallToNameRegistratorOutOfGas',
+    # Put a list of strings of known faulty tests here
 ]
 
 
