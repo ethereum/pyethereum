@@ -242,7 +242,7 @@ def test_hedge():
     assert o6 == [4]
 
 
-# Test the LIFO nature of call and the FIFO nature of post
+# Test the LIFO nature of call
 arither_code = '''
 init:
     contract.storage[0] = 10
@@ -253,25 +253,17 @@ code:
         contract.storage[0] *= 10
         call(contract.address, 0)
         contract.storage[0] *= 10
-    elif msg.data[0] == 2:
-        contract.storage[0] *= 10
-        postcall(tx.gas / 2, contract.address, 0)
-        contract.storage[0] *= 10
     elif msg.data[0] == 3:
         return(contract.storage[0])
 '''
 
 
-def test_post():
+def test_lifo():
     s = tester.state()
     c = s.contract(arither_code)
     s.send(tester.k0, c, 0, [1])
     o2 = s.send(tester.k0, c, 0, [3])
     assert o2 == [1010]
-    c = s.contract(arither_code)
-    s.send(tester.k0, c, 0, [2])
-    o2 = s.send(tester.k0, c, 0, [3])
-    assert o2 == [1001]
 
 
 # Test suicides and suicide reverts
@@ -355,21 +347,21 @@ contract.storage[1] += msg.data[0]
 
 filename2 = "stateless_qwertyuioplkjhgfdsa.se"
 
-stateless_test_code = \
+callcode_test_code = \
     '''
 x = create("%s")
 call(x, 6)
-call_stateless(x, 4)
-call_stateless(x, 60)
+call_code(x, 4)
+call_code(x, 60)
 call(x, 40)
 return(contract.storage[1])
 ''' % filename2
 
 
-def test_stateless():
+def test_callcode():
     s = tester.state()
     open(filename2, 'w').write(add1_code)
-    c = s.contract(stateless_test_code)
+    c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0, [])
     os.remove(filename2)
     assert o1 == [64]
