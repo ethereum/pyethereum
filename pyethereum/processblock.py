@@ -54,6 +54,7 @@ GTXDATA = 5
 GTXCOST = 500
 TT255 = 2**255
 TT256 = 2**256
+TT256M1 = 2**256 - 1
 
 OUT_OF_GAS = -1
 
@@ -446,11 +447,11 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if op == 'STOP' or op == 'INVALID':
         return []
     elif op == 'ADD':
-        stk.append((stk.pop() + stk.pop()) % TT256)
+        stk.append((stk.pop() + stk.pop()) & TT256M1)
     elif op == 'SUB':
-        stk.append((stk.pop() - stk.pop()) % TT256)
+        stk.append((stk.pop() - stk.pop()) & TT256M1)
     elif op == 'MUL':
-        stk.append((stk.pop() * stk.pop()) % TT256)
+        stk.append((stk.pop() * stk.pop()) & TT256M1)
     elif op == 'DIV':
         s0, s1 = stk.pop(), stk.pop()
         stk.append(0 if s1 == 0 else s0 / s1)
@@ -459,14 +460,14 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(0 if s1 == 0 else s0 % s1)
     elif op == 'SDIV':
         s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) * (-1 if s0*s1 < 0 else 1)) % TT256)
+        stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) * (-1 if s0*s1 < 0 else 1)) & TT256M1)
     elif op == 'SMOD':
         s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) % TT256)
+        stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) & TT256M1)
     elif op == 'EXP':
         stk.append(pow(stk.pop(), stk.pop(), TT256))
     elif op == 'NEG':
-        stk.append(-stk.pop() % TT256)
+        stk.append(-stk.pop() & TT256M1)
     elif op == 'LT':
         stk.append(1 if stk.pop() < stk.pop() else 0)
     elif op == 'GT':
