@@ -10,6 +10,7 @@ import sys
 import logging
 import json
 import time
+import fastvm
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
 
@@ -240,7 +241,6 @@ def verify_transaction_spv_proof(block, tx, proof):
 
 
 def mk_independent_transaction_spv_proof(block, index):
-    print block, index, block._list_transactions()
     block = blocks.Block.init_from_header(block.list_header())
     tx = transactions.Transaction.create(block.get_transaction(index)[0])
     if index > 0:
@@ -396,9 +396,10 @@ def to_signed(i):
 
 # Does not include paying opfee
 def apply_op(block, tx, msg, processed_code, compustate):
+
     if compustate.pc >= len(processed_code):
         return []
-    op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+    op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
 
     # out of gas error
     if fee > compustate.gas:
@@ -607,7 +608,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         compustate.pc = stk.pop()
         if compustate.pc >= len(processed_code):
             return []
-        op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+        op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
         if op != 'JUMPDEST':
             return []
     elif op == 'JUMPI':
@@ -616,7 +617,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             compustate.pc = s0
             if compustate.pc >= len(processed_code):
                 return []
-            op, in_args, out_args, mem_grabs, fee, opcode = processed_code[compustate.pc]
+            op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
             if op != 'JUMPDEST':
                 return []
     elif op == 'PC':
@@ -731,3 +732,5 @@ def apply_op(block, tx, msg, processed_code, compustate):
         return []
     for a in stk:
         assert isinstance(a, (int, long))
+
+# apply_msg = fastvm.apply_msg

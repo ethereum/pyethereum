@@ -374,6 +374,7 @@ a[0] = 1
 return(a, 1)
 '''
 
+
 def test_array():
     s = tester.state()
     c = s.contract(array_code)
@@ -386,16 +387,34 @@ a[0] = 1
 return(a, 1)
 '''
 
+
 def test_array2():
     s = tester.state()
     c = s.contract(array_code2)
     assert [1] == s.send(tester.k0, c, 0, [])
 
-array_code3="""
+array_code3 = """
 a = array(3)
 return(a, 3)
 """
+
+
 def test_array3():
     s = tester.state()
     c = s.contract(array_code3)
-    assert [0,0,0] == s.send(tester.k0, c, 0, [])
+    assert [0, 0, 0] == s.send(tester.k0, c, 0, [])
+
+# test_evm = None
+# test_sixten = None
+# test_returnten = None
+# test_namecoin = None
+# test_currency = None
+# test_data_feeds = None
+# test_hedge = None
+# test_lifo = None
+# test_suicider = None
+# test_reverter = None
+# test_callcode = None
+# test_array = None
+# test_array2 = None
+# test_array3 = None

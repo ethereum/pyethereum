@@ -12,6 +12,8 @@ from rlp import big_endian_to_int, int_to_big_endian
 
 
 logger = logging.getLogger(__name__)
+TT256 = 2**256
+TT256M1 = 2**256 - 1
 
 
 # decorator
@@ -30,7 +32,15 @@ def debug(label):
 def bytearray_to_int(arr):
     o = 0
     for a in arr:
-        o = o * 256 + a
+        o = (o << 8) + a
+    return o
+
+
+def int_to_bytearray(i, l):
+    o = [0] * l
+    for x in range(l):
+        o[l-x-1] = i & 0xff
+        i >>= 8
     return o
 
 
@@ -186,7 +196,7 @@ def encode_addr(v):
 
 def encode_int(v):
     '''encodes an integer into serialization'''
-    if not isinstance(v, (int, long)) or v < 0 or v >= 2 ** 256:
+    if not isinstance(v, (int, long)) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range")
     return int_to_big_endian(v)
 
