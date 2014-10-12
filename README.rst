@@ -10,6 +10,9 @@ Ethereum Python Client
 .. image:: https://coveralls.io/repos/ethereum/pyethereum/badge.png
   :target: https://coveralls.io/r/ethereum/pyethereum
 
+.. image:: http://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum
+  :target: http://build.ethdev.com/builders/Linux%20PyEthereum
+
 
 Quickstart
 -------------
