@@ -36,10 +36,10 @@ def bytearray_to_int(arr):
     return o
 
 
-def int_to_bytearray(i, l):
-    o = [0] * l
-    for x in range(l):
-        o[l-x-1] = i & 0xff
+def int_to_32bytearray(i):
+    o = [0] * 32
+    for x in range(32):
+        o[31-x] = i & 0xff
         i >>= 8
     return o
 
@@ -63,6 +63,14 @@ def zunpad(x):
     while i < len(x) and x[i] == '\x00':
         i += 1
     return x[i:]
+
+
+def int_to_addr(x):
+    o = [''] * 20
+    for i in range(20):
+        o[19-i] = chr(x & 0xff)
+        x >>= 8
+    return ''.join(o).encode('hex')
 
 
 def coerce_addr_to_bin(x):

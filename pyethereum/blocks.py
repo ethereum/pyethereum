@@ -370,8 +370,13 @@ class Block(object):
         :param address: account address, can be binary or hex string
         :param param: parameter to get
         '''
-        if param != 'storage' and address in self.caches[param]:
-            return self.caches[param][address]
+        if param != 'storage':
+            if address in self.caches[param]:
+                return self.caches[param][address]
+            else:
+                o = self.get_acct(address)[acct_structure_rev[param][0]]
+                self.caches[param][address] = o
+                return o
         return self.get_acct(address)[acct_structure_rev[param][0]]
 
     # _set_acct_item(bin or hex, int, bin)

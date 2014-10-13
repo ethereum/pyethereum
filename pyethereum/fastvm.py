@@ -15,60 +15,100 @@ GTXCOST = 500
 TT255 = 2**255
 TT256 = 2**256
 TT256M1 = 2**256 - 1
-filter1 = set(['JUMP', 'JUMPI', 'JUMPDEST', 'STOP', 'RETURN',
-               'INVALID', 'CALL', 'CREATE', 'CALL_CODE', 'SUICIDE'])
+TT160 = 2**160
+TT160M1 = 2**160 - 1
 
 
 def to_signed(i):
     return i if i < TT255 else i - TT256
 
 
-def ceil32(x):
-    return x if x % 32 == 0 else x + 32 - (x % 32)
-
-
 def extract_bytes(mem, start, sz):
     end = start + sz
+    sminor, smajor = start & 31, start >> 5
+    eminor, emajor = end & 31, end >> 5
     if not sz:
         return []
-    elif (start // 32) == (end // 32):
-        m = mem[start // 32]
-        o = utils.int_to_bytearray(m, 32)[start % 32: end % 32]
+    elif smajor == emajor:
+        m = mem[smajor]
+        o = utils.int_to_32bytearray(m)[sminor: eminor]
     else:
-        m = utils.int_to_bytearray(mem[start // 32], 32)[start % 32:]
-        for i in range(start // 32 + 1, end // 32):
-            m.extend(utils.int_to_bytearray(mem[i], 32))
-        if end % 32:
-            m.extend(utils.int_to_bytearray(mem[end // 32], 32)[:end % 32])
+        m = utils.int_to_32bytearray(mem[smajor])[sminor:]
+        for i in range((smajor) + 1, emajor):
+            m.extend(utils.int_to_32bytearray(mem[i]))
+        if eminor:
+            m.extend(utils.int_to_32bytearray(mem[emajor])[:eminor])
         o = m
     return o
 
 
 def set_bytes(mem, start, bytez):
     end = start + len(bytez)
+    sminor, smajor = start & 31, start >> 5
+    eminor, emajor = end & 31, end >> 5
     if not bytez:
         pass
-    elif (start // 32) == (end // 32):
-        m = utils.int_to_bytearray(mem[start // 32], 32)
-        mem[start // 32] = utils.bytearray_to_int(m[:start % 32] + bytez + m[end % 32:])
+    elif (smajor) == (emajor):
+        m = utils.int_to_32bytearray(mem[smajor])
+        mem[smajor] = utils.bytearray_to_int(m[:sminor] + bytez + m[eminor:])
     else:
-        m = utils.int_to_bytearray(mem[start // 32], 32)
-        mem[start // 32] = utils.bytearray_to_int(m[:start % 32] + bytez[:32 - (start % 32)])
+        if sminor:
+            m = utils.int_to_32bytearray(mem[smajor])
+            mem[smajor] = utils.bytearray_to_int(m[:sminor] + bytez[:32 - (sminor)])
+        else:
+            mem[smajor] = utils.bytearray_to_int(bytez[:32])
         j = 0
-        for i in range(start // 32 + 1, end // 32):
-            mem[i] = utils.bytearray_to_int(bytez[j * 32 + 32 - start % 32: j * 32 + 64 - start % 32])
-            j += 1
-        if end % 32:
-            m2 = utils.int_to_bytearray(mem[end // 32], 32)
-            endpiece = bytez[j * 32 + 32 - start % 32:]
-            mem[end // 32] = utils.bytearray_to_int(endpiece + m2[-32+len(endpiece):])
+        for i in range((smajor) + 1, emajor):
+            mem[i] = utils.bytearray_to_int(bytez[j + 32 - (sminor): j + 64 - (sminor)])
+            j += 32
+        if eminor:
+            m2 = utils.int_to_32bytearray(mem[emajor])
+            endpiece = bytez[j + 32 - (sminor):]
+            mem[emajor] = utils.bytearray_to_int(endpiece + m2[-32+len(endpiece):])
+
+
+def copy32(mem1, mem2, start1, start2, l):
+    major1 = start1 >> 5
+    major2 = start2 >> 5
+    offset1 = start1 % 32
+    offset2 = start2 % 32
+    for i in range(l >> 5):
+        if not offset1:
+            L = mem1[major1 + i]
+        else:
+            L = ((mem1[major1 + i] << (8 * offset1)) & TT256M1) + (mem1[major1 + i + 1] >> (256 - 8 * offset1))
+
+        if not offset2:
+            mem2[major2 + i] = L
+        else:
+            mem2[major2 + i] = (mem2[major2 + i] & (TT256 - (TT256 >> (8 * offset2)))) + (L >> (8 * offset2))
+            mem2[major2 + i + 1] = (mem2[major2 + i + 1] & ((TT256 >> (8 * offset2)) - 1)) + ((L << (256 - 8 * offset2)) & TT256M1)
+
+    if l % 32:
+        b = extract_bytes(mem1, start1 + l - l % 32, l % 32)
+        set_bytes(mem2, start2 + l - l % 32, b)
+
+
+def load32(mem, byte):
+    if not byte % 32:
+        return mem[byte >> 5]
+    else:
+        return ((mem[byte >> 5] << (8 * (byte % 32))) & TT256M1) + (mem[byte >> 5 + 1] >> (256 - 8 * (byte % 32)))
+
+
+def bytearray_to_32s(b):
+    b += [0] * 32
+    o = []
+    for i in range(0, len(b), 32):
+        o.append(utils.bytearray_to_int(b[i:i + 32]))
+    return o
 
 
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
-        newsize = start + sz
-        if len(mem) < ceil32(newsize) // 32:
-            m_extend = ceil32(newsize) // 32 - len(mem)
+        newsize = ((start + sz) + 33 - ((start + sz - 1) & 31)) >> 5
+        if len(mem) < newsize:
+            m_extend = newsize - len(mem)
             memfee = GMEMORY * m_extend
             if compustate.gas < memfee:
                 out_of_gas_exception('mem_extend', memfee, compustate, op)
@@ -92,12 +132,13 @@ class Compustate():
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data):
+    def __init__(self, sender, to, value, gas, data, databytes):
         self.sender = sender
         self.to = to
         self.value = value
         self.gas = gas
         self.data = data
+        self.databytes = databytes
         self.processed_code = []
         self.callback = lambda x, y, z: x
         self.snapshot = None
@@ -109,6 +150,10 @@ class Message(object):
 
 def out_of_gas_exception(expense, fee, compustate, op):
     return OUT_OF_GAS
+
+
+filter1 = set(['JUMP', 'JUMPI', 'JUMPDEST', 'STOP', 'RETURN',
+               'INVALID', 'CALL', 'CREATE', 'CALL_CODE', 'SUICIDE'])
 
 
 def preprocess_vmcode(code):
@@ -137,7 +182,7 @@ def preprocess_vmcode(code):
         if i in jumps:
             chunks[laststart] = {"reqh": reqh, "deltah": -h,
                                  "gascost": gascost, "opdata": c,
-                                 "ops": [x[4] for x in c],
+                                 "ops": list(enumerate([x[4] for x in c])),
                                  "start": laststart, "jumpable": lastjumpable,
                                  "end": i+1}
             c = []
@@ -153,15 +198,15 @@ def preprocess_vmcode(code):
         i += 1
     chunks[laststart] = {"reqh": reqh, "deltah": -h,
                          "gascost": gascost, "opdata": c,
-                         "ops": [x[4] for x in c],
+                         "ops": list(enumerate([x[4] for x in c])),
                          "start": laststart, "jumpable": lastjumpable,
                          "end": i+1}
     return chunks
 
 
 def apply_msg(block, tx, msg, code):
+    msg = Message(msg.sender, msg.to, msg.value, msg.gas, bytearray_to_32s([ord(x) for x in msg.data]), len(msg.data))
     # print '### applying msg ###'
-    msg.data = [ord(x) for x in msg.data]
     callstack = []
     msgtop, mem, stk, ops, index = None, None, None, [], [None]
 
@@ -171,7 +216,7 @@ def apply_msg(block, tx, msg, code):
 
     # To be called immediately when a new message is initiated
     def initialize(msg, code):
-        # print 'init', msg.data, msg.gas, msg.sender, block.get_nonce(msg.sender)
+        # print 'init', extract_bytes(msg.data, 0, msg.databytes), msg.gas, msg.sender, block.get_nonce(msg.sender)
         callstack.append(msg)
         # Transfer value, instaquit if not enough
         o = block.transfer_value(msg.sender, msg.to, msg.value)
@@ -189,31 +234,33 @@ def apply_msg(block, tx, msg, code):
     initialize(msg, code)
 
     # To be called immediately when a message returns
-    def drop(o):
+    def drop(o, l=0):
         special[0] = 'drop'
         special[1] = o
+        special[2] = l
 
-    def drop2(o):
-        # print 'dropping', o
+    def drop2(o, l=0):
+        # print 'dropping', extract_bytes(o, 0, l)
         if len(callstack) > 1:
             if o == OUT_OF_GAS:
                 block.revert(msgtop.snapshot)
-                msgtop.callback(0, msgtop.compustate.gas, [])
+                msgtop.callback(0, msgtop.compustate.gas, [], 0)
             else:
-                msgtop.callback(1, msgtop.compustate.gas, o)
+                msgtop.callback(1, msgtop.compustate.gas, o, l)
             callstack.pop()
         else:
             if o == OUT_OF_GAS:
                 block.revert(msgtop.snapshot)
                 done.extend([0, msgtop.compustate.gas, []])
             else:
-                done.extend([1, msgtop.compustate.gas, o])
+                done.extend([1, msgtop.compustate.gas, extract_bytes(o, 0, l)])
 
     def contract_callback_factory():
 
-        def cb(res, gas, dat):
+        def cb(res, gas, dat, databytes):
             if res:
-                block.set_code(callstack[-1].to, ''.join([chr(x) for x in dat]))
+                b = extract_bytes(dat, 0, databytes)
+                block.set_code(callstack[-1].to, ''.join([chr(x) for x in b]))
                 res = utils.coerce_to_int(callstack[-1].to)
             else:
                 if tx.sender != callstack[-1].sender:
@@ -225,15 +272,15 @@ def apply_msg(block, tx, msg, code):
 
     def callback_factory(memoutstart, memoutsz):
 
-        def cb(res, gas, dat):
+        def cb(res, gas, dat, databytes):
             if res == 0:
                 callstack[-2].compustate.stack.append(0)
             else:
                 callstack[-2].compustate.stack.append(1)
                 callstack[-2].compustate.gas += gas
-                dat2 = dat[:memoutsz]
-                dat2 += [0] * (memoutsz - len(dat2))
-                set_bytes(callstack[-2].compustate.memory, memoutstart, dat2)
+                if len(dat) * 32 < memoutsz:
+                    dat += [0] * (memoutsz - (len(dat) // 32) + 1)
+                copy32(dat, callstack[-2].compustate.memory, 0, memoutstart, databytes)
         callstack[-1].callback = cb
 
     def gaz():
@@ -278,21 +325,17 @@ def apply_msg(block, tx, msg, code):
     def OP_INVALID():
         drop([])
 
-    def OP_CATCHALL():
-        a = ops[index[0]]
-        if 0x60 <= a < 0x80:
-            dat = code_chunk['opdata'][index[0]][6]
-            stk.append(dat)
-        elif 0x80 <= a < 0x90:
-            depth = a - 0x7f
-            stk.append(stk[-depth])
-        elif 0x90 <= a < 0xa0:
-            depth = a - 0x8f
-            temp = stk[-depth-1]
-            stk[-depth-1] = stk[-1]
-            stk[-1] = temp
-        elif a not in opcodes: # INVALID
-            drop([])
+    def OP_PUSHN():
+        stk.append(code_chunk['opdata'][index[0]][6])
+
+    def OP_DUPN():
+        stk.append(stk[-(ops[index[0]][1] - 0x7f)])
+
+    def OP_SWAPN():
+        depth = ops[index[0]][1] - 0x8f
+        temp = stk[-depth-1]
+        stk[-depth-1] = stk[-1]
+        stk[-1] = temp
 
     def OP_CREATE():
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
@@ -301,30 +344,32 @@ def apply_msg(block, tx, msg, code):
             if block.get_balance(msgtop.to) >= value:
                 sender = msgtop.to.decode('hex') if len(msgtop.to) == 40 else msgtop.to
                 block.increment_nonce(msgtop.to)
-                data = extract_bytes(mem, mstart, msz)
-                create_msg = Message(msgtop.to, '', value, gaz() - 100, data)
+                data = [0] * ((msz >> 5) + 1)
+                copy32(mem, data, mstart, 0, msz)
+                create_msg = Message(msgtop.to, '', value, gaz() - 100, data, msz)
                 msgtop.compustate.gas -= gaz() - 100
                 nonce = utils.encode_int(block.get_nonce(msgtop.to) - 1)
                 create_msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
                 special[0] = 'create'
                 special[1] = create_msg
-                special[2] = ''.join([chr(x) for x in data])
+                special[2] = ''.join([chr(x) for x in extract_bytes(data, 0, msz)])
             else:
                 stk.append(0)
 
     def OP_CALL():
             subgas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, msgtop.compustate, '', meminstart, meminsz) or \
-                    not mem_extend(mem, msgtop.compustate, '', memoutstart, memoutsz) or \
-                    msgtop.compustate.gas < subgas:
-                return drop(OUT_OF_GAS)
+            if max(meminstart + meminsz, memoutstart + memoutsz) > len(mem) << 5:
+                if not mem_extend(mem, msgtop.compustate, '', meminstart, meminsz) or \
+                        not mem_extend(mem, msgtop.compustate, '', memoutstart, memoutsz) or \
+                        msgtop.compustate.gas < subgas:
+                    return drop(OUT_OF_GAS)
             msgtop.compustate.gas -= subgas
             if block.get_balance(msgtop.to) >= value:
-                to = utils.encode_int(to & (2**160 - 1))
-                to = (('\x00' * (20 - len(to))) + to).encode('hex')
-                data = extract_bytes(mem, meminstart, meminsz)
-                call_msg = Message(msgtop.to, to, value, subgas, data)
+                data = [0] * ((meminsz >> 5) + 1)
+                copy32(mem, data, meminstart, 0, meminsz)
+                to = utils.int_to_addr(to)
+                call_msg = Message(msgtop.to, to, value, subgas, data, meminsz)
                 special[0] = 'call'
                 special[1] = call_msg
                 special[2] = block.get_code(to)
@@ -338,7 +383,9 @@ def apply_msg(block, tx, msg, code):
         if s1:
             if not mem_extend(mem, msgtop.compustate, '', s0, s1):
                 return drop(OUT_OF_GAS)
-            drop(extract_bytes(mem, s0, s1))
+            o = [0] * ((s1 >> 5) + 1)
+            copy32(mem, o, s0, 0, s1)
+            drop(o, s1)
 
     def OP_CALL_CODE():
             subgas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
@@ -349,13 +396,12 @@ def apply_msg(block, tx, msg, code):
             if msgtop.compustate.gas < subgas:
                 return drop(out_of_gas_exception('subcall gas', gas, msgtop.compustate, ''))
             msgtop.compustate.gas -= subgas
-            to = utils.encode_int(to)
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            data = extract_bytes(mem, meminstart, meminsz)
-            call_msg = Message(msgtop.to, msgtop.to, value, subgas, data)
+            data = [0] * ((meminsz >> 5) + 1)
+            copy32(mem, data, meminstart, 0, meminsz)
+            call_msg = Message(msgtop.to, msgtop.to, value, subgas, data, meminsz)
             special[0] = 'call'
             special[1] = call_msg
-            special[2] = block.get_code(to)
+            special[2] = block.get_code(utils.int_to_addr(to))
             special[3] = memoutstart
             special[4] = memoutsz
 
@@ -365,7 +411,6 @@ def apply_msg(block, tx, msg, code):
             block.transfer_value(msgtop.to, to, block.get_balance(msgtop.to))
             block.suicides.append(msgtop.to)
             drop([])
-
 
     def OP_EXP():
         stk.append(pow(stk.pop(), stk.pop(), TT256))
@@ -419,7 +464,7 @@ def apply_msg(block, tx, msg, code):
 
     def OP_SHA3():
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, msgtop.compustate, op, s0, s1):
+        if not mem_extend(mem, msgtop.compustate, '', s0, s1):
             return drop(OUT_OF_GAS)
         data = ''.join([chr(x) for x in mem[s0: s0 + s1]])
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
@@ -441,21 +486,21 @@ def apply_msg(block, tx, msg, code):
 
     def OP_CALLDATALOAD():
         s0 = stk.pop()
-        if s0 >= len(msgtop.data):
+        if s0 >= msgtop.databytes:
             stk.append(0)
         else:
-            stk.append(utils.bytearray_to_int(msgtop.data[s0: s0 + 32]))
+            stk.append(load32(msgtop.data, s0))
 
     def OP_CALLDATASIZE():
-        stk.append(len(msgtop.data))
+        stk.append(msgtop.databytes)
 
     def OP_CALLDATACOPY():
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, msgtop.compustate, '', s0, s2):
             return drop(OUT_OF_GAS)
-        copy_chunk = msgtop.data[s1: s1 + s2]
-        copy_chunk += [0] * (s2 - len(copy_chunk))
-        set_bytes(mem, s0, copy_chunk)
+        if s1 + s2 > (len(msgtop.data) << 5):
+            msgtop.data.extend([0] * (((s1 + s2) >> 5) - len(msgtop.data) + 1))
+        copy32(msgtop.data, mem, s1, s0, s2)
 
     def OP_CODESIZE():
         stk.append(len(msgtop.processed_code))
@@ -509,29 +554,31 @@ def apply_msg(block, tx, msg, code):
 
     def OP_MLOAD():
         s0 = stk.pop()
-        if not mem_extend(mem, msgtop.compustate, '', s0, 32):
-            return drop(OUT_OF_GAS)
+        if (s0 + 32) > len(mem) << 5:
+            if not mem_extend(mem, msgtop.compustate, '', s0, 32):
+                return drop(OUT_OF_GAS)
         if not s0 % 32:
-            stk.append(mem[s0 // 32])
+            stk.append(mem[s0 >> 5])
         else:
-            stk.append((mem[s0 // 32] << (8 * (s0 % 32))) & TT256M1 + mem[s0 // 32 + 1] >> (32 - s0 % 32))
+            stk.append((mem[s0 >> 5] << (8 * (s0 % 32))) & TT256M1 + mem[s0 >> 5 + 1] >> (256 - 8 * (s0 % 32)))
 
     def OP_MSTORE():
         s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, msgtop.compustate, '', s0, 32):
-            return drop(OUT_OF_GAS)
+        if (s0 + 32) > len(mem)  << 5:
+            if not mem_extend(mem, msgtop.compustate, '', s0, 32):
+                return drop(OUT_OF_GAS)
         if not s0 % 32:
-            mem[s0 // 32] = s1
+            mem[s0 >> 5] = s1
         else:
-            mem[s0 // 32] = mem[s0 // 32] & (TT256 - (TT256 >> (8 * (s0 % 32)))) + s1 >> (8 * (s0 % 32))
-            mem[s0 // 32 + 1] = mem[s0 // 32 + 1] & ((TT256 >> (8 * (s0 % 32))) - 1) + (s1 << (256 - 8 * (s0 % 32))) & TT256M1
+            mem[s0 >> 5] = mem[s0 >> 5] & (TT256 - (TT256 >> (8 * (s0 % 32)))) + s1 >> (8 * (s0 % 32))
+            mem[s0 >> 5 + 1] = mem[s0 >> 5 + 1] & ((TT256 >> (8 * (s0 % 32))) - 1) + (s1 << (256 - 8 * (s0 % 32))) & TT256M1
 
     def OP_MSTORE8():
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, msgtop.compustate, '', s0, 1):
             return drop(OUT_OF_GAS)
-        a = mem[s0 // 32]
-        mem[s0 // 32] = (a ^ (a & ((1 << (256 - 8 * (s0 % 32))) * 255))) + s1 << (256 - 8 * (s0 % 32))
+        a = mem[s0 >> 5]
+        mem[s0 >> 5] = (a ^ (a & ((1 << (256 - 8 * (s0 % 32))) * 255))) + s1 << (256 - 8 * (s0 % 32))
 
     def OP_SLOAD():
         stk.append(block.get_storage_data(msgtop.to, stk.pop()))
@@ -568,7 +615,7 @@ def apply_msg(block, tx, msg, code):
         stk.append(pc())
 
     def OP_MSIZE():
-        stk.append(len(mem) * 32)
+        stk.append(len(mem) << 5)
 
     def OP_GAS():
         stk.append(gas() - 1)
@@ -601,33 +648,33 @@ def apply_msg(block, tx, msg, code):
         OP_BYTE,
         OP_ADDMOD,
         OP_MULMOD,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
         # 0x20
         OP_SHA3,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
         # 0x30:
         OP_ADDRESS,
         OP_BALANCE,
@@ -642,9 +689,9 @@ def apply_msg(block, tx, msg, code):
         OP_GASPRICE,
         OP_EXTCODESIZE,
         OP_EXTCODECOPY,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
         # 0x40:
         OP_PREVHASH,
         OP_COINBASE,
@@ -652,20 +699,20 @@ def apply_msg(block, tx, msg, code):
         OP_NUMBER,
         OP_DIFFICULTY,
         OP_GASLIMIT,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
         # 0x50
         OP_POP,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
         OP_MLOAD,
         OP_MSTORE,
         OP_MSTORE8,
@@ -677,24 +724,24 @@ def apply_msg(block, tx, msg, code):
         OP_MSIZE,
         OP_GAS,
         OP_JUMPDEST,
-        OP_CATCHALL,
-        OP_CATCHALL,
-    ] + [OP_CATCHALL] * 144 + [
+        OP_INVALID,
+        OP_INVALID,
+    ] + [OP_PUSHN] * 32 + [OP_DUPN] * 16 + [OP_SWAPN] * 16 + [OP_INVALID] * 80 + [
         OP_CREATE,
         OP_CALL,
         OP_RETURN,
         OP_CALL_CODE,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
-        OP_CATCHALL,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
+        OP_INVALID,
         OP_SUICIDE
     ]
 
@@ -708,19 +755,16 @@ def apply_msg(block, tx, msg, code):
             continue
 
         code_chunk = msgtop.processed_code[msgtop.compustate.pc]
-        # print 'cc', code_chunk, msgtop.compustate.gas
         # insufficient stack or base gas
-        if len(msgtop.compustate.stack) < code_chunk["reqh"] or \
+        if len(stk) < code_chunk["reqh"] or \
                 msgtop.compustate.gas < code_chunk["gascost"]:
             drop2([])
         ops = code_chunk["ops"]
-        opcount = len(ops)
         index = [0]
-        while index[0] < opcount:
+        for (index[0], op) in ops:
             # print msgtop.compustate.stack, gas(), msgtop.compustate.gas
             # print 'op', code_chunk['opdata'][index[0]][0], msgtop.compustate.stack, gaz()
-            op_map[ops[index[0]]]()
-            index[0] += 1
+            op_map[op]()
 
         # print 'd', msgtop.compustate.stack, gas(), msgtop.compustate.gas, code_chunk["gascost"]
         # print 'e', droppable[0], jumpable[0], msgtop.compustate.stack
@@ -728,12 +772,12 @@ def apply_msg(block, tx, msg, code):
         msgtop.compustate.gas -= code_chunk["gascost"]
         # insufficient extra gas
         if msgtop.compustate.gas < 0:
-            drop2(out_of_gas_exception('surcharges', code_chunk["gascost"], msgtop.compustate, code_chunk["ops"]))
+            drop2(out_of_gas_exception('surcharges', code_chunk["gascost"], msgtop.compustate, ops))
         msgtop.compustate.pc = code_chunk["end"]
 
         if special[0] is not None:
             if special[0] == 'drop':
-                drop2(special[1])
+                drop2(special[1], special[2])
             elif special[0] == 'jump':
                 msgtop.compustate.pc = special[1]
             elif special[0] == 'create':

@@ -299,6 +299,7 @@ def decode_datalist(arr):
 
 
 def apply_msg(block, tx, msg, code):
+    # print 'init', map(ord, msg.data), msg.gas, msg.sender, block.get_nonce(msg.sender)
     pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
                  gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
     if pblogger.log_pre_state:
@@ -321,6 +322,7 @@ def apply_msg(block, tx, msg, code):
         o = apply_op(block, tx, msg, processed_code, compustate)
         ops += 1
         if o is not None:
+            # print 'dropping', o
             pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
                          sender=msg.sender, to=msg.to, ops=ops,
                          time_per_op=(time.time() - t) / ops)
@@ -397,9 +399,12 @@ def to_signed(i):
 # Does not include paying opfee
 def apply_op(block, tx, msg, processed_code, compustate):
 
+
     if compustate.pc >= len(processed_code):
         return []
     op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
+
+    # print 'op', opcode, compustate.stack, compustate.gas
 
     # out of gas error
     if fee > compustate.gas:
