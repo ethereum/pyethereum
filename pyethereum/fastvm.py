@@ -19,10 +19,13 @@ TT160 = 2**160
 TT160M1 = 2**160 - 1
 
 
+# Converts an unsigned value to a signed value
 def to_signed(i):
     return i if i < TT255 else i - TT256
 
 
+# Given a bytearray stored as a list of 32-byte values, extracts
+# bytes start...start+sz-1 as an ordinary bytearray
 def extract_bytes(mem, start, sz):
     end = start + sz
     sminor, smajor = start & 31, start >> 5
@@ -42,6 +45,9 @@ def extract_bytes(mem, start, sz):
     return o
 
 
+# Given a bytearray stored as a list of 32-byte values, sets the
+# bytes starting at the given starting location to equal the given
+# normal bytearray
 def set_bytes(mem, start, bytez):
     end = start + len(bytez)
     sminor, smajor = start & 31, start >> 5
@@ -67,6 +73,9 @@ def set_bytes(mem, start, bytez):
             mem[emajor] = utils.bytearray_to_int(endpiece + m2[-32+len(endpiece):])
 
 
+# Copies bytes start1....start1+l-1 of bytearray mem1 to bytes
+# start2...start2+l-1 of bytearray mem2 (both bytearrays stored as 32-byte
+# values)
 def copy32(mem1, mem2, start1, start2, l):
     major1 = start1 >> 5
     major2 = start2 >> 5
@@ -89,6 +98,8 @@ def copy32(mem1, mem2, start1, start2, l):
         set_bytes(mem2, start2 + l - l % 32, b)
 
 
+# Given a byte array, returns the integer value from the 32 bytes
+# starting at the given index
 def load32(mem, byte):
     if not byte % 32:
         return mem[byte >> 5]
@@ -96,6 +107,7 @@ def load32(mem, byte):
         return ((mem[byte >> 5] << (8 * (byte % 32))) & TT256M1) + (mem[byte >> 5 + 1] >> (256 - 8 * (byte % 32)))
 
 
+# Converts a bytearray to a bytearray stored as 32 byte words
 def bytearray_to_32s(b):
     b += [0] * 32
     o = []
@@ -104,6 +116,7 @@ def bytearray_to_32s(b):
     return o
 
 
+# Extends the length of a memory array
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
         newsize = ((start + sz) + 33 - ((start + sz - 1) & 31)) >> 5
@@ -119,6 +132,8 @@ def mem_extend(mem, compustate, op, start, sz):
     return True
 
 
+# An object encompassing the current computational state
+# longterm todo: combine this into the message object?
 class Compustate():
 
     def __init__(self, **kwargs):
@@ -130,6 +145,7 @@ class Compustate():
             setattr(self, kw, kwargs[kw])
 
 
+# Message
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data, databytes):
@@ -137,10 +153,14 @@ class Message(object):
         self.to = to
         self.value = value
         self.gas = gas
+        # data stored as 32-byte word array
         self.data = data
+        # length of data as exact byte count
         self.databytes = databytes
         self.processed_code = []
+        # function to cal when the message execution returns/exits
         self.callback = lambda x, y, z: x
+        # snapshot to revert to if execution is reverted due to oog
         self.snapshot = None
         self.compustate = None
 
@@ -156,6 +176,10 @@ filter1 = set(['JUMP', 'JUMPI', 'JUMPDEST', 'STOP', 'RETURN',
                'INVALID', 'CALL', 'CREATE', 'CALL_CODE', 'SUICIDE'])
 
 
+# "compiles" virtual machine code into a format consisting of a map between
+# starting coordinates and "chunks" of code from that starting coordinate
+# to the next control point (control points defined by filter1 above). Also
+# calculates stack requirements and gas costs for each chunk all together
 def preprocess_vmcode(code):
     o = []
     jumps = {}
@@ -204,6 +228,7 @@ def preprocess_vmcode(code):
     return chunks
 
 
+# Main function, drop-in replacement for apply_msg in processblock.py
 def apply_msg(block, tx, msg, code):
     msg = Message(msg.sender, msg.to, msg.value, msg.gas, bytearray_to_32s([ord(x) for x in msg.data]), len(msg.data))
     # print '### applying msg ###'
@@ -234,11 +259,13 @@ def apply_msg(block, tx, msg, code):
     initialize(msg, code)
 
     # To be called immediately when a message returns
-    def drop(o, l=0):
+    def drop(output, outputlength=0):
         special[0] = 'drop'
-        special[1] = o
-        special[2] = l
+        special[1] = output
+        special[2] = outputlength
 
+    # The actual drop function, called by chunk finalizing code way
+    # at the bottom below
     def drop2(o, l=0):
         # print 'dropping', extract_bytes(o, 0, l)
         if len(callstack) > 1:
@@ -255,6 +282,7 @@ def apply_msg(block, tx, msg, code):
             else:
                 done.extend([1, msgtop.compustate.gas, extract_bytes(o, 0, l)])
 
+    # Generates callback functions for messages that create contracts
     def contract_callback_factory():
 
         def cb(res, gas, dat, databytes):
@@ -270,6 +298,8 @@ def apply_msg(block, tx, msg, code):
             callstack[-2].compustate.gas = gas
         callstack[-1].callback = cb
 
+    # Generates callback functions for normal messages. Take the output start
+    # and end bytes to put return data into parent memory
     def callback_factory(memoutstart, memoutsz):
 
         def cb(res, gas, dat, databytes):
@@ -283,6 +313,8 @@ def apply_msg(block, tx, msg, code):
                 copy32(dat, callstack[-2].compustate.memory, 0, memoutstart, databytes)
         callstack[-1].callback = cb
 
+    # Functions to calculate the current amount of gas left and
+    # the current PC
     def gaz():
         g = msgtop.compustate.gas
         for i in range(index[0]):
@@ -294,6 +326,7 @@ def apply_msg(block, tx, msg, code):
     def pc():
         return code_chunk["opdata"][index[0]][5]
 
+    # Functions to handle the individual operations
     def OP_STOP():
         drop([])
 
@@ -745,6 +778,7 @@ def apply_msg(block, tx, msg, code):
         OP_SUICIDE
     ]
 
+    # Main loop
     while not done:
         msgtop = callstack[-1]
         stk = msgtop.compustate.stack
@@ -761,13 +795,9 @@ def apply_msg(block, tx, msg, code):
             drop2([])
         ops = code_chunk["ops"]
         index = [0]
+        # Run a code chunk
         for (index[0], op) in ops:
-            # print msgtop.compustate.stack, gas(), msgtop.compustate.gas
-            # print 'op', code_chunk['opdata'][index[0]][0], msgtop.compustate.stack, gaz()
             op_map[op]()
-
-        # print 'd', msgtop.compustate.stack, gas(), msgtop.compustate.gas, code_chunk["gascost"]
-        # print 'e', droppable[0], jumpable[0], msgtop.compustate.stack
 
         msgtop.compustate.gas -= code_chunk["gascost"]
         # insufficient extra gas
@@ -775,6 +805,7 @@ def apply_msg(block, tx, msg, code):
             drop2(out_of_gas_exception('surcharges', code_chunk["gascost"], msgtop.compustate, ops))
         msgtop.compustate.pc = code_chunk["end"]
 
+        # If we need to jump, return or call
         if special[0] is not None:
             if special[0] == 'drop':
                 drop2(special[1], special[2])
@@ -787,6 +818,5 @@ def apply_msg(block, tx, msg, code):
                 initialize(special[1], special[2])
                 callback_factory(special[3], special[4])
             special[0] = None
-        #print done
 
     return done
