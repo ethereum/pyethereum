@@ -34,7 +34,7 @@ remote_port = 30303
 
 # Listen on the given host/port for incoming connections
 listen_host = 0.0.0.0
-listen_port = 30303
+listen_port = 50505
 
 # Number of peer to connections to establish
 num_peers = 10
@@ -47,7 +47,7 @@ node_id = {0}
 
 # Serve the restful json api on the given host/port
 listen_host = 0.0.0.0
-listen_port = 30203
+listen_port = 50405
 
 # path to server the api at
 api_path = /api/v02a
