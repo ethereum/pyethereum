@@ -99,12 +99,13 @@ def verify(block, parent):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data):
+    def __init__(self, sender, to, value, gas, data, depth=0):
         self.sender = sender
         self.to = to
         self.value = value
         self.gas = gas
         self.data = data
+        self.depth = 0
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -341,6 +342,8 @@ def apply_msg(block, tx, msg, code):
         return 1, msg.gas, []
     snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
+    if msg.depth >= 1024:
+        return 0, compustate.gas, []
     t, ops = time.time(), 0
     if code in code_cache:
         processed_code = code_cache[code]
@@ -705,7 +708,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if block.get_balance(msg.to) >= value:
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
-            create_msg = Message(msg.to, '', value, compustate.gas, data)
+            create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
             addr, gas, code = create_contract(block, tx, create_msg)
             pblogger.log('SUB CONTRACT OUT', address=addr, code=code)
             if addr:
@@ -730,7 +733,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
             pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'), csg=compustate.gas)
-            call_msg = Message(msg.to, to, value, gas, data)
+            call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
             result, gas, data = apply_msg_send(block, tx, call_msg)
             pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz, csg=compustate.gas)
             if result == 0:
@@ -760,7 +763,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
         data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
         pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
-        call_msg = Message(msg.to, msg.to, value, gas, data)
+        call_msg = Message(msg.to, msg.to, value, gas, data, msg.depth + 1)
         result, gas, data = apply_msg(block, tx, call_msg, block.get_code(to))
         pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz)
         if result == 0:
