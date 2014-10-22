@@ -62,6 +62,7 @@ test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
     # Put a list of strings of known faulty tests here
+    'balance1',
 ]
 
 
@@ -150,9 +151,6 @@ def do_test_vm(filename, testname=None, limit=99999999):
     blk.delta_balance(exek['address'], -tx.value)
     success, gas_remained, output = \
         pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'), toplevel=True)
-    while len(blk.postqueue):
-        msg2 = blk.postqueue.pop(0)
-        pb.apply_msg(blk, tx, msg2, blk.get_code(msg2.to))
     pb.apply_msg = orig_apply_msg
     apply_message_calls.pop(0)
     blk.commit_state()

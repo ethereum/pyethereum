@@ -105,7 +105,7 @@ class Message(object):
         self.value = value
         self.gas = gas
         self.data = data
-        self.depth = 0
+        self.depth = depth
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -342,13 +342,13 @@ def apply_msg(block, tx, msg, code):
         return 1, msg.gas, []
     snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
-    if msg.depth >= 1024:
-        return 0, compustate.gas, []
+    if msg.depth > 1024:
+        return 0, 0, []
     t, ops = time.time(), 0
     if code in code_cache:
         processed_code = code_cache[code]
     else:
-        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, [], 1]) +
+        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, 0]) +
                           [ord(c)] for c in code]
         code_cache[code] = processed_code
     # Main loop
@@ -406,7 +406,7 @@ def get_opcode(code, index):
 
 def get_op_data(code, index):
     opcode = ord(code[index]) if index < len(code) else 0
-    return opcodes.get(opcode, ['INVALID', 0, 0, [], 0])
+    return opcodes.get(opcode, ['INVALID', 0, 0, 0])
 
 
 def ceil32(x):
@@ -443,6 +443,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
 
     if compustate.pc >= len(processed_code):
         return []
+    #pblogger.log('pc', pc=processed_code[compustate.pc])
     op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
 
     # print 'op', opcode, compustate.stack, compustate.gas
@@ -732,7 +733,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'), csg=compustate.gas)
+            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'), csg=compustate.gas, depth=msg.depth + 1)
             call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
             result, gas, data = apply_msg_send(block, tx, call_msg)
             pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz, csg=compustate.gas)
