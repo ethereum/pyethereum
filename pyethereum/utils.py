@@ -109,6 +109,10 @@ def coerce_to_bytes(x):
         return x
 
 
+def sha3rlp(x):
+    return sha3(rlp.encode(x)) if x else ''
+
+
 def int_to_big_endian4(integer):
     ''' 4 bytes big endian integer'''
     return struct.pack('>I', integer)

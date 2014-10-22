@@ -179,7 +179,7 @@ def get_transaction_and_block(arg=None):
     except TypeError:
         bottle.abort(500, 'No hex  %s' % arg)
     try:  # index
-        tx, blk = chain_manager.index.get_transaction(tx_hash)
+        tx, blk, i = chain_manager.index.get_transaction(tx_hash)
     except KeyError:
         # try miner
         txs = chain_manager.miner.get_transactions()

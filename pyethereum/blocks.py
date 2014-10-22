@@ -46,7 +46,7 @@ GENESIS_INITIAL_ALLOC = \
 
 block_structure = [
     ["prevhash", "bin", "\00" * 32],
-    ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],
+    ["uncles_hash", "bin", ''],
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],
@@ -204,9 +204,8 @@ class Block(object):
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
 
-
     def validate_uncles(self):
-        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+        if utils.sha3rlp(self.uncles) != self.uncles_hash:
             return False
         # Check uncle validity
         ancestor_chain = [self]
@@ -336,7 +335,7 @@ class Block(object):
         assert block.difficulty == kargs['difficulty']
         assert block.number == kargs['number']
         assert block.extra_data == kargs['extra_data']
-        assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
+        assert utils.sha3rlp(block.uncles) == kargs['uncles_hash']
 
         assert block.tx_list_root == kargs['tx_list_root']
         assert block.state.root_hash == kargs['state_root'], (block.state.root_hash, kargs['state_root'])
@@ -766,7 +765,7 @@ class Block(object):
                          timestamp=int(time.time()), uncles=[]):
         return Block(
             prevhash=parent.hash,
-            uncles_hash=utils.sha3(rlp.encode(uncles)),
+            uncles_hash=utils.sha3rlp(uncles),
             coinbase=coinbase,
             state_root=parent.state.root_hash,
             tx_list_root=trie.BLANK_ROOT,
