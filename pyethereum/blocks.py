@@ -47,7 +47,7 @@ GENESIS_INITIAL_ALLOC = \
 
 block_structure = [
     ["prevhash", "bin", "\00" * 32],
-    ["uncles_hash", "bin", ''],
+    ["uncles_hash", "bin", utils.sha3('')],
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],
@@ -350,8 +350,8 @@ class Block(object):
 
     def mk_blank_acct(self):
         if not hasattr(self, '_blank_acct'):
-            codehash = ''
-            self.state.db.put(codehash, '')
+            codehash = utils.sha3('')
+            self.state.db.put(utils.sha3(''), '')
             self._blank_acct = [utils.encode_int(0),
                                 utils.encode_int(0),
                                 trie.BLANK_ROOT,

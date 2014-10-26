@@ -115,7 +115,7 @@ class Message(object):
 
 class Log(object):
 
-    def __init(self, address, topics, data):
+    def __init__(self, address, topics, data):
         self.address = address
         self.topics = topics
         self.data = data
@@ -375,6 +375,10 @@ def apply_msg(block, tx, msg, code):
         processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, 0]) +
                           [ord(c)] for c in code]
         code_cache[code] = processed_code
+    if code == '':
+        block.logs.append(Log(msg.to, [utils.coerce_to_int(msg.sender) + 1], ''))
+        return 1, compustate.gas, []
+
     # Main loop
     while 1:
         o = apply_op(block, tx, msg, processed_code, compustate)

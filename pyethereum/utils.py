@@ -117,7 +117,7 @@ def coerce_to_bytes(x):
 
 
 def sha3rlp(x):
-    return sha3(rlp.encode(x)) if x else ''
+    return sha3(rlp.encode(x))
 
 
 def int_to_big_endian4(integer):
@@ -149,8 +149,6 @@ def rlp_encode(item):
 
 def decode_hash(v):
     '''decodes a bytearray from hash'''
-    if v == '':
-        return ''
     return db_get(v)
 
 
@@ -189,8 +187,6 @@ def decode_root(root):
 
 def encode_hash(v):
     '''encodes a bytearray into hash'''
-    if v == '':
-        return ''
     k = sha3(v)
     db_put(k, v)
     return k
