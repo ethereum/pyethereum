@@ -88,11 +88,14 @@ class Transaction(object):
         self.sender = utils.privtoaddr(key)
         return self
 
-    def serialize(self, signed=True):
+    def listfy(self, signed=True):
         o = []
         for i, (name, typ, default) in enumerate(tx_structure):
             o.append(utils.encoders[typ](getattr(self, name)))
-        return rlp.encode(o if signed else o[:-3])
+        return o if signed else o[:-3]
+
+    def serialize(self, signed=True):
+        return rlp.encode(self.listfy(signed))
 
     def hex_serialize(self, signed=True):
         return self.serialize(signed).encode('hex')

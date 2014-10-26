@@ -5,6 +5,7 @@ import db
 import utils
 import processblock
 import transactions
+import bloom
 import logging
 import copy
 import sys
@@ -154,6 +155,8 @@ class Block(object):
         self.nonce = nonce
         self.uncles = uncles
         self.suicides = []
+        self.logs = []
+        self.refunds = 0
         self.caches = {
             'balance': {},
             'nonce': {},
@@ -174,10 +177,9 @@ class Block(object):
         if transaction_list is not None:
             # support init with transactions only if state is known
             assert self.state.root_hash_valid()
-            for tx_lst_serialized, state_root, gas_used_encoded \
-                    in transaction_list:
-                self._add_transaction_to_list(
-                    tx_lst_serialized, state_root, gas_used_encoded)
+            for i, obj in enumerate(transaction_list):
+                self.transactions.update(rlp.encode(utils.encode_int(i)),
+                                         rlp.encode(obj))
             if tx_list_root != self.transactions.root_hash:
                 raise Exception("Transaction list root hash does not match!")
             if not self.is_genesis() and self.nonce and\
@@ -408,21 +410,22 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
-    def _add_transaction_to_list(self, tx_lst_serialized,
-                                 state_root, gas_used_encoded):
-        # adds encoded data # FIXME: the constructor should get objects
-        assert isinstance(tx_lst_serialized, list)
-        data = [tx_lst_serialized, state_root, gas_used_encoded]
-        self.transactions.update(
-            rlp.encode(utils.encode_int(self.transaction_count)),
-            rlp.encode(data))
-        self.transaction_count += 1
+    def mk_transaction_receipt(self, tx_serialized):
+        o = [
+            tx_serialized,
+            self.state_root,
+            utils.encode_int(self.gas_used),
+            [x.serialize() for x in self.logs],
+            utils.zpad(utils.encode_int(bloom.bloom_from_list(
+                utils.flatten([x.bloomables() for x in self.logs]))), 32)
+        ]
+        return rlp.encode(o)
 
     def add_transaction_to_list(self, tx):
-        tx_lst_serialized = rlp.decode(tx.serialize())
-        self._add_transaction_to_list(tx_lst_serialized,
-                                      self.state_root,
-                                      utils.encode_int(self.gas_used))
+        self.transactions.update(
+            rlp.encode(utils.encode_int(self.transaction_count)),
+            self.mk_transaction_receipt(tx.listfy()))
+        self.transaction_count += 1
 
     def _list_transactions(self):
         # returns [[tx_lst_serialized, state_root, gas_used_encoded],...]
@@ -586,7 +589,10 @@ class Block(object):
             'txs': self.transactions,
             'txcount': self.transaction_count,
             'suicides': self.suicides,
+            'logs': self.logs,
+            'refunds': self.refunds,
             'suicides_size': len(self.suicides),
+            'logs_size': len(self.logs),
             'journal': self.journal,  # pointer to reference, so is not static
             'journal_size': len(self.journal)
         }
@@ -604,6 +610,10 @@ class Block(object):
         self.suicides = mysnapshot['suicides']
         while len(self.suicides) > mysnapshot['suicides_size']:
             self.suicides.pop()
+        self.logs = mysnapshot['logs']
+        while len(self.suicides) > mysnapshot['logs_size']:
+            self.logs.pop()
+        self.refunds = mysnapshot['refunds']
         self.state.root_hash = mysnapshot['state']
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
@@ -679,7 +689,7 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx, msr, gas = rlp.decode(tx_rlp)
+            tx, msr, gas, logs, bloom = rlp.decode(tx_rlp)
             if full_transactions:
                 txjson = transactions.Transaction.create(tx).to_dict()
             else:
@@ -687,7 +697,9 @@ class Block(object):
             txlist.append({
                 "tx": txjson,
                 "medstate": msr.encode('hex'),
-                "gas": str(utils.decode_int(gas))
+                "gas": str(utils.decode_int(gas)),
+                "logs": logs,
+                "bloom": bloom.encode('hex')
             })
         b["transactions"] = txlist
         if with_state:
@@ -792,7 +804,6 @@ class CachedBlock(Block):
     _hash_cached = None
 
     def _set_acct_item(self): raise NotImplementedError
-    def _add_transaction_to_list(self): raise NotImplementedError
     def set_state_root(self): raise NotImplementedError
     def revert(self): raise NotImplementedError
     def commit_state(self): pass

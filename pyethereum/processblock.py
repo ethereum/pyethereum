@@ -51,7 +51,9 @@ code_cache = {}
 
 GDEFAULT = 1
 GMEMORY = 1
-GSTORAGE = 100
+GSTORAGEKILL = -100
+GSTORAGEMOD = 100
+GSTORAGEADD = 300
 GTXDATA = 5
 GTXCOST = 500
 TT255 = 2**255
@@ -109,6 +111,25 @@ class Message(object):
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
+
+
+class Log(object):
+
+    def __init(self, address, topics, data):
+        self.address = address
+        self.topics = topics
+        self.data = data
+
+    def serialize(self):
+        return [
+            self.address.decode('hex'),
+            [utils.encode_int(x) for x in self.topics],
+            self.data
+        ]
+
+    def bloomables(self):
+        return [self.address.decode('hex')] + \
+            [utils.encode_int(x) for x in self.topics]
 
 
 class InvalidTransaction(Exception):
@@ -204,7 +225,7 @@ def apply_transaction(block, tx):
         output = OUT_OF_GAS
     else:
         pblogger.log('TX SUCCESS')
-        gas_used = tx.startgas - gas_remained
+        gas_used = tx.startgas - gas_remained - block.refunds
         # sell remaining gas
         block.transfer_value(
             block.coinbase, tx.sender, tx.gasprice * gas_remained)
@@ -303,25 +324,28 @@ def decode_datalist(arr):
 def proc_ecrecover(block, tx, msg):
     if msg.gas < 500:
         return 0, 0, []
-    indata = msg.data
-    h = utils.big_endian_to_int(indata[:32])
+    indata = msg.data + '\x00' * 128
+    h = indata[:32]
     v = utils.big_endian_to_int(indata[32:64])
     r = utils.big_endian_to_int(indata[64:96])
     s = utils.big_endian_to_int(indata[96:128])
     pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
-    return [0] * 12 + [ord(x) for x in utils.sha3(pub[1:])[-20:]]
+    o = [0] * 12 + [ord(x) for x in utils.sha3(pub[1:])[-20:]]
+    return 1, msg.gas - 500, o
 
 
 def proc_sha256(block, tx, msg):
     if msg.gas < 100:
         return 0, 0, []
-    return [ord(x) for x in bitcoin.bin_sha256(msg.data)]
+    o = [ord(x) for x in bitcoin.bin_sha256(msg.data)]
+    return 1, msg.gas - 100, o
 
 
 def proc_ripemd160(block, tx, msg):
     if msg.gas < 100:
         return 0, 0, []
-    return [0] * 12 + [ord(x) for x in bitcoin.bin_ripemd160(msg.data)]
+    o = [0] * 12 + [ord(x) for x in bitcoin.bin_ripemd160(msg.data)]
+    return 1, msg.gas - 100, o
 
 specials = {
     '0000000000000000000000000000000000000001': proc_ecrecover,
@@ -462,7 +486,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if in_args > len(compustate.stack):
         pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
                      available=len(compustate.stack))
-        return []
+        return OUT_OF_GAS
 
 
     if pblogger.log_apply_op:
@@ -492,8 +516,10 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 log_args['data'] = msg.data.encode('hex')
             pblogger.log('OP', **log_args)
 
-    if op == 'STOP' or op == 'INVALID':
+    if op == 'STOP':
         return []
+    elif op == 'INVALID':
+        return OUT_OF_GAS
     elif op == 'ADD':
         stk.append((stk.pop() + stk.pop()) & TT256M1)
     elif op == 'SUB':
@@ -514,8 +540,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) & TT256M1)
     elif op == 'EXP':
         stk.append(pow(stk.pop(), stk.pop(), TT256))
-    elif op == 'NEG':
-        stk.append(-stk.pop() & TT256M1)
+    elif op == 'BNOT':
+        stk.append(TT256M1 - stk.pop())
     elif op == 'LT':
         stk.append(1 if stk.pop() < stk.pop() else 0)
     elif op == 'GT':
@@ -548,6 +574,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'MULMOD':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         stk.append((s0 * s1) % s2 if s2 else 0)
+    elif op == 'SIGNEXTEND':
+        s0, s1 = stk.pop(), stk.pop()
+        if s1 <= 255:
+            if s0 & (1 << s1):
+                stk.append(s0 & (TT256 - (1 << s1)))
+            else:
+                stk.append(s0 & ((1 << s1) - 1))
     elif op == 'SHA3':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s1):
@@ -644,12 +677,14 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(block.get_storage_data(msg.to, stk.pop()))
     elif op == 'SSTORE':
         s0, s1 = stk.pop(), stk.pop()
-        pre_occupied = GSTORAGE if block.get_storage_data(msg.to, s0) else 0
-        post_occupied = GSTORAGE if s1 else 0
-        gascost = GSTORAGE + post_occupied - pre_occupied
+        if block.get_storage_data(msg.to, s0):
+            gascost = GSTORAGEMOD if s1 else GSTORAGEKILL
+        else:
+            gascost = GSTORAGEADD if s1 else GSTORAGEMOD
         if compustate.gas < gascost:
             return out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
-        compustate.gas -= gascost
+        compustate.gas -= max(gascost, 0)
+        block.refunds -= min(gascost, 0) # adds neg gascost as a refund if below zero
         block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP':
         compustate.pc = stk.pop()
@@ -658,7 +693,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if compustate.pc:
             op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
             if op != 'JUMPDEST':
-                return []
+                pblogger.log('BAD JUMPDEST')
+                return OUT_OF_GAS
     elif op == 'JUMPI':
         s0, s1 = stk.pop(), stk.pop()
         if s1:
@@ -669,7 +705,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
             if compustate.pc:
                 op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
                 if op != 'JUMPDEST':
-                    return []
+                    pblogger.log('BAD JUMPDEST')
+                    return OUT_OF_GAS
     elif op == 'PC':
         stk.append(compustate.pc - 1)
     elif op == 'MSIZE':
@@ -702,6 +739,14 @@ def apply_op(block, tx, msg, processed_code, compustate):
         temp = stk[-depth-1]
         stk[-depth-1] = stk[-1]
         stk[-1] = temp
+    elif op[:3] == 'LOG':
+        depth = int(op[3:])
+        topics = [stk.pop() for x in range(depth)]
+        mstart, msz = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, mstart, msz):
+            return OUT_OF_GAS
+        data = ''.join(map(chr, mem[mstart: mstart + msz]))
+        block.logs.append(Log(msg.to, topics, data))
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):

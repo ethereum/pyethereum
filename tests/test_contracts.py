@@ -317,11 +317,11 @@ if msg.data[0] == 0:
     msg(1000, contract.address, 0, 1)
     msg(1000, contract.address, 0, 2)
 elif msg.data[0] == 1:
-    send(1, 9)
+    send(7, 9)
     contract.storage[8080] = 4040
     contract.storage[160160] = 2020
 elif msg.data[0] == 2:
-    send(2, 9)
+    send(8, 9)
     contract.storage[8081] = 4039
     contract.storage[160161] = 2019
     call(contract.address, 2)
@@ -334,9 +334,9 @@ def test_reverter():
     c = s.contract(reverter_code, endowment=10**15)
     s.send(tester.k0, c, 0, [0])
     assert s.block.get_storage_data(c, 8080) == 4040
-    assert s.block.get_balance('0'*39+'1') == 9
+    assert s.block.get_balance('0'*39+'7') == 9
     assert s.block.get_storage_data(c, 8081) == 0
-    assert s.block.get_balance('0'*39+'2') == 0
+    assert s.block.get_balance('0'*39+'8') == 0
 
 # Test stateless contracts
 

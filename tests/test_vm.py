@@ -62,7 +62,6 @@ test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
 
 faulty = [
     # Put a list of strings of known faulty tests here
-    'balance1',
 ]
 
 

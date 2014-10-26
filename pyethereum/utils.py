@@ -29,6 +29,13 @@ def debug(label):
     return deb
 
 
+def flatten(li):
+    o = []
+    for l in li:
+        o.extend(l)
+    return o
+
+
 def bytearray_to_int(arr):
     o = 0
     for a in arr:
