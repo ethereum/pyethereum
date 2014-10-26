@@ -1,12 +1,12 @@
 import utils
 
-BUCKETS_PER_VAL = 5
+BUCKETS_PER_VAL = 3
 
 
 def bloom_insert(bloom, val):
     h = utils.sha3(val)
-    for i in range(BUCKETS_PER_VAL):
-        bloom |= 1 << ord(h[i])
+    for i in range(0, BUCKETS_PER_VAL * 2, 2):
+        bloom |= 1 << ((ord(h[i + 1]) + (ord(h[i]) << 8)) & 511)
     return bloom
 
 

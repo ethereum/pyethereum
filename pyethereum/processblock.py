@@ -225,7 +225,8 @@ def apply_transaction(block, tx):
         output = OUT_OF_GAS
     else:
         pblogger.log('TX SUCCESS')
-        gas_used = tx.startgas - gas_remained - block.refunds
+        gas_used = tx.startgas - gas_remained
+        gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
             block.coinbase, tx.sender, tx.gasprice * gas_remained)

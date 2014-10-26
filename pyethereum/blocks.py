@@ -51,6 +51,7 @@ block_structure = [
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],
+    ["receipts_root", "trie_root", trie.BLANK_ROOT],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
     ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
@@ -133,6 +134,7 @@ class Block(object):
                  coinbase=block_structure_rev['coinbase'][2],
                  state_root=trie.BLANK_ROOT,
                  tx_list_root=trie.BLANK_ROOT,
+                 receipts_root=trie.BLANK_ROOT,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
                  min_gas_price=block_structure_rev['min_gas_price'][2],
@@ -166,6 +168,7 @@ class Block(object):
         self.journal = []
 
         self.transactions = trie.Trie(utils.get_db_path(), tx_list_root)
+        self.receipts = trie.Trie(utils.get_db_path(), receipts_root)
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
@@ -304,8 +307,7 @@ class Block(object):
                                        uncles=uncles)
 
         # replay transactions
-        for tx_lst_serialized, _state_root, _gas_used_encoded in \
-                transaction_list:
+        for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
 #            logger.debug('applying %r', tx)
@@ -313,14 +315,6 @@ class Block(object):
             #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
             logger.debug('d %s %s', _gas_used_encoded, block.gas_used)
-            assert utils.decode_int(_gas_used_encoded) == block.gas_used, \
-                "Gas mismatch (ours %d, theirs %d) on block: %r" % \
-                (block.gas_used, _gas_used_encoded, block.to_dict(False, True, True))
-            assert _state_root == block.state.root_hash, \
-                "State root mismatch (ours %r theirs %r) on block: %r" % \
-                (block.state.root_hash.encode('hex'),
-                 _state_root.encode('hex'),
-                 block.to_dict(False, True, True))
 
         block.finalize()
 
@@ -329,6 +323,7 @@ class Block(object):
         block.min_gas_price = kargs['min_gas_price']
 
         # checks
+        assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts_root, kargs['receipts_root'])
         assert block.prevhash == self.hash
 
         assert block.gas_used == kargs['gas_used']
@@ -410,21 +405,20 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
-    def mk_transaction_receipt(self, tx_serialized):
+    def mk_transaction_receipt(self):
         o = [
-            tx_serialized,
             self.state_root,
             utils.encode_int(self.gas_used),
+            utils.zpad(utils.int_to_big_endian(bloom.bloom_from_list(
+                utils.flatten([x.bloomables() for x in self.logs]))), 64),
             [x.serialize() for x in self.logs],
-            utils.zpad(utils.encode_int(bloom.bloom_from_list(
-                utils.flatten([x.bloomables() for x in self.logs]))), 32)
         ]
         return rlp.encode(o)
 
     def add_transaction_to_list(self, tx):
-        self.transactions.update(
-            rlp.encode(utils.encode_int(self.transaction_count)),
-            self.mk_transaction_receipt(tx.listfy()))
+        k = rlp.encode(utils.encode_int(self.transaction_count))
+        self.transactions.update( k, tx.serialize())
+        self.receipts.update(k, self.mk_transaction_receipt())
         self.transaction_count += 1
 
     def _list_transactions(self):
@@ -651,6 +645,11 @@ class Block(object):
 
     tx_list_root = property(get_tx_list_root)
 
+    def get_receipts_root(self):
+        return self.receipts.root_hash
+
+    receipts_root = property(get_receipts_root)
+
     def list_header(self, exclude=[]):
         header = []
         for name, typ, default in block_structure:
@@ -689,7 +688,9 @@ class Block(object):
         txlist = []
         for i in range(self.transaction_count):
             tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx, msr, gas, logs, bloom = rlp.decode(tx_rlp)
+            tx = rlp.decode(tx_rlp)
+            receipt_rlp = self.receipts.get(rlp.encode(utils.encode_int(i)))
+            msr, gas, bloom, logs = rlp.decode(receipt_rlp)
             if full_transactions:
                 txjson = transactions.Transaction.create(tx).to_dict()
             else:

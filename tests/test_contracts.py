@@ -123,6 +123,7 @@ code:
         if fromvalue >= value:
             contract.storage[from] = fromvalue - value
             contract.storage[to] = contract.storage[to] + value
+            log(from, to, value)
             return(1)
         else:
             return(0)

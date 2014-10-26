@@ -2,6 +2,7 @@ import os
 import leveldb
 import threading
 import logging
+import compress
 logger = logging.getLogger(__name__)
 
 databases = {}
@@ -21,7 +22,7 @@ class DB(object):
 #        logger.debug('%r: get:%r uncommited:%r', self, key, key in self.uncommitted)
         if key in self.uncommitted:
             return self.uncommitted[key]
-        return self.db.Get(key)
+        return compress.decompress(self.db.Get(key))
 
     def put(self, key, value):
 #       logger.debug('%r: put:%r:%r', self, key, value)
@@ -33,7 +34,7 @@ class DB(object):
         with self.lock:
             batch = leveldb.WriteBatch()
             for k, v in self.uncommitted.iteritems():
-                batch.Put(k, v)
+                batch.Put(k, compress.compress(v))
             self.db.Write(batch, sync=False)
             self.uncommitted.clear()
 
