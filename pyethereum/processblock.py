@@ -12,6 +12,7 @@ import json
 import time
 import fastvm
 import bitcoin
+import copy
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
 
@@ -374,6 +375,26 @@ specials = {
 }
 
 
+# Preprocesses code, and determines whihc locations are in the middle
+# of pushdata and thus invalid
+def preprocess_code(code):
+    i = 0
+    ops = []
+    while i < len(code):
+        o = copy.copy(opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) +
+                      [ord(code[i]), 0])
+        ops.append(o)
+        if o[0][:4] == 'PUSH':
+            for j in range(int(o[0][4:])):
+                i += 1
+                byte = ord(code[i]) if i < len(code) else 0
+                o[-1] = (o[-1] << 8) + byte
+                if i < len(code):
+                    ops.append(['INVALID', 0, 0, 0, byte, 0])
+        i += 1
+    return ops
+
+
 def apply_msg(block, tx, msg, code):
     # print 'init', map(ord, msg.data), msg.gas, msg.sender, block.get_nonce(msg.sender)
     pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
@@ -392,8 +413,7 @@ def apply_msg(block, tx, msg, code):
     if code in code_cache:
         processed_code = code_cache[code]
     else:
-        processed_code = [opcodes.get(ord(c), ['INVALID', 0, 0, 0]) +
-                          [ord(c)] for c in code]
+        processed_code = preprocess_code(code)
         code_cache[code] = processed_code
     if code == '':
         block.logs.append(Log(msg.to, [utils.coerce_to_int(msg.sender) + 1], ''))
@@ -490,13 +510,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if compustate.pc >= len(processed_code):
         return []
 
-    op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
+    op, in_args, out_args, fee, opcode, pushval = processed_code[compustate.pc]
 
     # print 'op', opcode, compustate.stack, compustate.gas
 
     # out of gas error
     if fee > compustate.gas:
-        return vm_exception('OOG', fee=fee, cs=compustate, op=op)
+        return vm_exception('OUT OF GAS')
 
     # Apply operation
     compustate.gas -= fee
@@ -506,29 +526,24 @@ def apply_op(block, tx, msg, processed_code, compustate):
 
     # empty stack error
     if in_args > len(compustate.stack):
-        return vm_exception('INSUFFICIENT STACK', op=op, needed=in_args,
-                            available=len(compustate.stack))
-
+        return vm_exception('INSUFFICIENT STACK', op=op, needed=str(in_args),
+                            available=str(len(compustate.stack)))
 
     if pblogger.log_apply_op:
         trace_data = {}
         if pblogger.log_stack:
-            trace_data['stk'] = list(compustate.stack)
+            trace_data['stack'] = map(str, list(compustate.stack))
         if pblogger.log_memory:
             trace_data['memory'] = ''.join([chr(x).encode('hex') for x in compustate.memory])
         if pblogger.log_storage:
             trace_data['storage'] = block.account_to_dict(msg.to)['storage']
         if pblogger.log_op:
-            log_args = dict(pc=compustate.pc - 1,
-                            op=op,
-                            stackargs=compustate.stack[-1:-in_args-1:-1],
-                            gas=compustate.gas + fee,
-                            balance=block.get_balance(msg.to))
+            trace_data['gas'] = str(compustate.gas + fee)
+            trace_data['pc'] = str(compustate.pc - 1)
+            trace_data['op'] = op
             if op[:4] == 'PUSH':
                 ind = compustate.pc
-                log_args['value'] = \
-                    utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
-            trace_data['op'] = log_args
+                trace_data['pushvalue'] = op[-1]
 
         pblogger.multilog(trace_data)
 
@@ -639,7 +654,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             return vm_exception('OOG EXTENDING MEMORY')
         for i in range(s2):
             if s1 + i < len(processed_code):
-                mem[s0 + i] = processed_code[s1 + i][-1]
+                mem[s0 + i] = processed_code[s1 + i][4]
             else:
                 mem[s0 + i] = 0
     elif op == 'GASPRICE':
@@ -698,7 +713,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         else:
             gascost = GSTORAGEADD if s1 else GSTORAGEMOD
         if compustate.gas < gascost:
-            return vm_exception('OOG sstore trie expansion', gascost=gascost, cs=compustate, op=op)
+            return vm_exception('OUT OF GAS')
         compustate.gas -= max(gascost, 0)
         block.refunds -= min(gascost, 0) # adds neg gascost as a refund if below zero
         block.set_storage_data(msg.to, s0, s1)
@@ -707,7 +722,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if compustate.pc >= len(processed_code):
             return []
         if compustate.pc:
-            op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
+            op = processed_code[compustate.pc - 1][0]
             if op != 'JUMPDEST':
                 return vm_exception('BAD JUMPDEST')
     elif op == 'JUMPI':
@@ -716,9 +731,9 @@ def apply_op(block, tx, msg, processed_code, compustate):
             compustate.pc = s0
             if compustate.pc >= len(processed_code):
                 return []
-            op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
+            op = processed_code[compustate.pc][0]
             if compustate.pc:
-                op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
+                op = processed_code[compustate.pc - 1][0]
                 if op != 'JUMPDEST':
                     return vm_exception('BAD JUMPDEST')
     elif op == 'PC':
@@ -729,9 +744,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(compustate.gas)  # AFTER subtracting cost 1
     elif op[:4] == 'PUSH':
         pushnum = int(op[4:])
-        dat = [x[-1] for x in processed_code[compustate.pc: compustate.pc + pushnum]]
         compustate.pc += pushnum
-        stk.append(utils.bytearray_to_int(dat))
+        stk.append(pushval)
     elif op[:3] == 'DUP':
         depth = int(op[3:])
         # DUP POP POP Debug hint
@@ -770,7 +784,9 @@ def apply_op(block, tx, msg, processed_code, compustate):
             pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
             create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
             addr, gas, code = create_contract(block, tx, create_msg)
-            pblogger.log('SUB CONTRACT OUT', address=addr, code=code)
+            pblogger.log('SUB CONTRACT OUT',
+                         address=utils.int_to_addr(addr),
+                         code=''.join([chr(x).encode('hex') for x in code]))
             if addr:
                 stk.append(addr)
                 compustate.gas = gas
@@ -786,16 +802,19 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 not mem_extend(mem, compustate, op, memoutstart, memoutsz):
             return vm_exception('OOG EXTENDING MEMORY')
         if compustate.gas < gas:
-            return vm_exception('OOG subcall gas', gas=gas, cs=compustate, op=op)
+            return vm_exception('OUT OF GAS')
         compustate.gas -= gas
         if block.get_balance(msg.to) >= value:
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'), csg=compustate.gas, depth=msg.depth + 1)
+            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=str(value),
+                         gas=str(gas), data=data.encode('hex'),
+                         parentgas=str(compustate.gas), depth=str(msg.depth + 1))
             call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
             result, gas, data = apply_msg_send(block, tx, call_msg)
-            pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz, csg=compustate.gas)
+            pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data),
+                         expected=memoutsz, csg=compustate.gas)
             if result == 0:
                 stk.append(0)
             else:
@@ -817,7 +836,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 not mem_extend(mem, compustate, op, memoutstart, memoutsz):
             return vm_exception('OOG EXTENDING MEMORY')
         if compustate.gas < gas:
-            return vm_exception('OOG subcall gas', gas=gas, cs=compustate, op=op)
+            return vm_exception('OUT OF GAS')
         compustate.gas -= gas
         to = utils.encode_int(to)
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
