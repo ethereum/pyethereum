@@ -102,6 +102,23 @@ class state():
         tx.sign(sender)
         return pb.verify_transaction_spv_proof(self.block, tx, proof)
 
+    def trace(self, sender, to, value, data=[]):
+
+        # collect debug output
+        log = []
+
+        def log_receiver(data):
+            log.append(data)
+
+        pb.pblogger.log_op = 1
+        pb.pblogger.log_stack = 1
+        pb.pblogger.log_memory = 1
+        pb.pblogger.log_storage = 1
+        pb.pblogger.listeners.append(log_receiver)
+        self.send(sender, to, value, data)
+        pb.pblogger.listeners.remove(log_receiver)
+        return log
+        
     def mine(self, n=1, coinbase=a0):
         for i in range(n):
             self.block.finalize()

@@ -35,7 +35,7 @@ class PBLogger(object):
     def log(self, name, **kargs):
         # call callbacks
         for l in self.listeners:
-            l(name, kargs)
+            l({name: kargs})
         if self.log_json:
             logger.debug(json.dumps({name: kargs}))
         else:
@@ -43,6 +43,25 @@ class PBLogger(object):
             items = sorted(kargs.items(), key=lambda x: order.get(x[0], 0))
             msg = ", ".join("%s=%s" % (k, v) for k, v in items)
             logger.debug("%s: %s", name.ljust(15), msg)
+
+    def multilog(self, data):
+        for l in self.listeners:
+            l(data)
+        if self.log_json:
+            logger.debug(json.dumps(data))
+        else:
+            for key, datum in data.iteritems():
+                if isinstance(datum, dict):
+                    order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
+                    items = sorted(datum.items(), key=lambda x: order.get(x[0], 0))
+                    msg = ", ".join("%s=%s" % (k, v) for k, v in items)
+                elif isinstance(datum, list):
+                    msg = ", ".join(map(str, datum))
+                else:
+                    msg = str(datum)
+                logger.debug("%s: %s", key.ljust(15), msg)
+                
+
 
 pblogger = PBLogger()
 
@@ -442,9 +461,8 @@ def ceil32(x):
     return x if x % 32 == 0 else x + 32 - (x % 32)
 
 
-def out_of_gas_exception(expense, fee, compustate, op):
-    pblogger.log('OUT OF GAS', expense=expense, needed=fee, available=compustate.gas,
-                 op=op, stack=list(reversed(compustate.stack)))
+def vm_exception(error, **kargs):
+    pblogger.log('EXCEPTION', cause=error, **kargs)
     return OUT_OF_GAS
 
 
@@ -455,7 +473,6 @@ def mem_extend(mem, compustate, op, start, sz):
             m_extend = ceil32(newsize) - len(mem)
             memfee = GMEMORY * (m_extend / 32)
             if compustate.gas < memfee:
-                out_of_gas_exception('mem_extend', memfee, compustate, op)
                 compustate.gas = 0
                 return False
             compustate.gas -= memfee
@@ -466,20 +483,20 @@ def mem_extend(mem, compustate, op, start, sz):
 def to_signed(i):
     return i if i < TT255 else i - TT256
 
+
 # Does not include paying opfee
 def apply_op(block, tx, msg, processed_code, compustate):
 
-
     if compustate.pc >= len(processed_code):
         return []
-    #pblogger.log('pc', pc=processed_code[compustate.pc])
+
     op, in_args, out_args, fee, opcode = processed_code[compustate.pc]
 
     # print 'op', opcode, compustate.stack, compustate.gas
 
     # out of gas error
     if fee > compustate.gas:
-        return out_of_gas_exception('base_gas', fee, compustate, op)
+        return vm_exception('OOG', fee=fee, cs=compustate, op=op)
 
     # Apply operation
     compustate.gas -= fee
@@ -489,24 +506,18 @@ def apply_op(block, tx, msg, processed_code, compustate):
 
     # empty stack error
     if in_args > len(compustate.stack):
-        pblogger.log('INSUFFICIENT STACK ERROR', op=op, needed=in_args,
-                     available=len(compustate.stack))
-        return OUT_OF_GAS
+        return vm_exception('INSUFFICIENT STACK', op=op, needed=in_args,
+                            available=len(compustate.stack))
 
 
     if pblogger.log_apply_op:
+        trace_data = {}
         if pblogger.log_stack:
-            pblogger.log('STK', stk=list(reversed(compustate.stack)))
-
+            trace_data['stk'] = list(compustate.stack)
         if pblogger.log_memory:
-            for i in range(0, len(compustate.memory), 16):
-                memblk = compustate.memory[i:i+16]
-                memline = ' '.join([chr(x).encode('hex') for x in memblk])
-                pblogger.log('MEM', mem=memline)
-
+            trace_data['memory'] = ''.join([chr(x).encode('hex') for x in compustate.memory])
         if pblogger.log_storage:
-            pblogger.log('STORAGE', storage=block.account_to_dict(msg.to)['storage'])
-
+            trace_data['storage'] = block.account_to_dict(msg.to)['storage']
         if pblogger.log_op:
             log_args = dict(pc=compustate.pc - 1,
                             op=op,
@@ -517,14 +528,14 @@ def apply_op(block, tx, msg, processed_code, compustate):
                 ind = compustate.pc
                 log_args['value'] = \
                     utils.bytearray_to_int([x[-1] for x in processed_code[ind: ind + int(op[4:])]])
-            elif op == 'CALLDATACOPY':
-                log_args['data'] = msg.data.encode('hex')
-            pblogger.log('OP', **log_args)
+            trace_data['op'] = log_args
+
+        pblogger.multilog(trace_data)
 
     if op == 'STOP':
         return []
     elif op == 'INVALID':
-        return OUT_OF_GAS
+        return vm_exception('INVALID OP', opcode=opcode)
     elif op == 'ADD':
         stk.append((stk.pop() + stk.pop()) & TT256M1)
     elif op == 'SUB':
@@ -589,7 +600,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'SHA3':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s1):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[s0: s0 + s1]))
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
     elif op == 'ADDRESS':
@@ -614,7 +625,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CALLDATACOPY':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s2):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         for i in range(s2):
             if s1 + i < len(msg.data):
                 mem[s0 + i] = ord(msg.data[s1 + i])
@@ -625,7 +636,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CODECOPY':
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s2):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         for i in range(s2):
             if s1 + i < len(processed_code):
                 mem[s0 + i] = processed_code[s1 + i][-1]
@@ -639,7 +650,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         addr, s1, s2, s3 = stk.pop(), stk.pop(), stk.pop(), stk.pop()
         extcode = block.get_code(utils.coerce_addr_to_hex(addr)) or ''
         if not mem_extend(mem, compustate, op, s1, s3):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         for i in range(s3):
             if s2 + i < len(extcode):
                 mem[s1 + i] = ord(extcode[s2 + i])
@@ -662,13 +673,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'MLOAD':
         s0 = stk.pop()
         if not mem_extend(mem, compustate, op, s0, 32):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[s0: s0 + 32]))
         stk.append(utils.big_endian_to_int(data))
     elif op == 'MSTORE':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, 32):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         v = s1
         for i in range(31, -1, -1):
             mem[s0 + i] = v % 256
@@ -676,7 +687,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'MSTORE8':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, 1):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         mem[s0] = s1 % 256
     elif op == 'SLOAD':
         stk.append(block.get_storage_data(msg.to, stk.pop()))
@@ -687,7 +698,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         else:
             gascost = GSTORAGEADD if s1 else GSTORAGEMOD
         if compustate.gas < gascost:
-            return out_of_gas_exception('sstore trie expansion', gascost, compustate, op)
+            return vm_exception('OOG sstore trie expansion', gascost=gascost, cs=compustate, op=op)
         compustate.gas -= max(gascost, 0)
         block.refunds -= min(gascost, 0) # adds neg gascost as a refund if below zero
         block.set_storage_data(msg.to, s0, s1)
@@ -698,8 +709,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if compustate.pc:
             op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
             if op != 'JUMPDEST':
-                pblogger.log('BAD JUMPDEST')
-                return OUT_OF_GAS
+                return vm_exception('BAD JUMPDEST')
     elif op == 'JUMPI':
         s0, s1 = stk.pop(), stk.pop()
         if s1:
@@ -710,8 +720,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             if compustate.pc:
                 op, in_args, out_args, fee, opcode = processed_code[compustate.pc - 1]
                 if op != 'JUMPDEST':
-                    pblogger.log('BAD JUMPDEST')
-                    return OUT_OF_GAS
+                    return vm_exception('BAD JUMPDEST')
     elif op == 'PC':
         stk.append(compustate.pc - 1)
     elif op == 'MSIZE':
@@ -749,13 +758,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
         topics = [stk.pop() for x in range(depth)]
         mstart, msz = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
         block.logs.append(Log(msg.to, topics, data))
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         if block.get_balance(msg.to) >= value:
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
@@ -775,9 +784,9 @@ def apply_op(block, tx, msg, processed_code, compustate):
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                 not mem_extend(mem, compustate, op, memoutstart, memoutsz):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         if compustate.gas < gas:
-            return out_of_gas_exception('subcall gas', gas, compustate, op)
+            return vm_exception('OOG subcall gas', gas=gas, cs=compustate, op=op)
         compustate.gas -= gas
         if block.get_balance(msg.to) >= value:
             to = utils.encode_int(to)
@@ -799,16 +808,16 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'RETURN':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s1):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         return mem[s0: s0 + s1]
     elif op == 'CALL_CODE':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                 not mem_extend(mem, compustate, op, memoutstart, memoutsz):
-            return OUT_OF_GAS
+            return vm_exception('OOG EXTENDING MEMORY')
         if compustate.gas < gas:
-            return out_of_gas_exception('subcall gas', gas, compustate, op)
+            return vm_exception('OOG subcall gas', gas=gas, cs=compustate, op=op)
         compustate.gas -= gas
         to = utils.encode_int(to)
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')

@@ -548,7 +548,7 @@ class Block(object):
                 if with_storage_root:
                     med_dict['storage_root'] = strie.get_root_hash().encode('hex')
             else:
-                med_dict[key] = self.caches[key].get(address, utils.printers[typ](val))
+                med_dict[key] = utils.printers[typ](self.caches[key].get(address, val))
         if with_storage:
             med_dict['storage'] = {}
             d = strie.to_dict()
