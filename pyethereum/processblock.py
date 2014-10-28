@@ -106,29 +106,11 @@ def must_le(what, a, b):
 
 
 def verify(block, parent):
-
-    must_ge(block.timestamp, parent.timestamp)
-    must_le(block.timestamp, time.time() + 900)
-
-    block2 = blocks.Block.init_from_parent(parent,
-                                           block.coinbase,
-                                           extra_data=block.extra_data,
-                                           timestamp=block.timestamp,
-                                           uncles=block.uncles)
-    must_equal('difficulty', block2.difficulty, block.difficulty)
-    must_equal('gas limit', block2.gas_limit, block.gas_limit)
-    for i in range(block.transaction_count):
-        tx, s, g = rlp.decode(
-            block.transactions.get(rlp.encode(utils.encode_int(i))))
-        tx = transactions.Transaction.create(tx)
-        must_le(tx.startgas + block2.gas_used, block.gas_limit)
-        apply_transaction(block2, tx)
-        must_equal('tx state root', s, block2.state.root_hash)
-        must_equal('tx gas used', g, utils.encode_int(block2.gas_used))
-    block2.finalize()
-    must_equal('block state root', block2.state.root_hash, block.state.root_hash)
-    must_equal('block gas used', block2.gas_used, block.gas_used)
-    return True
+    try:
+        parent.deserialize_child(block.serialize())
+        return True
+    except:
+        return False
 
 
 class Message(object):
