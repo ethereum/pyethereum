@@ -85,17 +85,30 @@ OUT_OF_GAS = -1
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = ''
 
+
 class VerificationFailed(Exception):
     pass
 
-def verify(block, parent):
-    def must_equal(what, a, b):
-        if a != b: raise VerificationFailed(what, a, '==', b)
 
-    if not block.timestamp >= parent.timestamp:
-        raise VerificationFailed('timestamp', block.timestamp, '>=', parent.timestamp)
-    if not block.timestamp <= time.time() + 900:
-        raise VerificationFailed('timestamps', block.timestamp, '<=', time.time() + 900)
+def must_equal(what, a, b):
+    if a != b:
+        raise VerificationFailed(what, a, '==', b)
+
+
+def must_ge(what, a, b):
+    if not (a >= b):
+        raise VerificationFailed(what, a, '>=', b)
+
+
+def must_le(what, a, b):
+    if not (a <= b):
+        raise VerificationFailed(what, a, '<=', b)
+
+
+def verify(block, parent):
+
+    must_ge(block.timestamp, parent.timestamp)
+    must_le(block.timestamp, time.time() + 900)
 
     block2 = blocks.Block.init_from_parent(parent,
                                            block.coinbase,
@@ -108,8 +121,7 @@ def verify(block, parent):
         tx, s, g = rlp.decode(
             block.transactions.get(rlp.encode(utils.encode_int(i))))
         tx = transactions.Transaction.create(tx)
-        if not tx.startgas + block2.gas_used <= block.gas_limit:
-            raise VerificationFailed('gas_limit', tx.startgas + block2.gas_used, '<=', block.gas_limit)
+        must_le(tx.startgas + block2.gas_used, block.gas_limit)
         apply_transaction(block2, tx)
         must_equal('tx state root', s, block2.state.root_hash)
         must_equal('tx gas used', g, utils.encode_int(block2.gas_used))
@@ -210,7 +222,6 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-
     pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
@@ -237,7 +248,6 @@ def apply_transaction(block, tx):
                  data=''.join(map(chr, data)).encode('hex'))
     if pblogger.log_block:
         pblogger.log('BLOCK', block=block.to_dict(with_state=True, full_transactions=True))
-
 
     if not result:  # 0 = OOG failure in both cases
         pblogger.log('TX FAILED', reason='out of gas', startgas=tx.startgas, gas_remained=gas_remained)
@@ -286,9 +296,10 @@ def verify_transaction_spv_proof(block, tx, proof):
 
 def mk_independent_transaction_spv_proof(block, index):
     block = blocks.Block.init_from_header(block.list_header())
-    tx = transactions.Transaction.create(block.get_transaction(index)[0])
+    tx = transactions.Transaction.create(block.get_transaction(index))
+    block.get_receipt(index)
     if index > 0:
-        _, pre_med, pre_gas = block.get_transaction(index - 1)
+        pre_med, pre_gas, _, _ = block.get_receipt(index - 1)
     else:
         pre_med, pre_gas = block.get_parent().state_root, 0
     block.state_root = pre_med
@@ -309,17 +320,23 @@ def verify_independent_transaction_spv_proof(proof):
     b = blocks.Block.init_from_header(header)
     b.set_proof_mode(blocks.VERIFYING, nodes)
     if index != 0:
-        _, pre_med, pre_gas = b.get_transaction(index - 1)
+        pre_med, pre_gas, _, _ = b.get_receipt(index - 1)
     else:
         pre_med, pre_gas = pb['state_root'], ''
         if utils.sha3(rlp.encode(prevheader)) != b.prevhash:
             return False
     b.state_root = pre_med
     b.gas_used = utils.decode_int(pre_gas)
-    tx, post_med, post_gas = b.get_transaction(index)
+    tx = b.get_transaction(index)
+    post_med, post_gas, bloom, logs = b.get_receipt(index)
     tx = transactions.Transaction.create(tx)
     o = verify_transaction_spv_proof(b, tx, nodes)
-    return o and b.state_root == post_med and b.gas_used == utils.decode_int(post_gas)
+    if b.state_root == post_med:
+        if b.gas_used == utils.decode_int(post_gas):
+            if [x.serialize() for x in b.logs] == logs:
+                if b.mk_log_bloom() == bloom:
+                    return o
+    return False
 
 
 class Compustate():

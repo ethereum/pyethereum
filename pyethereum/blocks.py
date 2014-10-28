@@ -405,36 +405,42 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
+    def mk_log_bloom(self):
+        b = bloom.bloom_from_list(
+            utils.flatten([x.bloomables() for x in self.logs]))
+        return utils.zpad(utils.int_to_big_endian(b), 64)
+
     def mk_transaction_receipt(self):
         o = [
             self.state_root,
             utils.encode_int(self.gas_used),
-            utils.zpad(utils.int_to_big_endian(bloom.bloom_from_list(
-                utils.flatten([x.bloomables() for x in self.logs]))), 64),
+            self.mk_log_bloom(),
             [x.serialize() for x in self.logs],
         ]
         return rlp.encode(o)
 
     def add_transaction_to_list(self, tx):
         k = rlp.encode(utils.encode_int(self.transaction_count))
-        self.transactions.update( k, tx.serialize())
+        self.transactions.update(k, tx.serialize())
         self.receipts.update(k, self.mk_transaction_receipt())
         self.transaction_count += 1
 
     def _list_transactions(self):
-        # returns [[tx_lst_serialized, state_root, gas_used_encoded],...]
         txlist = []
         for i in range(self.transaction_count):
             txlist.append(self.get_transaction(i))
         return txlist
 
     def get_transaction(self, num):
-        # returns [tx_lst_serialized, state_root, gas_used_encoded]
         return rlp.decode(self.transactions.get(rlp.encode(utils.encode_int(num))))
 
     def get_transactions(self):
         return [transactions.Transaction.create(tx) for
-                tx, s, g in self._list_transactions()]
+                tx in self._list_transactions()]
+
+    def get_receipt(self, num):
+        # returns [tx_lst_serialized, state_root, gas_used_encoded]
+        return rlp.decode(self.receipts.get(rlp.encode(utils.encode_int(num))))
 
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')
