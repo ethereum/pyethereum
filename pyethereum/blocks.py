@@ -58,6 +58,7 @@ block_structure = [
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
+    ["bloom", "int64", 0],
     ["extra_data", "bin", ""],
     ["nonce", "bin", ""],
 ]
@@ -142,6 +143,7 @@ class Block(object):
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
                  uncles=[],
+                 bloom=0,
                  header=None):
 
         self.prevhash = prevhash
@@ -172,8 +174,7 @@ class Block(object):
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
-        self.proof_mode = None
-        self.proof_nodes = []
+        self.bloom = bloom
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -183,6 +184,7 @@ class Block(object):
             for i, obj in enumerate(transaction_list):
                 self.transactions.update(rlp.encode(utils.encode_int(i)),
                                          rlp.encode(obj))
+                self.transaction_count = len(transaction_list)
             if tx_list_root != self.transactions.root_hash:
                 raise Exception("Transaction list root hash does not match!")
             if not self.is_genesis() and self.nonce and\
@@ -407,6 +409,7 @@ class Block(object):
     def mk_log_bloom(self):
         b = bloom.bloom_from_list(
             utils.flatten([x.bloomables() for x in self.logs]))
+        self.most_recent_tx_bloom = b
         return utils.zpad(utils.int_to_big_endian(b), 64)
 
     def mk_transaction_receipt(self):
@@ -422,6 +425,7 @@ class Block(object):
         k = rlp.encode(utils.encode_int(self.transaction_count))
         self.transactions.update(k, tx.serialize())
         self.receipts.update(k, self.mk_transaction_receipt())
+        self.bloom |= self.most_recent_tx_bloom
         self.transaction_count += 1
 
     def _list_transactions(self):
@@ -483,12 +487,8 @@ class Block(object):
             if index in self.caches['storage:'+address]:
                 return self.caches['storage:'+address][index]
         t = self.get_storage(address)
-        t.proof_mode = self.proof_mode
-        t.proof_nodes = self.proof_nodes
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         val = rlp.decode(t.get(key))
-        if self.proof_mode == RECORDING:
-            self.proof_nodes.extend(t.proof_nodes)
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
@@ -508,8 +508,6 @@ class Block(object):
             for i, (key, typ, default) in enumerate(acct_structure):
                 if key == 'storage':
                     t = trie.Trie(utils.get_db_path(), acct[i])
-                    t.proof_mode = self.proof_mode
-                    t.proof_nodes = self.proof_nodes
                     for k, v in self.caches.get('storage:'+address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
@@ -519,17 +517,12 @@ class Block(object):
                         else:
                             t.delete(enckey)
                     acct[i] = t.root_hash
-                    if self.proof_mode == RECORDING:
-                        self.proof_nodes.extend(t.proof_nodes)
                 else:
                     if address in self.caches[key]:
                         v = self.caches[key].get(address, default)
                         changes.append([key, address, v])
                         acct[i] = utils.encoders[acct_structure[i][1]](v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
-        if self.proof_mode == RECORDING:
-            self.proof_nodes.extend(self.state.proof_nodes)
-            self.state.proof_nodes = []
         if processblock.pblogger.log_state_delta:
             processblock.pblogger.log('delta', changes=changes)
         self.reset_cache()
@@ -630,6 +623,7 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
+        self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
         self.commit_state()
 
     def serialize_header_without_nonce(self):
@@ -797,12 +791,6 @@ class Block(object):
             nonce='',
             transaction_list=[],
             uncles=uncles)
-
-    def set_proof_mode(self, pm, pmnodes=None):
-        self.proof_mode = pm
-        self.state.proof_mode = pm
-        self.proof_nodes = pmnodes or []
-        self.state.proof_nodes = pmnodes or []
 
 
 class CachedBlock(Block):

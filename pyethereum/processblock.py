@@ -9,7 +9,6 @@ import trie
 import sys
 import logging
 import json
-import time
 import fastvm
 import copy
 import specials
@@ -60,7 +59,6 @@ class PBLogger(object):
                 else:
                     msg = str(datum)
                 logger.debug("%s: %s", key.ljust(15), msg)
-                
 
 
 pblogger = PBLogger()
@@ -265,7 +263,6 @@ class Compustate():
         self.gas = 0
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
-
 
 
 # Preprocesses code, and determines whihc locations are in the middle

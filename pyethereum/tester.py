@@ -4,6 +4,7 @@ import tempfile
 import time
 import logging
 import sys
+import spv
 
 serpent = None
 
@@ -92,7 +93,7 @@ class state():
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
-        return pb.mk_transaction_spv_proof(self.block, tx)
+        return spv.mk_transaction_spv_proof(self.block, tx)
 
     def verifyspv(self, sender, to, value, data=[], proof=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -100,7 +101,7 @@ class state():
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
-        return pb.verify_transaction_spv_proof(self.block, tx, proof)
+        return spv.verify_transaction_spv_proof(self.block, tx, proof)
 
     def trace(self, sender, to, value, data=[]):
 

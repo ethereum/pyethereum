@@ -3,24 +3,27 @@ import processblock
 import transactions
 import utils
 import rlp
+import trie
 
 
 def mk_transaction_spv_proof(block, tx):
-    block.set_proof_mode(blocks.RECORDING)
+    trie.proof.push(trie.RECORDING)
     processblock.apply_transaction(block, tx)
-    o = block.proof_nodes
-    block.set_proof_mode(blocks.NONE)
-    return o
+    o = trie.proof.get_nodelist()
+    trie.proof.pop()
+    o2 = map(rlp.decode, list(set(map(rlp.encode, o))))
+    return o2
 
 
 def verify_transaction_spv_proof(block, tx, proof):
-    block.set_proof_mode(blocks.VERIFYING, proof)
+    trie.proof.push(trie.VERIFYING, proof)
     try:
         processblock.apply_transaction(block, tx)
-        block.set_proof_mode(blocks.NONE)
+        trie.proof.pop()
         return True
     except Exception, e:
         print e
+        trie.proof.pop()
         return False
 
 
@@ -39,6 +42,7 @@ def mk_independent_transaction_spv_proof(block, index):
     if index > 0:
         nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index - 1))))
     nodes = map(rlp.decode, list(set(map(rlp.encode, nodes))))
+    print nodes
     return rlp.encode([utils.encode_int(64), block.get_parent().list_header(),
                        block.list_header(), utils.encode_int(index), nodes])
 

@@ -185,6 +185,10 @@ def decode_root(root):
     return root
 
 
+def decode_int64(v):
+    return big_endian_to_int(v)
+
+
 def encode_hash(v):
     '''encodes a bytearray into hash'''
     k = sha3(v)
@@ -216,12 +220,17 @@ def encode_int(v):
     return int_to_big_endian(v)
 
 
+def encode_int64(v):
+    return zpad(int_to_big_endian(v), 64)
+
+
 decoders = {
     "hash": decode_hash,
     "bin": decode_bin,
     "addr": decode_addr,
     "int": decode_int,
     "trie_root": decode_root,
+    "int64": decode_int64,
 }
 
 encoders = {
@@ -230,6 +239,7 @@ encoders = {
     "addr": encode_addr,
     "int": encode_int,
     "trie_root": encode_root,
+    "int64": encode_int64,
 }
 
 printers = {

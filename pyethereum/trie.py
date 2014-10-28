@@ -4,6 +4,7 @@ import os
 import rlp
 import utils
 import db
+import copy
 
 DB = db.DB
 
@@ -43,6 +44,52 @@ NIBBLE_TERMINATOR = 16
 RECORDING = 1
 NONE = 0
 VERIFYING = -1
+
+proving = False
+
+
+class ProofConstructor():
+    def __init__(self):
+        self.mode = []
+        self.nodes = []
+        self.exempt = []
+
+    def push(self, mode, nodes=[]):
+        global proving
+        proving = True
+        self.mode.append(mode)
+        self.exempt.append(set())
+        if mode == VERIFYING:
+            self.nodes.append(set([rlp.encode(x) for x in nodes]))
+        else:
+            self.nodes.append(set())
+
+    def pop(self):
+        global proving
+        self.mode.pop()
+        self.nodes.pop()
+        self.exempt.pop()
+        if not self.mode:
+            proving = False
+
+    def get_nodelist(self):
+        return map(rlp.decode, list(self.nodes[-1]))
+
+    def get_nodes(self):
+        return self.nodes[-1]
+
+    def add_node(self, node):
+        node = rlp.encode(node)
+        if node not in self.exempt[-1]:
+            self.nodes[-1].add(node)
+
+    def add_exempt(self, node):
+        self.exempt[-1].add(rlp.encode(node))
+
+    def get_mode(self):
+        return self.mode[-1]
+
+proof = ProofConstructor()
 
 
 class InvalidSPVProof(Exception):
@@ -137,7 +184,6 @@ BLANK_ROOT = utils.sha3('')
 
 
 class Trie(object):
-    proof_mode = 0
 
     def __init__(self, dbfile, root_hash=BLANK_ROOT):
         '''it also present a dictionary like interface
@@ -151,18 +197,28 @@ class Trie(object):
         else:
             self.db = dbfile  # Pass in a database object directly
         self.set_root_hash(root_hash)
-        self.proof_mode = 0
-        self.proof_nodes = []
 
     # For SPV proof production/verification purposes
-    def spv_check(self, node):
-        if not self.proof_mode:
+    def spv_grabbing(self, node):
+        global proving
+        if not proving:
             pass
-        elif self.proof_mode == RECORDING:
-            self.proof_nodes.append(node)
-        elif self.proof_mode == VERIFYING:
-            if node not in self.proof_nodes:
+        elif proof.get_mode() == RECORDING:
+            proof.add_node(copy.copy(node))
+            # print 'recording %s' % utils.sha3(rlp.encode(node)).encode('hex')
+        elif proof.get_mode() == VERIFYING:
+            # print 'verifying %s' % utils.sha3(rlp.encode(node)).encode('hex')
+            if rlp.encode(node) not in proof.get_nodes():
                 raise InvalidSPVProof("Proof invalid!")
+
+    def spv_storing(self, node):
+        global proving
+        if not proving:
+            pass
+        elif proof.get_mode() == RECORDING:
+            proof.add_exempt(copy.copy(node))
+        elif proof.get_mode() == VERIFYING:
+            proof.add_node(copy.copy(node))
 
     @property
     def root_hash(self):
@@ -177,7 +233,7 @@ class Trie(object):
         val = rlp.encode(self.root_node)
         key = utils.sha3(val)
         self.db.put(key, val)
-        self.spv_check(self.root_node)
+        self.spv_grabbing(self.root_node)
         return key
 
     @root_hash.setter
@@ -219,7 +275,7 @@ class Trie(object):
 
         hashkey = utils.sha3(rlpnode)
         self.db.put(hashkey, rlpnode)
-        self.spv_check(node)
+        self.spv_storing(node)
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -228,7 +284,7 @@ class Trie(object):
         if isinstance(encoded, list):
             return encoded
         o = rlp.decode(self.db.get(encoded))
-        self.spv_check(o)
+        self.spv_grabbing(o)
         return o
 
     def _get_node_type(self, node):
@@ -735,19 +791,17 @@ class Trie(object):
         return self.root_hash in self.db
 
     def produce_spv_proof(self, key):
-        self.proof_mode = RECORDING
-        self.proof_nodes = [self.root_node]
+        proof.push(RECORDING)
         self.get(key)
-        self.proof_mode = NONE
-        o = self.proof_nodes
-        self.proof_nodes = []
+        o = proof.get_nodelist()
+        proof.pop()
         return o
 
 
 def verify_spv_proof(root, key, proof):
+    proof.push(VERIFYING, proof)
     t = Trie(db.EphemDB())
-    t.proof_mode = VERIFYING
-    t.proof_nodes = proof
+
     for i, node in enumerate(proof):
         R = rlp.encode(node)
         H = utils.sha3(R)
@@ -755,9 +809,11 @@ def verify_spv_proof(root, key, proof):
     try:
         t.root_hash = root
         t.get(key)
+        proof.pop()
         return True
     except Exception, e:
         print e
+        proof.pop()
         return False
 
 
