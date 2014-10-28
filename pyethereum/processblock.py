@@ -11,11 +11,10 @@ import logging
 import json
 import time
 import fastvm
-import bitcoin
 import copy
+import specials
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
-
 
 
 class PBLogger(object):
@@ -257,70 +256,6 @@ def apply_transaction(block, tx):
     return success, output if success else ''
 
 
-def mk_transaction_spv_proof(block, tx):
-    block.set_proof_mode(blocks.RECORDING)
-    apply_transaction(block, tx)
-    o = block.proof_nodes
-    block.set_proof_mode(blocks.NONE)
-    return o
-
-
-def verify_transaction_spv_proof(block, tx, proof):
-    block.set_proof_mode(blocks.VERIFYING, proof)
-    try:
-        apply_transaction(block, tx)
-        block.set_proof_mode(blocks.NONE)
-        return True
-    except Exception, e:
-        print e
-        return False
-
-
-def mk_independent_transaction_spv_proof(block, index):
-    block = blocks.Block.init_from_header(block.list_header())
-    tx = transactions.Transaction.create(block.get_transaction(index))
-    block.get_receipt(index)
-    if index > 0:
-        pre_med, pre_gas, _, _ = block.get_receipt(index - 1)
-    else:
-        pre_med, pre_gas = block.get_parent().state_root, 0
-    block.state_root = pre_med
-    block.gas_used = pre_gas
-    nodes = mk_transaction_spv_proof(block, tx)
-    nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index))))
-    if index > 0:
-        nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index - 1))))
-    nodes = map(rlp.decode, list(set(map(rlp.encode, nodes))))
-    return rlp.encode([utils.encode_int(64), block.get_parent().list_header(),
-                       block.list_header(), utils.encode_int(index), nodes])
-
-
-def verify_independent_transaction_spv_proof(proof):
-    _, prevheader, header, index, nodes = rlp.decode(proof)
-    index = utils.decode_int(index)
-    pb = blocks.Block.deserialize_header(prevheader)
-    b = blocks.Block.init_from_header(header)
-    b.set_proof_mode(blocks.VERIFYING, nodes)
-    if index != 0:
-        pre_med, pre_gas, _, _ = b.get_receipt(index - 1)
-    else:
-        pre_med, pre_gas = pb['state_root'], ''
-        if utils.sha3(rlp.encode(prevheader)) != b.prevhash:
-            return False
-    b.state_root = pre_med
-    b.gas_used = utils.decode_int(pre_gas)
-    tx = b.get_transaction(index)
-    post_med, post_gas, bloom, logs = b.get_receipt(index)
-    tx = transactions.Transaction.create(tx)
-    o = verify_transaction_spv_proof(b, tx, nodes)
-    if b.state_root == post_med:
-        if b.gas_used == utils.decode_int(post_gas):
-            if [x.serialize() for x in b.logs] == logs:
-                if b.mk_log_bloom() == bloom:
-                    return o
-    return False
-
-
 class Compustate():
 
     def __init__(self, **kwargs):
@@ -331,47 +266,6 @@ class Compustate():
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
 
-
-def decode_datalist(arr):
-    if isinstance(arr, list):
-        arr = ''.join(map(chr, arr))
-    o = []
-    for i in range(0, len(arr), 32):
-        o.append(utils.big_endian_to_int(arr[i:i + 32]))
-    return o
-
-
-def proc_ecrecover(block, tx, msg):
-    if msg.gas < 500:
-        return 0, 0, []
-    indata = msg.data + '\x00' * 128
-    h = indata[:32]
-    v = utils.big_endian_to_int(indata[32:64])
-    r = utils.big_endian_to_int(indata[64:96])
-    s = utils.big_endian_to_int(indata[96:128])
-    pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
-    o = [0] * 12 + [ord(x) for x in utils.sha3(pub[1:])[-20:]]
-    return 1, msg.gas - 500, o
-
-
-def proc_sha256(block, tx, msg):
-    if msg.gas < 100:
-        return 0, 0, []
-    o = [ord(x) for x in bitcoin.bin_sha256(msg.data)]
-    return 1, msg.gas - 100, o
-
-
-def proc_ripemd160(block, tx, msg):
-    if msg.gas < 100:
-        return 0, 0, []
-    o = [0] * 12 + [ord(x) for x in bitcoin.bin_ripemd160(msg.data)]
-    return 1, msg.gas - 100, o
-
-specials = {
-    '0000000000000000000000000000000000000001': proc_ecrecover,
-    '0000000000000000000000000000000000000002': proc_sha256,
-    '0000000000000000000000000000000000000003': proc_ripemd160,
-}
 
 
 # Preprocesses code, and determines whihc locations are in the middle
@@ -440,7 +334,7 @@ def apply_msg(block, tx, msg, code):
 
 def apply_msg_send(block, tx, msg):
     # special pseudo-contracts for ecrecover, sha256, ripemd160
-    if msg.to in specials:
+    if msg.to in specials.specials:
         o = block.transfer_value(msg.sender, msg.to, msg.value)
         if not o:
             return 1, msg.gas, []
@@ -541,7 +435,6 @@ def apply_op(block, tx, msg, processed_code, compustate):
             trace_data['pc'] = str(compustate.pc - 1)
             trace_data['op'] = op
             if op[:4] == 'PUSH':
-                ind = compustate.pc
                 trace_data['pushvalue'] = op[-1]
 
         pblogger.multilog(trace_data)
@@ -714,7 +607,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if compustate.gas < gascost:
             return vm_exception('OUT OF GAS')
         compustate.gas -= max(gascost, 0)
-        block.refunds -= min(gascost, 0) # adds neg gascost as a refund if below zero
+        block.refunds -= min(gascost, 0)  # adds neg gascost as a refund if below zero
         block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP':
         compustate.pc = stk.pop()
