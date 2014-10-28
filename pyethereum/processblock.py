@@ -495,7 +495,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         stk.append((s0 * s1) % s2 if s2 else 0)
     elif op == 'SIGNEXTEND':
-        s0, s1 = stk.pop(), stk.pop()
+        s0, s1 = stk.pop(), stk.pop() * 8
         if s1 <= 255:
             if s0 & (1 << s1):
                 stk.append(s0 & (TT256 - (1 << s1)))
