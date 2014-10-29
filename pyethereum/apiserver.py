@@ -262,7 +262,8 @@ def get_trace(txhash):
 
     # collect debug output
     log = []
-    def log_receiver(data)
+
+    def log_receiver(data):
         log.append(data)
 
     processblock.pblogger.listeners.append(log_receiver)
