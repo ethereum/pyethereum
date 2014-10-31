@@ -59,6 +59,7 @@ class PBLogger(object):
                 else:
                     msg = str(datum)
                 logger.debug("%s: %s", key.ljust(15), msg)
+            logger.debug("")
 
 
 pblogger = PBLogger()
@@ -265,16 +266,22 @@ class Compustate():
             setattr(self, kw, kwargs[kw])
 
 
-# Preprocesses code, and determines whihc locations are in the middle
+# Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
 def preprocess_code(code):
     i = 0
     ops = []
+    last_push = False
     while i < len(code):
         o = copy.copy(opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) +
                       [ord(code[i]), 0])
+        if last_push:
+            last_push = False
+            if o[0] == 'JUMP' or o[0] == 'JUMPI':
+                o[0] += 'STATIC'
         ops.append(o)
         if o[0][:4] == 'PUSH':
+            last_push = True
             for j in range(int(o[0][4:])):
                 i += 1
                 byte = ord(code[i]) if i < len(code) else 0
@@ -432,7 +439,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             trace_data['pc'] = str(compustate.pc - 1)
             trace_data['op'] = op
             if op[:4] == 'PUSH':
-                trace_data['pushvalue'] = op[-1]
+                trace_data['pushvalue'] = pushval
 
         pblogger.multilog(trace_data)
 
@@ -458,10 +465,21 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'SMOD':
         s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
         stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) & TT256M1)
+    elif op == 'ADDMOD':
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        stk.append((s0 + s1) % s2 if s2 else 0)
+    elif op == 'MULMOD':
+        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+        stk.append((s0 * s1) % s2 if s2 else 0)
     elif op == 'EXP':
         stk.append(pow(stk.pop(), stk.pop(), TT256))
-    elif op == 'BNOT':
-        stk.append(TT256M1 - stk.pop())
+    elif op == 'SIGNEXTEND':
+        s0, s1 = stk.pop(), stk.pop() * 8
+        if s1 <= 255:
+            if s0 & (1 << s1):
+                stk.append(s0 & (TT256 - (1 << s1)))
+            else:
+                stk.append(s0 & ((1 << s1) - 1))
     elif op == 'LT':
         stk.append(1 if stk.pop() < stk.pop() else 0)
     elif op == 'GT':
@@ -474,7 +492,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(1 if s0 > s1 else 0)
     elif op == 'EQ':
         stk.append(1 if stk.pop() == stk.pop() else 0)
-    elif op == 'NOT':
+    elif op == 'ISZERO':
         stk.append(0 if stk.pop() else 1)
     elif op == 'AND':
         stk.append(stk.pop() & stk.pop())
@@ -482,25 +500,15 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(stk.pop() | stk.pop())
     elif op == 'XOR':
         stk.append(stk.pop() ^ stk.pop())
+    elif op == 'NOT':
+        stk.append(TT256M1 - stk.pop())
     elif op == 'BYTE':
         s0, s1 = stk.pop(), stk.pop()
         if s0 >= 32:
             stk.append(0)
         else:
             stk.append((s1 / 256 ** (31 - s0)) % 256)
-    elif op == 'ADDMOD':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        stk.append((s0 + s1) % s2 if s2 else 0)
-    elif op == 'MULMOD':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        stk.append((s0 * s1) % s2 if s2 else 0)
-    elif op == 'SIGNEXTEND':
-        s0, s1 = stk.pop(), stk.pop() * 8
-        if s1 <= 255:
-            if s0 & (1 << s1):
-                stk.append(s0 & (TT256 - (1 << s1)))
-            else:
-                stk.append(s0 & ((1 << s1) - 1))
+
     elif op == 'SHA3':
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, s0, s1):
@@ -606,25 +614,25 @@ def apply_op(block, tx, msg, processed_code, compustate):
         compustate.gas -= max(gascost, 0)
         block.refunds -= min(gascost, 0)  # adds neg gascost as a refund if below zero
         block.set_storage_data(msg.to, s0, s1)
-    elif op == 'JUMP':
+    elif op == 'JUMP' or op == 'JUMPSTATIC':
         compustate.pc = stk.pop()
         if compustate.pc >= len(processed_code):
             return []
-        if compustate.pc:
-            op = processed_code[compustate.pc - 1][0]
-            if op != 'JUMPDEST':
-                return vm_exception('BAD JUMPDEST')
-    elif op == 'JUMPI':
+        opnew = processed_code[compustate.pc][0]
+        if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
+                opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
+            print op, opnew, compustate.pc
+            return vm_exception('BAD JUMPDEST')
+    elif op == 'JUMPI' or op == 'JUMPISTATIC':
         s0, s1 = stk.pop(), stk.pop()
         if s1:
             compustate.pc = s0
             if compustate.pc >= len(processed_code):
                 return []
-            op = processed_code[compustate.pc][0]
-            if compustate.pc:
-                op = processed_code[compustate.pc - 1][0]
-                if op != 'JUMPDEST':
-                    return vm_exception('BAD JUMPDEST')
+            opnew = processed_code[compustate.pc][0]
+            if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
+                    opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
+                return vm_exception('BAD JUMPDEST')
     elif op == 'PC':
         stk.append(compustate.pc - 1)
     elif op == 'MSIZE':

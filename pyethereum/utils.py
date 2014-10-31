@@ -247,7 +247,8 @@ printers = {
     "bin": lambda v: '0x'+v.encode('hex'),
     "addr": lambda v: v,
     "int": lambda v: str(v),
-    "trie_root": lambda v: v.encode('hex')
+    "trie_root": lambda v: v.encode('hex'),
+    "int64": lambda x: zpad(encode_int64(x), 64).encode('hex')
 }
 
 
