@@ -65,9 +65,12 @@ class state():
             raise Exception("Contract creation failed")
         return a
 
-    def send(self, sender, to, value, data=[]):
+    def send(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(*data)
+        if funid is not None:
+            evmdata = serpent.encode_abi(funid, abi)
+        else:
+            evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)

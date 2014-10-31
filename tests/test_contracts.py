@@ -12,7 +12,7 @@ pblogger = tester.pb.pblogger
 pblogger.log_pre_state = True    # dump storage at account before execution
 pblogger.log_post_state = True   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = False      # dump memory before each op
+pblogger.log_memory = True      # dump memory before each op
 pblogger.log_stack = True        # dump stack before each op
 pblogger.log_op = True           # log op, gas, stack before each op
 pblogger.log_apply_op = True     # log op, gas, stack before each op
@@ -109,37 +109,35 @@ def test_namecoin():
 # Test a simple currency implementation
 
 currency_code = '''
-init:
+def init():
     contract.storage[msg.sender] = 1000
-code:
-    if msg.datasize == 1:
-        addr = msg.data[0]
-        return(contract.storage[addr])
+
+def query(addr):
+    return(contract.storage[addr])
+
+def send(to, value):
+    from = msg.sender
+    fromvalue = contract.storage[from]
+    if fromvalue >= value:
+        contract.storage[from] = fromvalue - value
+        contract.storage[to] = contract.storage[to] + value
+        log(from, to, value)
+        return(1)
     else:
-        from = msg.sender
-        fromvalue = contract.storage[from]
-        to = msg.data[0]
-        value = msg.data[1]
-        if fromvalue >= value:
-            contract.storage[from] = fromvalue - value
-            contract.storage[to] = contract.storage[to] + value
-            log(from, to, value)
-            return(1)
-        else:
-            return(0)
+        return(0)
 '''
 
 
 def test_currency():
     s = tester.state()
     c = s.contract(currency_code, sender=tester.k0)
-    o1 = s.send(tester.k0, c, 0, [tester.a2, 200])
+    o1 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 200])
     assert o1 == [1]
-    o2 = s.send(tester.k0, c, 0, [tester.a2, 900])
+    o2 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 900])
     assert o2 == [0]
-    o3 = s.send(tester.k0, c, 0, [tester.a0])
+    o3 = s.send(tester.k0, c, 0, funid=0, abi=[tester.a0])
     assert o3 == [800]
-    o4 = s.send(tester.k0, c, 0, [tester.a2])
+    o4 = s.send(tester.k0, c, 0, funid=0, abi=[tester.a2])
     assert o4 == [200]
 
 # Test a data feed
