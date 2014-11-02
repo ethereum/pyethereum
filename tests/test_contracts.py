@@ -74,8 +74,10 @@ filename = "mul2_qwertyuioplkjhgfdsa.se"
 
 returnten_code = \
     '''
+extern mul2: [double]
+
 x = create("%s")
-return(call(x, 0, 5))
+return(x.double(5))
 ''' % filename
 
 
@@ -93,8 +95,8 @@ def test_returnten():
 namecoin_code =\
     '''
 def main(k, v):
-    if !contract.storage[k]:
-        contract.storage[k] = v
+    if !self.storage[k]:
+        self.storage[k] = v
         return(1)
     else:
         return(0)
@@ -117,17 +119,17 @@ def test_namecoin():
 
 currency_code = '''
 def init():
-    contract.storage[msg.sender] = 1000
+    self.storage[msg.sender] = 1000
 
 def query(addr):
-    return(contract.storage[addr])
+    return(self.storage[addr])
 
 def send(to:29, value:31):
     from = msg.sender
-    fromvalue = contract.storage[from]
+    fromvalue = self.storage[from]
     if fromvalue >= value:
-        contract.storage[from] = fromvalue - value
-        contract.storage[to] = contract.storage[to] + value
+        self.storage[from] = fromvalue - value
+        self.storage[to] = self.storage[to] + value
         log(from, to, value)
         return(1)
     else:
@@ -151,18 +153,18 @@ def test_currency():
 
 data_feed_code = '''
 def init():
-    contract.storage[1000] = 1
-    contract.storage[1001] = msg.sender
+    self.storage[1000] = 1
+    self.storage[1001] = msg.sender
 
 def set(k, v):
-    if msg.sender == contract.storage[1001]:
-        contract.storage[k] = v
+    if msg.sender == self.storage[1001]:
+        self.storage[k] = v
         return(1)
     else:
         return(0)
 
 def get(k):
-    return(contract.storage[k])
+    return(self.storage[k])
 '''
 
 
@@ -185,31 +187,33 @@ def test_data_feeds():
 # contracts calling other contracts
 
 hedge_code = '''
+extern datafeed: [set, get]
+
 def main(datafeed, index):
-    if !contract.storage[1000]:
-        contract.storage[1000] = msg.sender
-        contract.storage[1002] = msg.value
-        contract.storage[1003] = datafeed
-        contract.storage[1004] = index
+    if !self.storage[1000]:
+        self.storage[1000] = msg.sender
+        self.storage[1002] = msg.value
+        self.storage[1003] = datafeed
+        self.storage[1004] = index
         return(1)
-    elif !contract.storage[1001]:
-        ethvalue = contract.storage[1002]
+    elif !self.storage[1001]:
+        ethvalue = self.storage[1002]
         if msg.value >= ethvalue:
-            contract.storage[1001] = msg.sender
-        c = call(contract.storage[1003], 1, data=[contract.storage[1004]], datasz=1)
+            self.storage[1001] = msg.sender
+        c = self.storage[1003].get(data=[self.storage[1004]], datasz=1)
         othervalue = ethvalue * c
-        contract.storage[1005] = othervalue
-        contract.storage[1006] = block.timestamp + 500
+        self.storage[1005] = othervalue
+        self.storage[1006] = block.timestamp + 500
         return([2,othervalue],2)
     else:
-        othervalue = contract.storage[1005]
-        ethvalue = othervalue / call(contract.storage[1003], 1, contract.storage[1004])
-        if ethvalue >= contract.balance:
-            send(contract.storage[1000],contract.balance)
+        othervalue = self.storage[1005]
+        ethvalue = othervalue / self.storage[1003].get(self.storage[1004])
+        if ethvalue >= self.balance:
+            send(self.storage[1000],self.balance)
             return(3)
-        elif block.timestamp > contract.storage[1006]:
-            send(contract.storage[1001],contract.balance - ethvalue)
-            send(contract.storage[1000],ethvalue)
+        elif block.timestamp > self.storage[1006]:
+            send(self.storage[1001],self.balance - ethvalue)
+            send(self.storage[1000],ethvalue)
             return(4)
         else:
             return(5)
@@ -251,18 +255,18 @@ def test_hedge():
 # Test the LIFO nature of call
 arither_code = '''
 def init():
-    contract.storage[0] = 10
+    self.storage[0] = 10
 
 def f1():
-    contract.storage[0] += 1
+    self.storage[0] += 1
 
 def f2():
-    contract.storage[0] *= 10
-    call(contract.address, 0)
-    contract.storage[0] *= 10
+    self.storage[0] *= 10
+    call(self, 0)
+    self.storage[0] *= 10
 
 def f3():
-    return(contract.storage[0])
+    return(self.storage[0])
 '''
 
 
@@ -277,15 +281,15 @@ def test_lifo():
 # Test suicides and suicide reverts
 suicider_code = '''
 def mainloop(rounds):
-    contract.storage[15] = 40
-    call(contract.address, 3)
+    self.storage[15] = 40
+    call(self, 3)
     i = 0
     while i < rounds:
         i += 1
 
 def entry(rounds):
-    contract.storage[15] = 20
-    call(contract.address, 0, rounds, gas=tx.gas - 100)
+    self.storage[15] = 20
+    call(self, 0, rounds, gas=tx.gas - 100)
 
 def ping_ten():
     return(10)
@@ -294,7 +298,7 @@ def suicide():
     suicide(0)
 
 def ping_storage15():
-    return(contract.storage[15])
+    return(self.storage[15])
 '''
 
 
@@ -326,20 +330,20 @@ def test_suicider():
 
 reverter_code = '''
 def entry():
-    call(contract.address, 1, gas=1000)
-    call(contract.address, 2, gas=1000)
+    call(self, 1, gas=1000)
+    call(self, 2, gas=1000)
 
 def non_recurse():
     send(7, 9)
-    contract.storage[8080] = 4040
-    contract.storage[160160] = 2020
+    self.storage[8080] = 4040
+    self.storage[160160] = 2020
 
 def recurse():
     send(8, 9)
-    contract.storage[8081] = 4039
-    contract.storage[160161] = 2019
-    call(contract.address, 2)
-    contract.storage["waste_some_gas"] = 0
+    self.storage[8081] = 4039
+    self.storage[160161] = 2019
+    call(self, 2)
+    self.storage["waste_some_gas"] = 0
 '''
 
 
@@ -357,19 +361,21 @@ def test_reverter():
 add1_code = \
     '''
 def main(x):
-    contract.storage[1] += x
+    self.storage[1] += x
 '''
 
 filename2 = "stateless_qwertyuioplkjhgfdsa.se"
 
 callcode_test_code = \
     '''
+extern add1: [main]
+
 x = create("%s")
-call(x, 0, 6)
-call_code(x, 0, 4)
-call_code(x, 0, 60)
-call(x, 0, 40)
-return(contract.storage[1])
+x.main(6)
+x.main(4, call=code)
+x.main(60, call=code)
+x.main(40)
+return(self.storage[1])
 ''' % filename2
 
 
@@ -422,21 +428,21 @@ def test_array3():
 
 calltest_code = """
 def main():
-    call(contract.address, 1, 1, 2, 3, 4, 5)
-    call(contract.address, 2, 2, 3, 4, 5, 6)
-    call(contract.address, 3, 3, 4, 5, 6, 7)
+    self.first(1, 2, 3, 4, 5)
+    self.second(2, 3, 4, 5, 6)
+    self.third(3, 4, 5, 6, 7)
 
 def first(a, b, c, d, e):
-    contract.storage[1] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    self.storage[1] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
 
 def second(a:11, b:19, c:32, d, e:20):
-    contract.storage[2] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    self.storage[2] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
 
 def third(a, b, c, d, e):
-    contract.storage[3] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    self.storage[3] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
 
 def get(k):
-    return(contract.storage[k])
+    return(self.storage[k])
 """
 
 
