@@ -118,18 +118,20 @@ def test_namecoin():
 # Test a simple currency implementation
 
 currency_code = '''
+data balances[2^160]
+
 def init():
-    self.storage[msg.sender] = 1000
+    self.balances[msg.sender] = 1000
 
 def query(addr):
-    return(self.storage[addr])
+    return(self.balances[addr])
 
 def send(to:29, value:31):
     from = msg.sender
-    fromvalue = self.storage[from]
+    fromvalue = self.balances[from]
     if fromvalue >= value:
-        self.storage[from] = fromvalue - value
-        self.storage[to] = self.storage[to] + value
+        self.balances[from] = fromvalue - value
+        self.balances[to] = self.balances[to] + value
         log(from, to, value)
         return(1)
     else:
@@ -152,19 +154,22 @@ def test_currency():
 # Test a data feed
 
 data_feed_code = '''
+data creator
+data values[]
+
+
 def init():
-    self.storage[1000] = 1
-    self.storage[1001] = msg.sender
+    self.creator = msg.sender
 
 def set(k, v):
-    if msg.sender == self.storage[1001]:
-        self.storage[k] = v
+    if msg.sender == self.creator:
+        self.values[k] = v
         return(1)
     else:
         return(0)
 
 def get(k):
-    return(self.storage[k])
+    return(self.values[k])
 '''
 
 
@@ -189,31 +194,39 @@ def test_data_feeds():
 hedge_code = '''
 extern datafeed: [set, get]
 
+data partyone
+data partytwo
+data hedgeValue
+data datafeed
+data index
+data fiatValue
+data maturity
+
 def main(datafeed, index):
-    if !self.storage[1000]:
-        self.storage[1000] = msg.sender
-        self.storage[1002] = msg.value
-        self.storage[1003] = datafeed
-        self.storage[1004] = index
+    if !self.partyone:
+        self.partyone = msg.sender
+        self.hedgeValue = msg.value
+        self.datafeed = datafeed
+        self.index = index
         return(1)
-    elif !self.storage[1001]:
-        ethvalue = self.storage[1002]
+    elif !self.partytwo:
+        ethvalue = self.hedgeValue
         if msg.value >= ethvalue:
-            self.storage[1001] = msg.sender
-        c = self.storage[1003].get(data=[self.storage[1004]], datasz=1)
+            self.partytwo = msg.sender
+        c = self.datafeed.get(data=[self.index], datasz=1)
         othervalue = ethvalue * c
-        self.storage[1005] = othervalue
-        self.storage[1006] = block.timestamp + 500
-        return([2,othervalue],2)
+        self.fiatValue = othervalue
+        self.maturity = block.timestamp + 500
+        return([2, othervalue],2)
     else:
-        othervalue = self.storage[1005]
-        ethvalue = othervalue / self.storage[1003].get(self.storage[1004])
+        othervalue = self.fiatValue
+        ethvalue = othervalue / self.datafeed.get(self.index)
         if ethvalue >= self.balance:
-            send(self.storage[1000],self.balance)
+            send(self.partyone, self.balance)
             return(3)
-        elif block.timestamp > self.storage[1006]:
-            send(self.storage[1001],self.balance - ethvalue)
-            send(self.storage[1000],ethvalue)
+        elif block.timestamp > self.maturity:
+            send(self.partytwo, self.balance - ethvalue)
+            send(self.partyone, ethvalue)
             return(4)
         else:
             return(5)
@@ -457,6 +470,47 @@ def test_calls():
     assert [45678] == s.send(tester.k0, c, 0, funid=4, abi=[1])
     s.send(tester.k0, c, 0, funid=2, abi=['5:11', '6:19', '7:32', 8, '9:20'])
     assert [56789] == s.send(tester.k0, c, 0, funid=4, abi=[2])
+
+
+storage_object_test_code = """
+data chessboard[8][8]
+data users[100](health, x, y, items[5])
+
+def ping():
+    self.chessboard[0][0] = 1
+    self.chessboard[0][1] = 2
+    self.chessboard[3][0] = 3
+    self.users[0].health = 100
+    self.users[1].x = 15
+    self.users[1].y = 12
+    self.users[1].items[2] = 9
+
+def query_chessboard(x, y):
+    return(self.chessboard[x][y])
+
+def query_stats(u):
+    return([self.users[u].health, self.users[u].x, self.users[u].y], 3)
+
+def query_items(u, i):
+    return(self.users[u].items[i])
+
+"""
+
+
+def test_storage_objects():
+    s = tester.state()
+    c = s.contract(storage_object_test_code)
+    s.send(tester.k0, c, 0, funid=0, abi=[])
+    assert [1] == s.send(tester.k0, c, 0, funid=1, abi=[0, 0])
+    assert [2] == s.send(tester.k0, c, 0, funid=1, abi=[0, 1])
+    assert [3] == s.send(tester.k0, c, 0, funid=1, abi=[3, 0])
+    assert [100, 0, 0] == s.send(tester.k0, c, 0, funid=2, abi=[0])
+    assert [0, 15, 12] == s.send(tester.k0, c, 0, funid=2, abi=[1])
+    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
+    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
+    assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
+
+
 
 
 # test_evm = None
