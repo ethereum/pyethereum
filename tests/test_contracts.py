@@ -473,8 +473,11 @@ def test_calls():
 
 
 storage_object_test_code = """
+extern moo = [ping, query_chessboard, query_stats, query_items, query_person, testping, testping2]
+
 data chessboard[8][8]
 data users[100](health, x, y, items[5])
+data person(head, arms[2](elbow, fingers[5]), legs[2])
 
 def ping():
     self.chessboard[0][0] = 1
@@ -484,6 +487,17 @@ def ping():
     self.users[1].x = 15
     self.users[1].y = 12
     self.users[1].items[2] = 9
+    self.users[80].health = self
+    self.users[80].items[3] = self
+    self.person.head = 555
+    self.person.arms[0].elbow = 556
+    self.person.arms[0].fingers[0] = 557
+    self.person.arms[0].fingers[4] = 558
+    self.person.legs[0] = 559
+    self.person.arms[1].elbow = 656
+    self.person.arms[1].fingers[0] = 657
+    self.person.arms[1].fingers[4] = 658
+    self.person.legs[1] = 659
 
 def query_chessboard(x, y):
     return(self.chessboard[x][y])
@@ -493,6 +507,26 @@ def query_stats(u):
 
 def query_items(u, i):
     return(self.users[u].items[i])
+
+def query_person():
+    a = array(20)
+    a[0] = self.person.head
+    a[1] = self.person.arms[0].elbow
+    a[2] = self.person.arms[1].elbow
+    a[3] = self.person.legs[0]
+    a[4] = self.person.legs[1]
+    i = 0
+    while i < 5:
+        a[5 + i] = self.person.arms[0].fingers[i]
+        a[10 + i] = self.person.arms[1].fingers[i]
+        i += 1
+    return(a, 15)
+
+def testping(x:2, y:7):
+    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)], 2)
+
+def testping2(x):
+    return(x*x)
 
 """
 
@@ -509,8 +543,75 @@ def test_storage_objects():
     assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
     assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
     assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
+    assert [555, 556, 656, 559, 659,
+            557, 0,   0,   0,   558,
+            657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
+    assert [361, 441] == s.send(tester.k0, c, 0, funid=5, abi=['19:2', '21:7'])
 
 
+infinite_storage_object_test_code = """
+data chessboard[][8]
+data users[100](health, x, y, items[])
+data person(head, arms[](elbow, fingers[5]), legs[2])
+
+def ping():
+    self.chessboard[0][0] = 1
+    self.chessboard[0][1] = 2
+    self.chessboard[3][0] = 3
+    self.users[0].health = 100
+    self.users[1].x = 15
+    self.users[1].y = 12
+    self.users[1].items[2] = 9
+    self.person.head = 555
+    self.person.arms[0].elbow = 556
+    self.person.arms[0].fingers[0] = 557
+    self.person.arms[0].fingers[4] = 558
+    self.person.legs[0] = 559
+    self.person.arms[1].elbow = 656
+    self.person.arms[1].fingers[0] = 657
+    self.person.arms[1].fingers[4] = 658
+    self.person.legs[1] = 659
+
+def query_chessboard(x, y):
+    return(self.chessboard[x][y])
+
+def query_stats(u):
+    return([self.users[u].health, self.users[u].x, self.users[u].y], 3)
+
+def query_items(u, i):
+    return(self.users[u].items[i])
+
+def query_person():
+    a = array(20)
+    a[0] = self.person.head
+    a[1] = self.person.arms[0].elbow
+    a[2] = self.person.arms[1].elbow
+    a[3] = self.person.legs[0]
+    a[4] = self.person.legs[1]
+    i = 0
+    while i < 5:
+        a[5 + i] = self.person.arms[0].fingers[i]
+        a[10 + i] = self.person.arms[1].fingers[i]
+        i += 1
+    return(a, 15)
+"""
+
+
+def test_infinite_storage_objects():
+    s = tester.state()
+    c = s.contract(infinite_storage_object_test_code)
+    s.send(tester.k0, c, 0, funid=0, abi=[])
+    assert [1] == s.send(tester.k0, c, 0, funid=1, abi=[0, 0])
+    assert [2] == s.send(tester.k0, c, 0, funid=1, abi=[0, 1])
+    assert [3] == s.send(tester.k0, c, 0, funid=1, abi=[3, 0])
+    assert [100, 0, 0] == s.send(tester.k0, c, 0, funid=2, abi=[0])
+    assert [0, 15, 12] == s.send(tester.k0, c, 0, funid=2, abi=[1])
+    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
+    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
+    assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
+    assert [555, 556, 656, 559, 659,
+            557, 0,   0,   0,   558,
+            657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
 
 
 # test_evm = None
