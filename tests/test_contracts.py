@@ -498,6 +498,7 @@ def ping():
     self.person.arms[1].fingers[0] = 657
     self.person.arms[1].fingers[4] = 658
     self.person.legs[1] = 659
+    self.person.legs[1] += 1000
 
 def query_chessboard(x, y):
     return(self.chessboard[x][y])
@@ -543,7 +544,7 @@ def test_storage_objects():
     assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
     assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
     assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
-    assert [555, 556, 656, 559, 659,
+    assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
             657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
     assert [361, 441] == s.send(tester.k0, c, 0, funid=5, abi=['19:2', '21:7'])
@@ -690,8 +691,6 @@ def test_storagevar_fails():
     except Exception, e:
         success6 = "Invalid object member" in str(e)
     assert success6, e
-
-
 
 
 # test_evm = None
