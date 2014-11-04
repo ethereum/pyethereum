@@ -614,6 +614,86 @@ def test_infinite_storage_objects():
             657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
 
 
+fail1 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms[0]
+"""
+
+fail2 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms[0].fingers
+"""
+
+fail3 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms[0].fingers[4][3]
+"""
+
+fail4 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms.elbow[0].fingers[4]
+"""
+
+fail5 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms[0].fingers[4].nail
+"""
+
+fail6 = """
+data person(head, arms[2](elbow, fingers[5]), legs[2])
+
+x = self.person.arms[0].elbow.skin
+"""
+
+
+def test_storagevar_fails():
+    s = tester.state()
+    success1, success2, success3, success4, success5, success6 = \
+        0, 0, 0, 0, 0, 0
+    try:
+        s.contract(fail1)
+    except Exception, e:
+        success1 = "Storage variable access not deep enough" in str(e)
+    assert success1, e
+
+    try:
+        s.contract(fail2)
+    except Exception, e:
+        success2 = "Too few array index lookups" in str(e)
+    assert success2, e
+
+    try:
+        s.contract(fail3)
+    except Exception, e:
+        success3 = "Too many array index lookups" in str(e)
+    assert success3, e
+
+    try:
+        s.contract(fail4)
+    except Exception, e:
+        success4 = "Too few array index lookups" in str(e)
+    assert success4, e
+
+    try:
+        s.contract(fail5)
+    except Exception, e:
+        success5 = "Invalid object member" in str(e)
+    assert success5, e
+
+    try:
+        s.contract(fail6)
+    except Exception, e:
+        success6 = "Invalid object member" in str(e)
+    assert success6, e
+
+
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -629,3 +709,6 @@ def test_infinite_storage_objects():
 # test_array2 = None
 # test_array3 = None
 # test_calls = None
+# test_storage_objects = None
+# test_infinite_storage_objects = None
+# test_storagevar_fails = None
