@@ -29,11 +29,14 @@ def check_testdata(data_keys, expected_keys):
 
 @pytest.fixture(scope="module")
 def vm_tests_fixtures():
-    """Read vm tests from fixtures"""
+    """
+    Read vm tests from fixtures
+    fixtures/VMTests/*
+    """
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
-    filenames = os.listdir(os.path.join('fixtures', 'vmtests'))
-    files = [os.path.join('fixtures', 'vmtests', f) for f in filenames]
+    filenames = os.listdir(os.path.join('fixtures', 'VMTests'))
+    files = [os.path.join('fixtures', 'VMTests', f) for f in filenames]
     vm_fixtures = {}
     try:
         for f, fn in zip(files, filenames):
@@ -41,24 +44,19 @@ def vm_tests_fixtures():
                 vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
     except IOError:
         raise IOError("Could not read vmtests.json from fixtures",
-            "Make sure you did 'git submodule init'")
-    #assert set(vm_fixture.keys()) == set(['boolean', 'suicide', 'random', 'arith', 'mktx']),\
-    #    "Tests changed, try updating the fixtures submodule"
+                      "Make sure you did 'git submodule init'")
     return vm_fixtures
 
-test_random = lambda: do_test_vm('random', 'random')
-test_boolean = lambda: do_test_vm('vmtests', 'boolean')
-test_boolean = lambda: do_test_vm('vmtests', 'suicide')
-test_boolean = lambda: do_test_vm('vmtests', 'arith')
-test_boolean = lambda: do_test_vm('vmtests', 'mktx')
-test_add = lambda: do_test_vm('vmArithmeticTest')
-test_bitwise = lambda: do_test_vm('vmBitwiseLogicOperationTest')
-test_blockinfo = lambda: do_test_vm('vmBlockInfoTest')
-test_envinfo = lambda: do_test_vm('vmEnvironmentalInfoTest')
-test_pushdupswap = lambda: do_test_vm('vmPushDupSwapTest')
-test_ioandflow = lambda: do_test_vm('vmIOandFlowOperationsTest')
-test_sha3 = lambda: do_test_vm('vmSha3Test')
-test_sysops = lambda: do_test_vm('vmSystemOperationsTest')
+
+# SETUP TESTS IN GLOBAL NAME SPACE
+def gen_func(filename, testname):
+    return lambda: do_test_vm(filename, testname)
+
+for filename, tests in vm_tests_fixtures().items():
+    for testname, testdata in tests.items():
+        func_name = 'test_%s_%s' % (filename, testname)
+        func = gen_func(filename, testname)
+        globals()[func_name] = func
 
 faulty = [
     # Put a list of strings of known faulty tests here
@@ -98,7 +96,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
     # if isinstance(env['code'], str):
     #     continue
     # else:
-    #     addr = 0 # FIXME
+    # addr = 0 # FIXME
     #     blk.set_code(addr, ''.join(map(chr, env['code'])))
 
     # setup state
@@ -126,7 +124,8 @@ def do_test_vm(filename, testname=None, limit=99999999):
     tx.sender = sender
     pblogger.log_apply_op = True
     pblogger.log_op = True
-    pblogger.log('TX', tx=tx.hex_hash(), sender=sender, to=recvaddr, value=tx.value, startgas=tx.startgas, gasprice=tx.gasprice)
+    pblogger.log('TX', tx=tx.hex_hash(), sender=sender, to=recvaddr,
+                 value=tx.value, startgas=tx.startgas, gasprice=tx.gasprice)
 
     # capture apply_message calls
     apply_message_calls = []
@@ -159,12 +158,12 @@ def do_test_vm(filename, testname=None, limit=99999999):
     # check against callcreates
     for i, callcreate in enumerate(callcreates):
         amc = apply_message_calls[i]
-        assert callcreate['data'] == '0x'+amc['data']
+        assert callcreate['data'] == '0x' + amc['data']
         assert callcreate['gasLimit'] == str(amc['gasLimit'])
         assert callcreate['value'] == str(amc['value'])
         assert callcreate['destination'] == amc['destination']
 
-    assert '0x'+''.join(map(chr, output)).encode('hex') == params['out']
+    assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
     assert str(gas_remained) == params['gas']
 
     # check state
