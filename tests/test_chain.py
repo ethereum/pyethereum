@@ -36,7 +36,7 @@ def genesis_fixture():
     Read genesis block from fixtures.
     """
     genesis_fixture = None
-    with open('fixtures/genesishashestest.json', 'r') as f:
+    with open('fixtures/BasicTests/genesishashestest.json', 'r') as f:
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
     # FIXME: assert that link is uptodate
