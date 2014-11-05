@@ -20,6 +20,8 @@ pblogger.log_block = False       # dump block after TX was applied
 pblogger.log_memory = False      # dump memory before each op
 pblogger.log_op = True           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
+pblogger.log_apply_op = True     # generate machine readable output
+pblogger.log_stack = True        # generate machine readable output
 
 
 def check_testdata(data_keys, expected_keys):

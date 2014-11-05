@@ -293,7 +293,7 @@ def preprocess_code(code):
 
 
 def apply_msg(block, tx, msg, code):
-    # print 'init', map(ord, msg.data), msg.gas, msg.sender, block.get_nonce(msg.sender)
+    #print 'init', map(ord, msg.data), msg.gas, msg.sender, block.get_nonce(msg.sender)
     pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
                  gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
     if pblogger.log_pre_state:
@@ -415,16 +415,17 @@ def apply_op(block, tx, msg, processed_code, compustate):
     if fee > compustate.gas:
         return vm_exception('OUT OF GAS')
 
+    # empty stack error
+    if in_args > len(compustate.stack):
+        return vm_exception('INSUFFICIENT STACK', op=op, needed=str(in_args),
+                            available=str(len(compustate.stack)))
+
+
     # Apply operation
     compustate.gas -= fee
     compustate.pc += 1
     stk = compustate.stack
     mem = compustate.memory
-
-    # empty stack error
-    if in_args > len(compustate.stack):
-        return vm_exception('INSUFFICIENT STACK', op=op, needed=str(in_args),
-                            available=str(len(compustate.stack)))
 
     if pblogger.log_apply_op:
         trace_data = {}
@@ -474,12 +475,15 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'EXP':
         stk.append(pow(stk.pop(), stk.pop(), TT256))
     elif op == 'SIGNEXTEND':
-        s0, s1 = stk.pop(), stk.pop() * 8
-        if s1 <= 255:
-            if s0 & (1 << s1):
-                stk.append(s0 & (TT256 - (1 << s1)))
+        s0, s1 = stk.pop(), stk.pop()
+        if s0 <= 31:
+            testbit = s0 * 8 + 7
+            if s1 & (1 << testbit):
+                stk.append(s1 | (TT256 - (1 << testbit)))
             else:
-                stk.append(s0 & ((1 << s1) - 1))
+                stk.append(s1 & ((1 << testbit) - 1))
+        else:
+            stk.append(s1)
     elif op == 'LT':
         stk.append(1 if stk.pop() < stk.pop() else 0)
     elif op == 'GT':
@@ -616,20 +620,17 @@ def apply_op(block, tx, msg, processed_code, compustate):
         block.set_storage_data(msg.to, s0, s1)
     elif op == 'JUMP' or op == 'JUMPSTATIC':
         compustate.pc = stk.pop()
-        if compustate.pc >= len(processed_code):
-            return []
-        opnew = processed_code[compustate.pc][0]
+        opnew = processed_code[compustate.pc][0] if \
+            compustate.pc < len(processed_code) else 'STOP'
         if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
                 opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
-            print op, opnew, compustate.pc
             return vm_exception('BAD JUMPDEST')
     elif op == 'JUMPI' or op == 'JUMPISTATIC':
         s0, s1 = stk.pop(), stk.pop()
         if s1:
             compustate.pc = s0
-            if compustate.pc >= len(processed_code):
-                return []
-            opnew = processed_code[compustate.pc][0]
+            opnew = processed_code[compustate.pc][0] if \
+                compustate.pc < len(processed_code) else 'STOP'
             if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
                     opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
                 return vm_exception('BAD JUMPDEST')
