@@ -1,6 +1,6 @@
 import os
 import pytest
-from pyethereum import tester
+from pyethereum import tester, utils
 import serpent
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
@@ -691,6 +691,83 @@ def test_storagevar_fails():
     except Exception, e:
         success6 = "Invalid object member" in str(e)
     assert success6, e
+
+crowdfund_code = """
+data campaigns[2^80](recipient, goal, deadline, contrib_total, contrib_count, contribs[2^50](sender, value))
+
+def create_campaign(id, recipient, goal, timelimit)
+    if self.campaigns[id].recipient:
+        return(0)
+    self.campaigns[id].recipient = recipient
+    self.campaigns[id].goal = goal
+    self.campaigns[id].deadline = block.timestamp + timelimit
+
+def contribute(id):
+    # Update contribution total
+    total_contributed = self.campaigns[id].contrib_total + msg.value
+    self.campaigns[id].contrib_total = total_contributed
+
+    # Record new contribution
+    sub_index = self.campaigns[id].contrib_count
+    self.campaigns[id].contribs[sub_index].sender = msg.sender
+    self.campaigns[id].contribs[sub_index].value = msg.value
+    self.campaigns[id].contrib_count = sub_index + 1
+
+    # Enough funding?
+    if total_contributed >= self.campaigns[id].goal:
+        send(self.campaigns[id].recipient, total_contributed)
+        self.clear(id)
+        return(1)
+
+    # Expired?
+    if block.timestamp > self.campaigns[id].deadline:
+        i = 0
+        c = self.campaigns[id].contrib_count
+        while i < c:
+            send(self.campaigns[id].contribs[i].sender, self.campaigns[id].contribs[i].value)
+            i += 1
+        self.clear(id)
+        return(2)
+
+# Progress report [2, id]
+def progress_report(id):
+    return(self.campaigns[id].contrib_total)
+
+# Clearing function for internal use
+def clear(self, id):
+    if self == msg.sender:
+        self.campaigns[id].recipient = 0
+        self.campaigns[id].goal = 0
+        self.campaigns[id].deadline = 0
+        c = self.campaigns[id].contrib_count
+        self.campaigns[id].contrib_count = 0
+        self.campaigns[id].contrib_total = 0
+        i = 0
+        while i < c:
+            self.campaigns[id].contribs[i].sender = 0
+            self.campaigns[id].contribs[i].value = 0
+            i += 1
+"""
+
+
+def test_crowdfund():
+    s = tester.state()
+    c = s.contract(crowdfund_code)
+    s.send(tester.k0, c, 0, funid=0, abi=[100, 45, 100000, 2])
+    s.send(tester.k0, c, 0, funid=0, abi=[200, 48, 100000, 2])
+    s.send(tester.k1, c, 1, funid=1, abi=[100])
+    assert [1] == s.send(tester.k1, c, 2, funid=2, abi=[100])
+    s.send(tester.k2, c, 30000, funid=1, abi=[200])
+    s.send(tester.k3, c, 59049, funid=1, abi=[100])
+    assert [59050] == s.send(tester.k1, c, 2, funid=2, abi=[100])
+    s.send(tester.k4, c, 70001, funid=1, abi=[200])
+    assert 100001 == s.block.get_balance(utils.int_to_addr(48))
+    mida1 = s.block.get_balance(tester.a1)
+    mida3 = s.block.get_balance(tester.a3)
+    s.mine(5)
+    s.send(tester.k5, c, 1, funid=1, abi=[100])
+    assert mida1 + 1 == s.block.get_balance(tester.a1)
+    assert mida3 + 59049 == s.block.get_balance(tester.a3)
 
 
 # test_evm = None
