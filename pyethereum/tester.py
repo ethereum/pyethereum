@@ -90,17 +90,23 @@ class state():
             "output": o
         }
 
-    def mkspv(self, sender, to, value, data=[]):
+    def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(*data)
+        if funid is not None:
+            evmdata = serpent.encode_abi(funid, abi)
+        else:
+            evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
         return spv.mk_transaction_spv_proof(self.block, tx)
 
-    def verifyspv(self, sender, to, value, data=[], proof=[]):
+    def verifyspv(self, sender, to, value, data=[], funid=None, abi=None, proof=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        evmdata = serpent.encode_datalist(*data)
+        if funid is not None:
+            evmdata = serpent.encode_abi(funid, abi)
+        else:
+            evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
