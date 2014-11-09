@@ -267,15 +267,7 @@ class Peer(StoppableLoopThread):
             addresses.append([ip, port, pid])
         signals.peer_addresses_received.send(sender=Peer, addresses=addresses)
 
-### transactions
-
-    def send_GetTransactions(self):
-        logger.debug('asking for transactions')
-        self.send_packet(packeter.dump_GetTransactions())
-
-    def _recv_GetTransactions(self, data):
-        logger.debug('asked for transactions')
-        signals.gettransactions_received.send(sender=Peer, peer=self)
+# transactions
 
     def send_Transactions(self, transactions):
         self.send_packet(packeter.dump_Transactions(transactions))
@@ -301,10 +293,20 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetBlocks(block_hashes))
 
     def _recv_GetBlocks(self, block_hashes):
-        signals.get_blocks_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
+        signals.get_blocks_received.send(
+            sender=Peer, block_hashes=block_hashes, peer=self)
 
-###block hashes
+# new blocks
+    def send_NewBlock(self, block):
+        self.send_packet(packeter.dump_NewBlock(block))
 
+    def _recv_NewBlock(self, data):
+        total_difficulty = idec(data[0])
+        transient_block = blocks.TransientBlock(rlp.encode(data[1:]))
+        signals.new_block_received.send(
+            sender=Peer, peer=self, block=transient_block)
+
+# block hashes
     def send_GetBlockHashes(self, block_hash, max_blocks):
         self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
 
