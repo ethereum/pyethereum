@@ -9,7 +9,7 @@ from dispatch import receiver
 from stoppable import StoppableLoopThread
 import rlp
 import signals
-import blocks
+import bloom
 from peer import Peer
 
 
@@ -203,6 +203,19 @@ class PeerManager(StoppableLoopThread):
 peer_manager = PeerManager()
 
 
+class SentFilter(object):
+
+    "filters data that should only be sent once"
+    bloom = bloom.bloom_insert(0, '')
+
+    def add(self, data, peer):
+        "returns True if data was previously not added for peer"
+        k = '%s%s' % (data, id(peer))
+        b = self.bloom
+        self.bloom = bloom.bloom_insert(b, k)
+        return b == self.bloom
+
+
 @receiver(signals.config_ready)
 def config_peermanager(sender, config, **kwargs):
     peer_manager.configure(config)
@@ -214,9 +227,11 @@ def connection_accepted_handler(sender, connection, ip, port, **kwargs):
 
 
 @receiver(signals.broadcast_new_block)
-def send_blocks_handler(sender, block, **kwargs):
+def send_new_block_handler(sender, block, **kwargs):
     for peer in peer_manager.connected_ethereum_peers:
-        peer.send_Blocks([block])
+        peer.send_NewBlock(block)
+
+sent_peers_filter = SentFilter()
 
 
 @receiver(signals.getpeers_received)
@@ -225,9 +240,12 @@ def getaddress_received_handler(sender, peer, **kwargs):
         peers = peer_manager.get_known_peer_addresses()
         assert is_valid_ip(peer_manager.local_ip)
         peers.add((peer_manager.local_ip,
-                  peer_manager.local_port,
-                  peer_manager.local_node_id))
-    peer.send_Peers(peers)
+                   peer_manager.local_port,
+                   peer_manager.local_node_id))
+        peers = [p for p in peers if sent_peers_filter.add(repr(p), peer)]
+        if len(peers):
+            logger.debug('%r returning %d peers', peer, len(peers))
+            peer.send_Peers(peers)
 
 
 @receiver(signals.peer_disconnect_requested)
@@ -249,11 +267,15 @@ def peer_addresses_received_handler(sender, addresses, **kwargs):
     peer_manager.save_peers()
 
 
+txfilter = SentFilter()
+
+
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]
     for peer in peer_manager.connected_ethereum_peers:
-        peer.send_Transactions(transactions)
+        peer.send_Transactions([tx for tx in transactions
+                                if txfilter.add(tx.hex_serialize(), peer)])
 
 
 @receiver(signals.peer_handshake_success)

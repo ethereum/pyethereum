@@ -10,6 +10,7 @@ import utils
 import rlp
 import blocks
 import processblock
+import peermanager
 from transactions import Transaction
 from miner import Miner
 from synchronizer import Synchronizer
@@ -461,15 +462,19 @@ def peer_handshake(sender, peer, **kwargs):
     # reply with status if not yet sent
     if peer.has_ethereum_capabilities() and not peer.status_sent:
         logger.debug("%r handshake, sending status", peer)
-        peer.send_Status(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+        peer.send_Status(
+            chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+    else:
+        logger.debug("%r handshake, but peer has no 'eth' capablities", peer)
 
 
 @receiver(signals.remote_transactions_received)
-def remote_transactions_received_handler(sender, transactions, **kwargs):
+def remote_transactions_received_handler(sender, transactions, peer, **kwargs):
     "receives rlp.decoded serialized"
     txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
     logger.debug('remote_transactions_received: %r', txl)
     for tx in txl:
+        peermanager.txfilter.add(tx, peer)  # FIXME
         chain_manager.add_transaction(tx)
 
 
