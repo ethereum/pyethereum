@@ -25,36 +25,54 @@ def load_packet(packet):
 
 
 class Packeter(object):
+
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
     https://github.com/ethereum/cpp-ethereum/wiki/%C3%90%CE%9EVP2P-Networking
 
     """
-    NETWORK_PROTOCOL_VERSION = 0
-    ETHEREUM_PROTOCOL_VERSION = 36  # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
+    NETWORK_PROTOCOL_VERSION = 2
+    # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
+    ETHEREUM_PROTOCOL_VERSION = 38
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
-    #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
+    # the node s Unique Identifier and is the 512-bit hash that serves to
+    # identify the node.
     NODE_ID = sha3('')  # set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
-    CAPABILITIES = ['eth']  # + ['shh']  ethereum protocol  whisper protocol
 
-    cmd_map = dict(((0x00, 'Hello'),
-                   (0x01, 'Disconnect'),
-                   (0x02, 'Ping'),
-                   (0x03, 'Pong'),
-                   (0x04, 'GetPeers'),
-                   (0x05, 'Peers'),
-                   (0x10, 'Status'),
-                   (0x11, 'GetTransactions'),
-                   (0x12, 'Transactions'),
-                   (0x13, 'GetBlockHashes'),
-                   (0x14, 'BlockHashes'),
-                   (0x15, 'GetBlocks'),
-                   (0x16, 'Blocks'),
-                   ))
+    p2p_cmd_map = dict((
+        (0x00, 'Hello'),
+        (0x01, 'Disconnect'),
+        (0x02, 'Ping'),
+        (0x03, 'Pong'),
+        (0x04, 'GetPeers'),
+        (0x05, 'Peers')
+    ))
+
+    eth_cmd_map = dict((
+        (0x00, 'Status'),
+        (0x02, 'Transactions'),
+        (0x03, 'GetBlockHashes'),
+        (0x04, 'BlockHashes'),
+        (0x05, 'GetBlocks'),
+        (0x06, 'Blocks'),
+        (0x07, 'NewBlock')
+    ))
+
+    # FAKE ADAPTIVE MESSAGE IDs (eth,eth)
+    cmd_map = dict(p2p_cmd_map)
+    offset = 11 + max(p2p_cmd_map.keys())
+    for _id, name in eth_cmd_map.items():
+        cmd_map[offset + _id] = name
+
     cmd_map_by_name = dict((v, k) for k, v in cmd_map.items())
+
+    # for now we only have eth capabilities.
+    # if we add, shh we also need to add Adaptive Message IDs
+    # + ['shh', 2]  ethereum protocol  whisper protocol
+    CAPABILITIES = [('eth', ETHEREUM_PROTOCOL_VERSION)]
 
     disconnect_reasons_map = dict((
         ('Disconnect requested', 0x00),
@@ -66,6 +84,7 @@ class Packeter(object):
         ('Wrong genesis block', 0x06),
         ('Incompatible network protocols', 0x07),
         ('Client quitting', 0x08)))
+
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
@@ -199,7 +218,6 @@ class Packeter(object):
             ip = ''.join(chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)
-
 
     def dump_Status(self, total_difficulty, head_hash, genesis_hash):
         """
