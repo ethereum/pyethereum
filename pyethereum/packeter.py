@@ -248,6 +248,19 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Blocks']] + blocks_as_lists
         return self.dump_packet(data)
 
+    def dump_NewBlock(self, block):
+        """
+        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty] 
+        Specify a single block that the peer should know about. 
+        The composite item in the list (following the message ID) is a block in 
+        the format described in the main Ethereum specification.
+
+        totalDifficulty is the total difficulty of the block (aka score).
+        """
+        total_difficulty = block.total_difficulty.chain_diffculty()
+        lst_block = rlp.decode(block.serialize())
+        data = [self.cmd_map_by_name['NewBlock'], total_difficulty, lst_block]
+        return self.dump_packet(data)
 
     def dump_GetBlockHashes(self, block_hash, max_blocks):
         """

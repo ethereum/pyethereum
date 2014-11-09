@@ -480,11 +480,10 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
     chain_manager.add_transaction(transaction)
 
 
-@receiver(signals.gettransactions_received)
-def gettransactions_received_handler(sender, peer, **kwargs):
-    transactions = chain_manager.get_transactions()
-    transactions = [rlp.decode(x.serialize()) for x in transactions]
-    peer.send_Transactions(transactions)
+@receiver(signals.new_block_received)
+def new_block_received_handler(sender, block, peer, **kwargs):
+    logger.debug("recv new remote block: %r", block.number)
+    chain_manager.receive_chain([block], peer)
 
 
 @receiver(signals.remote_blocks_received)
