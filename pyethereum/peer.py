@@ -162,6 +162,7 @@ class Peer(StoppableLoopThread):
 
         self.hello_received = True
         self.client_version = client_version
+        self.capabilities = (x[0] for x in capabilities)
         self.node_id = node_id
         self.port = listen_port  # replace connection port with listen port
 
