@@ -445,16 +445,20 @@ def handle_get_blocks(sender, block_hashes, peer, **kwargs):
 def config_chainmanager(sender, config, **kwargs):
     chain_manager.configure(config)
 
+
 @receiver(signals.peer_status_received)
 def peer_status_received(sender, peer, **kwargs):
     logger.debug("%r received status", peer)
     # request chain
     with peer.lock:
-        chain_manager.synchronizer.synchronize_status(peer, peer.status_head_hash, peer.status_total_difficulty)
-    # request transactions
+        chain_manager.synchronizer.synchronize_status(
+            peer, peer.status_head_hash, peer.status_total_difficulty)
+    # send transactions
     with peer.lock:
-        logger.debug("%r asking for transactions", peer)
-        peer.send_GetTransactions()
+        logger.debug("%r sending transactions", peer)
+        transactions = chain_manager.get_transactions()
+        transactions = [rlp.decode(x.serialize()) for x in transactions]
+        peer.send_Transactions(transactions)
 
 
 @receiver(signals.peer_handshake_success)
