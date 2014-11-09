@@ -100,7 +100,8 @@ class PeerManager(StoppableLoopThread):
     def _create_peer_sock(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(CONNECT_SOCKET_TIMEOUT)  # relaxed timeout for connecting
+        # relaxed timeout for connecting
+        sock.settimeout(CONNECT_SOCKET_TIMEOUT)
         return sock
 
     def connect_peer(self, host, port):

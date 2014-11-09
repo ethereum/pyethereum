@@ -25,8 +25,8 @@ rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 NUM_BLOCKS_PER_REQUEST = 256  # MAX_GET_CHAIN_REQUEST_BLOCKS
 
 
-
 class Index(object):
+
     """"
     Collection of indexes
 
@@ -38,6 +38,7 @@ class Index(object):
         - optional to resolve txhash to block:tx
 
     """
+
     def __init__(self, db, index_transactions=True):
         self.db = db
         self._index_transactions = index_transactions
@@ -47,9 +48,7 @@ class Index(object):
         if self._index_transactions:
             self._add_transactions(blk)
 
-
     # block by number #########
-
     def _block_by_number_key(self, number):
         return 'blocknumber:%d' % number
 
@@ -71,9 +70,7 @@ class Index(object):
         "returns block hash"
         return self.db.get(self._block_by_number_key(number))
 
-
     # transactions #############
-
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i in range(blk.transaction_count):
@@ -242,7 +239,7 @@ class ChainManager(StoppableLoopThread):
 
             for t_block in transient_blocks:  # oldest to newest
                 logger.debug('Deserializing %r', t_block)
-                #logger.debug(t_block.rlpdata.encode('hex'))
+                # logger.debug(t_block.rlpdata.encode('hex'))
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
@@ -277,7 +274,8 @@ class ChainManager(StoppableLoopThread):
                     logger.debug('Known %r', block)
                 else:
                     assert block.has_parent()
-                    forward = len(transient_blocks)==1 # assume single block is newly mined block
+                    # assume single block is newly mined block
+                    forward = len(transient_blocks) == 1
                     success = self.add_block(block, forward=forward)
                     if success:
                         logger.debug('Added %r', block)
@@ -338,7 +336,6 @@ class ChainManager(StoppableLoopThread):
         self.commit()  # batch commits all changes that came with the new block
 
         return True
-
 
     def get_children(self, block):
         return [self.get(c) for c in self.index.get_children(block.hash)]
@@ -426,6 +423,7 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
     logger.debug("sending: found: %d block_hashes", len(found))
     with peer.lock:
         peer.send_BlockHashes(found)
+
 
 @receiver(signals.get_blocks_received)
 def handle_get_blocks(sender, block_hashes, peer, **kwargs):
