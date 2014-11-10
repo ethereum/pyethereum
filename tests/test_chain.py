@@ -198,6 +198,14 @@ def test_genesis_initial_alloc(genesis_fixture):
         assert genesis.get_balance(k) == v
 
 def test_genesis_hash(genesis_fixture):
+    """
+    py current:     7e2c3861f556686d7bc3ce4e93fa0011020868dc769838aca66bcc82010a2c60
+    fixtures 15.10.:f68067286ddb7245c2203b18135456de1fc4ed6a24a2d9014195faa7900025bf
+    py poc6:        08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
+    fixtures 19.9,: 08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
+    """
+
+
     set_db()
     genesis = blocks.genesis()
     assert genesis.hex_hash() == genesis_fixture['genesis_hash']
