@@ -39,11 +39,9 @@ def vm_tests_fixtures():
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
     filenames = os.listdir(os.path.join('fixtures', 'VMTests'))
     files = [os.path.join('fixtures', 'VMTests', f) for f in filenames]
-    filenames2 = os.listdir(os.path.join('fixtures', 'StateTests'))
-    files2 = [os.path.join('fixtures', 'StateTests', f) for f in filenames2]
     vm_fixtures = {}
     try:
-        for f, fn in zip(files + files2[:0], filenames + filenames2[:0]):
+        for f, fn in zip(files, filenames):
             if f[-5:] == '.json':
                 vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
     except IOError, e:

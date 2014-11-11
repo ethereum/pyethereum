@@ -236,7 +236,9 @@ def apply_transaction(block, tx):
     else:
         pblogger.log('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
-        gas_used -= min(block.refunds, gas_used // 2)
+        if block.refunds > 0:
+            print 'Refunding: %r gas' % min(block.refunds, gas_used // 2)
+            gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
             block.coinbase, tx.sender, tx.gasprice * gas_remained)
@@ -342,7 +344,7 @@ def apply_msg_send(block, tx, msg):
         o = block.transfer_value(msg.sender, msg.to, msg.value)
         if not o:
             return 1, msg.gas, []
-        return specials[msg.to](block, tx, msg)
+        return specials.specials[msg.to](block, tx, msg)
     else:
         return apply_msg(block, tx, msg, block.get_code(msg.to))
 

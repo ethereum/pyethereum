@@ -324,7 +324,8 @@ class Block(object):
         block.min_gas_price = kargs['min_gas_price']
 
         # checks
-        assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts_root, kargs['receipts_root'])
+        assert block.receipts.root_hash == kargs['receipts_root'], \
+            (block.receipts.root, kargs['receipts_root'], block.receipts.to_dict())
         assert block.prevhash == self.hash
 
         assert block.gas_used == kargs['gas_used']
