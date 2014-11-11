@@ -180,7 +180,7 @@ def is_key_value_type(node_type):
                          NODE_TYPE_EXTENSION]
 
 BLANK_NODE = ''
-BLANK_ROOT = utils.sha3('')
+BLANK_ROOT = utils.sha3rlp('')
 
 
 class Trie(object):
