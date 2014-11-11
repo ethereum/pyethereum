@@ -80,9 +80,9 @@ class state():
         o = serpent.decode_datalist(r)
         return map(lambda x: x-2**256 if x > 2**255 else x, o)
 
-    def profile(self, sender, to, value, data=[]):
+    def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used
-        o = self.send(sender, to, value, data)
+        o = self.send(sender, to, value, data, funid, abi)
         intrinsic_gas_used = pb.GTXDATA * len(self.last_tx.data) + pb.GTXCOST
         return {
             "time": time.time() - tm,
@@ -144,6 +144,9 @@ class state():
 
 def enable_logging():
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    pb.pblogger.log_apply_op = True
+    pb.pblogger.log_stack = True
+    pb.pblogger.log_op = True
 
 
 gas_limit = 100000

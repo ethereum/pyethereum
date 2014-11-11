@@ -47,7 +47,7 @@ GENESIS_INITIAL_ALLOC = \
 
 block_structure = [
     ["prevhash", "bin", "\00" * 32],
-    ["uncles_hash", "bin", utils.sha3('')],
+    ["uncles_hash", "bin", utils.sha3rlp([])],
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],

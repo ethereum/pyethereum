@@ -331,7 +331,7 @@ def apply_msg(block, tx, msg, code):
 
             if o == OUT_OF_GAS:
                 block.revert(snapshot)
-                return 0, compustate.gas, []
+                return 0, 0, []
             else:
                 return 1, compustate.gas, o
 
@@ -646,20 +646,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk.append(pushval)
     elif op[:3] == 'DUP':
         depth = int(op[3:])
-        # DUP POP POP Debug hint
-        is_debug = 1
-        for i in range(depth):
-            if compustate.pc + i < len(processed_code) and \
-                    processed_code[compustate.pc + i][0] != 'POP':
-                is_debug = 0
-                break
-        if is_debug:
-            stackargs = [stk.pop() for i in range(depth)]
-            print(' '.join(map(repr, stackargs)))
-            stk.extend(reversed(stackargs))
-            stk.append(stackargs[-1])
-        else:
-            stk.append(stk[-depth])
+        stk.append(stk[-depth])
     elif op[:4] == 'SWAP':
         depth = int(op[4:])
         temp = stk[-depth-1]
@@ -673,6 +660,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
             return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
         block.logs.append(Log(msg.to, topics, data))
+        pblogger.log('LOG', to=msg.to, topics=topics, data=data)
+        print topics, data
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):
