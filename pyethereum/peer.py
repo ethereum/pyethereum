@@ -158,7 +158,7 @@ class Peer(StoppableLoopThread):
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
-                     self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
+                     self, network_protocol_version, node_id.encode('hex')[:8], client_version, capabilities)
 
         if network_protocol_version != packeter.NETWORK_PROTOCOL_VERSION:
             logger.debug('%r Incompatible network protocols, expected %r, received %r',

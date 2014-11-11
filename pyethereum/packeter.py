@@ -34,7 +34,7 @@ class Packeter(object):
     """
     NETWORK_PROTOCOL_VERSION = 2
     # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
-    ETHEREUM_PROTOCOL_VERSION = 38
+    ETHEREUM_PROTOCOL_VERSION = 39
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     # the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
