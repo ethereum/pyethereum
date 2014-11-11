@@ -53,6 +53,7 @@ class Packeter(object):
 
     eth_cmd_map = dict((
         (0x00, 'Status'),
+        (0x01, 'Transactions'), # FIXME!!!
         (0x02, 'Transactions'),
         (0x03, 'GetBlockHashes'),
         (0x04, 'BlockHashes'),
