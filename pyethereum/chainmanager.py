@@ -10,6 +10,7 @@ import utils
 import rlp
 import blocks
 import processblock
+import peermanager
 from transactions import Transaction
 from miner import Miner
 from synchronizer import Synchronizer
@@ -24,8 +25,8 @@ rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 NUM_BLOCKS_PER_REQUEST = 256  # MAX_GET_CHAIN_REQUEST_BLOCKS
 
 
-
 class Index(object):
+
     """"
     Collection of indexes
 
@@ -37,6 +38,7 @@ class Index(object):
         - optional to resolve txhash to block:tx
 
     """
+
     def __init__(self, db, index_transactions=True):
         self.db = db
         self._index_transactions = index_transactions
@@ -46,9 +48,7 @@ class Index(object):
         if self._index_transactions:
             self._add_transactions(blk)
 
-
     # block by number #########
-
     def _block_by_number_key(self, number):
         return 'blocknumber:%d' % number
 
@@ -70,9 +70,7 @@ class Index(object):
         "returns block hash"
         return self.db.get(self._block_by_number_key(number))
 
-
     # transactions #############
-
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i in range(blk.transaction_count):
@@ -241,7 +239,7 @@ class ChainManager(StoppableLoopThread):
 
             for t_block in transient_blocks:  # oldest to newest
                 logger.debug('Deserializing %r', t_block)
-                #logger.debug(t_block.rlpdata.encode('hex'))
+                # logger.debug(t_block.rlpdata.encode('hex'))
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
@@ -276,7 +274,8 @@ class ChainManager(StoppableLoopThread):
                     logger.debug('Known %r', block)
                 else:
                     assert block.has_parent()
-                    forward = len(transient_blocks)==1 # assume single block is newly mined block
+                    # assume single block is newly mined block
+                    forward = len(transient_blocks) == 1
                     success = self.add_block(block, forward=forward)
                     if success:
                         logger.debug('Added %r', block)
@@ -337,7 +336,6 @@ class ChainManager(StoppableLoopThread):
         self.commit()  # batch commits all changes that came with the new block
 
         return True
-
 
     def get_children(self, block):
         return [self.get(c) for c in self.index.get_children(block.hash)]
@@ -426,6 +424,7 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
     with peer.lock:
         peer.send_BlockHashes(found)
 
+
 @receiver(signals.get_blocks_received)
 def handle_get_blocks(sender, block_hashes, peer, **kwargs):
     logger.debug("handle_get_blocks: %d", len(block_hashes))
@@ -444,16 +443,20 @@ def handle_get_blocks(sender, block_hashes, peer, **kwargs):
 def config_chainmanager(sender, config, **kwargs):
     chain_manager.configure(config)
 
+
 @receiver(signals.peer_status_received)
 def peer_status_received(sender, peer, **kwargs):
     logger.debug("%r received status", peer)
     # request chain
     with peer.lock:
-        chain_manager.synchronizer.synchronize_status(peer, peer.status_head_hash, peer.status_total_difficulty)
-    # request transactions
+        chain_manager.synchronizer.synchronize_status(
+            peer, peer.status_head_hash, peer.status_total_difficulty)
+    # send transactions
     with peer.lock:
-        logger.debug("%r asking for transactions", peer)
-        peer.send_GetTransactions()
+        logger.debug("%r sending transactions", peer)
+        transactions = chain_manager.get_transactions()
+        transactions = [rlp.decode(x.serialize()) for x in transactions]
+        peer.send_Transactions(transactions)
 
 
 @receiver(signals.peer_handshake_success)
@@ -461,15 +464,19 @@ def peer_handshake(sender, peer, **kwargs):
     # reply with status if not yet sent
     if peer.has_ethereum_capabilities() and not peer.status_sent:
         logger.debug("%r handshake, sending status", peer)
-        peer.send_Status(chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+        peer.send_Status(
+            chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+    else:
+        logger.debug("%r handshake, but peer has no 'eth' capablities", peer)
 
 
 @receiver(signals.remote_transactions_received)
-def remote_transactions_received_handler(sender, transactions, **kwargs):
+def remote_transactions_received_handler(sender, transactions, peer, **kwargs):
     "receives rlp.decoded serialized"
     txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
     logger.debug('remote_transactions_received: %r', txl)
     for tx in txl:
+        peermanager.txfilter.add(tx, peer)  # FIXME
         chain_manager.add_transaction(tx)
 
 
@@ -480,11 +487,10 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
     chain_manager.add_transaction(transaction)
 
 
-@receiver(signals.gettransactions_received)
-def gettransactions_received_handler(sender, peer, **kwargs):
-    transactions = chain_manager.get_transactions()
-    transactions = [rlp.decode(x.serialize()) for x in transactions]
-    peer.send_Transactions(transactions)
+@receiver(signals.new_block_received)
+def new_block_received_handler(sender, block, peer, **kwargs):
+    logger.debug("recv new remote block: %r", block.number)
+    chain_manager.receive_chain([block], peer)
 
 
 @receiver(signals.remote_blocks_received)

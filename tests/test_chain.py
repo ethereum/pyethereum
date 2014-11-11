@@ -36,7 +36,7 @@ def genesis_fixture():
     Read genesis block from fixtures.
     """
     genesis_fixture = None
-    with open('fixtures/genesishashestest.json', 'r') as f:
+    with open('fixtures/BasicTests/genesishashestest.json', 'r') as f:
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
     # FIXME: assert that link is uptodate
@@ -186,75 +186,29 @@ def test_genesis_db():
     assert blk == blk2
     assert blk != blk3
 
-@pytest.mark.xfail
 def test_genesis_state_root(genesis_fixture):
-    # https://ethereum.etherpad.mozilla.org/12
+    set_db()
+    genesis = blocks.genesis()
+    assert genesis.state_root.encode('hex') == genesis_fixture['genesis_state_root']
+
+def test_genesis_initial_alloc(genesis_fixture):
     set_db()
     genesis = blocks.genesis()
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
         assert genesis.get_balance(k) == v
-    assert genesis.state_root.encode(
-        'hex') == genesis_fixture['genesis_state_root']
 
-@pytest.mark.xfail
 def test_genesis_hash(genesis_fixture):
+    """
+    py current:     7e2c3861f556686d7bc3ce4e93fa0011020868dc769838aca66bcc82010a2c60
+    fixtures 15.10.:f68067286ddb7245c2203b18135456de1fc4ed6a24a2d9014195faa7900025bf
+    py poc6:        08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
+    fixtures 19.9,: 08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
+    """
+
+
     set_db()
     genesis = blocks.genesis()
-    """
-    YP: https://raw.githubusercontent.com/ethereum/latexpaper/master/Paper.tex
-    0256 , SHA3RLP(), 0160 , stateRoot, 0256 , 2**22 , 0, 0, 1000000, 0, 0, (),
-    SHA3(42), (), ()
-
-    Where 0256 refers to the parent and state and transaction root hashes,
-    a 256-bit hash which is all zeroes;
-    0160 refers to the coinbase address,
-    a 160-bit hash which is all zeroes;
-    2**22 refers to the difficulty;
-    0 refers to the timestamp (the Unix epoch);
-    () refers to the extradata and the sequences of both uncles and
-    transactions, all empty.
-    SHA3(42) refers to the SHA3 hash of a byte array of length one whose first
-    and only byte is of value 42.
-    SHA3RLP() values refer to the hashes of the transaction and uncle lists
-    in RLP
-    both empty.
-    The proof-of-concept series include a development premine, making the state
-    root hash some value stateRoot. The latest documentation should be
-    consulted for the value of the state root.
-    """
-
-    h256 = '\00' * 32
-    sr = genesis_fixture['genesis_state_root'].decode('hex')
-    genesis_block_defaults = [
-        ["prevhash", "bin", h256],  # h256()
-        ["uncles_hash", "bin", utils.sha3(rlp.encode([]))],  # sha3EmptyList
-        ["coinbase", "addr", "0" * 40],  # h160()
-        ["state_root", "trie_root", sr],  # stateRoot
-        ["tx_list_root", "trie_root", trie.BLANK_ROOT],  # h256()
-        ["difficulty", "int", 2 ** 17],  # c_genesisDifficulty
-        ["number", "int", 0],  # 0
-        ["min_gas_price", "int", 0],  # 0
-        ["gas_limit", "int", 10 ** 6],  # 10**6 for genesis
-        ["gas_used", "int", 0],  # 0
-        ["timestamp", "int", 0],  # 0
-        ["extra_data", "bin", ""],  # ""
-        ["nonce", "bin", utils.sha3(chr(42))],  # sha3(bytes(1, 42));
-    ]
-
-    cpp_genesis_block = rlp.decode(
-        genesis_fixture['genesis_rlp_hex'].decode('hex'))
-    cpp_genesis_header = cpp_genesis_block[0]
-
-    for i, (name, typ, genesis_default) in enumerate(genesis_block_defaults):
-        assert utils.decoders[typ](cpp_genesis_header[i]) == genesis_default
-        assert getattr(genesis, name) == genesis_default
-
     assert genesis.hex_hash() == genesis_fixture['genesis_hash']
-
-    assert genesis.hex_hash() == utils.sha3(
-        genesis_fixture['genesis_rlp_hex'].decode('hex')
-    ).encode('hex')
-
 
 def test_mine_block():
     k, v, k2, v2 = accounts()

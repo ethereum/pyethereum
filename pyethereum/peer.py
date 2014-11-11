@@ -12,15 +12,22 @@ import rlp
 import blocks
 
 
-MAX_GET_CHAIN_ACCEPT_HASHES = 2048  # Maximum number of send hashes GetChain will accept
-MAX_GET_CHAIN_SEND_HASHES = 2048  # Maximum number of hashes GetChain will ever send
-MAX_GET_CHAIN_ASK_BLOCKS = 512  # Maximum number of blocks GetChain will ever ask for
-MAX_GET_CHAIN_REQUEST_BLOCKS = 512  # Maximum number of requested blocks GetChain will accept
-MAX_BLOCKS_SEND = MAX_GET_CHAIN_REQUEST_BLOCKS  # Maximum number of blocks Blocks will ever send
-MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND  # Maximum number of blocks Blocks will ever accept
+# Maximum number of send hashes GetChain will accept
+MAX_GET_CHAIN_ACCEPT_HASHES = 2048
+# Maximum number of hashes GetChain will ever send
+MAX_GET_CHAIN_SEND_HASHES = 2048
+# Maximum number of blocks GetChain will ever ask for
+MAX_GET_CHAIN_ASK_BLOCKS = 512
+# Maximum number of requested blocks GetChain will accept
+MAX_GET_CHAIN_REQUEST_BLOCKS = 512
+# Maximum number of blocks Blocks will ever send
+MAX_BLOCKS_SEND = MAX_GET_CHAIN_REQUEST_BLOCKS
+# Maximum number of blocks Blocks will ever accept
+MAX_BLOCKS_ACCEPTED = MAX_BLOCKS_SEND
 
 
 logger = logging.getLogger(__name__)
+
 
 class Peer(StoppableLoopThread):
 
@@ -48,7 +55,6 @@ class Peer(StoppableLoopThread):
 
         self.recv_buffer = ''
         self.response_queue = Queue.Queue()
-
 
     def __repr__(self):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
@@ -101,10 +107,10 @@ class Peer(StoppableLoopThread):
         processed_length = 0
         while True:
             try:
-                #print 'receiving'
+                # print 'receiving'
                 self.recv_buffer += self.connection().recv(2048)
             except socket.error:  # Timeout
-                #print 'timeout'
+                # print 'timeout'
                 break
             # check if we have a complete packet
             length = len(self.recv_buffer)
@@ -114,7 +120,6 @@ class Peer(StoppableLoopThread):
                 self._process_recv_buffer()
 
         return processed_length
-
 
     def _process_recv_buffer(self):
         try:
@@ -133,9 +138,7 @@ class Peer(StoppableLoopThread):
             return
         getattr(self, func_name)(data)
 
-
     # Handshake
-
     def has_ethereum_capabilities(self):
         return 'eth' in self.capabilities
 
@@ -150,7 +153,7 @@ class Peer(StoppableLoopThread):
         try:
             data = [_decode[i](x) for i, x in enumerate(data)]
             network_protocol_version, client_version = data[0], data[1]
-            self.capabilities, listen_port, node_id = data[2], data[3], data[4]
+            capabilities, listen_port, node_id = data[2], data[3], data[4]
         except IndexError:
             return self.send_Disconnect(reason='Incompatible network protocols')
 
@@ -158,10 +161,14 @@ class Peer(StoppableLoopThread):
                      self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
 
         if network_protocol_version != packeter.NETWORK_PROTOCOL_VERSION:
+            logger.debug('%r Incompatible network protocols, expected %r, received %r',
+                         self, packeter.NETWORK_PROTOCOL_VERSION, network_protocol_version)
+
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         self.hello_received = True
         self.client_version = client_version
+        self.capabilities = (x[0] for x in capabilities)
         self.node_id = node_id
         self.port = listen_port  # replace connection port with listen port
 
@@ -169,7 +176,7 @@ class Peer(StoppableLoopThread):
             self.send_Hello()
         signals.peer_handshake_success.send(sender=Peer, peer=self)
 
-### Status
+# Status
 
     def send_Status(self, head_hash, head_total_difficulty, genesis_hash):
         logger.debug('sending status TD:%d HEAD:%r GENESIS:%r',
@@ -205,7 +212,7 @@ class Peer(StoppableLoopThread):
         self.status_total_difficulty = total_difficulty
         signals.peer_status_received.send(sender=Peer, peer=self)
 
-### ping pong
+# ping pong
 
     def send_Ping(self):
         self.send_packet(packeter.dump_Ping())
@@ -220,7 +227,7 @@ class Peer(StoppableLoopThread):
     def _recv_Pong(self, data):
         pass
 
-### disconnects
+# disconnects
     reasons_to_forget = ('Bad protocol',
                          'Incompatible network protocols',
                          'Wrong genesis block')
@@ -243,7 +250,7 @@ class Peer(StoppableLoopThread):
             logger.info('%r received disconnect: w/o reason', self)
         signals.peer_disconnect_requested.send(sender=Peer, peer=self, forget=forget)
 
-### peers
+# peers
 
     def send_GetPeers(self):
         self.send_packet(packeter.dump_GetPeers())
@@ -266,24 +273,16 @@ class Peer(StoppableLoopThread):
             addresses.append([ip, port, pid])
         signals.peer_addresses_received.send(sender=Peer, addresses=addresses)
 
-### transactions
-
-    def send_GetTransactions(self):
-        logger.debug('asking for transactions')
-        self.send_packet(packeter.dump_GetTransactions())
-
-    def _recv_GetTransactions(self, data):
-        logger.debug('asked for transactions')
-        signals.gettransactions_received.send(sender=Peer, peer=self)
+# transactions
 
     def send_Transactions(self, transactions):
         self.send_packet(packeter.dump_Transactions(transactions))
 
     def _recv_Transactions(self, data):
         logger.debug('received transactions #%d', len(data))
-        signals.remote_transactions_received.send(sender=Peer, transactions=data)
+        signals.remote_transactions_received.send(sender=Peer, transactions=data, peer=self)
 
-### blocks
+# blocks
 
     def send_Blocks(self, blocks):
         assert len(blocks) <= MAX_BLOCKS_SEND
@@ -300,10 +299,20 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_GetBlocks(block_hashes))
 
     def _recv_GetBlocks(self, block_hashes):
-        signals.get_blocks_received.send(sender=Peer, block_hashes=block_hashes, peer=self)
+        signals.get_blocks_received.send(
+            sender=Peer, block_hashes=block_hashes, peer=self)
 
-###block hashes
+# new blocks
+    def send_NewBlock(self, block):
+        self.send_packet(packeter.dump_NewBlock(block))
 
+    def _recv_NewBlock(self, data):
+        total_difficulty = idec(data[0])
+        transient_block = blocks.TransientBlock(rlp.encode(data[1:]))
+        signals.new_block_received.send(
+            sender=Peer, peer=self, block=transient_block)
+
+# block hashes
     def send_GetBlockHashes(self, block_hash, max_blocks):
         self.send_packet(packeter.dump_GetBlockHashes(block_hash, max_blocks))
 

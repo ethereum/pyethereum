@@ -25,36 +25,54 @@ def load_packet(packet):
 
 
 class Packeter(object):
+
     """
     Translates between the network and the local data
     https://github.com/ethereum/wiki/wiki/%5BEnglish%5D-Wire-Protocol
     https://github.com/ethereum/cpp-ethereum/wiki/%C3%90%CE%9EVP2P-Networking
 
     """
-    NETWORK_PROTOCOL_VERSION = 0
-    ETHEREUM_PROTOCOL_VERSION = 36  # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
+    NETWORK_PROTOCOL_VERSION = 2
+    # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
+    ETHEREUM_PROTOCOL_VERSION = 38
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
-    #the node s Unique Identifier and is the 512-bit hash that serves to identify the node.
+    # the node s Unique Identifier and is the 512-bit hash that serves to
+    # identify the node.
     NODE_ID = sha3('')  # set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
-    CAPABILITIES = ['eth']  # + ['shh']  ethereum protocol  whisper protocol
 
-    cmd_map = dict(((0x00, 'Hello'),
-                   (0x01, 'Disconnect'),
-                   (0x02, 'Ping'),
-                   (0x03, 'Pong'),
-                   (0x04, 'GetPeers'),
-                   (0x05, 'Peers'),
-                   (0x10, 'Status'),
-                   (0x11, 'GetTransactions'),
-                   (0x12, 'Transactions'),
-                   (0x13, 'GetBlockHashes'),
-                   (0x14, 'BlockHashes'),
-                   (0x15, 'GetBlocks'),
-                   (0x16, 'Blocks'),
-                   ))
+    p2p_cmd_map = dict((
+        (0x00, 'Hello'),
+        (0x01, 'Disconnect'),
+        (0x02, 'Ping'),
+        (0x03, 'Pong'),
+        (0x04, 'GetPeers'),
+        (0x05, 'Peers')
+    ))
+
+    eth_cmd_map = dict((
+        (0x00, 'Status'),
+        (0x02, 'Transactions'),
+        (0x03, 'GetBlockHashes'),
+        (0x04, 'BlockHashes'),
+        (0x05, 'GetBlocks'),
+        (0x06, 'Blocks'),
+        (0x07, 'NewBlock')
+    ))
+
+    # FAKE ADAPTIVE MESSAGE IDs (eth,eth)
+    cmd_map = dict(p2p_cmd_map)
+    offset = 11 + max(p2p_cmd_map.keys())
+    for _id, name in eth_cmd_map.items():
+        cmd_map[offset + _id] = name
+
     cmd_map_by_name = dict((v, k) for k, v in cmd_map.items())
+
+    # for now we only have eth capabilities.
+    # if we add, shh we also need to add Adaptive Message IDs
+    # + ['shh', 2]  ethereum protocol  whisper protocol
+    CAPABILITIES = [('eth', ETHEREUM_PROTOCOL_VERSION)]
 
     disconnect_reasons_map = dict((
         ('Disconnect requested', 0x00),
@@ -66,6 +84,7 @@ class Packeter(object):
         ('Wrong genesis block', 0x06),
         ('Incompatible network protocols', 0x07),
         ('Client quitting', 0x08)))
+
     disconnect_reasons_map_by_id = \
         dict((v, k) for k, v in disconnect_reasons_map.items())
 
@@ -200,7 +219,6 @@ class Packeter(object):
             data.append([ip, port, pid])
         return self.dump_packet(data)
 
-
     def dump_Status(self, total_difficulty, head_hash, genesis_hash):
         """
         0x10 Status: [0x10: P, protocolVersion: P, networkID: P, totalDifficulty: P, latestHash: B_32, genesisHash: B_32]
@@ -220,20 +238,8 @@ class Packeter(object):
                 ]
         return self.dump_packet(data)
 
-
     def dump_Transactions(self, transactions):
         data = [self.cmd_map_by_name['Transactions']] + transactions
-        return self.dump_packet(data)
-
-    def dump_GetTransactions(self):
-        """
-        [0x12, [nonce, receiving_address, value, ... ], ... ]
-        Specify (a) transaction(s) that the peer should make sure is included
-        on its transaction queue. The items in the list (following the first
-        item 0x12) are transactions in the format described in the main
-        Ethereum specification.
-        """
-        data = [self.cmd_map_by_name['GetTransactions']]
         return self.dump_packet(data)
 
     def dump_Blocks(self, blocks):
@@ -242,6 +248,19 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Blocks']] + blocks_as_lists
         return self.dump_packet(data)
 
+    def dump_NewBlock(self, block):
+        """
+        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty] 
+        Specify a single block that the peer should know about. 
+        The composite item in the list (following the message ID) is a block in 
+        the format described in the main Ethereum specification.
+
+        totalDifficulty is the total difficulty of the block (aka score).
+        """
+        total_difficulty = block.total_difficulty.chain_diffculty()
+        lst_block = rlp.decode(block.serialize())
+        data = [self.cmd_map_by_name['NewBlock'], total_difficulty, lst_block]
+        return self.dump_packet(data)
 
     def dump_GetBlockHashes(self, block_hash, max_blocks):
         """

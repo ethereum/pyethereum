@@ -15,7 +15,7 @@ def check_testdata(data_keys, expected_keys):
 
 def load_tests():
     try:
-        fixture = json.load(open('fixtures/trietestnextprev.json', 'r'))
+        fixture = json.load(open('fixtures/TrieTests/trietestnextprev.json', 'r'))
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
                       "Make sure you did 'git submodule init'")
