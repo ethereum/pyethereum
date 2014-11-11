@@ -21,8 +21,6 @@ def genesis_fixture():
     # FIXME: assert that link is uptodate
     for k in ('genesis_rlp_hex', 'genesis_state_root', 'genesis_hash', 'initial_alloc'):
         assert k in genesis_fixture
-    assert utils.sha3(genesis_fixture['genesis_rlp_hex'].decode('hex')).encode('hex') ==\
-        genesis_fixture['genesis_hash']
     return genesis_fixture
 
 
@@ -77,3 +75,4 @@ if __name__ == '__main__':
     for i in range(3):
         assert py_genesis[i] == cpp_genesis[i]
 
+    print 'state_root', py_header[blocks.block_structure_rev['state_root'][0]].encode('hex')
