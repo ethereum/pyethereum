@@ -324,11 +324,9 @@ class Block(object):
         block.min_gas_price = kargs['min_gas_price']
 
         # checks
-        assert block.receipts.root_hash == kargs['receipts_root'], \
-            (block.receipts.root, kargs['receipts_root'], block.receipts.to_dict())
         assert block.prevhash == self.hash
 
-        assert block.gas_used == kargs['gas_used']
+        assert block.gas_used == kargs['gas_used'], (block.gas_used, kargs['gas_used'])
         assert block.gas_limit == kargs['gas_limit']
         assert block.timestamp == kargs['timestamp']
         assert block.difficulty == kargs['difficulty']
@@ -336,8 +334,10 @@ class Block(object):
         assert block.extra_data == kargs['extra_data']
         assert utils.sha3rlp(block.uncles) == kargs['uncles_hash']
 
-        assert block.tx_list_root == kargs['tx_list_root']
         assert block.state.root_hash == kargs['state_root'], (block.state.root_hash, kargs['state_root'])
+        assert block.tx_list_root == kargs['tx_list_root']
+        assert block.receipts.root_hash == kargs['receipts_root'], \
+            (block.receipts.root_hash, kargs['receipts_root'], block.receipts.to_dict())
 
         return block
 

@@ -343,8 +343,8 @@ def test_suicider():
 
 reverter_code = '''
 def entry():
-    call(self, 1, gas=1000)
-    call(self, 2, gas=1000)
+    self.non_recurse(gas=1000)
+    self.recurse(gas=1000)
 
 def non_recurse():
     send(7, 9)

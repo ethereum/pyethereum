@@ -306,7 +306,7 @@ def apply_msg(block, tx, msg, code):
         return 1, msg.gas, []
     snapshot = block.snapshot()
     compustate = Compustate(gas=msg.gas)
-    if msg.depth > 1024:
+    if msg.depth >= 1024:
         return 0, 0, []
     t, ops = time.time(), 0
     if code in code_cache:
@@ -314,9 +314,12 @@ def apply_msg(block, tx, msg, code):
     else:
         processed_code = preprocess_code(code)
         code_cache[code] = processed_code
-    if code == '':
-        block.logs.append(Log(msg.to, [utils.coerce_to_int(msg.sender) + 1], ''))
-        return 1, compustate.gas, []
+    #if block.get_code(msg.to) == '' and msg.to != CREATE_CONTRACT_ADDRESS and msg.value > 0:
+    #    topics = [utils.coerce_to_int(msg.sender) + 1]
+    #    data = ''  # utils.zpad(utils.encode_int(msg.value), 32)
+    #    block.logs.append(Log(msg.to, topics, data))
+    #    pblogger.log('LOG', to=msg.to, topics=topics, data=data)
+    #    return 1, compustate.gas, []
 
     # Main loop
     while 1:
@@ -615,6 +618,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
             gascost = GSTORAGEMOD if s1 else GSTORAGEKILL
         else:
             gascost = GSTORAGEADD if s1 else GSTORAGEMOD
+        print block.get_storage_data(msg.to, s0), s1, gascost
         if compustate.gas < gascost:
             return vm_exception('OUT OF GAS')
         compustate.gas -= max(gascost, 0)
