@@ -309,8 +309,8 @@ class Peer(StoppableLoopThread):
 
     def _recv_NewBlock(self, data):
         logger.debug('NewBlock: %r', rlp.encode(data).encode('hex'))
-        total_difficulty = idec(data[0])
-        transient_block = blocks.TransientBlock(rlp.encode(data[1:]))
+        total_difficulty = idec(data[1])
+        transient_block = blocks.TransientBlock(rlp.encode(data[0]))
         signals.new_block_received.send(
             sender=Peer, peer=self, block=transient_block)
 
