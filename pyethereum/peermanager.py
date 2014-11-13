@@ -14,7 +14,8 @@ from peer import Peer
 
 
 DEFAULT_SOCKET_TIMEOUT = 0.01
-CONNECT_SOCKET_TIMEOUT = 5.
+CONNECT_SOCKET_TIMEOUT = .5
+CHECK_PEERCOUNT_INTERVAL = 1.
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,7 @@ class PeerManager(StoppableLoopThread):
                         peer.send_GetPeers()
 
     def loop_body(self):
-        "check peer health every 10 seconds"
+        "check peer health every CHECK_PEERCOUNT_INTERVAL seconds"
         for peer in list(self.connected_peers):
             self._check_alive(peer)
         self._connect_peers()
@@ -181,9 +182,10 @@ class PeerManager(StoppableLoopThread):
         if len(self._known_peers) == 0:
             self.load_saved_peers()
 
-        for i in range(100):
+        SLEEP_TIME = 0.05
+        for i in range(int(CHECK_PEERCOUNT_INTERVAL/SLEEP_TIME)):
             if not self.stopped():
-                time.sleep(.1)
+                time.sleep(SLEEP_TIME)
 
     def _start_peer(self, connection, ip, port):
         peer = Peer(connection, ip, port)
