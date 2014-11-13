@@ -8,7 +8,7 @@ configure to connect to one peer, no mine
 
 """
 print('IMPORTED BLOCKFETCHERPATCH')
-fn = 'blocks.poc6.p32.hexdata'
+fn = 'blocks.poc7.p40.hexdata'
 
 
 import pyethereum.config
@@ -17,7 +17,7 @@ import tempfile
 def read_config(fn=None):
     print "Read config called"
     cfg = pyethereum.config.get_default_config()
-    cfg.set('network', 'num_peers', '2')  # set to 2 as, the bootsrapping server does not talk 'eth'
+    cfg.set('network', 'num_peers', '1')  # set to 2 as, the bootsrapping server does not talk 'eth'
     #cfg.set('network', 'remote_host', '77.101.50.246')
     cfg.set('misc', 'data_dir', tempfile.mktemp())
     cfg.set('misc', 'mining', '0')
