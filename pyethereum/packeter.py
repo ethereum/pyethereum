@@ -258,7 +258,7 @@ class Packeter(object):
 
         totalDifficulty is the total difficulty of the block (aka score).
         """
-        total_difficulty = block.total_difficulty.chain_diffculty()
+        total_difficulty = block.chain_difficulty()
         lst_block = rlp.decode(block.serialize())
         data = [self.cmd_map_by_name['NewBlock'], total_difficulty, lst_block]
         return self.dump_packet(data)
