@@ -41,7 +41,7 @@ class Peer(StoppableLoopThread):
         self.port = port
         self.client_version = ''
         self.node_id = ''
-        self.capabilities = []  # ['eth', 'shh']
+        self.capabilities = []  # [('eth',40) , ('shh',12)]
 
         self.hello_received = False
         self.hello_sent = False
@@ -140,7 +140,9 @@ class Peer(StoppableLoopThread):
 
     # Handshake
     def has_ethereum_capabilities(self):
-        return 'eth' in self.capabilities
+        for p, pv in self.capabilities:
+            if p == 'eth' and pv == packeter.ETHEREUM_PROTOCOL_VERSION:
+                return True
 
     def send_Hello(self):
         logger.debug('%r sending Hello', self)
@@ -157,9 +159,9 @@ class Peer(StoppableLoopThread):
         except IndexError:
             return self.send_Disconnect(reason='Incompatible network protocols')
 
-        capabilities = [(p,ord(v)) for p, v in capabilities]
+        self.capabilities = [(p,ord(v)) for p, v in capabilities]
         logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
-                     self, network_protocol_version, node_id.encode('hex')[:8], client_version, capabilities)
+                     self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
 
         if network_protocol_version != packeter.NETWORK_PROTOCOL_VERSION:
             logger.debug('%r Incompatible network protocols, expected %r, received %r',
@@ -169,7 +171,6 @@ class Peer(StoppableLoopThread):
 
         self.hello_received = True
         self.client_version = client_version
-        self.capabilities = (x[0] for x in capabilities)
         self.node_id = node_id
         self.port = listen_port  # replace connection port with listen port
 
