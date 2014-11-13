@@ -157,6 +157,7 @@ class Peer(StoppableLoopThread):
         except IndexError:
             return self.send_Disconnect(reason='Incompatible network protocols')
 
+        capabilities = [(p,ord(v)) for p, v in capabilities]
         logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
                      self, network_protocol_version, node_id.encode('hex')[:8], client_version, capabilities)
 
@@ -307,6 +308,7 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_NewBlock(block))
 
     def _recv_NewBlock(self, data):
+        logger.debug('NewBlock: %r', rlp.encode(data).encode('hex'))
         total_difficulty = idec(data[0])
         transient_block = blocks.TransientBlock(rlp.encode(data[1:]))
         signals.new_block_received.send(
