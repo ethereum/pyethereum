@@ -1,6 +1,6 @@
 import rlp
 from bitcoin import encode_pubkey
-from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
+from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import utils
 
 tx_structure = [
@@ -48,7 +48,7 @@ class Transaction(object):
         self.v, self.r, self.s = v, r, s
 
         # Determine sender
-        if self.r and self.s:
+        if self.r < N and self.s < P and self.v >= 27 and self.v <= 28:
             rawhash = utils.sha3(self.serialize(False))
             pub = encode_pubkey(
                 ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),

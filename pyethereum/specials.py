@@ -11,8 +11,7 @@ def proc_ecrecover(block, tx, msg):
     v = utils.big_endian_to_int(indata[32:64])
     r = utils.big_endian_to_int(indata[64:96])
     s = utils.big_endian_to_int(indata[96:128])
-    print v, r, s, 'vrs'
-    if v < 27 or v > 28:
+    if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - 500, [0] * 32
     pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
     o = [0] * 12 + [ord(x) for x in utils.sha3(pub[1:])[-20:]]
