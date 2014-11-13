@@ -501,7 +501,8 @@ class Block(object):
     def commit_state(self):
         changes = []
         if not len(self.journal):
-            processblock.pblogger.log('delta', changes=[])
+            if processblock.pblogger.log_state_delta:
+                processblock.pblogger.log('delta', changes=[])
             return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \

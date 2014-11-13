@@ -36,8 +36,8 @@ def get_transaction(gasprice=0, nonce=0):
 
 namecoin_code =\
     '''
-if !contract.storage[msg.data[0]]:
-    contract.storage[msg.data[0]] = msg.data[1]
+if !self.storage[msg.data[0]]:
+    self.storage[msg.data[0]] = msg.data[1]
     return(1)
 else:
     return(0)
