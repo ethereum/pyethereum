@@ -662,12 +662,13 @@ def apply_op(block, tx, msg, processed_code, compustate):
         depth = int(op[3:])
         topics = [stk.pop() for x in range(depth)]
         mstart, msz = stk.pop(), stk.pop()
+        compustate.gas -= msz
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
+
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
         block.logs.append(Log(msg.to, topics, data))
-        pblogger.log('LOG', to=msg.to, topics=topics, data=data)
-        print topics, data
+        pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):

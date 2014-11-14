@@ -279,6 +279,7 @@ class ChainManager(StoppableLoopThread):
                     success = self.add_block(block, forward=forward)
                     if success:
                         logger.debug('Added %r', block)
+                        # print block.hex_serialize()
 
     def add_block(self, block, forward=False):
         "returns True if block was added sucessfully"
