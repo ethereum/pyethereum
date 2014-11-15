@@ -797,21 +797,22 @@ def test_saveload():
     assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
 
 
-test_evm = None
-test_sixten = None
-test_returnten = None
-test_namecoin = None
-test_currency = None
-test_data_feeds = None
-test_hedge = None
-test_lifo = None
-test_suicider = None
-test_reverter = None
-test_callcode = None
-test_array = None
-test_array2 = None
-test_array3 = None
-test_calls = None
-test_storage_objects = None
-test_infinite_storage_objects = None
-test_storagevar_fails = None
+# test_evm = None
+# test_sixten = None
+# test_returnten = None
+# test_namecoin = None
+# test_currency = None
+# test_data_feeds = None
+# test_hedge = None
+# test_lifo = None
+# test_suicider = None
+# test_reverter = None
+# test_callcode = None
+# test_array = None
+# test_array2 = None
+# test_array3 = None
+# test_calls = None
+# test_storage_objects = None
+# test_infinite_storage_objects = None
+# test_storagevar_fails = None
+# test_saveload = None
