@@ -78,7 +78,7 @@ class state():
         if not s:
             raise Exception("Transaction failed")
         o = serpent.decode_datalist(r)
-        return map(lambda x: x-2**256 if x > 2**255 else x, o)
+        return map(lambda x: x-2**256 if x >= 2**255 else x, o)
 
     def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used
