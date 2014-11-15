@@ -769,22 +769,49 @@ def test_crowdfund():
     assert mida1 + 1 == s.block.get_balance(tester.a1)
     assert mida3 + 59049 == s.block.get_balance(tester.a3)
 
+saveload_code = """
 
-# test_evm = None
-# test_sixten = None
-# test_returnten = None
-# test_namecoin = None
-# test_currency = None
-# test_data_feeds = None
-# test_hedge = None
-# test_lifo = None
-# test_suicider = None
-# test_reverter = None
-# test_callcode = None
-# test_array = None
-# test_array2 = None
-# test_array3 = None
-# test_calls = None
-# test_storage_objects = None
-# test_infinite_storage_objects = None
-# test_storagevar_fails = None
+data store[1000]
+
+def kall():
+    a = "sir bobalot to the rescue !!1!1!!1!1"
+    save(store[0], a, chars=60)
+    b = load(store[0], chars=60)
+    c = load(store[0], chars=33)
+    return([a[0], a[1], b[0], b[1], c[0], c[1]], 8)
+
+"""
+
+import bitcoin
+
+
+def test_saveload():
+    s = tester.state()
+    c = s.contract(saveload_code)
+    o = s.send(tester.k0, c, 0, funid=0, abi=[])
+    assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
+    assert o[1] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[1], 16)
+    assert o[2] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[2], 16)
+    assert o[3] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[3], 16)
+    assert o[4] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[4], 16)
+    assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
+
+
+test_evm = None
+test_sixten = None
+test_returnten = None
+test_namecoin = None
+test_currency = None
+test_data_feeds = None
+test_hedge = None
+test_lifo = None
+test_suicider = None
+test_reverter = None
+test_callcode = None
+test_array = None
+test_array2 = None
+test_array3 = None
+test_calls = None
+test_storage_objects = None
+test_infinite_storage_objects = None
+test_storagevar_fails = None
