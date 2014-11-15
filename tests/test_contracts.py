@@ -797,6 +797,18 @@ def test_saveload():
     assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
 
 
+sdiv_code = """
+def kall():
+    return([2^255 / 2^253, 2^255 % 3], 2)
+"""
+
+
+def test_sdiv():
+    s = tester.state()
+    c = s.contract(sdiv_code)
+    assert [-4, -2] == s.send(tester.k0, c, 0, funid=0, abi=[])
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -816,3 +828,4 @@ def test_saveload():
 # test_infinite_storage_objects = None
 # test_storagevar_fails = None
 # test_saveload = None
+# test_sdiv = None
