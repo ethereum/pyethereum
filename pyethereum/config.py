@@ -62,19 +62,8 @@ data_dir = {1}
 # percent cpu devoted to mining 0=off
 mining = 30
 
-
-# how verbose should the client be (1-3)
-verbosity = 3
-
-# set log level and filters (WARM, INFO, DEBUG)
-# examples:
-#   get every log message from every module
-#      :DEBUG
-#   get every warning from every module
-#       :WARN
-#   get every message from module chainmanager and all warnings
-#       pyethereum.chainmanager:DEBUG,:WARN
-logging = pyethereum.chainmanager:DEBUG,pyethereum.synchronizer:DEBUG,:INFO
+# see help for available log groups
+logging = default
 
 
 # WALLET OPTIONS ##################
@@ -105,9 +94,3 @@ def read_config(cfg_path=default_config_path()):
     config.read(cfg_path)
     return config
 
-def dump_config(config):
-    r = ['']
-    for section in config.sections():
-        for a, v in config.items(section):
-            r.append('[%s] %s = %r' % (section, a, v))
-    return '\n'.join(r)

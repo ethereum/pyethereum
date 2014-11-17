@@ -1,9 +1,8 @@
 
 from operator import attrgetter
-import logging
-import blocks
 import sys
-logger = logging.getLogger(__name__)
+import blocks
+from pyethereum.tlogging import log_synchronizer as log_debug
 
 class HashChainTask(object):
     """
@@ -19,22 +18,21 @@ class HashChainTask(object):
         self.request(block_hash)
 
     def request(self, block_hash):
-        logger.debug('%r requesting block_hashes starting from %r', self.peer, block_hash.encode('hex'))
+        log_debug('requesting block_hashes', peer=self.peer, from=block_hash.encode('hex'))
         self.peer.send_GetBlockHashes(block_hash, self.NUM_HASHES_PER_REQUEST)
 
     def received_block_hashes(self, block_hashes):
-        logger.debug('HashChainTask.received_block_hashes %d', len(block_hashes))
+        log_debug('HashChainTask.received_block_hashes', num=len(block_hashes))
         if block_hashes and self.chain_manager.genesis.hash == block_hashes[-1]:
-            logger.debug('%r has different chain starting from genesis', self.peer)
+            log_debug('has different chain starting from genesis', peer=self.peer)
         for bh in block_hashes:
             if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
-                logger.debug('%r matching block hash found %r, %d blocks to fetch',
-                             self.peer, bh.encode('hex'), len(self.hash_chain))
+                log_debug('matching block hash found', peer=self.peer, 
+                    hash=bh.encode('hex'), num_to_fetch=len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
         if len(block_hashes) == 0:
             return list(reversed(self.hash_chain))
-            # logger.debug('hash_chain.append(%r) %d', bh.encode('hex'), len(self.hash_chain))
         self.request(bh)
 
 
@@ -54,33 +52,34 @@ class SynchronizationTask(object):
         self.chain_manager = chain_manager
         self.peer = peer
         self.hash_chain = []  # [oldest to youngest]
-        logger.debug('%r syncing %r', self.peer, block_hash.encode('hex'))
+        log_debug('syncing', peer=self.peer, hash=block_hash.encode('hex'))
         self.hash_chain_task = HashChainTask(self.chain_manager, self.peer, block_hash)
 
     def received_block_hashes(self, block_hashes):
         res = self.hash_chain_task.received_block_hashes(block_hashes)
         if res:
             self.hash_chain = res
-            logger.debug('%r hash chain with %d hashes for missing blocks', self.peer, len(self.hash_chain))
+            log_debug('receieved hash chain', peer=self.peer, num=len(self.hash_chain))
             self.request_blocks()
 
     def received_blocks(self, transient_blocks):
-        logger.debug('%r received %d blocks. %d missing', self.peer, len(transient_blocks), len(self.hash_chain))
+        log_debug('blocks received', peer=self.peer, num=len(transient_blocks), missing=len(self.hash_chain))
         for tb in transient_blocks:
             if len(self.hash_chain) and self.hash_chain[0] == tb.hash:
                 self.hash_chain.pop(0)
             else:
-                logger.debug('%r received unexpected block %r', self.peer, tb)
+                log_debug('received unexpected block', peer=self.peer, hash=tb.hex_hash())
                 return False
         if self.hash_chain:
             # still blocks to fetch
-            logger.debug('%r still missing %d blocks', self.peer, len(self.hash_chain))
+            log_debug('still missing blocks', peer=self.peer, num=len(self.hash_chain))
             self.request_blocks()
         else:  # done
             return True
 
     def request_blocks(self):
-        logger.debug('%r requesting %d of %d missing blocks', self.peer, self.NUM_BLOCKS_PER_REQUEST, len(self.hash_chain))
+        log_debug('requesting missing blocks', peer=self.peer, 
+                    requested=self.NUM_BLOCKS_PER_REQUEST, missing=len(self.hash_chain))
         self.peer.send_GetBlocks(self.hash_chain[:self.NUM_BLOCKS_PER_REQUEST])
 
 
@@ -107,26 +106,26 @@ class Synchronizer(object):
         self.synchronization_tasks = {}  # peer > syncer # syncer.unknown_hash as marker for task
 
     def stop_synchronization(self, peer):
-        logger.debug('%r sync stopped', peer)
+        log_debug('sync stopped', peer=peer)
         if peer in self.synchronization_tasks:
             del self.synchronization_tasks[peer]
 
     def synchronize_unknown_block(self, peer, block_hash, force=False):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
-        logger.debug('%r sync %r', peer, block_hash.encode('hex'))
+        log_debug('sync unknown', peer=peer, block=block_hash.encode('hex'))
         if block_hash == self.chain_manager.genesis.hash or block_hash in self.chain_manager:
-            logger.debug('%r known_hash %r, skipping', peer, block_hash.encode('hex'))
+            log_debug('known_hash, skipping', peer=peer, hash=block_hash.encode('hex'))
             return
 
         if peer and (not peer in self.synchronization_tasks) or force:
-            logger.debug('%r new sync task', peer)
+            log_debug('new sync task', peer=peer)
             self.synchronization_tasks[peer] = SynchronizationTask(self.chain_manager, peer, block_hash)
         else:
-            logger.debug('%r already has a synctask, sorry', peer)
+            log_debug('existing synctask', peer=peer)
 
     def synchronize_status(self, peer, block_hash, total_difficulty):
         "Case: unknown head with sufficient difficulty"
-        logger.debug('%r status  with %r %d', peer,  block_hash.encode('hex'), total_difficulty)
+        log_debug('sync status', peer=peer,  hash=block_hash.encode('hex'), total_difficulty=total_difficulty)
 
         # guesstimate the max difficulty difference possible for a sucessfully competing chain
         # worst case if skip it: we are on a stale chain until the other catched up
@@ -135,19 +134,19 @@ class Synchronizer(object):
         avg_uncles_per_block = 4
         max_diff = self.chain_manager.head.difficulty * num_blocks_behind * (1 + avg_uncles_per_block)
         if total_difficulty + max_diff > self.chain_manager.head.difficulty:
-            logger.debug('%r sufficient difficulty, syncing', peer)
+            log_debug('sufficient difficulty, syncing', peer=peer)
             self.synchronize_unknown_block(peer, block_hash)
         else:
-            logger.debug('%r insufficient difficulty, not syncing', peer)
+            log_debug('insufficient difficulty, not syncing', peer=peer)
 
     def received_block_hashes(self, peer, block_hashes):
         if peer in self.synchronization_tasks:
-            logger.debug("Synchronizer.received_block_hashes %d for: %r", len(block_hashes), peer)
+            log_debug("Synchronizer.received_block_hashes", peer=peer, num=len(block_hashes))
             self.synchronization_tasks[peer].received_block_hashes(block_hashes)
 
     def received_blocks(self, peer, transient_blocks):
         if peer in self.synchronization_tasks:
             res = self.synchronization_tasks[peer].received_blocks(transient_blocks)
             if res is True:
-                logger.debug("Synchronizer.received_blocks: chain w %r synced", peer)
+                log_debug("Synchronizer.received_blocks: chain synced", peer=peer)
                 del self.synchronization_tasks[peer]

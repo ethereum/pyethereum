@@ -1,6 +1,5 @@
 import time
 import socket
-import logging
 import json
 import os
 
@@ -11,13 +10,14 @@ import rlp
 import signals
 import bloom
 from peer import Peer
-
+from pyethereum.tlogging import log_net_info
+from pyethereum.tlogging import log_net_debug
+from pyethereum.tlogging import log_p2p
 
 DEFAULT_SOCKET_TIMEOUT = 0.01
 CONNECT_SOCKET_TIMEOUT = .5
 CHECK_PEERCOUNT_INTERVAL = 1.
 
-logger = logging.getLogger(__name__)
 
 def is_valid_ip(ip):  # FIXME, IPV6
     return ip.count('.') == 3
@@ -110,14 +110,14 @@ class PeerManager(StoppableLoopThread):
         :param host:  domain notation or IP
         '''
         sock = self._create_peer_sock()
-        logger.debug('connecting {0}:{1}'.format(host, port))
+        log_net_debug('attempting connect', host=host, port=port)
         try:
             sock.connect((host, port))
         except Exception as e:
-            logger.debug('Connecting %s:%d failed, %s', host, port, e)
+            log_net_debug('connecting failed', host=host, port=port, error=e)
             return None
         ip, port = sock.getpeername()
-        logger.debug('connected {0}:{1}'.format(ip, port))
+        log_net_info('connected', ip=ip, port=port)
         peer = self.add_peer(sock, ip, port)
 
         peer.send_Hello()
@@ -141,16 +141,12 @@ class PeerManager(StoppableLoopThread):
 
         # if ping was sent and not returned within last second
         if self.max_ping_wait < dt_ping < dt_seen:
-            logger.debug(
-                '{0} last ping: {1} last seen: {2}'
-                .format(peer, dt_ping, dt_seen))
-            logger.debug(
-                '{0} did not respond to ping, disconnecting {1}:{2}'
-                .format(peer, peer.ip, peer.port))
+            log_net_debug('silent', peer=peer, last_seen=dt_seen, last_ping=dt_ping)
+            log_net_debug('disconnecting unresponsive', peer=peer)
             self.remove_peer(peer)
         elif min(dt_seen, dt_ping) > self.max_silence:
             # ping silent peer
-            logger.debug('pinging silent peer {0}'.format(peer))
+            log_net_debug('pinging silent', peer=peer)
 
             with peer.lock:
                 peer.send_Ping()
@@ -160,9 +156,8 @@ class PeerManager(StoppableLoopThread):
         num_peers = self.config.getint('network', 'num_peers')
         candidates = self.get_peer_candidates()
         if len(self.connected_peers) < num_peers:
-            logger.debug('not enough peers: {0}'.format(
-                len(self.connected_peers)))
-            logger.debug('num candidates: {0}'.format(len(candidates)))
+            log_net_debug('not enough peers', num_connected=len(self.connected_peers), 
+                required=num_peers, candidates=len(candidates))
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
@@ -247,7 +242,7 @@ def getaddress_received_handler(sender, peer, **kwargs):
                    peer_manager.local_node_id))
         peers = [p for p in peers if sent_peers_filter.add(repr(p), peer)]
         if len(peers):
-            logger.debug('%r returning %d peers', peer, len(peers))
+            log_p2p('returning peers', peer=peer, num=len(peers))
             peer.send_Peers(peers)
 
 
@@ -283,5 +278,5 @@ def send_transactions(sender, transactions=[], **kwargs):
 
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):
-    logger.info("%r handshaked", peer)
+    log_p2p("handshaked", peer=peer)
     peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)

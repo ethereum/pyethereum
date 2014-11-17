@@ -1,15 +1,14 @@
 import sys
 import signals
-import logging
 from pyethereum import rlp
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
 from pyethereum.utils import sha3
 from pyethereum import dispatch
+from pyethereum.tlogging import log_packeter
 from . import __version__
 
-logger = logging.getLogger(__name__)
 
 
 def lrlp_decode(data):
@@ -34,7 +33,7 @@ class Packeter(object):
     """
     NETWORK_PROTOCOL_VERSION = 2
     # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
-    ETHEREUM_PROTOCOL_VERSION = 41
+    ETHEREUM_PROTOCOL_VERSION = 42
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     # the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.

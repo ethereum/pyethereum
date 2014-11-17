@@ -1,7 +1,5 @@
 import threading
-import logging
-
-logger = logging.getLogger(__name__)
+from pyethereum.tlogging import log_debug
 
 
 class StoppableLoopThread(threading.Thread):
@@ -14,8 +12,7 @@ class StoppableLoopThread(threading.Thread):
     def stop(self):
         with self.lock:
             self._stopped = True
-        logger.debug(
-            'Thread {0} is requested to stop'.format(self))
+        logger.debug('Thread {0} is requested to stop'.format(self))
 
     def stopped(self):
         with self.lock:
