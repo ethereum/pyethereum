@@ -499,7 +499,7 @@ def test_add_longer_side_chain():
 
 
 
-def test_reward_unlces():
+def test_reward_uncles():
     """
     B0 B1 B2
     B0 Uncle
