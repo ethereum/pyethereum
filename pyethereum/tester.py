@@ -120,3 +120,6 @@ def enable_logging():
 
 
 gas_limit = 100000
+
+def sha3(data):
+    return serpent.decode_datalist(u.sha3(serpent.encode_datalist(*data)))[0]

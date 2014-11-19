@@ -407,3 +407,23 @@ def test_array3():
     s = tester.state()
     c = s.contract(array_code3)
     assert [0,0,0] == s.send(tester.k0, c, 0, [])
+
+sha3_code = """
+args = array(msg.datasize)
+i = 0
+while i < msg.datasize:
+    args[i] = msg.data[i]
+    i = i + 1
+
+return(sha3(args, msg.datasize))
+"""
+
+def test_sha3():
+    from random import randrange
+    s = tester.state()
+    c = s.contract(sha3_code)
+    data = map(lambda _: randrange(2**256), range(randrange(0, 5)))
+    H_data = tester.sha3(data)
+    result = s.send(tester.k0, c, 0, data)
+    assert len(result) == 1
+    assert H_data == (result[0] + 2**256 if result[0] < 0 else result[0])
