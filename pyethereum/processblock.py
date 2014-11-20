@@ -618,7 +618,6 @@ def apply_op(block, tx, msg, processed_code, compustate):
             gascost = GSTORAGEMOD if s1 else GSTORAGEKILL
         else:
             gascost = GSTORAGEADD if s1 else GSTORAGEMOD
-        print block.get_storage_data(msg.to, s0), s1, gascost
         if compustate.gas < gascost:
             return vm_exception('OUT OF GAS')
         compustate.gas -= max(gascost, 0)
@@ -660,8 +659,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk[-1] = temp
     elif op[:3] == 'LOG':
         depth = int(op[3:])
-        topics = [stk.pop() for x in range(depth)]
         mstart, msz = stk.pop(), stk.pop()
+        topics = [stk.pop() for x in range(depth)]
         compustate.gas -= msz
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
