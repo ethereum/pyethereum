@@ -205,6 +205,7 @@ def apply_transaction(block, tx):
     pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
+    print block.get_nonce(tx.sender), '@@@'
 
     # buy startgas
     success = block.transfer_value(tx.sender, block.coinbase,
@@ -364,8 +365,6 @@ def create_contract(block, tx, msg):
         block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
-        if tx.sender != msg.sender:
-            block.decrement_nonce(msg.sender)
         block.del_account(msg.to)
         return res, gas, dat
 
