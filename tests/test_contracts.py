@@ -422,8 +422,9 @@ def test_sha3():
     from random import randrange
     s = tester.state()
     c = s.contract(sha3_code)
-    data = map(lambda _: randrange(2**256), range(randrange(0, 5)))
-    H_data = tester.sha3(data)
-    result = s.send(tester.k0, c, 0, data)
-    assert len(result) == 1
-    assert H_data == (result[0] + 2**256 if result[0] < 0 else result[0])
+    for n in range(5):
+        data = map(lambda _: randrange(2**256), range(n))
+        H_data = tester.sha3(data)
+        result = s.send(tester.k0, c, 0, data)
+        assert len(result) == 1
+        assert H_data == (result[0] + 2**256 if result[0] < 0 else result[0])
