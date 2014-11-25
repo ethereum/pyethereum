@@ -129,6 +129,8 @@ def query(addr):
 def send(to:29, value:31):
     from = msg.sender
     fromvalue = self.balances[from]
+    log(to)
+    log(value)
     if fromvalue >= value:
         self.balances[from] = fromvalue - value
         self.balances[to] = self.balances[to] + value
@@ -828,4 +830,5 @@ def test_sdiv():
 # test_infinite_storage_objects = None
 # test_storagevar_fails = None
 # test_saveload = None
+# test_crowdfund = None
 # test_sdiv = None
