@@ -205,6 +205,7 @@ def apply_transaction(block, tx):
     pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
+    print block.get_nonce(tx.sender), '@@@'
 
     # buy startgas
     success = block.transfer_value(tx.sender, block.coinbase,
@@ -364,8 +365,6 @@ def create_contract(block, tx, msg):
         block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
-        if tx.sender != msg.sender:
-            block.decrement_nonce(msg.sender)
         block.del_account(msg.to)
         return res, gas, dat
 
@@ -618,7 +617,6 @@ def apply_op(block, tx, msg, processed_code, compustate):
             gascost = GSTORAGEMOD if s1 else GSTORAGEKILL
         else:
             gascost = GSTORAGEADD if s1 else GSTORAGEMOD
-        print block.get_storage_data(msg.to, s0), s1, gascost
         if compustate.gas < gascost:
             return vm_exception('OUT OF GAS')
         compustate.gas -= max(gascost, 0)
@@ -660,8 +658,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         stk[-1] = temp
     elif op[:3] == 'LOG':
         depth = int(op[3:])
-        topics = [stk.pop() for x in range(depth)]
         mstart, msz = stk.pop(), stk.pop()
+        topics = [stk.pop() for x in range(depth)]
         compustate.gas -= msz
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
