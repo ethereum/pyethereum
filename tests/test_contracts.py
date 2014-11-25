@@ -129,8 +129,6 @@ def query(addr):
 def send(to:29, value:31):
     from = msg.sender
     fromvalue = self.balances[from]
-    log(to)
-    log(value)
     if fromvalue >= value:
         self.balances[from] = fromvalue - value
         self.balances[to] = self.balances[to] + value
