@@ -463,18 +463,18 @@ def peer_status_received(sender, peer, **kwargs):
 def peer_handshake(sender, peer, **kwargs):
     # reply with status if not yet sent
     if peer.has_ethereum_capabilities() and not peer.status_sent:
-        log_debug("%r handshake, sending status", peer)
+        log_debug("handshake, sending status", peer=peer)
         peer.send_Status(
             chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
     else:
-        log_debug("%r handshake, but peer has no 'eth' capablities", peer)
+        log_debug("handshake, but peer has no 'eth' capablities", peer=peer)
 
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, peer, **kwargs):
     "receives rlp.decoded serialized"
     txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
-    log_debug('remote_transactions_received: %r', txl)
+    log_debug('remote_transactions_received', num=len(txl))
     for tx in txl:
         peermanager.txfilter.add(tx, peer)  # FIXME
         chain_manager.add_transaction(tx)

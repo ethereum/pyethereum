@@ -3,7 +3,7 @@ import struct
 import blocks
 import processblock
 import utils
-from pyethereum.tlogging import log_miner
+from pyethereum.tlogging import log_miner as log_debug
 
 class Miner():
     """

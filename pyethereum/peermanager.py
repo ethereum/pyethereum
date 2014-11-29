@@ -55,10 +55,12 @@ class PeerManager(StoppableLoopThread):
         path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         if os.path.exists(path):
             peers = set((ip, port, "") for ip, port in json.load(open(path)))
+            log_net_debug('loaded peers', num=len(peers), path=path)
             self._known_peers.update(peers)
 
     def save_peers(self):
         path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
+        log_net_debug('saving peers', num=len(self._known_peers), path=path)
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):

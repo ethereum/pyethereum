@@ -12,17 +12,17 @@ class StoppableLoopThread(threading.Thread):
     def stop(self):
         with self.lock:
             self._stopped = True
-        logger.debug('Thread {0} is requested to stop'.format(self))
+        log_debug('Thread is requested to stop', name=self)
 
     def stopped(self):
         with self.lock:
             return self._stopped
 
     def pre_loop(self):
-        logger.debug('Thread {0} start to run'.format(self))
+        log_debug('Thread start to run', name=self)
 
     def post_loop(self):
-        logger.debug('Thread {0} stopped'.format(self))
+        log_debug('Thread stopped', name=self)
 
     def run(self):
         self.pre_loop()

@@ -18,7 +18,7 @@ class HashChainTask(object):
         self.request(block_hash)
 
     def request(self, block_hash):
-        log_debug('requesting block_hashes', peer=self.peer, from=block_hash.encode('hex'))
+        log_debug('requesting block_hashes', peer=self.peer, start=block_hash.encode('hex'))
         self.peer.send_GetBlockHashes(block_hash, self.NUM_HASHES_PER_REQUEST)
 
     def received_block_hashes(self, block_hashes):

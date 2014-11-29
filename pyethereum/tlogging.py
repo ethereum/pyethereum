@@ -1,6 +1,7 @@
 
 import sys
 import json
+import time
 
 """
 Requirements:
@@ -20,7 +21,7 @@ logs should be consumable by software
 #HOWTO: log levels defined by groups
 
 
-log_level_names = ('critical', 'error', 'warning', 'info', 'debug', 'trace')
+log_level_names = ('critical', 'error', 'warn', 'info', 'debug', 'trace')
 log_levels = dict((n, i) for i, n in enumerate(log_level_names))
 
 
@@ -142,11 +143,23 @@ class BaseFormatter(object):
         return "[%s]\t%s: %s" % (logger.name, event_name.ljust(15), msg)
 
 
+
+
+class tJSONEncoder(json.JSONEncoder):
+
+    def default(self, obj):
+        from pyethereum.peer import Peer # FIXME
+        if isinstance(obj, Peer):
+            return (obj.ip, obj.port)
+        #   return repr(obj)
+        # Let the base class default method raise the TypeError
+        #return json.JSONEncoder.default(self, obj)
+        return repr(obj)
+
 class JSONFormatter(object):
 
     def format(self, logger, event_name, data):
-        return json.dumps({logger.name: {event_name: data}})
-
+        return tJSONEncoder().encode({logger.name: {event_name: data}, 'ts':time.time()})
 
 class LogWriter(object):
 
@@ -190,7 +203,7 @@ class Logger(object):
 
     def __init__(self, name, level='warn'):
         self.name = name
-        assert level in log_levels.keys()
+        assert level in log_levels.keys(), (level, log_levels.keys())
         self.level = level
         self.listeners = []
         self.kargs_sorting = []
@@ -230,6 +243,7 @@ def configure_logging(logger_names):
 # default config
 logging = LogManager()
 logging.writer = LogWriter(BaseFormatter())
+logging.writer = LogWriter(JSONFormatter())
 
 log_error = logging.create('error', level='error')
 log_info = logging.create('info', level='info')
@@ -245,7 +259,7 @@ log_packeter = logging.create('packeter', level='debug')
 log_synchronizer = logging.create('sync', level='debug')
 log_db = logging.create('db', level='debug')
 log_miner = logging.create('miner', level='debug')
-log_chain_info = logging.create('chain_warn', level='warn')
+log_chain_warn = logging.create('chain_warn', level='warn')
 log_chain_info = logging.create('chain', level='info')
 log_chain_debug = logging.create('chain_debug', level='debug')
 
