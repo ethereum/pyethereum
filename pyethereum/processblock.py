@@ -72,8 +72,11 @@ GMEMORY = 1
 GSTORAGEKILL = -100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300
-GTXDATA = 5
-GTXCOST = 500
+
+GTXCOST = 500       # TX BASE GAS COST
+GTXDATAZERO = 1     # TX DATA ZERO BYTE GAS COST
+GTXDATANONZERO = 5  # TX DATA NON ZERO BYTE GAS COST
+
 TT255 = 2**255
 TT256 = 2**256
 TT256M1 = 2**256 - 1
@@ -183,7 +186,9 @@ def apply_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    intrinsic_gas_used = GTXDATA * len(tx.data) + GTXCOST
+    num_zero_bytes = tx.data.count(chr(0))
+    num_non_zero_bytes = len(tx.data) - num_zero_bytes
+    intrinsic_gas_used = GTXCOST +  GTXDATAZERO * num_zero_bytes +  GTXDATANONZERO * num_non_zero_bytes
     if tx.startgas < intrinsic_gas_used:
         raise InsufficientStartGas(rp(tx.startgas, intrinsic_gas_used))
 
