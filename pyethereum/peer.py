@@ -156,10 +156,11 @@ class Peer(StoppableLoopThread):
             data = [_decode[i](x) for i, x in enumerate(data)]
             network_protocol_version, client_version = data[0], data[1]
             capabilities, listen_port, node_id = data[2], data[3], data[4]
-        except IndexError:
+            self.capabilities = [(p,ord(v)) for p, v in capabilities]
+        except (IndexError, ValueError) as e:
+            logger.debug('%r could not decode Hello %s', self, e)
             return self.send_Disconnect(reason='Incompatible network protocols')
 
-        self.capabilities = [(p,ord(v)) for p, v in capabilities]
         logger.debug('%r received Hello PROTOCOL:%r NODE_ID:%r CLIENT_VERSION:%r CAPABILITIES:%r',
                      self, network_protocol_version, node_id.encode('hex')[:8], client_version, self.capabilities)
 
