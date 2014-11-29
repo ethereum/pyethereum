@@ -195,8 +195,8 @@ def apply_transaction(block, tx):
             rp(block.get_balance(tx.sender), total_cost))
 
     # check offered gas price is enough
-    if tx.gasprice < block.min_gas_price:
-        raise GasPriceTooLow(rp(tx.gasprice, block.min_gas_price))
+    # if tx.gasprice < block.min_gas_price:
+        # raise GasPriceTooLow(rp(tx.gasprice, block.min_gas_price))
 
     # check block gas limit
     if block.gas_used + tx.startgas > block.gas_limit:
