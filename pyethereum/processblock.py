@@ -72,6 +72,7 @@ GMEMORY = 1
 GSTORAGEKILL = -100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300
+GEXPONENTBYTE = 1   # cost of EXP exponent per byte
 
 GTXCOST = 500       # TX BASE GAS COST
 GTXDATAZERO = 1     # TX DATA ZERO BYTE GAS COST
@@ -482,7 +483,20 @@ def apply_op(block, tx, msg, processed_code, compustate):
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
         stk.append((s0 * s1) % s2 if s2 else 0)
     elif op == 'EXP':
-        stk.append(pow(stk.pop(), stk.pop(), TT256))
+        base, exponent = stk.pop(), stk.pop()
+        # fee for exponent is dependent on its bytes
+        # calc n bytes to represent exponent
+        nbytes = 0
+        x = exponent
+        while x > 0:
+            nbytes += 1
+            x >>= 8
+        expfee = nbytes * GEXPONENTBYTE
+        if compustate.gas < expfee:
+            compustate.gas = 0
+            return vm_exception('OOG EXPONENT')
+        compustate.gas -= expfee
+        stk.append(pow(base, exponent, TT256))
     elif op == 'SIGNEXTEND':
         s0, s1 = stk.pop(), stk.pop()
         if s0 <= 31:
