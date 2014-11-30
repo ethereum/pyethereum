@@ -73,6 +73,7 @@ GSTORAGEKILL = -100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300
 GEXPONENTBYTE = 1   # cost of EXP exponent per byte
+GCOPY = 1           # cost to copy one 32 byte word
 
 GTXCOST = 500       # TX BASE GAS COST
 GTXDATAZERO = 1     # TX DATA ZERO BYTE GAS COST
@@ -406,6 +407,14 @@ def mem_extend(mem, compustate, op, start, sz):
             mem.extend([0] * m_extend)
     return True
 
+def data_copy(compustate, size):
+    if size:
+        copyfee = GCOPY * ceil32(size) / 32
+        if compustate.gas < copyfee:
+            compustate.gas = 0
+            return False
+        compustate.gas -= copyfee
+    return True
 
 def to_signed(i):
     return i if i < TT255 else i - TT256
@@ -562,39 +571,45 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op == 'CALLDATASIZE':
         stk.append(len(msg.data))
     elif op == 'CALLDATACOPY':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, s2):
+        start, s1, size = stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, start, size):
             return vm_exception('OOG EXTENDING MEMORY')
-        for i in range(s2):
+        if not data_copy(compustate, size):
+            return vm_exception('OOG COPY DATA')
+        for i in range(size):
             if s1 + i < len(msg.data):
-                mem[s0 + i] = ord(msg.data[s1 + i])
+                mem[start + i] = ord(msg.data[s1 + i])
             else:
-                mem[s0 + i] = 0
+                mem[start + i] = 0
     elif op == 'CODESIZE':
         stk.append(len(processed_code))
     elif op == 'CODECOPY':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, s2):
+        start, s1, size = stk.pop(), stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, start, size):
             return vm_exception('OOG EXTENDING MEMORY')
-        for i in range(s2):
+        if not data_copy(compustate, size):
+            return vm_exception('OOG COPY DATA')
+        for i in range(size):
             if s1 + i < len(processed_code):
-                mem[s0 + i] = processed_code[s1 + i][4]
+                mem[start + i] = processed_code[s1 + i][4]
             else:
-                mem[s0 + i] = 0
+                mem[start + i] = 0
     elif op == 'GASPRICE':
         stk.append(tx.gasprice)
     elif op == 'EXTCODESIZE':
         stk.append(len(block.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
     elif op == 'EXTCODECOPY':
-        addr, s1, s2, s3 = stk.pop(), stk.pop(), stk.pop(), stk.pop()
+        addr, start, s2, size = stk.pop(), stk.pop(), stk.pop(), stk.pop()
         extcode = block.get_code(utils.coerce_addr_to_hex(addr)) or ''
-        if not mem_extend(mem, compustate, op, s1, s3):
+        if not mem_extend(mem, compustate, op, start, size):
             return vm_exception('OOG EXTENDING MEMORY')
-        for i in range(s3):
+        if not data_copy(compustate, size):
+            return vm_exception('OOG COPY DATA')
+        for i in range(size):
             if s2 + i < len(extcode):
-                mem[s1 + i] = ord(extcode[s2 + i])
+                mem[start + i] = ord(extcode[s2 + i])
             else:
-                mem[s1 + i] = 0
+                mem[start + i] = 0
     elif op == 'PREVHASH':
         stk.append(utils.big_endian_to_int(block.prevhash))
     elif op == 'COINBASE':
