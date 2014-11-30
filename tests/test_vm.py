@@ -78,9 +78,9 @@ def do_test_vm(filename, testname=None, limit=99999999):
 
     pre = params['pre']
     exek = params['exec']
-    callcreates = params['callcreates']
+    callcreates = params.get('callcreates', [])
     env = params['env']
-    post = params['post']
+    post = params.get('post',{})
 
     check_testdata(env.keys(), ['currentGasLimit', 'currentTimestamp',
                                 'previousHash', 'currentCoinbase',
@@ -165,8 +165,10 @@ def do_test_vm(filename, testname=None, limit=99999999):
         assert callcreate['value'] == str(amc['value'])
         assert callcreate['destination'] == amc['destination']
 
-    assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
-    assert str(gas_remained) == params['gas']
+    if 'out' in params:
+        assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
+    if 'gas' in params:
+        assert str(gas_remained) == params['gas']
 
     # check state
     for address, data in post.items():
