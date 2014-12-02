@@ -14,14 +14,17 @@ pblogger = pb.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-pblogger.log_pre_state = True    # dump storage at account before execution
-pblogger.log_post_state = True   # dump storage at account after execution
+log_active = False
+pblogger = pb.pblogger
+pblogger.log_pre_state = log_active    # dump storage at account before execution
+pblogger.log_post_state = log_active   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = False      # dump memory before each op
-pblogger.log_op = True           # log op, gas, stack before each op
+pblogger.log_memory = log_active      # dump memory before each op
+pblogger.log_stack = log_active      # dump stack before each op
+pblogger.log_storage = log_active      # dump storage before each op
+pblogger.log_op = log_active           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = True     # generate machine readable output
-pblogger.log_stack = True        # generate machine readable output
+pblogger.log_apply_op = log_active     # log anything per operation at all
 
 
 def check_testdata(data_keys, expected_keys):

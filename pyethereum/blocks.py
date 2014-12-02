@@ -634,7 +634,7 @@ class Block(object):
             self.bloom = bloom.bloom_insert(self.bloom,
                                             uncle_data['coinbase'].decode('hex'))
         self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
-        logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
+        #logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
         self.commit_state()
 
     def serialize_header_without_nonce(self):
