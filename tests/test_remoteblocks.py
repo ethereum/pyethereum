@@ -99,7 +99,8 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
         blk = blocks.TransientBlock(hexdata)
         print blk.number, blk.hash.encode('hex'), '%d txs' % len(blk.transaction_list)
         chain_manager.receive_chain([blk])
-        assert blk.hash in chain_manager
+        if not blk.hash in chain_manager:
+            chain_manager.head.deserialize_child(blk.rlpdata)
 
 
 if __name__ == "__main__":
