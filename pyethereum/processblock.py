@@ -193,7 +193,7 @@ def apply_transaction(block, tx):
     pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
-    print block.get_nonce(tx.sender), '@@@'
+    # print block.get_nonce(tx.sender), '@@@'
 
     # buy startgas
     success = block.transfer_value(tx.sender, block.coinbase,
@@ -226,7 +226,7 @@ def apply_transaction(block, tx):
         pblogger.log('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
         if block.refunds > 0:
-            print 'Refunding: %r gas' % min(block.refunds, gas_used // 2)
+            pblogger.log('Refunding: %r gas' % min(block.refunds, gas_used // 2))
             gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
