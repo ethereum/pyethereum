@@ -681,10 +681,24 @@ def apply_op(block, tx, msg, processed_code, compustate):
         temp = stk[-depth-1]
         stk[-depth-1] = stk[-1]
         stk[-1] = temp
+
+
     elif op[:3] == 'LOG':
+        """
+        0xa0 ... 0xa4, 32/64/96/128/160 + len(data) gas
+        a. Opcodes LOG0...LOG4 are added, takes 2-6 stack arguments
+                MEMSTART MEMSZ (TOPIC1) (TOPIC2) (TOPIC3) (TOPIC4)
+        b. Logs are kept track of during tx execution exactly the same way as suicides
+           (except as an ordered list, not a set).
+           Each log is in the form [address, [topic1, ... ], data] where:
+           * address is what the ADDRESS opcode would output
+           * data is mem[MEMSTART: MEMSTART + MEMSZ]
+           * topics are as provided by the opcode
+        c. The ordered list of logs in the transaction are expressed as [log0, log1, ..., logN].
+        """
         depth = int(op[3:])
         mstart, msz = stk.pop(), stk.pop()
-        topics = list(set(stk.pop() for x in range(depth)))
+        topics = [stk.pop() for x in range(depth)]
         compustate.gas -= msz
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
@@ -692,6 +706,8 @@ def apply_op(block, tx, msg, processed_code, compustate):
         print "VM DOOOOO LOG", dict(topics=topics, data=data, address=msg.to)
         block.logs.append(Log(msg.to, topics, data))
         pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
+
+
     elif op == 'CREATE':
         value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, mstart, msz):
