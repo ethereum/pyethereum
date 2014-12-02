@@ -684,7 +684,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
     elif op[:3] == 'LOG':
         depth = int(op[3:])
         mstart, msz = stk.pop(), stk.pop()
-        topics = [stk.pop() for x in range(depth)]
+        topics = list(set(stk.pop() for x in range(depth)))
         compustate.gas -= msz
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
