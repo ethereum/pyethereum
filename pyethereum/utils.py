@@ -115,6 +115,8 @@ def coerce_to_bytes(x):
     else:
         return x
 
+def ceil32(x):
+    return x if x % 32 == 0 else x + 32 - (x % 32)
 
 def sha3rlp(x):
     return sha3(rlp.encode(x))

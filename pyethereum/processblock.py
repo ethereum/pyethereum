@@ -365,11 +365,6 @@ def get_op_data(code, index):
     opcode = ord(code[index]) if index < len(code) else 0
     return opcodes.get(opcode, ['INVALID', 0, 0, 0])
 
-
-def ceil32(x):
-    return x if x % 32 == 0 else x + 32 - (x % 32)
-
-
 def vm_exception(error, **kargs):
     pblogger.log('EXCEPTION', cause=error, **kargs)
     return OUT_OF_GAS
@@ -378,8 +373,8 @@ def vm_exception(error, **kargs):
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
         newsize = start + sz
-        if len(mem) < ceil32(newsize):
-            m_extend = ceil32(newsize) - len(mem)
+        if len(mem) < utils.ceil32(newsize):
+            m_extend = utils.ceil32(newsize) - len(mem)
             memfee = GMEMORY * (m_extend / 32)
             if compustate.gas < memfee:
                 compustate.gas = 0
@@ -390,7 +385,7 @@ def mem_extend(mem, compustate, op, start, sz):
 
 def data_copy(compustate, size):
     if size:
-        copyfee = GCOPY * ceil32(size) / 32
+        copyfee = GCOPY * utils.ceil32(size) / 32
         if compustate.gas < copyfee:
             compustate.gas = 0
             return False
