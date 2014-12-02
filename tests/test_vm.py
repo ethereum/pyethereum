@@ -158,7 +158,21 @@ def do_test_vm(filename, testname=None, limit=99999999):
     apply_message_calls.pop(0)
     blk.commit_state()
 
+    """
+     generally expected that the test implementer will read env, exec and pre
+     then check their results against gas, logs, out, post and callcreates.
+     If an exception is expected, then latter sections are absent in the test. 
+     Since the reverting of the state is not part of the VM tests.
+     """
+
+
+    if not success:
+        return
+
+    for k in ['gas', 'logs', 'out', 'post', 'callcreates']:
+        assert k in params
     assert len(callcreates) == len(apply_message_calls)
+
 
     # check against callcreates
     for i, callcreate in enumerate(callcreates):
@@ -172,9 +186,37 @@ def do_test_vm(filename, testname=None, limit=99999999):
         assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
     if 'gas' in params:
         assert str(gas_remained) == params['gas']
+    if 'logs' in params:
+        """
+        The logs sections is a mapping between the blooms and their corresponding logentries.
+        Each logentry has the format:
+        address: The address of the logentry.
+        data: The data of the logentry.
+        topics: The topics of the logentry, given as an array of values.
+        """
+        test_logs = params['logs']
+        vm_logs = dict()
+        for log in blk.logs:
+            vm_logs[log.bloom().encode('hex')] = log.to_dict()
+
+        assert len(vm_logs) == len(test_logs)
+        for hexbloom, test_log_data in test_logs.items():
+            if not hexbloom in vm_logs.keys():
+                print "TEST LOGS", test_logs
+                print "VM LOGS", vm_logs
+                raise KeyError('bloom %s not in logs' % hexbloom)
+
+            vm_log_data = vm_logs[hexbloom]
+            for k in test_log_data:
+                if test_log_data[k] != vm_log_data[k]:
+                    print "TEST LOGS", test_logs
+                    print "VM LOGS", vm_logs
+                    raise Exception('VM Log mismatch %r %r %r' % (k, test_log_data[k], vm_log_data[k]))
+
 
     # check state
     for address, data in post.items():
         state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)  # attribute not present in vmtest fixtures
         assert data == state
+
