@@ -97,6 +97,15 @@ class UnknownParentException(Exception):
     pass
 
 
+class VerificationFailed(Exception):
+    pass
+
+
+def must_equal(what, a, b):
+    if a != b:
+        raise VerificationFailed(what, a, '==', b)
+
+
 class TransientBlock(object):
 
     """
@@ -119,7 +128,7 @@ class TransientBlock(object):
 
 
 def check_header_pow(header):
-    assert len(header[-1]) == 32
+    must_equal('nonce_len', len(header[-1]), 32)
     rlp_Hn = rlp.encode(header[:-1])
     nonce = header[-1]
     diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
@@ -323,21 +332,18 @@ class Block(object):
         block.nonce = kargs['nonce']
 #        block.min_gas_price = kargs['min_gas_price']
 
-        # checks
-        assert block.prevhash == self.hash
-
-        assert block.gas_used == kargs['gas_used'], (block.gas_used, kargs['gas_used'])
-        assert block.gas_limit == kargs['gas_limit']
-        assert block.timestamp == kargs['timestamp']
-        assert block.difficulty == kargs['difficulty']
-        assert block.number == kargs['number']
-        assert block.extra_data == kargs['extra_data']
-        assert utils.sha3rlp(block.uncles) == kargs['uncles_hash']
-
-        assert block.state.root_hash == kargs['state_root'], (block.state.root_hash, kargs['state_root'])
-        assert block.tx_list_root == kargs['tx_list_root']
-        assert block.receipts.root_hash == kargs['receipts_root'], \
-            (block.receipts.root_hash, kargs['receipts_root'], block.receipts.to_dict())
+        # checks 
+        must_equal('prev_hash', block.prevhash, self.hash)
+        must_equal('gas_used', block.gas_used, kargs['gas_used'])
+        must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
+        must_equal('timestamp', block.timestamp, kargs['timestamp'])
+        must_equal('difficulty', block.difficulty, kargs['difficulty'])
+        must_equal('number', block.number, kargs['number'])
+        must_equal('extra_data', block.extra_data, kargs['extra_data'])
+        must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
+        must_equal('state_root', block.state.root_hash, kargs['state_root'])
+        must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
+        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
 
         return block
 

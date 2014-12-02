@@ -89,30 +89,11 @@ OUT_OF_GAS = -1
 CREATE_CONTRACT_ADDRESS = ''
 
 
-class VerificationFailed(Exception):
-    pass
-
-
-def must_equal(what, a, b):
-    if a != b:
-        raise VerificationFailed(what, a, '==', b)
-
-
-def must_ge(what, a, b):
-    if not (a >= b):
-        raise VerificationFailed(what, a, '>=', b)
-
-
-def must_le(what, a, b):
-    if not (a <= b):
-        raise VerificationFailed(what, a, '<=', b)
-
-
 def verify(block, parent):
     try:
         parent.deserialize_child(block.serialize())
         return True
-    except:
+    except blocks.VerificationFailed:
         return False
 
 
