@@ -12,6 +12,7 @@ import json
 import fastvm
 import copy
 import specials
+import bloom
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
 
@@ -128,6 +129,20 @@ class Log(object):
     def bloomables(self):
         return [self.address.decode('hex')] + \
             [utils.encode_int(x) for x in self.topics]
+
+    def bloom(self):
+        b = bloom.bloom_from_list(self.bloomables())
+        return utils.zpad(utils.int_to_big_endian(b), 64)
+
+    def __repr__(self):
+        return '<Log(address=%r, topics=%r, data=%r)>' % \
+                (self.address, self.topics, self.data)
+
+    def to_dict(self):
+        return dict(address=self.address,
+                    topics=[utils.zpad(utils.int_to_big_endian(x), 32).encode('hex') for x in self.topics],
+                    data='0x' + self.data.encode('hex'))
+
 
 
 class InvalidTransaction(Exception):
