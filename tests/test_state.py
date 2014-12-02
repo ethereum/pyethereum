@@ -126,7 +126,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
     try:
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
-    except:
+    except pb.InvalidTransaction:
         output = ''
         print 'Transaction not valid'
         pass
