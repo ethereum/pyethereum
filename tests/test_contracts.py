@@ -66,7 +66,7 @@ def test_sixten():
 
 mul2_code = \
     '''
-def double(v:17):
+def double(v):
     return(v*2)
 '''
 
@@ -126,7 +126,7 @@ def init():
 def query(addr):
     return(self.balances[addr])
 
-def send(to:29, value:31):
+def send(to, value):
     from = msg.sender
     fromvalue = self.balances[from]
     if fromvalue >= value:
@@ -142,9 +142,9 @@ def send(to:29, value:31):
 def test_currency():
     s = tester.state()
     c = s.contract(currency_code, sender=tester.k0)
-    o1 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2+':29', '200:31'])
+    o1 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 200])
     assert o1 == [1]
-    o2 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2+':29', '900:31'])
+    o2 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 900])
     assert o2 == [0]
     o3 = s.send(tester.k0, c, 0, funid=0, abi=[tester.a0])
     assert o3 == [800]
@@ -213,7 +213,7 @@ def main(datafeed, index):
         ethvalue = self.hedgeValue
         if msg.value >= ethvalue:
             self.partytwo = msg.sender
-        c = self.datafeed.get(data=[self.index], datasz=1)
+        c = self.datafeed.get(self.index)
         othervalue = ethvalue * c
         self.fiatValue = othervalue
         self.maturity = block.timestamp + 500
@@ -275,7 +275,7 @@ def f1():
 
 def f2():
     self.storage[0] *= 10
-    call(self, 0)
+    self.f1()
     self.storage[0] *= 10
 
 def f3():
@@ -295,14 +295,14 @@ def test_lifo():
 suicider_code = '''
 def mainloop(rounds):
     self.storage[15] = 40
-    call(self, 3)
+    self.suicide()
     i = 0
     while i < rounds:
         i += 1
 
 def entry(rounds):
     self.storage[15] = 20
-    call(self, 0, rounds, gas=tx.gas - 100)
+    self.mainloop(rounds, gas=tx.gas - 100)
 
 def ping_ten():
     return(10)
@@ -355,7 +355,7 @@ def recurse():
     send(8, 9)
     self.storage[8081] = 4039
     self.storage[160161] = 2019
-    call(self, 2)
+    self.recurse()
     self.storage["waste_some_gas"] = 0
 '''
 
@@ -448,7 +448,7 @@ def main():
 def first(a, b, c, d, e):
     self.storage[1] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
 
-def second(a:11, b:19, c:32, d, e:20):
+def second(a, b, c, d, e):
     self.storage[2] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
 
 def third(a, b, c, d, e):
@@ -468,7 +468,7 @@ def test_calls():
     assert [34567] == s.send(tester.k0, c, 0, funid=4, abi=[3])
     s.send(tester.k0, c, 0, funid=1, abi=[4, 5, 6, 7, 8])
     assert [45678] == s.send(tester.k0, c, 0, funid=4, abi=[1])
-    s.send(tester.k0, c, 0, funid=2, abi=['5:11', '6:19', '7:32', 8, '9:20'])
+    s.send(tester.k0, c, 0, funid=2, abi=[5, 6, 7, 8, 9])
     assert [56789] == s.send(tester.k0, c, 0, funid=4, abi=[2])
 
 
@@ -523,7 +523,7 @@ def query_person():
         i += 1
     return(a, 15)
 
-def testping(x:2, y:7):
+def testping(x, y):
     return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)], 2)
 
 def testping2(x):
@@ -547,7 +547,7 @@ def test_storage_objects():
     assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
             657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
-    assert [361, 441] == s.send(tester.k0, c, 0, funid=5, abi=['19:2', '21:7'])
+    assert [361, 441] == s.send(tester.k0, c, 0, funid=5, abi=[19, 21])
 
 
 infinite_storage_object_test_code = """
@@ -775,9 +775,9 @@ data store[1000]
 
 def kall():
     a = "sir bobalot to the rescue !!1!1!!1!1"
-    save(store[0], a, chars=60)
-    b = load(store[0], chars=60)
-    c = load(store[0], chars=33)
+    save(self.store[0], a, chars=60)
+    b = load(self.store[0], chars=60)
+    c = load(self.store[0], chars=33)
     return([a[0], a[1], b[0], b[1], c[0], c[1]], 8)
 
 """
@@ -809,6 +809,106 @@ def test_sdiv():
     assert [-4, -2] == s.send(tester.k0, c, 0, funid=0, abi=[])
 
 
+basic_argcall_code = """
+def argcall(args:a):
+    return(args[0] + args[1] * 10 + args[2] * 100)
+
+def argkall(args:a):
+    return self.argcall(args:arglen(args))
+"""
+
+
+def test_argcall():
+    s = tester.state()
+    c = s.contract(basic_argcall_code)
+    assert [375] == s.send(tester.k0, c, 0, funid=0, abi=[[5, 7, 3]])
+    assert [376] == s.send(tester.k0, c, 0, funid=1, abi=[[6, 7, 3]])
+
+
+sort_code = """
+def sort(args:a):
+    if arglen(args) < 2:
+        return(args, arglen(args))
+    h = array(arglen(args))
+    hpos = 0
+    l = array(arglen(args))
+    lpos = 0
+    i = 1
+    while i < arglen(args):
+        if args[i] < args[0]:
+            l[lpos] = args[i]
+            lpos += 1
+        else:
+            h[hpos] = args[i]
+            hpos += 1
+        i += 1
+    h = self.sort(h:hpos, outsz=hpos)
+    l = self.sort(l:lpos, outsz=lpos)
+    o = array(arglen(args))
+    i = 0
+    while i < lpos:
+        o[i] = l[i]
+        i += 1
+    o[lpos] = args[0]
+    i = 0
+    while i < hpos:
+        o[lpos + 1 + i] = h[i]
+        i += 1
+    return(o, arglen(args))
+"""
+
+
+def test_sort():
+    s = tester.state()
+    c = s.contract(sort_code)
+    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[9]])
+    assert a1 == [9]
+    a2 = s.send(tester.k0, c, 0, funid=0, abi=[[9, 5]])
+    assert a2 == [5, 9]
+    a3 = s.send(tester.k0, c, 0, funid=0, abi=[[9, 3, 5]])
+    assert a3 == [3, 5, 9]
+    a4 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
+    assert a4 == [24, 29, 80, 112, 112, 234]
+
+filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
+
+sort_tester_code = \
+    '''
+extern sorter: [sort:a]
+data sorter
+
+def init():
+    self.sorter = create("%s")
+
+def test(args:a):
+    ac = arglen(args)
+    return(self.sorter.sort(args:ac, outsz=ac), ac)
+''' % filename9
+
+
+def test_indirect_sort():
+    s = tester.state()
+    open(filename9, 'w').write(sort_code)
+    c = s.contract(sort_tester_code)
+    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
+    assert a1 == [24, 29, 80, 112, 112, 234]
+
+
+multiarg_code = """
+def kall(a:a, b, c:a, d:s, e):
+    x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
+    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), arglen(d)], 3)
+"""
+
+
+def test_multiarg_code():
+    s = tester.state()
+    c = s.contract(multiarg_code)
+    o = s.send(tester.k0, c, 0, funid=0,
+               abi=[[1, 2, 3], 4, [5, 6, 7], "\"doge\"", 8])
+    assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -830,3 +930,7 @@ def test_sdiv():
 # test_saveload = None
 # test_crowdfund = None
 # test_sdiv = None
+# test_argcall = None
+# test_sort = None
+# test_indirect_sort = None
+# test_multiarg_code = None

@@ -68,7 +68,7 @@ class state():
     def send(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
@@ -93,7 +93,7 @@ class state():
     def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
@@ -101,10 +101,11 @@ class state():
         tx.sign(sender)
         return spv.mk_transaction_spv_proof(self.block, tx)
 
-    def verifyspv(self, sender, to, value, data=[], funid=None, abi=None, proof=[]):
+    def verifyspv(self, sender, to, value, data=[],
+                  funid=None, abi=None, proof=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
