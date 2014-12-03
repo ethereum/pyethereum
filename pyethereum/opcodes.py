@@ -67,8 +67,8 @@ opcodes = {
     0xa4: ['LOG4', 6, 0, 160],
     0xf0: ['CREATE', 3, 1, 100],
     0xf1: ['CALL', 7, 1, 20],
-    0xf2: ['CALLCODE', 2, 1, 1],
-    0xf3: ['RETURN', 7, 1, 20],
+    0xf2: ['CALLCODE', 7, 1, 20],
+    0xf3: ['RETURN', 2, 1, 1],
     0xff: ['SUICIDE', 1, 1, 0],
 }
 

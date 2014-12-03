@@ -757,12 +757,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
                     mem[memoutstart + i] = data[i]
         else:
             stk.append(0)
-    elif op == 'RETURN':
-        s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, s1):
-            return vm_exception('OOG EXTENDING MEMORY')
-        return mem[s0: s0 + s1]
-    elif op == 'CALL_CODE':
+    elif op == 'CALLCODE':
         gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
             stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
         if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
@@ -785,6 +780,11 @@ def apply_op(block, tx, msg, processed_code, compustate):
             compustate.gas += gas
             for i in range(min(len(data), memoutsz)):
                 mem[memoutstart + i] = data[i]
+    elif op == 'RETURN':
+        s0, s1 = stk.pop(), stk.pop()
+        if not mem_extend(mem, compustate, op, s0, s1):
+            return vm_exception('OOG EXTENDING MEMORY')
+        return mem[s0: s0 + s1]
     elif op == 'SUICIDE':
         to = utils.encode_int(stk.pop())
         to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
