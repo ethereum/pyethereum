@@ -58,8 +58,9 @@ def test_gas_deduction():
     assert blk.coinbase != v
     assert v_old_balance > blk.get_balance(v)
     assert v_old_balance == blk.get_balance(v) + blk.get_balance(blk.coinbase)
-    intrinsic_gas_used = processblock.GTXCOST + \
-        processblock.GTXDATA * len(tx1.data)
+    intrinsic_gas_used = processblock.GTXCOST
+    intrinsic_gas_used += processblock.GTXDATAZERO * tx1.data.count(chr(0))
+    intrinsic_gas_used += processblock.GTXDATANONZERO * (len(tx1.data) - tx1.data.count(chr(0)))
     assert v_old_balance - blk.get_balance(v) >= intrinsic_gas_used * gasprice
 
 

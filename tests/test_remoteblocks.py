@@ -8,21 +8,23 @@ import logging
 import pytest
 import tempfile
 from tests.utils import set_db
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
+
+log_active = False
 pblogger = processblock.pblogger
-pblogger.log_pre_state = True    # dump storage at account before execution
-pblogger.log_post_state = True   # dump storage at account after execution
+pblogger.log_pre_state = log_active    # dump storage at account before execution
+pblogger.log_post_state = log_active   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = True      # dump memory before each op
-pblogger.log_stack = True      # dump stack before each op
-pblogger.log_storage = True      # dump storage before each op
-pblogger.log_op = True           # log op, gas, stack before each op
+pblogger.log_memory = log_active      # dump memory before each op
+pblogger.log_stack = log_active      # dump stack before each op
+pblogger.log_storage = log_active      # dump storage before each op
+pblogger.log_op = log_active           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = True     # log anything per operation at all
+pblogger.log_apply_op = log_active     # log anything per operation at all
 
 
 def test_import_remote_chain():
@@ -97,7 +99,8 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
         blk = blocks.TransientBlock(hexdata)
         print blk.number, blk.hash.encode('hex'), '%d txs' % len(blk.transaction_list)
         chain_manager.receive_chain([blk])
-        assert blk.hash in chain_manager
+        if not blk.hash in chain_manager:
+            chain_manager.head.deserialize_child(blk.rlpdata)
 
 
 if __name__ == "__main__":

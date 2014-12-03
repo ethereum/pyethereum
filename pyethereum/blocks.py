@@ -55,7 +55,7 @@ block_structure = [
     ["bloom", "int64", 0],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-    ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
+#    ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
@@ -97,6 +97,15 @@ class UnknownParentException(Exception):
     pass
 
 
+class VerificationFailed(Exception):
+    pass
+
+
+def must_equal(what, a, b):
+    if a != b:
+        raise VerificationFailed(what, a, '==', b)
+
+
 class TransientBlock(object):
 
     """
@@ -119,7 +128,7 @@ class TransientBlock(object):
 
 
 def check_header_pow(header):
-    assert len(header[-1]) == 32
+    must_equal('nonce_len', len(header[-1]), 32)
     rlp_Hn = rlp.encode(header[:-1])
     nonce = header[-1]
     diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
@@ -138,7 +147,7 @@ class Block(object):
                  receipts_root=trie.BLANK_ROOT,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
-                 min_gas_price=block_structure_rev['min_gas_price'][2],
+#                 min_gas_price=block_structure_rev['min_gas_price'][2],
                  gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
@@ -151,7 +160,7 @@ class Block(object):
         self.coinbase = coinbase
         self.difficulty = difficulty
         self.number = number
-        self.min_gas_price = min_gas_price
+#        self.min_gas_price = min_gas_price
         self.gas_limit = gas_limit
         self.gas_used = gas_used
         self.timestamp = timestamp
@@ -321,23 +330,20 @@ class Block(object):
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
-        block.min_gas_price = kargs['min_gas_price']
+#        block.min_gas_price = kargs['min_gas_price']
 
-        # checks
-        assert block.prevhash == self.hash
-
-        assert block.gas_used == kargs['gas_used'], (block.gas_used, kargs['gas_used'])
-        assert block.gas_limit == kargs['gas_limit']
-        assert block.timestamp == kargs['timestamp']
-        assert block.difficulty == kargs['difficulty']
-        assert block.number == kargs['number']
-        assert block.extra_data == kargs['extra_data']
-        assert utils.sha3rlp(block.uncles) == kargs['uncles_hash']
-
-        assert block.state.root_hash == kargs['state_root'], (block.state.root_hash, kargs['state_root'])
-        assert block.tx_list_root == kargs['tx_list_root']
-        assert block.receipts.root_hash == kargs['receipts_root'], \
-            (block.receipts.root_hash, kargs['receipts_root'], block.receipts.to_dict())
+        # checks 
+        must_equal('prev_hash', block.prevhash, self.hash)
+        must_equal('gas_used', block.gas_used, kargs['gas_used'])
+        must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
+        must_equal('timestamp', block.timestamp, kargs['timestamp'])
+        must_equal('difficulty', block.difficulty, kargs['difficulty'])
+        must_equal('number', block.number, kargs['number'])
+        must_equal('extra_data', block.extra_data, kargs['extra_data'])
+        must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
+        must_equal('state_root', block.state.root_hash, kargs['state_root'])
+        must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
+        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
 
         return block
 
@@ -628,7 +634,7 @@ class Block(object):
             self.bloom = bloom.bloom_insert(self.bloom,
                                             uncle_data['coinbase'].decode('hex'))
         self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
-        logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
+        #logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
         self.commit_state()
 
     def serialize_header_without_nonce(self):
@@ -788,7 +794,7 @@ class Block(object):
             tx_list_root=trie.BLANK_ROOT,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
-            min_gas_price=0,
+#            min_gas_price=0,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
             timestamp=timestamp,

@@ -14,14 +14,14 @@ pblogger = pb.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-pblogger.log_pre_state = True    # dump storage at account before execution
-pblogger.log_post_state = True   # dump storage at account after execution
+pblogger.log_pre_state = False    # dump storage at account before execution
+pblogger.log_post_state = False   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = True      # dump memory before each op
-pblogger.log_op = True           # log op, gas, stack before each op
+pblogger.log_memory = False      # dump memory before each op
+pblogger.log_op = False           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = True     # generate machine readable output
-pblogger.log_stack = True        # generate machine readable output
+pblogger.log_apply_op = False     # generate machine readable output
+pblogger.log_stack = False        # generate machine readable output
 
 
 def check_testdata(data_keys, expected_keys):
@@ -120,13 +120,13 @@ def do_test_vm(filename, testname=None, limit=99999999):
         to=exek['to'],
         value=int(exek['value']),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
-    pblogger.log_apply_op = True
-    pblogger.log_op = True
+    pblogger.log_apply_op = False
+    pblogger.log_op = False
 
     try:
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
-    except:
+    except pb.InvalidTransaction:
         output = ''
         print 'Transaction not valid'
         pass

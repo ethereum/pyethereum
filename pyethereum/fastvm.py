@@ -173,7 +173,7 @@ def out_of_gas_exception(expense, fee, compustate, op):
 
 
 filter1 = set(['JUMP', 'JUMPI', 'JUMPDEST', 'STOP', 'RETURN',
-               'INVALID', 'CALL', 'CREATE', 'CALL_CODE', 'SUICIDE'])
+               'INVALID', 'CALL', 'CREATE', 'CALLCODE', 'SUICIDE'])
 
 
 # "compiles" virtual machine code into a format consisting of a map between
@@ -420,7 +420,7 @@ def apply_msg(block, tx, msg, code):
             copy32(mem, o, s0, 0, s1)
             drop(o, s1)
 
-    def OP_CALL_CODE():
+    def OP_CALLCODE():
             subgas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, msgtop.compustate, '', meminstart, meminsz) or \
@@ -762,8 +762,8 @@ def apply_msg(block, tx, msg, code):
     ] + [OP_PUSHN] * 32 + [OP_DUPN] * 16 + [OP_SWAPN] * 16 + [OP_INVALID] * 80 + [
         OP_CREATE,
         OP_CALL,
+        OP_CALLCODE,
         OP_RETURN,
-        OP_CALL_CODE,
         OP_INVALID,
         OP_INVALID,
         OP_INVALID,
