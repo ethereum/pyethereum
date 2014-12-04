@@ -42,7 +42,7 @@ def dump_transactions(hex_rlp_encoded_data):
         tx = transactions.Transaction.create(tx_lst_serialized)
         #print tx.to_dict()
 
-#@pytest.mark.xfail
+@pytest.mark.xfail
 def test_dump_tx(data=blk_poc7_v40_61):
     return dump_transactions(data)
 
