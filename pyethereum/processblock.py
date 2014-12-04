@@ -123,13 +123,13 @@ class Log(object):
     def serialize(self):
         return [
             self.address.decode('hex'),
-            [utils.encode_int(x) for x in self.topics],
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics], # why zpad?
             self.data
         ]
 
     def bloomables(self):
         return [self.address.decode('hex')] + \
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics] # why zpad?
 
     def bloom(self):
         b = bloom.bloom_from_list(self.bloomables())
