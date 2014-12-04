@@ -414,26 +414,20 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
-    def mk_log_bloom(self):
-        b = bloom.bloom_from_list(
-            utils.flatten([x.bloomables() for x in self.logs]))
-        self.most_recent_tx_bloom = b
-        return utils.zpad(utils.int_to_big_endian(b), 64)
-
-    def mk_transaction_receipt(self):
+    def mk_transaction_receipt(self, tx):
         o = [
             self.state_root,
             utils.encode_int(self.gas_used),
-            self.mk_log_bloom(),
-            [x.serialize() for x in self.logs],
+            tx.log_bloom_b64(),
+            [x.serialize() for x in tx.logs]
         ]
         return rlp.encode(o)
 
     def add_transaction_to_list(self, tx):
         k = rlp.encode(utils.encode_int(self.transaction_count))
         self.transactions.update(k, tx.serialize())
-        self.receipts.update(k, self.mk_transaction_receipt())
-        self.bloom |= self.most_recent_tx_bloom
+        self.receipts.update(k, self.mk_transaction_receipt(tx))
+        self.bloom |= tx.log_bloom() # int
         self.transaction_count += 1
 
     def _list_transactions(self):

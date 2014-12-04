@@ -107,6 +107,7 @@ class Message(object):
         self.gas = gas
         self.data = data
         self.depth = depth
+        self.logs = []
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -342,6 +343,7 @@ def apply_msg(block, tx, msg, code):
                 block.revert(snapshot)
                 return 0, 0, []
             else:
+                tx.logs.extend(msg.logs)
                 return 1, compustate.gas, o
 
 
@@ -703,8 +705,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
-        print "VM DOOOOO LOG", dict(topics=topics, data=data, address=msg.to)
-        block.logs.append(Log(msg.to, topics, data))
+        msg.logs.append(Log(msg.to, topics, data))
         pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
 
 
