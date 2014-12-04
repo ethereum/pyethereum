@@ -238,6 +238,10 @@ class ChainManager(StoppableLoopThread):
             self.synchronizer.received_blocks(peer, transient_blocks)
 
             for t_block in transient_blocks:  # oldest to newest
+                logger.debug('Checking PoW %r', t_block)
+                if not blocks.check_header_pow(t_block.header_args):
+                    logger.debug('Invalid PoW %r', t_block)
+                    continue
                 logger.debug('Deserializing %r', t_block)
                 # logger.debug(t_block.rlpdata.encode('hex'))
                 try:
