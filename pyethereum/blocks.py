@@ -180,7 +180,7 @@ class Block(object):
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
-        self.bloom = bloom
+        self.bloom = bloom # int
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -340,8 +340,9 @@ class Block(object):
         must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
         must_equal('state_root', block.state.root_hash, kargs['state_root'])
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
-        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
         must_equal('bloom', block.bloom, kargs['bloom'])
+        assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts.root_hash.encode('hex'), kargs['receipts_root'].encode('hex'))
+        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
         if not check_header_pow(block.list_header()):
             raise VerificationFailed('invalid nonce')
 
@@ -631,9 +632,6 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
-#            self.bloom = bloom.bloom_insert(self.bloom, uncle_data['coinbase'].decode('hex'))
-#        self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
-        #logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
         self.commit_state()
 
     def serialize_header_without_nonce(self):
