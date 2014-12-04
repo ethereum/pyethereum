@@ -128,9 +128,9 @@ class TransientBlock(object):
 
 
 def check_header_pow(header):
-    must_equal('nonce_len', len(header[-1]), 32)
     rlp_Hn = rlp.encode(header[:-1])
     nonce = header[-1]
+    assert len(nonce) == 32
     diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
     h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
     return utils.big_endian_to_int(h) < 2 ** 256 / diff
@@ -145,6 +145,7 @@ class Block(object):
                  state_root=trie.BLANK_ROOT,
                  tx_list_root=trie.BLANK_ROOT,
                  receipts_root=trie.BLANK_ROOT,
+                 bloom=0,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
 #                 min_gas_price=block_structure_rev['min_gas_price'][2],
@@ -152,7 +153,6 @@ class Block(object):
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
                  uncles=[],
-                 bloom=0,
                  header=None):
 
         self.prevhash = prevhash
@@ -317,6 +317,7 @@ class Block(object):
                                        timestamp=kargs['timestamp'],
                                        uncles=uncles)
 
+
         # replay transactions
         for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
@@ -330,9 +331,12 @@ class Block(object):
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
+        block.nonce = kargs['nonce']
 #        block.min_gas_price = kargs['min_gas_price']
 
-        # checks 
+        # checks
+        if not check_header_pow(block.list_header()):
+            raise VerificationFailed('invalid nonce')
         must_equal('prev_hash', block.prevhash, self.hash)
         must_equal('gas_used', block.gas_used, kargs['gas_used'])
         must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
@@ -344,6 +348,7 @@ class Block(object):
         must_equal('state_root', block.state.root_hash, kargs['state_root'])
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
+        must_equal('bloom', block.bloom, kargs['bloom'])
 
         return block
 
@@ -631,9 +636,8 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
-            self.bloom = bloom.bloom_insert(self.bloom,
-                                            uncle_data['coinbase'].decode('hex'))
-        self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
+#            self.bloom = bloom.bloom_insert(self.bloom, uncle_data['coinbase'].decode('hex'))
+#        self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
         #logger.debug('mumumumumumumu: %r %r' % (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
         self.commit_state()
 
@@ -792,6 +796,8 @@ class Block(object):
             coinbase=coinbase,
             state_root=parent.state.root_hash,
             tx_list_root=trie.BLANK_ROOT,
+            receipts_root=trie.BLANK_ROOT,
+            bloom=0,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
 #            min_gas_price=0,
