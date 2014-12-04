@@ -331,12 +331,8 @@ class Block(object):
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
-        block.nonce = kargs['nonce']
-#        block.min_gas_price = kargs['min_gas_price']
 
         # checks
-        if not check_header_pow(block.list_header()):
-            raise VerificationFailed('invalid nonce')
         must_equal('prev_hash', block.prevhash, self.hash)
         must_equal('gas_used', block.gas_used, kargs['gas_used'])
         must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
@@ -349,6 +345,8 @@ class Block(object):
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
         must_equal('bloom', block.bloom, kargs['bloom'])
+        if not check_header_pow(block.list_header()):
+            raise VerificationFailed('invalid nonce')
 
         return block
 
