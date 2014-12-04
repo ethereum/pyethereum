@@ -55,7 +55,6 @@ block_structure = [
     ["bloom", "int64", 0],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-#    ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
@@ -148,7 +147,6 @@ class Block(object):
                  bloom=0,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
-#                 min_gas_price=block_structure_rev['min_gas_price'][2],
                  gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
@@ -160,7 +158,6 @@ class Block(object):
         self.coinbase = coinbase
         self.difficulty = difficulty
         self.number = number
-#        self.min_gas_price = min_gas_price
         self.gas_limit = gas_limit
         self.gas_used = gas_used
         self.timestamp = timestamp
@@ -798,7 +795,6 @@ class Block(object):
             bloom=0,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
-#            min_gas_price=0,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
             timestamp=timestamp,
