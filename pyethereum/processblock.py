@@ -128,7 +128,7 @@ class Log(object):
 
     def bloomables(self):
         return [self.address.decode('hex')] + \
-            [utils.encode_int(x) for x in self.topics]
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]
 
     def bloom(self):
         b = bloom.bloom_from_list(self.bloomables())
