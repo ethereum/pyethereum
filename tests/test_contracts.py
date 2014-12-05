@@ -908,6 +908,116 @@ def test_multiarg_code():
                abi=[[1, 2, 3], 4, [5, 6, 7], "\"doge\"", 8])
     assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
 
+peano_code = """
+macro padd(x, psuc(y)):
+    psuc(padd(x, y))
+
+macro padd(x, z()):
+    x
+
+macro dec(psuc(x)):
+    dec(x) + 1
+
+macro dec(z()):
+    0
+
+macro pmul(x, z()): 
+    z()
+
+macro pmul(x, psuc(y)):   
+    padd(pmul(x, y), x)
+
+macro pexp(x, z()): 
+    one()
+
+macro pexp(x, psuc(y)): 
+    pmul(x, pexp(x, y))
+    
+macro fac(z()):
+    one()
+    
+macro fac(psuc(x)): 
+    pmul(psuc(x), fac(x))
+
+macro one():
+    psuc(z())
+
+macro two():
+    psuc(psuc(z()))
+
+macro three():
+    psuc(psuc(psuc(z())))
+
+macro five():
+    padd(three(), two())
+
+return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))], 2)
+
+"""
+
+
+def test_macros():
+    s = tester.state()
+    c = s.contract(peano_code)
+    assert s.send(tester.k0, c, 0, []) == [27, 120]
+
+
+type_code = """
+type f: [a, b, c, d, e]
+
+macro f(a) + f(b):
+    f(add(a, b))
+
+macro f(a) - f(b):
+    f(sub(a, b))
+
+macro f(a) * f(b):
+    f(mul(a, b) / 10000)
+
+macro f(a) / f(b):
+    f(sdiv(a * 10000, b))
+
+macro f(a) % f(b):
+    f(smod(a, b))
+
+macro f(v) = f(w):
+    ~set(v, w)
+
+macro unfify(f(a)):
+    a / 10000
+
+macro fify(a):
+    f(a * 10000)
+
+a = fify(5)
+b = fify(2)
+c = a + b
+c = a / b
+d = a / b
+e = c + d
+return(unfify(e))
+"""
+
+
+def test_types():
+    s = tester.state()
+    c = s.contract(type_code)
+    assert s.send(tester.k0, c, 0, []) == [5]
+
+sha256_code = """
+return([sha256(0, 0), sha256(3), sha256("dog", chars=3)], 3)
+"""
+
+
+def test_sha256():
+    s = tester.state()
+    c = s.contract(sha256_code)
+    assert s.send(tester.k0, c, 0, []) == [
+        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
+        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256
+    ]
+
 
 # test_evm = None
 # test_sixten = None
@@ -934,3 +1044,6 @@ def test_multiarg_code():
 # test_sort = None
 # test_indirect_sort = None
 # test_multiarg_code = None
+# test_macros = None
+# test_types = None
+# test_sha256 = None
