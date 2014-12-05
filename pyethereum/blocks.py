@@ -121,9 +121,7 @@ class TransientBlock(object):
             setattr(self, name, utils.decoders[typ](self.header_args[i]))
 
     def __repr__(self):
-        return '<TransientBlock(#%d %s %s)>' %\
-            (self.number, self.hash.encode('hex')[
-             :4], self.prevhash.encode('hex')[:4])
+        return '<TransientBlock(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
 
 
 def check_header_pow(header):
@@ -785,9 +783,7 @@ class Block(object):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s %s)>' % (self.number,
-                                       self.hex_hash()[:4],
-                                       self.prevhash.encode('hex')[:4])
+        return '<Block(#%d %s)>' % (self.number, self.hex_hash()[:8])
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',

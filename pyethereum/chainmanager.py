@@ -203,7 +203,7 @@ class ChainManager(StoppableLoopThread):
         ineligible = set()  # hashes
         blk = self.head
         for i in range(8):
-            for u in blk.uncles:  # assuming uncle headres
+            for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
 #                    logger.debug('ineligible uncle %r', u.encode('hex'))
@@ -494,7 +494,7 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
 
 @receiver(signals.new_block_received)
 def new_block_received_handler(sender, block, peer, **kwargs):
-    logger.debug("recv new remote block: %r", block.number)
+    logger.debug("recv new block: %r cb:%s", block, block.coinbase.encode('hex'))
     chain_manager.receive_chain([block], peer)
 
 
