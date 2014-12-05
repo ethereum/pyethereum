@@ -347,10 +347,10 @@ class Block(object):
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
         bloom_bits =  bloom.bits_in_number(block.bloom)
         bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
-        print 'computed', bloom_bits
-        print 'expected', bloom_bits_expected
-        print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
-        print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
+        # print 'computed', bloom_bits
+        # print 'expected', bloom_bits_expected
+        # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
+        # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
         must_equal('bloom', block.bloom, kargs['bloom'])
         assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts.root_hash.encode('hex'), kargs['receipts_root'].encode('hex'))
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
