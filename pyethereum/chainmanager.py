@@ -305,6 +305,7 @@ class ChainManager(StoppableLoopThread):
             logger.debug('Invalid nonce %r', block)
             return False
         # Forward block w/ valid PoW asap (if not syncing)
+        # FIXME: filter peer by wich block was received
         if forward:
             signals.broadcast_new_block.send(sender=None, block=block)
             logger.debug("broadcasting new %r" % block)
@@ -494,7 +495,7 @@ def local_transaction_received_handler(sender, transaction, **kwargs):
 
 @receiver(signals.new_block_received)
 def new_block_received_handler(sender, block, peer, **kwargs):
-    logger.debug("recv new block: %r cb:%s", block, block.coinbase.encode('hex'))
+    logger.debug("recv new block: %r cb:%s", block, block.coinbase)
     chain_manager.receive_chain([block], peer)
 
 
