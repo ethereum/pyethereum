@@ -150,8 +150,7 @@ class PeerManager(StoppableLoopThread):
             self.remove_peer(peer)
         elif min(dt_seen, dt_ping) > self.max_silence:
             # ping silent peer
-            logger.debug('pinging silent peer {0}'.format(peer))
-
+            #logger.debug('pinging silent peer {0}'.format(peer))
             with peer.lock:
                 peer.send_Ping()
 
@@ -163,6 +162,9 @@ class PeerManager(StoppableLoopThread):
             logger.debug('not enough peers: {0}'.format(
                 len(self.connected_peers)))
             logger.debug('num candidates: {0}'.format(len(candidates)))
+            for peer in self.connected_peers:
+                logger.debug('%r %s' % (peer, peer.client_version))
+
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
