@@ -98,10 +98,14 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
         data = rlp.decode(hexdata)
         blk = blocks.TransientBlock(hexdata)
         print blk.number, blk.hash.encode('hex'), '%d txs' % len(blk.transaction_list)
+        head = chain_manager.head
+        assert blocks.check_header_pow(blk.header_args)
         chain_manager.receive_chain([blk])
         if not blk.hash in chain_manager:
+            print 'block could not be added'
+            assert head == chain_manager.head
             chain_manager.head.deserialize_child(blk.rlpdata)
-
+            assert blk.hash in chain_manager
 
 if __name__ == "__main__":
     """

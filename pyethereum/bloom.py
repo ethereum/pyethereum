@@ -12,6 +12,8 @@ of each value.
 bloom(0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6)
 sha3: bd2b01afcd27800b54d2179edc49e2bffde5078bb6d0b204694169b1643fb108
 first double-bytes: bd2b, 01af, cd27 -- which leads to bits in bloom --> 299, 431, 295
+
+blooms in this module are of type 'int'
 """
 
 BUCKETS_PER_VAL = 3
@@ -49,3 +51,7 @@ def bloom_combine(*args):
 
 def bloom_from_list(args):
     return bloom_combine(*[bloom_insert(0, arg) for arg in args])
+
+def b64(int_bloom):
+    "returns b64"
+    return utils.zpad(utils.int_to_big_endian(int_bloom), 64)

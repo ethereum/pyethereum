@@ -107,6 +107,7 @@ class Message(object):
         self.gas = gas
         self.data = data
         self.depth = depth
+        self.logs = []
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -122,17 +123,13 @@ class Log(object):
     def serialize(self):
         return [
             self.address.decode('hex'),
-            [utils.encode_int(x) for x in self.topics],
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics], # why zpad?
             self.data
         ]
 
     def bloomables(self):
         return [self.address.decode('hex')] + \
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]
-
-    def bloom(self):
-        b = bloom.bloom_from_list(self.bloomables())
-        return utils.zpad(utils.int_to_big_endian(b), 64)
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics] # why zpad?
 
     def __repr__(self):
         return '<Log(address=%r, topics=%r, data=%r)>' % \
@@ -342,6 +339,7 @@ def apply_msg(block, tx, msg, code):
                 block.revert(snapshot)
                 return 0, 0, []
             else:
+                tx.logs.extend(msg.logs)
                 return 1, compustate.gas, o
 
 
@@ -703,8 +701,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         if not mem_extend(mem, compustate, op, mstart, msz):
             return vm_exception('OOG EXTENDING MEMORY')
         data = ''.join(map(chr, mem[mstart: mstart + msz]))
-        print "VM DOOOOO LOG", dict(topics=topics, data=data, address=msg.to)
-        block.logs.append(Log(msg.to, topics, data))
+        msg.logs.append(Log(msg.to, topics, data))
         pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
 
 

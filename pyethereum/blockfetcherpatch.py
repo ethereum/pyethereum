@@ -8,7 +8,7 @@ configure to connect to one peer, no mine
 
 """
 print('IMPORTED BLOCKFETCHERPATCH')
-fn = 'blocks.poc7.p46.hexdata'
+fn = 'tests/raw_remote_blocks_hex.txt'
 
 
 import pyethereum.config
