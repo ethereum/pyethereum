@@ -83,7 +83,10 @@ class state():
     def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used
         o = self.send(sender, to, value, data, funid, abi)
-        intrinsic_gas_used = pb.GTXDATA * len(self.last_tx.data) + pb.GTXCOST
+        zero_bytes = self.last_tx.data.count(chr(0))
+        non_zero_bytes = len(self.last_tx.data) - zero_bytes
+        intrinsic_gas_used = pb.GTXDATAZERO * zero_bytes + \
+            pb.GTXDATANONZERO * non_zero_bytes
         return {
             "time": time.time() - tm,
             "gas": self.block.gas_used - g - intrinsic_gas_used,
