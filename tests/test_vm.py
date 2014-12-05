@@ -4,6 +4,7 @@ import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
+import pyethereum.bloom as bloom
 import os
 import sys
 
@@ -196,8 +197,9 @@ def do_test_vm(filename, testname=None, limit=99999999):
         """
         test_logs = params['logs']
         vm_logs = dict()
-        for log in blk.logs:
-            vm_logs[log.bloom().encode('hex')] = log.to_dict()
+        for log in tx.logs:
+            log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
+            vm_logs[log_bloom.encode('hex')] = log.to_dict()
 
         assert len(vm_logs) == len(test_logs)
         for hexbloom, test_log_data in test_logs.items():
