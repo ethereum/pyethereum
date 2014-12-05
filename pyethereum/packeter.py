@@ -259,8 +259,8 @@ class Packeter(object):
         totalDifficulty is the total difficulty of the block (aka score).
         """
         total_difficulty = block.chain_difficulty()
-        lst_block = rlp.decode(block.serialize())
-        data = [self.cmd_map_by_name['NewBlock'], total_difficulty, lst_block]
+        lst_block = rlp.decode(block.serialize()) # FIXME
+        data = [self.cmd_map_by_name['NewBlock'], lst_block, total_difficulty]
         return self.dump_packet(data)
 
     def dump_GetBlockHashes(self, block_hash, max_blocks):

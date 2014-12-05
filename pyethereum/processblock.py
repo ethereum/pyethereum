@@ -484,11 +484,7 @@ def apply_op(block, tx, msg, processed_code, compustate):
         base, exponent = stk.pop(), stk.pop()
         # fee for exponent is dependent on its bytes
         # calc n bytes to represent exponent
-        nbytes = 0
-        x = exponent
-        while x > 0:
-            nbytes += 1
-            x >>= 8
+        nbytes = len(utils.encode_int(exponent))
         expfee = nbytes * GEXPONENTBYTE
         if compustate.gas < expfee:
             compustate.gas = 0

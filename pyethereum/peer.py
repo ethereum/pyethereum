@@ -310,11 +310,18 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_NewBlock(block))
 
     def _recv_NewBlock(self, data):
+        """
+        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty] 
+        Specify a single block that the peer should know about. 
+        The composite item in the list (following the message ID) is a block in 
+        the format described in the main Ethereum specification.
+
+        totalDifficulty is the total difficulty of the block (aka score).
+        """
         logger.debug('NewBlock: %r', rlp.encode(data).encode('hex'))
         total_difficulty = idec(data[1])
         transient_block = blocks.TransientBlock(rlp.encode(data[0]))
-        signals.new_block_received.send(
-            sender=Peer, peer=self, block=transient_block)
+        signals.new_block_received.send(sender=Peer, peer=self, block=transient_block)
 
 # block hashes
     def send_GetBlockHashes(self, block_hash, max_blocks):
