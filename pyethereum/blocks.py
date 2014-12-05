@@ -314,15 +314,19 @@ class Block(object):
                                        timestamp=kargs['timestamp'],
                                        uncles=uncles)
 
-
+        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
         # replay transactions
         for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
 #            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
-            #block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
+            print "newbits", bloom.bits_in_number(tx.log_bloom())
+            for log in tx.logs:
+                bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
+                print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
+
 
         block.finalize()
 
@@ -340,6 +344,12 @@ class Block(object):
         must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
         must_equal('state_root', block.state.root_hash, kargs['state_root'])
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
+        bloom_bits =  bloom.bits_in_number(block.bloom)
+        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
+        print 'computed', bloom_bits
+        print 'expected', bloom_bits_expected
+        print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
+        print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
         must_equal('bloom', block.bloom, kargs['bloom'])
         assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts.root_hash.encode('hex'), kargs['receipts_root'].encode('hex'))
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
@@ -428,6 +438,10 @@ class Block(object):
         self.transactions.update(k, tx.serialize())
         self.receipts.update(k, self.mk_transaction_receipt(tx))
         self.bloom |= tx.log_bloom() # int
+        #print "newbits", bloom.bits_in_number(tx.log_bloom())
+        # for log in tx.logs:
+        #     print 'log', log.address, log.topics
+        #     print [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
         self.transaction_count += 1
 
     def _list_transactions(self):
