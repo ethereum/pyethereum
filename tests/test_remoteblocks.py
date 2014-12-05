@@ -8,7 +8,7 @@ import logging
 import pytest
 import tempfile
 from tests.utils import set_db
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
 
 # customize VM log output to your needs
