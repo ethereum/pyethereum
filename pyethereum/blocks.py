@@ -322,8 +322,9 @@ class Block(object):
 #            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
-            print "newbits", bloom.bits_in_number(tx.log_bloom())
+
             for log in tx.logs:
+                print "newbits", [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
                 bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
                 print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
 
@@ -439,7 +440,7 @@ class Block(object):
         self.receipts.update(k, self.mk_transaction_receipt(tx))
         self.bloom |= tx.log_bloom() # int
         #print "newbits", bloom.bits_in_number(tx.log_bloom())
-        # for log in tx.logs:
+        # for log in tx.logs:q
         #     print 'log', log.address, log.topics
         #     print [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
         self.transaction_count += 1
