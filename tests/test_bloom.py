@@ -82,10 +82,10 @@ def do_test_bloom(test_logs):
         topics = [decode_int_from_hex(x) for x in data['topics']]
         log = pb.Log(address, topics, '')
         #print "LOG", log.to_dict()
-        log_bloom = log.bloom()
+        log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
 #        print "log bits", bloom.bits_in_number(utils.decode_int(utils.zunpad(log_bloom)))
-        assert utils.zpad(log.bloom(), 64).encode('hex') == encode_hex_from_int(b)
-        assert test_bloom == utils.zpad(log_bloom, 64).encode('hex')
+        assert log_bloom.encode('hex') == encode_hex_from_int(b)
+        assert test_bloom == log_bloom.encode('hex')
 
 
 def test_addressX():
