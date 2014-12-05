@@ -323,10 +323,10 @@ class Block(object):
             success, output = processblock.apply_transaction(block, tx)
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
 
-            for log in tx.logs:
-                print "newbits", [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
-                bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
-                print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
+            # for log in tx.logs:
+            #     print "newbits", [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
+            #     bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
+            #     print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
 
 
         block.finalize()
