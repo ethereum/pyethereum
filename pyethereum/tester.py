@@ -26,6 +26,13 @@ a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 seed = 3**160
 
 
+def listen_for_logs(l):
+    if 'LOG' in l:
+        print l['LOG']
+
+pb.pblogger.listeners.append(listen_for_logs)
+
+
 # Pseudo-RNG (deterministic for now for testing purposes)
 def rand():
     global seed

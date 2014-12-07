@@ -473,7 +473,7 @@ def test_calls():
 
 
 storage_object_test_code = """
-extern moo = [ping, query_chessboard, query_stats, query_items, query_person, testping, testping2]
+extern moo: [ping, query_chessboard, query_stats, query_items, query_person, testping, testping2]
 
 data chessboard[8][8]
 data users[100](health, x, y, items[5])
@@ -695,7 +695,7 @@ def test_storagevar_fails():
 crowdfund_code = """
 data campaigns[2^80](recipient, goal, deadline, contrib_total, contrib_count, contribs[2^50](sender, value))
 
-def create_campaign(id, recipient, goal, timelimit)
+def create_campaign(id, recipient, goal, timelimit):
     if self.campaigns[id].recipient:
         return(0)
     self.campaigns[id].recipient = recipient
@@ -909,35 +909,35 @@ def test_multiarg_code():
     assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
 
 peano_code = """
-macro padd(x, psuc(y)):
-    psuc(padd(x, y))
+macro padd($x, psuc($y)):
+    psuc(padd($x, $y))
 
-macro padd(x, z()):
-    x
+macro padd($x, z()):
+    $x
 
-macro dec(psuc(x)):
-    dec(x) + 1
+macro dec(psuc($x)):
+    dec($x) + 1
 
 macro dec(z()):
     0
 
-macro pmul(x, z()): 
+macro pmul($x, z()):
     z()
 
-macro pmul(x, psuc(y)):   
-    padd(pmul(x, y), x)
+macro pmul($x, psuc($y)):
+    padd(pmul($x, $y), $x)
 
-macro pexp(x, z()): 
+macro pexp($x, z()):
     one()
 
-macro pexp(x, psuc(y)): 
-    pmul(x, pexp(x, y))
-    
+macro pexp($x, psuc($y)):
+    pmul($x, pexp($x, $y))
+
 macro fac(z()):
     one()
-    
-macro fac(psuc(x)): 
-    pmul(psuc(x), fac(x))
+
+macro fac(psuc($x)):
+    pmul(psuc($x), fac($x))
 
 macro one():
     psuc(z())
@@ -965,36 +965,34 @@ def test_macros():
 type_code = """
 type f: [a, b, c, d, e]
 
-macro f(a) + f(b):
-    f(add(a, b))
+macro f($a) + f($b):
+    f(add($a, $b))
 
-macro f(a) - f(b):
-    f(sub(a, b))
+macro f($a) - f($b):
+    f(sub($a, $b))
 
-macro f(a) * f(b):
-    f(mul(a, b) / 10000)
+macro f($a) * f($b):
+    f(mul($a, $b) / 10000)
 
-macro f(a) / f(b):
-    f(sdiv(a * 10000, b))
+macro f($a) / f($b):
+    f(sdiv($a * 10000, $b))
 
-macro f(a) % f(b):
-    f(smod(a, b))
+macro f($a) % f($b):
+    f(smod($a, $b))
 
-macro f(v) = f(w):
-    ~set(v, w)
+macro f($v) = f($w):
+    ~set($v, $w)
 
-macro unfify(f(a)):
-    a / 10000
+macro unfify(f($a)):
+    $a / 10000
 
-macro fify(a):
-    f(a * 10000)
+macro fify($a):
+    f($a * 10000)
 
 a = fify(5)
 b = fify(2)
-c = a + b
 c = a / b
-d = a / b
-e = c + d
+e = c + (a / b)
 return(unfify(e))
 """
 
