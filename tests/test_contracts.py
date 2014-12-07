@@ -981,7 +981,7 @@ macro f($a) % f($b):
     f(smod($a, $b))
 
 macro f($v) = f($w):
-    ~set($v, $w)
+    $v = $w
 
 macro unfify(f($a)):
     $a / 10000
