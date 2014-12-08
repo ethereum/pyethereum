@@ -1016,6 +1016,34 @@ def test_sha256():
         0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256
     ]
 
+types_in_functions_code = """
+type fixedp: [a, b]
+
+macro fixedp($x) * fixedp($y):
+    fixedp($x * $y / 2^64)
+
+macro fixedp($x) / fixedp($y):
+    fixedp($x * 2^64 / $y)
+
+macro raw_unfixedp(fixedp($x)):
+    $x / 2^64
+
+macro fixify($x):
+    fixedp($x * 2^64)
+
+macro fixedp($x) = fixedp($y):
+    $x = $y
+
+def sqrdiv(a, b):
+    return(raw_unfixedp((a / b) * (a / b)))
+"""
+
+
+def test_types_in_functions():
+    s = tester.state()
+    c = s.contract(types_in_functions_code)
+    assert s.send(tester.k0, c, 0, funid=0, abi=[25, 2]) == [156]
+
 
 # test_evm = None
 # test_sixten = None
@@ -1045,3 +1073,4 @@ def test_sha256():
 # test_macros = None
 # test_types = None
 # test_sha256 = None
+# test_types_in_functions = None
