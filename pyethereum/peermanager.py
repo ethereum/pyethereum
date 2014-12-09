@@ -209,7 +209,9 @@ peer_manager = PeerManager()
 
 
 class SentFilter(object):
-
+    # FIXME Bllomfilter will match everything after a while ...
+    # maybe fifo filter
+    # filter for 10sseconds
     "filters data that should only be sent once"
     bloom = bloom.bloom_insert(0, '')
 
