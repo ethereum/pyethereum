@@ -1,7 +1,8 @@
 import utils
 import bitcoin
 
-def proc_ecrecover(block, tx, msg):
+
+def proc_ecrecover(ext, msg):
     print 'ecrecover proc', msg.gas
     OP_GAS = 500
     gas_cost = OP_GAS
@@ -19,7 +20,7 @@ def proc_ecrecover(block, tx, msg):
     return 1, msg.gas - gas_cost, o
 
 
-def proc_sha256(block, tx, msg):
+def proc_sha256(ext, msg):
     print 'sha256 proc', msg.gas
     OP_GAS = 100
     gas_cost = OP_GAS
@@ -29,7 +30,7 @@ def proc_sha256(block, tx, msg):
     return 1, msg.gas - gas_cost, o
 
 
-def proc_ripemd160(block, tx, msg):
+def proc_ripemd160(ext, msg):
     print 'ripemd160 proc', msg.gas
     OP_GAS = 100
     gas_cost = OP_GAS

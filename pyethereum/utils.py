@@ -14,6 +14,7 @@ from rlp import big_endian_to_int, int_to_big_endian
 logger = logging.getLogger(__name__)
 TT256 = 2**256
 TT256M1 = 2**256 - 1
+TT255 = 2**255
 
 
 # decorator
@@ -115,8 +116,14 @@ def coerce_to_bytes(x):
     else:
         return x
 
+
 def ceil32(x):
     return x if x % 32 == 0 else x + 32 - (x % 32)
+
+
+def to_signed(i):
+    return i if i < TT255 else i - TT256
+
 
 def sha3rlp(x):
     return sha3(rlp.encode(x))

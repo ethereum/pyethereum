@@ -1,5 +1,5 @@
 import rlp
-from opcodes import opcodes
+import opcodes
 
 import utils
 import time
@@ -13,6 +13,7 @@ import fastvm
 import copy
 import specials
 import bloom
+import vm
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
 
@@ -68,19 +69,6 @@ pblogger = PBLogger()
 code_cache = {}
 
 
-GDEFAULT = 1
-GMEMORY = 1
-GSTORAGEKILL = -100
-GSTORAGEMOD = 100
-GSTORAGEADD = 300
-GEXPONENTBYTE = 1   # cost of EXP exponent per byte
-GCOPY = 1           # cost to copy one 32 byte word
-GCONTRACTBYTE = 5   # one byte of code in contract creation
-
-GTXCOST = 500       # TX BASE GAS COST
-GTXDATAZERO = 1     # TX DATA ZERO BYTE GAS COST
-GTXDATANONZERO = 5  # TX DATA NON ZERO BYTE GAS COST
-
 TT255 = 2**255
 TT256 = 2**256
 TT256M1 = 2**256 - 1
@@ -97,21 +85,6 @@ def verify(block, parent):
         return True
     except blocks.VerificationFailed:
         return False
-
-
-class Message(object):
-
-    def __init__(self, sender, to, value, gas, data, depth=0):
-        self.sender = sender
-        self.to = to
-        self.value = value
-        self.gas = gas
-        self.data = data
-        self.depth = depth
-        self.logs = []
-
-    def __repr__(self):
-        return '<Message(to:%s...)>' % self.to[:8]
 
 
 class Log(object):
@@ -184,8 +157,11 @@ def apply_transaction(block, tx):
     # g0, used by the transaction;
     num_zero_bytes = tx.data.count(chr(0))
     num_non_zero_bytes = len(tx.data) - num_zero_bytes
-    intrinsic_gas_used = GTXCOST +  GTXDATAZERO * num_zero_bytes +  GTXDATANONZERO * num_non_zero_bytes
+    intrinsic_gas_used = (opcodes.GTXCOST
+                          + opcodes.GTXDATAZERO * num_zero_bytes
+                          + opcodes.GTXDATANONZERO * num_non_zero_bytes)
     if tx.startgas < intrinsic_gas_used:
+        print tx.data.encode('hex'), 'gogogogogogo'
         raise InsufficientStartGas(rp(tx.startgas, intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
@@ -214,13 +190,14 @@ def apply_transaction(block, tx):
     assert success
 
     message_gas = tx.startgas - intrinsic_gas_used
-    message = Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
+    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
 
     # MESSAGE
+    ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        result, gas_remained, data = apply_msg_send(block, tx, message)
+        result, gas_remained, data = apply_msg_send(ext, message)
     else:  # CREATE
-        result, gas_remained, data = create_contract(block, tx, message)
+        result, gas_remained, data = create_contract(ext, message)
         if result > 0:
             result = utils.coerce_addr_to_hex(result)
 
@@ -251,6 +228,7 @@ def apply_transaction(block, tx):
             output = result
     block.commit_state()
     suicides = block.suicides
+    pblogger.log('SUICIDES', suicides=block.suicides)
     block.suicides = []
     for s in suicides:
         block.del_account(s)
@@ -259,63 +237,50 @@ def apply_transaction(block, tx):
     return success, output if success else ''
 
 
-class Compustate():
-
-    def __init__(self, **kwargs):
-        self.memory = []
-        self.stack = []
-        self.pc = 0
-        self.gas = 0
-        for kw in kwargs:
-            setattr(self, kw, kwargs[kw])
-
-
-# Preprocesses code, and determines which locations are in the middle
-# of pushdata and thus invalid
-def preprocess_code(code):
-    i = 0
-    ops = []
-    last_push = False
-    while i < len(code):
-        o = copy.copy(opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) +
-                      [ord(code[i]), 0])
-        if last_push:
-            last_push = False
-            if o[0] == 'JUMP' or o[0] == 'JUMPI':
-                o[0] += 'STATIC'
-        ops.append(o)
-        if o[0][:4] == 'PUSH':
-            last_push = True
-            for j in range(int(o[0][4:])):
-                i += 1
-                byte = ord(code[i]) if i < len(code) else 0
-                o[-1] = (o[-1] << 8) + byte
-                if i < len(code):
-                    ops.append(['INVALID', 0, 0, 0, byte, 0])
-        i += 1
-    return ops
+class VMExt():
+    def __init__(self, block, tx):
+        self._block = block
+        self.get_code = block.get_code
+        self.get_balance = block.get_balance
+        self.set_balance = block.set_balance
+        self.set_storage_data = block.set_storage_data
+        self.get_storage_data = block.get_storage_data
+        self.log_storage = lambda x: block.account_to_dict(x)['storage']
+        self.add_suicide = lambda x: block.suicides.append(x)
+        self.add_refund = lambda x: \
+            setattr(block, 'refunds', block.refunds + x)
+        self.block_prevhash = block.prevhash
+        self.block_coinbase = block.coinbase
+        self.block_timestamp = block.timestamp
+        self.block_number = block.number
+        self.block_difficulty = block.difficulty
+        self.block_gas_limit = block.gas_limit
+        self.log = lambda addr, topics, data: \
+            tx.logs.append(Log(addr, topics, data))
+        self.tx_origin = tx.sender
+        self.tx_gasprice = tx.gasprice
+        self.create = lambda msg: create_contract(self, msg)
+        self.call = lambda msg: apply_msg_send(self, msg)
+        self.sendmsg = lambda msg, code: apply_msg(self, msg, code)
 
 
-def apply_msg(block, tx, msg, code):
-    #print 'init', map(ord, msg.data), msg.gas, msg.sender, block.get_nonce(msg.sender)
-    pblogger.log("MSG APPLY", tx=tx.hex_hash(), sender=msg.sender, to=msg.to,
+def apply_msg(ext, msg, code):
+    # print 'init', map(ord, msg.data), msg.gas, \
+    #     msg.sender, block.get_nonce(msg.sender)
+    pblogger.log("MSG APPLY", sender=msg.sender, to=msg.to,
                  gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
     if pblogger.log_pre_state:
-        pblogger.log('MSG PRE STATE', account=msg.to, state=block.account_to_dict(msg.to))
+        pblogger.log('MSG PRE STATE', account=msg.to,
+                     state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
-    o = block.transfer_value(msg.sender, msg.to, msg.value)
+    o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
+        pblogger.log('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
         return 1, msg.gas, []
-    snapshot = block.snapshot()
-    compustate = Compustate(gas=msg.gas)
     if msg.depth >= 1024:
         return 0, 0, []
-    t, ops = time.time(), 0
-    if code in code_cache:
-        processed_code = code_cache[code]
-    else:
-        processed_code = preprocess_code(code)
-        code_cache[code] = processed_code
+    snapshot = ext._block.snapshot()
+
     #if block.get_code(msg.to) == '' and msg.to != CREATE_CONTRACT_ADDRESS and msg.value > 0:
     #    topics = [utils.coerce_to_int(msg.sender) + 1]
     #    data = ''  # utils.zpad(utils.encode_int(msg.value), 32)
@@ -324,54 +289,50 @@ def apply_msg(block, tx, msg, code):
     #    return 1, compustate.gas, []
 
     # Main loop
-    while 1:
-        o = apply_op(block, tx, msg, processed_code, compustate)
-        ops += 1
-        if o is not None:
-            # print 'dropping', o
-            pblogger.log('MSG APPLIED', result=o, gas_remained=compustate.gas,
-                         sender=msg.sender, to=msg.to, ops=ops,
-                         time_per_op=(time.time() - t) / ops)
-            if pblogger.log_post_state:
-                    pblogger.log('MSG POST STATE', account=msg.to,
-                                 state=block.account_to_dict(msg.to))
+    res, gas, dat = vm.vm_execute(ext, msg, code)
+    pblogger.log('MSG APPLIED', result=o, gas_remained=gas,
+                 sender=msg.sender, to=msg.to)
+    if pblogger.log_post_state:
+        pblogger.log('MSG POST STATE', account=msg.to,
+                     state=ext.log_storage(msg.to))
 
-            if o == OUT_OF_GAS:
-                block.revert(snapshot)
-                return 0, 0, []
-            else:
-                tx.logs.extend(msg.logs)
-                return 1, compustate.gas, o
+    if res == 0:
+        pblogger.log('REVERTING')
+        ext._block.revert(snapshot)
+
+    return res, gas, dat
 
 
-def apply_msg_send(block, tx, msg):
+def apply_msg_send(ext, msg):
     # special pseudo-contracts for ecrecover, sha256, ripemd160
     if msg.to in specials.specials:
-        o = block.transfer_value(msg.sender, msg.to, msg.value)
+        o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
         if not o:
             return 1, msg.gas, []
-        return specials.specials[msg.to](block, tx, msg)
+        return specials.specials[msg.to](ext, msg)
     else:
-        return apply_msg(block, tx, msg, block.get_code(msg.to))
+        return apply_msg(ext, msg, ext.get_code(msg.to))
 
 
-def create_contract(block, tx, msg):
+def create_contract(ext, msg):
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
-    if tx.sender != msg.sender:
-        block.increment_nonce(msg.sender)
-    nonce = utils.encode_int(block.get_nonce(msg.sender) - 1)
+    if ext.tx_origin != msg.sender:
+        ext._block.increment_nonce(msg.sender)
+    nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
-    assert not block.get_code(msg.to)
-    res, gas, dat = apply_msg(block, tx, msg, msg.data)
+    assert not ext.get_code(msg.to)
+    res, gas, dat = apply_msg(ext, msg, msg.data)
     if res:
-        if gas >= len(dat) * GCONTRACTBYTE:
-            gas -= len(dat) * GCONTRACTBYTE
+        gcost = len(dat) * opcodes.GCONTRACTBYTE
+        if gas >= gcost:
+            gas -= gcost
         else:
             dat = []
-        block.set_code(msg.to, ''.join(map(chr, dat)))
+            pblogger.log('CONTRACT CREATION OOG', have=gas, want=gcost)
+        ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
-        block.del_account(msg.to)
+        ext._block.del_account(msg.to)
         return res, gas, dat
 
 
@@ -381,415 +342,4 @@ def get_opcode(code, index):
 
 def get_op_data(code, index):
     opcode = ord(code[index]) if index < len(code) else 0
-    return opcodes.get(opcode, ['INVALID', 0, 0, 0])
-
-def vm_exception(error, **kargs):
-    pblogger.log('EXCEPTION', cause=error, **kargs)
-    return OUT_OF_GAS
-
-
-def mem_extend(mem, compustate, op, start, sz):
-    if sz:
-        newsize = start + sz
-        if len(mem) < utils.ceil32(newsize):
-            m_extend = utils.ceil32(newsize) - len(mem)
-            memfee = GMEMORY * (m_extend / 32)
-            if compustate.gas < memfee:
-                compustate.gas = 0
-                return False
-            compustate.gas -= memfee
-            mem.extend([0] * m_extend)
-    return True
-
-def data_copy(compustate, size):
-    if size:
-        copyfee = GCOPY * utils.ceil32(size) / 32
-        if compustate.gas < copyfee:
-            compustate.gas = 0
-            return False
-        compustate.gas -= copyfee
-    return True
-
-def to_signed(i):
-    return i if i < TT255 else i - TT256
-
-
-# Does not include paying opfee
-def apply_op(block, tx, msg, processed_code, compustate):
-
-    if compustate.pc >= len(processed_code):
-        return []
-
-    op, in_args, out_args, fee, opcode, pushval = processed_code[compustate.pc]
-
-    # print 'op', opcode, compustate.stack, compustate.gas
-
-    # out of gas error
-    if fee > compustate.gas:
-        return vm_exception('OUT OF GAS')
-
-    # empty stack error
-    if in_args > len(compustate.stack):
-        return vm_exception('INSUFFICIENT STACK', op=op, needed=str(in_args),
-                            available=str(len(compustate.stack)))
-
-
-    # Apply operation
-    compustate.gas -= fee
-    compustate.pc += 1
-    stk = compustate.stack
-    mem = compustate.memory
-
-    if pblogger.log_apply_op:
-        trace_data = {}
-        if pblogger.log_stack:
-            trace_data['stack'] = map(str, list(compustate.stack))
-        if pblogger.log_memory:
-            trace_data['memory'] = ''.join([chr(x).encode('hex') for x in compustate.memory])
-        if pblogger.log_storage:
-            trace_data['storage'] = block.account_to_dict(msg.to)['storage']
-        if pblogger.log_op:
-            trace_data['gas'] = str(compustate.gas + fee)
-            trace_data['pc'] = str(compustate.pc - 1)
-            trace_data['op'] = op
-            if op[:4] == 'PUSH':
-                trace_data['pushvalue'] = pushval
-
-        pblogger.multilog(trace_data)
-
-    if op == 'STOP':
-        return []
-    elif op == 'INVALID':
-        return vm_exception('INVALID OP', opcode=opcode)
-    elif op == 'ADD':
-        stk.append((stk.pop() + stk.pop()) & TT256M1)
-    elif op == 'SUB':
-        stk.append((stk.pop() - stk.pop()) & TT256M1)
-    elif op == 'MUL':
-        stk.append((stk.pop() * stk.pop()) & TT256M1)
-    elif op == 'DIV':
-        s0, s1 = stk.pop(), stk.pop()
-        stk.append(0 if s1 == 0 else s0 / s1)
-    elif op == 'MOD':
-        s0, s1 = stk.pop(), stk.pop()
-        stk.append(0 if s1 == 0 else s0 % s1)
-    elif op == 'SDIV':
-        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) * (-1 if s0*s1 < 0 else 1)) & TT256M1)
-    elif op == 'SMOD':
-        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) & TT256M1)
-    elif op == 'ADDMOD':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        stk.append((s0 + s1) % s2 if s2 else 0)
-    elif op == 'MULMOD':
-        s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-        stk.append((s0 * s1) % s2 if s2 else 0)
-    elif op == 'EXP':
-        base, exponent = stk.pop(), stk.pop()
-        # fee for exponent is dependent on its bytes
-        # calc n bytes to represent exponent
-        nbytes = len(utils.encode_int(exponent))
-        expfee = nbytes * GEXPONENTBYTE
-        if compustate.gas < expfee:
-            compustate.gas = 0
-            return vm_exception('OOG EXPONENT')
-        compustate.gas -= expfee
-        stk.append(pow(base, exponent, TT256))
-    elif op == 'SIGNEXTEND':
-        s0, s1 = stk.pop(), stk.pop()
-        if s0 <= 31:
-            testbit = s0 * 8 + 7
-            if s1 & (1 << testbit):
-                stk.append(s1 | (TT256 - (1 << testbit)))
-            else:
-                stk.append(s1 & ((1 << testbit) - 1))
-        else:
-            stk.append(s1)
-    elif op == 'LT':
-        stk.append(1 if stk.pop() < stk.pop() else 0)
-    elif op == 'GT':
-        stk.append(1 if stk.pop() > stk.pop() else 0)
-    elif op == 'SLT':
-        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(1 if s0 < s1 else 0)
-    elif op == 'SGT':
-        s0, s1 = to_signed(stk.pop()), to_signed(stk.pop())
-        stk.append(1 if s0 > s1 else 0)
-    elif op == 'EQ':
-        stk.append(1 if stk.pop() == stk.pop() else 0)
-    elif op == 'ISZERO':
-        stk.append(0 if stk.pop() else 1)
-    elif op == 'AND':
-        stk.append(stk.pop() & stk.pop())
-    elif op == 'OR':
-        stk.append(stk.pop() | stk.pop())
-    elif op == 'XOR':
-        stk.append(stk.pop() ^ stk.pop())
-    elif op == 'NOT':
-        stk.append(TT256M1 - stk.pop())
-    elif op == 'BYTE':
-        s0, s1 = stk.pop(), stk.pop()
-        if s0 >= 32:
-            stk.append(0)
-        else:
-            stk.append((s1 / 256 ** (31 - s0)) % 256)
-
-    elif op == 'SHA3':
-        s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, s1):
-            return vm_exception('OOG EXTENDING MEMORY')
-        data = ''.join(map(chr, mem[s0: s0 + s1]))
-        stk.append(utils.big_endian_to_int(utils.sha3(data)))
-    elif op == 'ADDRESS':
-        stk.append(utils.coerce_to_int(msg.to))
-    elif op == 'BALANCE':
-        stk.append(block.get_balance(utils.coerce_addr_to_hex(stk.pop())))
-    elif op == 'ORIGIN':
-        stk.append(utils.coerce_to_int(tx.sender))
-    elif op == 'CALLER':
-        stk.append(utils.coerce_to_int(msg.sender))
-    elif op == 'CALLVALUE':
-        stk.append(msg.value)
-    elif op == 'CALLDATALOAD':
-        s0 = stk.pop()
-        if s0 >= len(msg.data):
-            stk.append(0)
-        else:
-            dat = msg.data[s0: s0 + 32]
-            stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
-    elif op == 'CALLDATASIZE':
-        stk.append(len(msg.data))
-    elif op == 'CALLDATACOPY':
-        start, s1, size = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, start, size):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if not data_copy(compustate, size):
-            return vm_exception('OOG COPY DATA')
-        for i in range(size):
-            if s1 + i < len(msg.data):
-                mem[start + i] = ord(msg.data[s1 + i])
-            else:
-                mem[start + i] = 0
-    elif op == 'CODESIZE':
-        stk.append(len(processed_code))
-    elif op == 'CODECOPY':
-        start, s1, size = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, start, size):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if not data_copy(compustate, size):
-            return vm_exception('OOG COPY DATA')
-        for i in range(size):
-            if s1 + i < len(processed_code):
-                mem[start + i] = processed_code[s1 + i][4]
-            else:
-                mem[start + i] = 0
-    elif op == 'GASPRICE':
-        stk.append(tx.gasprice)
-    elif op == 'EXTCODESIZE':
-        stk.append(len(block.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
-    elif op == 'EXTCODECOPY':
-        addr, start, s2, size = stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        extcode = block.get_code(utils.coerce_addr_to_hex(addr)) or ''
-        if not mem_extend(mem, compustate, op, start, size):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if not data_copy(compustate, size):
-            return vm_exception('OOG COPY DATA')
-        for i in range(size):
-            if s2 + i < len(extcode):
-                mem[start + i] = ord(extcode[s2 + i])
-            else:
-                mem[start + i] = 0
-    elif op == 'PREVHASH':
-        stk.append(utils.big_endian_to_int(block.prevhash))
-    elif op == 'COINBASE':
-        stk.append(utils.big_endian_to_int(block.coinbase.decode('hex')))
-    elif op == 'TIMESTAMP':
-        stk.append(block.timestamp)
-    elif op == 'NUMBER':
-        stk.append(block.number)
-    elif op == 'DIFFICULTY':
-        stk.append(block.difficulty)
-    elif op == 'GASLIMIT':
-        stk.append(block.gas_limit)
-    elif op == 'POP':
-        stk.pop()
-    elif op == 'MLOAD':
-        s0 = stk.pop()
-        if not mem_extend(mem, compustate, op, s0, 32):
-            return vm_exception('OOG EXTENDING MEMORY')
-        data = ''.join(map(chr, mem[s0: s0 + 32]))
-        stk.append(utils.big_endian_to_int(data))
-    elif op == 'MSTORE':
-        s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, 32):
-            return vm_exception('OOG EXTENDING MEMORY')
-        v = s1
-        for i in range(31, -1, -1):
-            mem[s0 + i] = v % 256
-            v /= 256
-    elif op == 'MSTORE8':
-        s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, 1):
-            return vm_exception('OOG EXTENDING MEMORY')
-        mem[s0] = s1 % 256
-    elif op == 'SLOAD':
-        stk.append(block.get_storage_data(msg.to, stk.pop()))
-    elif op == 'SSTORE':
-        s0, s1 = stk.pop(), stk.pop()
-        if block.get_storage_data(msg.to, s0):
-            gascost = GSTORAGEMOD if s1 else GSTORAGEKILL
-        else:
-            gascost = GSTORAGEADD if s1 else GSTORAGEMOD
-        if compustate.gas < gascost:
-            return vm_exception('OUT OF GAS')
-        compustate.gas -= max(gascost, 0)
-        block.refunds -= min(gascost, 0)  # adds neg gascost as a refund if below zero
-        block.set_storage_data(msg.to, s0, s1)
-    elif op == 'JUMP' or op == 'JUMPSTATIC':
-        compustate.pc = stk.pop()
-        opnew = processed_code[compustate.pc][0] if \
-            compustate.pc < len(processed_code) else 'STOP'
-        if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
-                opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
-            return vm_exception('BAD JUMPDEST')
-    elif op == 'JUMPI' or op == 'JUMPISTATIC':
-        s0, s1 = stk.pop(), stk.pop()
-        if s1:
-            compustate.pc = s0
-            opnew = processed_code[compustate.pc][0] if \
-                compustate.pc < len(processed_code) else 'STOP'
-            if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
-                    opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
-                return vm_exception('BAD JUMPDEST')
-    elif op == 'PC':
-        stk.append(compustate.pc - 1)
-    elif op == 'MSIZE':
-        stk.append(len(mem))
-    elif op == 'GAS':
-        stk.append(compustate.gas)  # AFTER subtracting cost 1
-    elif op[:4] == 'PUSH':
-        pushnum = int(op[4:])
-        compustate.pc += pushnum
-        stk.append(pushval)
-    elif op[:3] == 'DUP':
-        depth = int(op[3:])
-        stk.append(stk[-depth])
-    elif op[:4] == 'SWAP':
-        depth = int(op[4:])
-        temp = stk[-depth-1]
-        stk[-depth-1] = stk[-1]
-        stk[-1] = temp
-
-
-    elif op[:3] == 'LOG':
-        """
-        0xa0 ... 0xa4, 32/64/96/128/160 + len(data) gas
-        a. Opcodes LOG0...LOG4 are added, takes 2-6 stack arguments
-                MEMSTART MEMSZ (TOPIC1) (TOPIC2) (TOPIC3) (TOPIC4)
-        b. Logs are kept track of during tx execution exactly the same way as suicides
-           (except as an ordered list, not a set).
-           Each log is in the form [address, [topic1, ... ], data] where:
-           * address is what the ADDRESS opcode would output
-           * data is mem[MEMSTART: MEMSTART + MEMSZ]
-           * topics are as provided by the opcode
-        c. The ordered list of logs in the transaction are expressed as [log0, log1, ..., logN].
-        """
-        depth = int(op[3:])
-        mstart, msz = stk.pop(), stk.pop()
-        topics = [stk.pop() for x in range(depth)]
-        compustate.gas -= msz
-        if not mem_extend(mem, compustate, op, mstart, msz):
-            return vm_exception('OOG EXTENDING MEMORY')
-        data = ''.join(map(chr, mem[mstart: mstart + msz]))
-        msg.logs.append(Log(msg.to, topics, data))
-        pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
-
-
-    elif op == 'CREATE':
-        value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, mstart, msz):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if block.get_balance(msg.to) >= value:
-            data = ''.join(map(chr, mem[mstart: mstart + msz]))
-            pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
-            create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
-            addr, gas, code = create_contract(block, tx, create_msg)
-            pblogger.log('SUB CONTRACT OUT',
-                         address=utils.int_to_addr(addr),
-                         code=''.join([chr(x).encode('hex') for x in code]))
-            if addr:
-                stk.append(addr)
-                compustate.gas = gas
-            else:
-                stk.append(0)
-                compustate.gas = 0
-        else:
-            stk.append(0)
-    elif op == 'CALL':
-        gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
-            stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
-                not mem_extend(mem, compustate, op, memoutstart, memoutsz):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if compustate.gas < gas:
-            return vm_exception('OUT OF GAS')
-        compustate.gas -= gas
-        if block.get_balance(msg.to) >= value:
-            to = utils.encode_int(to)
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=str(value),
-                         gas=str(gas), data=data.encode('hex'),
-                         parentgas=str(compustate.gas), depth=str(msg.depth + 1))
-            call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
-            result, gas, data = apply_msg_send(block, tx, call_msg)
-            pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data),
-                         expected=memoutsz, csg=compustate.gas)
-            if result == 0:
-                stk.append(0)
-            else:
-                stk.append(1)
-                compustate.gas += gas
-                for i in range(min(len(data), memoutsz)):
-                    mem[memoutstart + i] = data[i]
-        else:
-            stk.append(0)
-    elif op == 'CALLCODE':
-        gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
-            stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
-                not mem_extend(mem, compustate, op, memoutstart, memoutsz):
-            return vm_exception('OOG EXTENDING MEMORY')
-        if compustate.gas < gas:
-            return vm_exception('OUT OF GAS')
-        compustate.gas -= gas
-        to = utils.encode_int(to)
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-        pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
-        call_msg = Message(msg.to, msg.to, value, gas, data, msg.depth + 1)
-        result, gas, data = apply_msg(block, tx, call_msg, block.get_code(to))
-        pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz)
-        if result == 0:
-            stk.append(0)
-        else:
-            stk.append(1)
-            compustate.gas += gas
-            for i in range(min(len(data), memoutsz)):
-                mem[memoutstart + i] = data[i]
-    elif op == 'RETURN':
-        s0, s1 = stk.pop(), stk.pop()
-        if not mem_extend(mem, compustate, op, s0, s1):
-            return vm_exception('OOG EXTENDING MEMORY')
-        return mem[s0: s0 + s1]
-    elif op == 'SUICIDE':
-        to = utils.encode_int(stk.pop())
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-        block.transfer_value(msg.to, to, block.get_balance(msg.to))
-        block.suicides.append(msg.to)
-        return []
-    for a in stk:
-        assert isinstance(a, (int, long))
-
-# apply_msg = fastvm.apply_msg
+    return opcodes.opcodes.get(opcode, ['INVALID', 0, 0, 0])

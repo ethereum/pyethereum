@@ -12,10 +12,12 @@ pblogger = tester.pb.pblogger
 pblogger.log_pre_state = True    # dump storage at account before execution
 pblogger.log_post_state = True   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = True      # dump memory before each op
-pblogger.log_stack = True        # dump stack before each op
-pblogger.log_op = True           # log op, gas, stack before each op
-pblogger.log_apply_op = True     # log op, gas, stack before each op
+pblogger.log_json = False        # generate machine readable output
+vmlogger = tester.pb.vm.pblogger
+vmlogger.log_memory = True      # dump memory before each op
+vmlogger.log_stack = True        # dump stack before each op
+vmlogger.log_op = True           # log op, gas, stack before each op
+vmlogger.log_apply_op = True     # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
 
 gasprice = 0
@@ -57,7 +59,7 @@ sixten_code =\
 
 def test_sixten():
     s = tester.state()
-    c = s.contract('')
+    c = '1231231231231234564564564564561231231231'
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0, [])
     assert o1 == [610]
@@ -319,7 +321,7 @@ def test_suicider():
     s = tester.state()
     c = s.contract(suicider_code)
     prev_gas_limit = tester.gas_limit
-    tester.gas_limit = 4000
+    tester.gas_limit = 8000
     # Run normally: suicide processes, so the attempt to ping the
     # contract fails
     s.send(tester.k0, c, 0, funid=0, abi=[1, 10])
@@ -329,7 +331,7 @@ def test_suicider():
     # Run the suicider in such a way that it suicides in a sub-call,
     # then runs out of gas, leading to a revert of the suicide and the
     # storage mutation
-    s.send(tester.k0, c, 0, funid=1, abi=[4000])
+    s.send(tester.k0, c, 0, funid=1, abi=[8000])
     # Check that the suicide got reverted
     o2 = s.send(tester.k0, c, 0, funid=2, abi=[])
     assert o2 == [10]
