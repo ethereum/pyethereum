@@ -187,9 +187,6 @@ class ChainManager(StoppableLoopThread):
         if pct_cpu > 0:
             self.mine()
             delay = (time.time() - ts) * (100. / pct_cpu - 1)
-            if delay < 0:
-                logger.warn('delay %r<0!?', delay)
-                delay = 1
             assert delay >= 0
             time.sleep(min(delay, 1.))
         else:
