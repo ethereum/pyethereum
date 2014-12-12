@@ -6,22 +6,24 @@ import pyethereum.transactions as transactions
 import pyethereum.utils as u
 import os
 import sys
+import pyethereum.vm as vm
 
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 pblogger = pb.pblogger
+vmlogger = vm.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 pblogger.log_pre_state = False    # dump storage at account before execution
 pblogger.log_post_state = False   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = False      # dump memory before each op
-pblogger.log_op = False           # log op, gas, stack before each op
+vmlogger.log_memory = True      # dump memory before each op
+vmlogger.log_op = True           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = False     # generate machine readable output
-pblogger.log_stack = False        # generate machine readable output
+vmlogger.log_apply_op = True     # generate machine readable output
+vmlogger.log_stack = True        # generate machine readable output
 
 
 def check_testdata(data_keys, expected_keys):

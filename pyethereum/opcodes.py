@@ -28,7 +28,7 @@ opcodes = {
     0x18: ['XOR', 2, 1, 1],
     0x19: ['NOT', 1, 1, 1],
     0x1a: ['BYTE', 2, 1, 1],
-    0x20: ['SHA3', 2, 1, 20],
+    0x20: ['SHA3', 2, 1, 10],
     0x30: ['ADDRESS', 0, 1, 1],
     0x31: ['BALANCE', 1, 1, 20],
     0x32: ['ORIGIN', 0, 1, 1],
@@ -89,10 +89,13 @@ GMEMORY = 1
 GSTORAGEKILL = -100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300
-GEXPONENTBYTE = 1   # cost of EXP exponent per byte
-GCOPY = 1           # cost to copy one 32 byte word
-GCONTRACTBYTE = 5   # one byte of code in contract creation
+GEXPONENTBYTE = 1    # cost of EXP exponent per byte
+GCOPY = 1            # cost to copy one 32 byte word
+GCONTRACTBYTE = 5    # one byte of code in contract creation
 
-GTXCOST = 500       # TX BASE GAS COST
-GTXDATAZERO = 1     # TX DATA ZERO BYTE GAS COST
-GTXDATANONZERO = 5  # TX DATA NON ZERO BYTE GAS COST
+GTXCOST = 500        # TX BASE GAS COST
+GTXDATAZERO = 1      # TX DATA ZERO BYTE GAS COST
+GTXDATANONZERO = 5   # TX DATA NON ZERO BYTE GAS COST
+GSHA3WORD = 10       # Cost of SHA3 per word
+GSHA256WORD = 50     # Cost of SHA256 per word
+GRIPEMD160WORD = 50  # Cost of RIPEMD160 per word

@@ -22,7 +22,7 @@ def proc_ecrecover(ext, msg):
 
 def proc_sha256(ext, msg):
     print 'sha256 proc', msg.gas
-    OP_GAS = 100
+    OP_GAS = 50 + (utils.ceil32(len(msg.data)) / 32) * 50
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
@@ -32,7 +32,7 @@ def proc_sha256(ext, msg):
 
 def proc_ripemd160(ext, msg):
     print 'ripemd160 proc', msg.gas
-    OP_GAS = 100
+    OP_GAS = 50 + (utils.ceil32(len(msg.data)) / 32) * 50
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []

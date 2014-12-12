@@ -278,6 +278,9 @@ def vm_execute(ext, msg, code):
 
         elif op == 'SHA3':
             s0, s1 = stk.pop(), stk.pop()
+            compustate.gas -= 10 * (utils.ceil32(s1) / 32)
+            if compustate.gas < 0:
+                return vm_exception('OOG PAYING FOR SHA3')
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[s0: s0 + s1]))
@@ -287,7 +290,7 @@ def vm_execute(ext, msg, code):
         elif op == 'BALANCE':
             stk.append(ext.get_balance(utils.coerce_addr_to_hex(stk.pop())))
         elif op == 'ORIGIN':
-            stk.append(utils.coerce_to_int(ext.tx_sender))
+            stk.append(utils.coerce_to_int(ext.tx_origin))
         elif op == 'CALLER':
             stk.append(utils.coerce_to_int(msg.sender))
         elif op == 'CALLVALUE':

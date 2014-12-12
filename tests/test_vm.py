@@ -1,6 +1,7 @@
 import pytest
 import json
 import pyethereum.processblock as pb
+import pyethereum.vm as vm
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
@@ -12,20 +13,21 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 pblogger = pb.pblogger
+vmlogger = vm.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-log_active = False
+log_active = True
 pblogger = pb.pblogger
 pblogger.log_pre_state = log_active    # dump storage at account before execution
 pblogger.log_post_state = log_active   # dump storage at account after execution
 pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = log_active      # dump memory before each op
-pblogger.log_stack = log_active      # dump stack before each op
-pblogger.log_storage = log_active      # dump storage before each op
-pblogger.log_op = log_active           # log op, gas, stack before each op
 pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = log_active     # log anything per operation at all
+vmlogger.log_memory = log_active      # dump memory before each op
+vmlogger.log_stack = log_active      # dump stack before each op
+vmlogger.log_storage = log_active      # dump storage before each op
+vmlogger.log_op = log_active           # log op, gas, stack before each op
+vmlogger.log_apply_op = log_active     # log anything per operation at all
 
 
 def check_testdata(data_keys, expected_keys):
@@ -137,26 +139,24 @@ def do_test_vm(filename, testname=None, limit=99999999):
     apply_message_calls = []
     orig_apply_msg = pb.apply_msg
 
-    def apply_msg_wrapper(_block, _tx, msg, code, toplevel=False):
+    def apply_msg_wrapper(_ext, msg, code, toplevel=False):
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
                                         data=msg.data.encode('hex')))
         if not toplevel:
             pb.apply_msg = orig_apply_msg
-        result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
+        result, gas_rem, data = orig_apply_msg(_ext, msg, code)
         if not toplevel:
             pb.apply_msg = apply_msg_wrapper
         return result, gas_rem, data
 
     pb.apply_msg = apply_msg_wrapper
 
-    msg = pb.Message(tx.sender, tx.to, tx.value, tx.startgas, tx.data)
-    blk.delta_balance(exek['caller'], tx.value)
-    blk.delta_balance(exek['address'], -tx.value)
+    ext = pb.VMExt(blk, tx)
+    msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas, tx.data)
     success, gas_remained, output = \
-        pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'), toplevel=True)
+        vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
-    apply_message_calls.pop(0)
     blk.commit_state()
 
     """
@@ -196,25 +196,17 @@ def do_test_vm(filename, testname=None, limit=99999999):
         topics: The topics of the logentry, given as an array of values.
         """
         test_logs = params['logs']
-        vm_logs = dict()
+        vm_logs = []
         for log in tx.logs:
-            log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
-            vm_logs[log_bloom.encode('hex')] = log.to_dict()
+            vm_logs.append({
+                "bloom": bloom.b64(bloom.bloom_from_list(log.bloomables())).encode('hex'),
+                "address": log.address,
+                "data": '0x'+log.data.encode('hex'),
+                "topics": [u.zpad(u.int_to_big_endian(t), 32).encode('hex') for t in log.topics]
+            })
 
         assert len(vm_logs) == len(test_logs)
-        for hexbloom, test_log_data in test_logs.items():
-            if not hexbloom in vm_logs.keys():
-                print "TEST LOGS", test_logs
-                print "VM LOGS", vm_logs
-                raise KeyError('bloom %s not in logs' % hexbloom)
-
-            vm_log_data = vm_logs[hexbloom]
-            for k in test_log_data:
-                if test_log_data[k] != vm_log_data[k]:
-                    print "TEST LOGS", test_logs
-                    print "VM LOGS", vm_logs
-                    raise Exception('VM Log mismatch %r %r %r' % (k, test_log_data[k], vm_log_data[k]))
-
+        assert vm_logs == test_logs
 
     # check state
     for address, data in post.items():
