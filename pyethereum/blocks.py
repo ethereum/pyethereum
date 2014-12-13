@@ -55,7 +55,6 @@ block_structure = [
     ["bloom", "int64", 0],
     ["difficulty", "int", INITIAL_DIFFICULTY],
     ["number", "int", 0],
-    ["min_gas_price", "int", GENESIS_MIN_GAS_PRICE],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
@@ -97,6 +96,15 @@ class UnknownParentException(Exception):
     pass
 
 
+class VerificationFailed(Exception):
+    pass
+
+
+def must_equal(what, a, b):
+    if a != b:
+        raise VerificationFailed(what, a, '==', b)
+
+
 class TransientBlock(object):
 
     """
@@ -113,15 +121,13 @@ class TransientBlock(object):
             setattr(self, name, utils.decoders[typ](self.header_args[i]))
 
     def __repr__(self):
-        return '<TransientBlock(#%d %s %s)>' %\
-            (self.number, self.hash.encode('hex')[
-             :4], self.prevhash.encode('hex')[:4])
+        return '<TransientBlock(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
 
 
 def check_header_pow(header):
-    assert len(header[-1]) == 32
     rlp_Hn = rlp.encode(header[:-1])
     nonce = header[-1]
+    assert len(nonce) == 32
     diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
     h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
     return utils.big_endian_to_int(h) < 2 ** 256 / diff
@@ -136,14 +142,13 @@ class Block(object):
                  state_root=trie.BLANK_ROOT,
                  tx_list_root=trie.BLANK_ROOT,
                  receipts_root=trie.BLANK_ROOT,
+                 bloom=0,
                  difficulty=block_structure_rev['difficulty'][2],
                  number=0,
-                 min_gas_price=block_structure_rev['min_gas_price'][2],
                  gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
                  transaction_list=[],
                  uncles=[],
-                 bloom=0,
                  header=None):
 
         self.prevhash = prevhash
@@ -151,7 +156,6 @@ class Block(object):
         self.coinbase = coinbase
         self.difficulty = difficulty
         self.number = number
-        self.min_gas_price = min_gas_price
         self.gas_limit = gas_limit
         self.gas_used = gas_used
         self.timestamp = timestamp
@@ -174,7 +178,7 @@ class Block(object):
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
-        self.bloom = bloom
+        self.bloom = bloom # int
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -310,37 +314,48 @@ class Block(object):
                                        timestamp=kargs['timestamp'],
                                        uncles=uncles)
 
+        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
         # replay transactions
         for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
 #            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
-            # block.add_transaction_to_list(tx) # < this is done by processblock
 #            logger.debug('state:\n%s', utils.dump_state(block.state))
+
+            # for log in tx.logs:
+            #     print "newbits", [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
+            #     bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
+            #     print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
+
 
         block.finalize()
 
         block.uncles_hash = kargs['uncles_hash']
         block.nonce = kargs['nonce']
-        block.min_gas_price = kargs['min_gas_price']
 
         # checks
-        assert block.prevhash == self.hash
-
-        assert block.gas_used == kargs['gas_used'], (block.gas_used, kargs['gas_used'])
-        assert block.gas_limit == kargs['gas_limit']
-        assert block.timestamp == kargs['timestamp']
-        assert block.difficulty == kargs['difficulty']
-        assert block.number == kargs['number']
-        assert block.extra_data == kargs['extra_data']
-        assert utils.sha3rlp(block.uncles) == kargs['uncles_hash']
-
-        assert block.state.root_hash == kargs[
-            'state_root'], (block.state.root_hash, kargs['state_root'])
-        assert block.tx_list_root == kargs['tx_list_root']
-        assert block.receipts.root_hash == kargs['receipts_root'], \
-            (block.receipts.root_hash, kargs['receipts_root'], block.receipts.to_dict())
+        must_equal('prev_hash', block.prevhash, self.hash)
+        must_equal('gas_used', block.gas_used, kargs['gas_used'])
+        must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
+        must_equal('timestamp', block.timestamp, kargs['timestamp'])
+        must_equal('difficulty', block.difficulty, kargs['difficulty'])
+        must_equal('number', block.number, kargs['number'])
+        must_equal('extra_data', block.extra_data, kargs['extra_data'])
+        must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
+        must_equal('state_root', block.state.root_hash, kargs['state_root'])
+        must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
+        bloom_bits =  bloom.bits_in_number(block.bloom)
+        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
+        # print 'computed', bloom_bits
+        # print 'expected', bloom_bits_expected
+        # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
+        # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
+        must_equal('bloom', block.bloom, kargs['bloom'])
+        assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts.root_hash.encode('hex'), kargs['receipts_root'].encode('hex'))
+        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
+        if not check_header_pow(block.list_header()):
+            raise VerificationFailed('invalid nonce')
 
         return block
 
@@ -410,26 +425,24 @@ class Block(object):
         self._set_acct_item(address, param, value)
         return True
 
-    def mk_log_bloom(self):
-        b = bloom.bloom_from_list(
-            utils.flatten([x.bloomables() for x in self.logs]))
-        self.most_recent_tx_bloom = b
-        return utils.zpad(utils.int_to_big_endian(b), 64)
-
-    def mk_transaction_receipt(self):
+    def mk_transaction_receipt(self, tx):
         o = [
             self.state_root,
             utils.encode_int(self.gas_used),
-            self.mk_log_bloom(),
-            [x.serialize() for x in self.logs],
+            tx.log_bloom_b64(),
+            [x.serialize() for x in tx.logs]
         ]
         return rlp.encode(o)
 
     def add_transaction_to_list(self, tx):
         k = rlp.encode(utils.encode_int(self.transaction_count))
         self.transactions.update(k, tx.serialize())
-        self.receipts.update(k, self.mk_transaction_receipt())
-        self.bloom |= self.most_recent_tx_bloom
+        self.receipts.update(k, self.mk_transaction_receipt(tx))
+        self.bloom |= tx.log_bloom() # int
+        #print "newbits", bloom.bits_in_number(tx.log_bloom())
+        # for log in tx.logs:q
+        #     print 'log', log.address, log.topics
+        #     print [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
         self.transaction_count += 1
 
     def _list_transactions(self):
@@ -628,11 +641,6 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
-            self.bloom = bloom.bloom_insert(self.bloom,
-                                            uncle_data['coinbase'].decode('hex'))
-        self.bloom = bloom.bloom_insert(self.bloom, self.coinbase.decode('hex'))
-        logger.debug('mumumumumumumu: %r %r' %
-                     (self.receipts.to_dict(), self.receipts.root_hash.encode('hex')))
         self.commit_state()
 
     def serialize_header_without_nonce(self):
@@ -776,9 +784,7 @@ class Block(object):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s %s)>' % (self.number,
-                                       self.hex_hash()[:4],
-                                       self.prevhash.encode('hex')[:4])
+        return '<Block(#%d %s)>' % (self.number, self.hex_hash()[:8])
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
@@ -789,9 +795,10 @@ class Block(object):
             coinbase=coinbase,
             state_root=parent.state.root_hash,
             tx_list_root=trie.BLANK_ROOT,
+            receipts_root=trie.BLANK_ROOT,
+            bloom=0,
             difficulty=calc_difficulty(parent, timestamp),
             number=parent.number + 1,
-            min_gas_price=0,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
             timestamp=timestamp,

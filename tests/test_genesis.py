@@ -53,26 +53,29 @@ if __name__ == '__main__':
     poc7_genesis_hash_hex = '955f36d073ccb026b78ab3424c15cf966a7563aa270413859f78702b9e8e22cb'
     cpp_genesis = rlp.decode(cpp_genesis_rlp) 
     cpp_genesis_hash_hex = utils.sha3(rlp.encode(cpp_genesis[0])).encode('hex')
-    assert cpp_genesis_hash_hex == poc7_genesis_hash_hex
+    
     cpp_header = cpp_genesis[0]
     cpp_header_hex = [x.encode('hex') for x in cpp_header]
-    
+
     py_genesis = rlp.decode(blocks.genesis().serialize())
     py_genesis_hex_hash = blocks.genesis().hex_hash()
     py_header = py_genesis[0]
     py_header_hex = [x.encode('hex') for x in py_header]
 
-    assert len(py_header_hex) == len(cpp_header_hex)
+    print 'py genesis hash hex', py_genesis_hex_hash
+    print 'py state_root', py_header[blocks.block_structure_rev['state_root'][0]].encode('hex')
+    print 'py genesis rlp', blocks.genesis().hex_serialize()
 
+    assert len(py_header_hex) == len(cpp_header_hex)
+    assert cpp_genesis_hash_hex == poc7_genesis_hash_hex
     for i, e in enumerate(py_header_hex):
         print blocks.block_structure[i][0], repr(e)
         print blocks.block_structure[i][0], repr(cpp_header_hex[i])
         print
         assert e == cpp_header_hex[i]
 
-    print 'py genesis hash hex', py_genesis_hex_hash
     assert poc7_genesis_hash_hex == py_genesis_hex_hash
     for i in range(3):
         assert py_genesis[i] == cpp_genesis[i]
 
-    print 'state_root', py_header[blocks.block_structure_rev['state_root'][0]].encode('hex')
+    

@@ -158,7 +158,9 @@ class Peer(StoppableLoopThread):
             data = [_decode[i](x) for i, x in enumerate(data)]
             network_protocol_version, client_version = data[0], data[1]
             capabilities, listen_port, node_id = data[2], data[3], data[4]
-        except IndexError:
+            self.capabilities = [(p,ord(v)) for p, v in capabilities]
+        except (IndexError, ValueError) as e:
+            logger.debug('%r could not decode Hello %s', self, e)
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         self.capabilities = [(p,ord(v)) for p, v in capabilities]
@@ -309,6 +311,15 @@ class Peer(StoppableLoopThread):
         self.send_packet(packeter.dump_NewBlock(block))
 
     def _recv_NewBlock(self, data):
+        """
+        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty] 
+        Specify a single block that the peer should know about. 
+        The composite item in the list (following the message ID) is a block in 
+        the format described in the main Ethereum specification.
+
+        totalDifficulty is the total difficulty of the block (aka score).
+        """
+        log_eth('NewBlock: %r', rlp.encode(data).encode('hex'))
         total_difficulty = idec(data[1])
         transient_block = blocks.TransientBlock(rlp.encode(data[0]))
         signals.new_block_received.send(sender=Peer, peer=self, block=transient_block)

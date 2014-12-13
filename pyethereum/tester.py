@@ -5,6 +5,7 @@ import time
 import logging
 import sys
 import spv
+import pyethereum.opcodes as opcodes
 
 serpent = None
 
@@ -12,6 +13,7 @@ u = pyethereum.utils
 t = pyethereum.transactions
 b = pyethereum.blocks
 pb = pyethereum.processblock
+vm = pyethereum.vm
 
 accounts = []
 keys = []
@@ -24,6 +26,13 @@ k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 seed = 3**160
+
+
+def listen_for_logs(l):
+    if 'LOG' in l:
+        print l['LOG']
+
+pb.pblogger.listeners.append(listen_for_logs)
 
 
 # Pseudo-RNG (deterministic for now for testing purposes)
@@ -54,7 +63,9 @@ class state():
 
     def contract(self, code, sender=k0, endowment=0):
         evm = serpent.compile(code)
-        return self.evm(evm, sender, endowment)
+        o = self.evm(evm, sender, endowment)
+        assert len(self.block.get_code(o)), "Contract code empty"
+        return o
 
     def evm(self, evm, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -68,7 +79,7 @@ class state():
     def send(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
@@ -83,7 +94,10 @@ class state():
     def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used
         o = self.send(sender, to, value, data, funid, abi)
-        intrinsic_gas_used = pb.GTXDATA * len(self.last_tx.data) + pb.GTXCOST
+        zero_bytes = self.last_tx.data.count(chr(0))
+        non_zero_bytes = len(self.last_tx.data) - zero_bytes
+        intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
+            opcodes.GTXDATANONZERO * non_zero_bytes
         return {
             "time": time.time() - tm,
             "gas": self.block.gas_used - g - intrinsic_gas_used,
@@ -93,7 +107,7 @@ class state():
     def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
@@ -101,10 +115,11 @@ class state():
         tx.sign(sender)
         return spv.mk_transaction_spv_proof(self.block, tx)
 
-    def verifyspv(self, sender, to, value, data=[], funid=None, abi=None, proof=[]):
+    def verifyspv(self, sender, to, value, data=[],
+                  funid=None, abi=None, proof=[]):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
-            evmdata = serpent.encode_abi(funid, abi)
+            evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
@@ -142,11 +157,35 @@ class state():
         self.block = b.Block.deserialize(data)
 
 
+def set_logging_level(lvl=1):
+    if lvl == 0:
+        logging.basicConfig(level=logging.ERROR, format='%(message)s')
+        pb.pblogger.log_msg = False
+    elif lvl >= 1 and lvl <= 2:
+        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+        vm.pblogger.log_apply_op = False
+        vm.pblogger.log_exits = (lvl == 2)
+        pb.pblogger.log_msg = (lvl == 2)
+    elif lvl >= 3:
+        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+        pb.pblogger.log_msg = True
+        vm.pblogger.log_exits = True
+        vm.pblogger.log_apply_op = True
+        vm.pblogger.log_stack = True
+        vm.pblogger.log_op = True
+        vm.pblogger.log_memory = (lvl >= 4)
+        vm.pblogger.log_storage = (lvl >= 4)
+    else:
+        raise Exception("Invalid loging level")
+    print 'Set logging level: %d' % lvl
+
+
 def enable_logging():
-    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-    pb.pblogger.log_apply_op = True
-    pb.pblogger.log_stack = True
-    pb.pblogger.log_op = True
+    set_logging_level(1)
+
+
+def disable_logging():
+    set_logging_level(0)
 
 
 gas_limit = 100000

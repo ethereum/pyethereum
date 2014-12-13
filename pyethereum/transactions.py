@@ -2,6 +2,7 @@ import rlp
 from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import utils
+import bloom
 
 tx_structure = [
     ["nonce", "int", 0],
@@ -46,6 +47,7 @@ class Transaction(object):
         self.value = value
         self.data = data
         self.v, self.r, self.s = v, r, s
+        self.logs = []
 
         # Determine sender
         if self.r < N and self.s < P and self.v >= 27 and self.v <= 28:
@@ -106,6 +108,13 @@ class Transaction(object):
 
     def hex_hash(self):
         return self.hash.encode('hex')
+
+    def log_bloom(self):
+        "returns int"
+        return bloom.bloom_from_list(utils.flatten([x.bloomables() for x in self.logs]))
+
+    def log_bloom_b64(self):
+        return bloom.b64(self.log_bloom())
 
     def to_dict(self):
         h = {}

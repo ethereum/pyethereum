@@ -149,7 +149,6 @@ class PeerManager(StoppableLoopThread):
         elif min(dt_seen, dt_ping) > self.max_silence:
             # ping silent peer
             log_net_debug('pinging silent', peer=peer)
-
             with peer.lock:
                 peer.send_Ping()
 
@@ -204,7 +203,9 @@ peer_manager = PeerManager()
 
 
 class SentFilter(object):
-
+    # FIXME Bllomfilter will match everything after a while ...
+    # maybe fifo filter
+    # filter for 10sseconds
     "filters data that should only be sent once"
     bloom = bloom.bloom_insert(0, '')
 

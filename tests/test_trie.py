@@ -1,8 +1,11 @@
+
 import pytest
 import json
 import tempfile
 import pyethereum.trie as trie
+import pyethereum.db as db
 
+import itertools
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
@@ -21,56 +24,43 @@ def load_tests():
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
             "Make sure you did 'git submodule init'")
-    expected_keys = set([u'foo', u'emptyValues', u'jeff', u'testy', u'singleItem',
-                     u'hex', u'smallValues', u'puppy', u'dogs'])
-    assert set(fixture.keys()) == expected_keys, "test data changed!"
+    expected_keys = set([u'jeff', u'emptyValues'])
+    assert set(fixture.keys()) == expected_keys, ("test data changed!", fixture.keys())
     return fixture
 
 
 def run_test(name):
 
     logger.debug('testing %s', name)
-    t = trie.Trie(tempfile.mktemp())
     pairs = load_tests()[name]
 
-    for k, v in pairs['in'].items():
-        if k[:2] == '0x':
-            k = k[2:].decode('hex')
-        if v[:2] == '0x':
-            v = v[2:].decode('hex')
-        logger.debug('updating with (%s, %s)', k, v)
-        t.update(k, v)
-    assert pairs['root'] == t.root_hash.encode('hex')
+    def _dec(x):
+        if isinstance(x, (str, unicode)) and x.startswith('0x'):
+            return x[2:].decode('hex')
+        return x
 
+    pairs['in'] = [(_dec(k), _dec(v)) for k,v in pairs['in']]
+    deletes = [(k,v) for k, v in pairs['in'] if v is None]
 
-def test_foo():
-    run_test('foo')
+    N_PERMUTATIONS = 1000
+    for i, permut in enumerate(itertools.permutations(pairs['in'])):
+        if i>N_PERMUTATIONS:
+            break
+        t = trie.Trie(db.EphemDB())
+        for k,v in permut:
+            #logger.debug('updating with (%s, %s)', k, v)
+            if v is not None:
+                t.update(k, v)
+            else:
+                t.delete(k)
+        # make sure we have deletes at the end
+        for k,v in deletes:
+            t.delete(k)
+        assert pairs['root'] == '0x'+t.root_hash.encode('hex'), (i, list(permut) + deletes)
+
 
 def test_emptyValues():
     run_test('emptyValues')
 
 def test_jeff():
     run_test('jeff')
-
-def test_testy():
-    run_test('testy')
-
-def test_singleItem():
-    run_test('singleItem')
-
-def test_hex():
-    run_test('hex')
-
-def test_smallValues():
-    run_test('smallValues')
-
-def test_puppy():
-    run_test('puppy')
-
-def test_dogs():
-    run_test('dogs')
-
-
-
-
-

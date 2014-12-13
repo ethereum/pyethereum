@@ -186,9 +186,6 @@ class ChainManager(StoppableLoopThread):
         if pct_cpu > 0:
             self.mine()
             delay = (time.time() - ts) * (100. / pct_cpu - 1)
-            if delay < 0:
-                log_warn('delay %r<0!?', delay)
-                delay = 1
             assert delay >= 0
             time.sleep(min(delay, 1.))
         else:
@@ -202,7 +199,7 @@ class ChainManager(StoppableLoopThread):
         ineligible = set()  # hashes
         blk = self.head
         for i in range(8):
-            for u in blk.uncles:  # assuming uncle headres
+            for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
 #                    log_debug('ineligible uncle %r', u.encode('hex'))
@@ -237,8 +234,12 @@ class ChainManager(StoppableLoopThread):
             self.synchronizer.received_blocks(peer, transient_blocks)
 
             for t_block in transient_blocks:  # oldest to newest
-                log_debug('Deserializing %r', t_block)
-                # log_debug(t_block.rlpdata.encode('hex'))
+                logger.debug('Checking PoW %r', t_block)
+                if not blocks.check_header_pow(t_block.header_args):
+                    logger.debug('Invalid PoW %r', t_block)
+                    continue
+                logger.debug('Deserializing %r', t_block)
+                # logger.debug(t_block.rlpdata.encode('hex'))
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
@@ -300,6 +301,7 @@ class ChainManager(StoppableLoopThread):
             log_debug('Invalid nonce %r', block)
             return False
         # Forward block w/ valid PoW asap (if not syncing)
+        # FIXME: filter peer by wich block was received
         if forward:
             signals.broadcast_new_block.send(sender=None, block=block)
             log_debug("broadcasting new %r" % block)

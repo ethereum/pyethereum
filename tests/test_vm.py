@@ -1,9 +1,11 @@
 import pytest
 import json
 import pyethereum.processblock as pb
+import pyethereum.vm as vm
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
+import pyethereum.bloom as bloom
 import os
 import sys
 
@@ -11,18 +13,22 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
 pblogger = pb.pblogger
+vmlogger = vm.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-pblogger.log_pre_state = True    # dump storage at account before execution
-pblogger.log_post_state = True   # dump storage at account after execution
-pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = False      # dump memory before each op
-pblogger.log_op = True           # log op, gas, stack before each op
-pblogger.log_json = False        # generate machine readable output
-pblogger.log_apply_op = True     # generate machine readable output
-pblogger.log_stack = True        # generate machine readable output
-
+def toggle_logging(log_active):
+    pblogger = pb.pblogger
+    pblogger.log_pre_state = log_active    # dump storage at account before execution
+    pblogger.log_post_state = log_active   # dump storage at account after execution
+    pblogger.log_block = False       # dump block after TX was applied
+    pblogger.log_json = False        # generate machine readable output
+    vmlogger.log_memory = log_active      # dump memory before each op
+    vmlogger.log_stack = log_active      # dump stack before each op
+    vmlogger.log_storage = log_active      # dump storage before each op
+    vmlogger.log_op = log_active           # log op, gas, stack before each op
+    vmlogger.log_apply_op = log_active     # log anything per operation at all
+toggle_logging(True)
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -75,12 +81,15 @@ def do_test_vm(filename, testname=None, limit=99999999):
         return
     logger.debug('running test:%r in %r', testname, filename)
     params = vm_tests_fixtures()[filename][testname]
+    run_test_vm(params)
 
+
+def run_test_vm(params):
     pre = params['pre']
     exek = params['exec']
-    callcreates = params['callcreates']
+    callcreates = params.get('callcreates', [])
     env = params['env']
-    post = params['post']
+    post = params.get('post',{})
 
     check_testdata(env.keys(), ['currentGasLimit', 'currentTimestamp',
                                 'previousHash', 'currentCoinbase',
@@ -133,29 +142,41 @@ def do_test_vm(filename, testname=None, limit=99999999):
     apply_message_calls = []
     orig_apply_msg = pb.apply_msg
 
-    def apply_msg_wrapper(_block, _tx, msg, code, toplevel=False):
+    def apply_msg_wrapper(_ext, msg, code, toplevel=False):
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
                                         data=msg.data.encode('hex')))
         if not toplevel:
             pb.apply_msg = orig_apply_msg
-        result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
+        result, gas_rem, data = orig_apply_msg(_ext, msg, code)
         if not toplevel:
             pb.apply_msg = apply_msg_wrapper
         return result, gas_rem, data
 
     pb.apply_msg = apply_msg_wrapper
 
-    msg = pb.Message(tx.sender, tx.to, tx.value, tx.startgas, tx.data)
-    blk.delta_balance(exek['caller'], tx.value)
-    blk.delta_balance(exek['address'], -tx.value)
+    ext = pb.VMExt(blk, tx)
+    msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas, tx.data)
     success, gas_remained, output = \
-        pb.apply_msg(blk, tx, msg, exek['code'][2:].decode('hex'), toplevel=True)
+        vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
-    apply_message_calls.pop(0)
     blk.commit_state()
 
+    """
+     generally expected that the test implementer will read env, exec and pre
+     then check their results against gas, logs, out, post and callcreates.
+     If an exception is expected, then latter sections are absent in the test. 
+     Since the reverting of the state is not part of the VM tests.
+     """
+
+
+    if not success:
+        return
+
+    for k in ['gas', 'logs', 'out', 'post', 'callcreates']:
+        assert k in params
     assert len(callcreates) == len(apply_message_calls)
+
 
     # check against callcreates
     for i, callcreate in enumerate(callcreates):
@@ -165,11 +186,49 @@ def do_test_vm(filename, testname=None, limit=99999999):
         assert callcreate['value'] == str(amc['value'])
         assert callcreate['destination'] == amc['destination']
 
-    assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
-    assert str(gas_remained) == params['gas']
+    if 'out' in params:
+        assert '0x' + ''.join(map(chr, output)).encode('hex') == params['out']
+    if 'gas' in params:
+        assert str(gas_remained) == params['gas']
+    if 'logs' in params:
+        """
+        The logs sections is a mapping between the blooms and their corresponding logentries.
+        Each logentry has the format:
+        address: The address of the logentry.
+        data: The data of the logentry.
+        topics: The topics of the logentry, given as an array of values.
+        """
+        test_logs = params['logs']
+        vm_logs = []
+        for log in tx.logs:
+            vm_logs.append({
+                "bloom": bloom.b64(bloom.bloom_from_list(log.bloomables())).encode('hex'),
+                "address": log.address,
+                "data": '0x'+log.data.encode('hex'),
+                "topics": [u.zpad(u.int_to_big_endian(t), 32).encode('hex') for t in log.topics]
+            })
+
+        assert len(vm_logs) == len(test_logs)
+        assert vm_logs == test_logs
 
     # check state
     for address, data in post.items():
         state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)  # attribute not present in vmtest fixtures
         assert data == state
+
+def random():
+    "used for external random vm tests"
+    toggle_logging(False)
+    logger.setLevel('ERROR')
+    import sys
+    data = json.loads(sys.argv[1])
+    for test_data in data.values():
+        try:
+            run_test_vm(test_data)
+        except Exception:
+            sys.exit(1)
+
+if __name__ == '__main__':
+    random()
+
