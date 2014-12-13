@@ -3,7 +3,9 @@ import pytest
 import json
 import tempfile
 import pyethereum.trie as trie
+import pyethereum.db as db
 
+import itertools
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
@@ -30,7 +32,6 @@ def load_tests():
 def run_test(name):
 
     logger.debug('testing %s', name)
-    t = trie.Trie(tempfile.mktemp())
     pairs = load_tests()[name]
 
     def _dec(x):
@@ -38,14 +39,24 @@ def run_test(name):
             return x[2:].decode('hex')
         return x
 
-    for k, v in pairs['in']:
-        k, v = _dec(k), _dec(v)
-        logger.debug('updating with (%s, %s)', k, v)
-        if v is not None:
-            t.update(k, v)
-        else:
+    pairs['in'] = [(_dec(k), _dec(v)) for k,v in pairs['in']]
+    deletes = [(k,v) for k, v in pairs['in'] if v is None]
+
+    N_PERMUTATIONS = 1000
+    for i, permut in enumerate(itertools.permutations(pairs['in'])):
+        if i>N_PERMUTATIONS:
+            break
+        t = trie.Trie(db.EphemDB())
+        for k,v in permut:
+            #logger.debug('updating with (%s, %s)', k, v)
+            if v is not None:
+                t.update(k, v)
+            else:
+                t.delete(k)
+        # make sure we have deletes at the end
+        for k,v in deletes:
             t.delete(k)
-    assert pairs['root'] == '0x'+t.root_hash.encode('hex')
+        assert pairs['root'] == '0x'+t.root_hash.encode('hex'), (i, list(permut) + deletes)
 
 
 def test_emptyValues():
