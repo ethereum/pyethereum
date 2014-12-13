@@ -17,18 +17,18 @@ vmlogger = vm.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-log_active = True
-pblogger = pb.pblogger
-pblogger.log_pre_state = log_active    # dump storage at account before execution
-pblogger.log_post_state = log_active   # dump storage at account after execution
-pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_json = False        # generate machine readable output
-vmlogger.log_memory = log_active      # dump memory before each op
-vmlogger.log_stack = log_active      # dump stack before each op
-vmlogger.log_storage = log_active      # dump storage before each op
-vmlogger.log_op = log_active           # log op, gas, stack before each op
-vmlogger.log_apply_op = log_active     # log anything per operation at all
-
+def toggle_logging(log_active):
+    pblogger = pb.pblogger
+    pblogger.log_pre_state = log_active    # dump storage at account before execution
+    pblogger.log_post_state = log_active   # dump storage at account after execution
+    pblogger.log_block = False       # dump block after TX was applied
+    pblogger.log_json = False        # generate machine readable output
+    vmlogger.log_memory = log_active      # dump memory before each op
+    vmlogger.log_stack = log_active      # dump stack before each op
+    vmlogger.log_storage = log_active      # dump storage before each op
+    vmlogger.log_op = log_active           # log op, gas, stack before each op
+    vmlogger.log_apply_op = log_active     # log anything per operation at all
+toggle_logging(True)
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -81,7 +81,10 @@ def do_test_vm(filename, testname=None, limit=99999999):
         return
     logger.debug('running test:%r in %r', testname, filename)
     params = vm_tests_fixtures()[filename][testname]
+    run_test_vm(params)
 
+
+def run_test_vm(params):
     pre = params['pre']
     exek = params['exec']
     callcreates = params.get('callcreates', [])
@@ -213,4 +216,19 @@ def do_test_vm(filename, testname=None, limit=99999999):
         state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)  # attribute not present in vmtest fixtures
         assert data == state
+
+def random():
+    "used for external random vm tests"
+    toggle_logging(False)
+    logger.setLevel('ERROR')
+    import sys
+    data = json.load(open(sys.argv[1], 'r'))
+    for test_data in data.values():
+        try:
+            run_test_vm(test_data)
+        except Exception:
+            sys.exit(1)
+
+if __name__ == '__main__':
+    random()
 
