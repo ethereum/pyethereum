@@ -19,14 +19,10 @@ sys.setrecursionlimit(100000)
 
 
 class PBLogger(object):
-    log_apply_op = False    # general flag for logging inside apply_op
-    log_op = False          # log op, gas, stack before each op
     log_pre_state = False   # dump storage at account before execution
     log_post_state = False  # dump storage at account after execution
+    log_msg = False         # log messages
     log_block = False       # dump block after TX was applied
-    log_memory = False      # dump memory before each op
-    log_stack = False       # dump stack before each op
-    log_storage = False     # dump storage before each op
     log_json = False        # generate machine readable output
     log_state_delta = False  # dump state delta post tx execution
 
@@ -228,7 +224,6 @@ def apply_transaction(block, tx):
             output = result
     block.commit_state()
     suicides = block.suicides
-    pblogger.log('SUICIDES', suicides=block.suicides)
     block.suicides = []
     for s in suicides:
         block.del_account(s)
@@ -267,15 +262,17 @@ class VMExt():
 def apply_msg(ext, msg, code):
     # print 'init', map(ord, msg.data), msg.gas, \
     #     msg.sender, block.get_nonce(msg.sender)
-    pblogger.log("MSG APPLY", sender=msg.sender, to=msg.to,
-                 gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
+    if pblogger.log_msg:
+        pblogger.log("MSG APPLY", sender=msg.sender, to=msg.to,
+                     gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
     if pblogger.log_pre_state:
         pblogger.log('MSG PRE STATE', account=msg.to,
                      state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        pblogger.log('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
+        if pblogger.log_msg:
+            pblogger.log('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
         return 1, msg.gas, []
     if msg.depth >= 1024:
         return 0, 0, []
@@ -290,14 +287,16 @@ def apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
-    pblogger.log('MSG APPLIED', result=o, gas_remained=gas,
-                 sender=msg.sender, to=msg.to)
+    if pblogger.log_msg:
+        pblogger.log('MSG APPLIED', result=o, gas_remained=gas,
+                     sender=msg.sender, to=msg.to, data=dat)
     if pblogger.log_post_state:
         pblogger.log('MSG POST STATE', account=msg.to,
                      state=ext.log_storage(msg.to))
 
     if res == 0:
-        pblogger.log('REVERTING')
+        if pblogger.log_msg:
+            pblogger.log('REVERTING')
         ext._block.revert(snapshot)
 
     return res, gas, dat
@@ -328,7 +327,8 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            pblogger.log('CONTRACT CREATION OOG', have=gas, want=gcost)
+            if pblogger.log_msg:
+                pblogger.log('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:

@@ -5,6 +5,7 @@ import time
 import logging
 import sys
 import spv
+import pyethereum.opcodes as opcodes
 
 serpent = None
 
@@ -12,6 +13,7 @@ u = pyethereum.utils
 t = pyethereum.transactions
 b = pyethereum.blocks
 pb = pyethereum.processblock
+vm = pyethereum.vm
 
 accounts = []
 keys = []
@@ -94,8 +96,8 @@ class state():
         o = self.send(sender, to, value, data, funid, abi)
         zero_bytes = self.last_tx.data.count(chr(0))
         non_zero_bytes = len(self.last_tx.data) - zero_bytes
-        intrinsic_gas_used = pb.GTXDATAZERO * zero_bytes + \
-            pb.GTXDATANONZERO * non_zero_bytes
+        intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
+            opcodes.GTXDATANONZERO * non_zero_bytes
         return {
             "time": time.time() - tm,
             "gas": self.block.gas_used - g - intrinsic_gas_used,
@@ -155,11 +157,35 @@ class state():
         self.block = b.Block.deserialize(data)
 
 
+def set_logging_level(lvl=1):
+    if lvl == 0:
+        logging.basicConfig(level=logging.ERROR, format='%(message)s')
+        pb.pblogger.log_msg = False
+    elif lvl >= 1 and lvl <= 2:
+        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+        vm.pblogger.log_apply_op = False
+        vm.pblogger.log_exits = (lvl == 2)
+        pb.pblogger.log_msg = (lvl == 2)
+    elif lvl >= 3:
+        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+        pb.pblogger.log_msg = True
+        vm.pblogger.log_exits = True
+        vm.pblogger.log_apply_op = True
+        vm.pblogger.log_stack = True
+        vm.pblogger.log_op = True
+        vm.pblogger.log_memory = (lvl >= 4)
+        vm.pblogger.log_storage = (lvl >= 4)
+    else:
+        raise Exception("Invalid loging level")
+    print 'Set logging level: %d' % lvl
+
+
 def enable_logging():
-    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-    pb.pblogger.log_apply_op = True
-    pb.pblogger.log_stack = True
-    pb.pblogger.log_op = True
+    set_logging_level(1)
+
+
+def disable_logging():
+    set_logging_level(0)
 
 
 gas_limit = 100000

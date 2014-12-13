@@ -23,6 +23,7 @@ class PBLogger(object):
     log_storage = False     # dump storage before each op
     log_json = False        # generate machine readable output
     log_state_delta = False  # dump state delta post tx execution
+    log_exits = False       # log exit conditions
 
     def __init__(self):
         self.listeners = []  # register callbacks here
@@ -138,12 +139,14 @@ def data_copy(compustate, size):
 
 
 def vm_exception(error, **kargs):
-    pblogger.log('EXCEPTION', cause=error, **kargs)
+    if pblogger.log_exits:
+        pblogger.log('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
 
 
 def peaceful_exit(cause, gas, data, **kargs):
-    pblogger.log('EXIT', cause=cause, **kargs)
+    if pblogger.log_exits:
+        pblogger.log('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
 code_cache = {}
@@ -454,12 +457,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if ext.get_balance(msg.to) >= value:
                 data = ''.join(map(chr, mem[mstart: mstart + msz]))
-                pblogger.log('SUB CONTRACT NEW', sender=msg.to, value=value, data=data.encode('hex'))
                 create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
                 addr, gas, code = ext.create(create_msg)
-                pblogger.log('SUB CONTRACT OUT',
-                             address=utils.int_to_addr(addr),
-                             code=''.join([chr(x).encode('hex') for x in code]))
                 if addr:
                     stk.append(addr)
                     compustate.gas = gas
@@ -481,13 +480,8 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-                pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=str(value),
-                             gas=str(gas), data=data.encode('hex'),
-                             parentgas=str(compustate.gas), depth=str(msg.depth + 1))
                 call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
-                pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data),
-                             expected=memoutsz, csg=compustate.gas)
                 if result == 0:
                     stk.append(0)
                 else:
@@ -509,10 +503,8 @@ def vm_execute(ext, msg, code):
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
-            pblogger.log('SUB CALL NEW', sender=msg.to, to=to, value=value, gas=gas, data=data.encode('hex'))
             call_msg = Message(msg.to, msg.to, value, gas, data, msg.depth + 1)
             result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
-            pblogger.log('SUB CALL OUT', result=result, data=data, length=len(data), expected=memoutsz)
             if result == 0:
                 stk.append(0)
             else:
@@ -528,12 +520,10 @@ def vm_execute(ext, msg, code):
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            pblogger.log('SUICIDE ADDED', of=msg.to, to=to)
             xfer = ext.get_balance(msg.to)
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
-            pblogger.log('mamahuhu', suicides=ext._block.suicides)
             return 1, compustate.gas, []
         for a in stk:
             assert isinstance(a, (int, long))
