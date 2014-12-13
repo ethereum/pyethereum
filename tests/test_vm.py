@@ -222,7 +222,7 @@ def random():
     toggle_logging(False)
     logger.setLevel('ERROR')
     import sys
-    data = json.load(open(sys.argv[1], 'r'))
+    data = json.loads(sys.argv[1])
     for test_data in data.values():
         try:
             run_test_vm(test_data)
