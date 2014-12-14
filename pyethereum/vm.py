@@ -11,6 +11,7 @@ TT255 = 2**255
 
 log_vm = []
 
+
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data, depth=0):
@@ -116,7 +117,8 @@ def vm_execute(ext, msg, code):
         if compustate.pc >= codelen:
             return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
-        op, in_args, out_args, fee, opcode, pushval = processed_code[compustate.pc]
+        op, in_args, out_args, fee, opcode, pushval = \
+            processed_code[compustate.pc]
 
         # out of gas error
         if fee > compustate.gas:
@@ -124,7 +126,8 @@ def vm_execute(ext, msg, code):
 
         # empty stack error
         if in_args > len(compustate.stack):
-            return vm_exception('INSUFFICIENT STACK', op=op, needed=str(in_args),
+            return vm_exception('INSUFFICIENT STACK',
+                                op=op, needed=str(in_args),
                                 available=str(len(compustate.stack)))
 
         # Apply operation
@@ -167,10 +170,12 @@ def vm_execute(ext, msg, code):
             stk.append(0 if s1 == 0 else s0 % s1)
         elif op == 'SDIV':
             s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) * (-1 if s0*s1 < 0 else 1)) & TT256M1)
+            stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) *
+                       (-1 if s0*s1 < 0 else 1)) & TT256M1)
         elif op == 'SMOD':
             s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) * (-1 if s0 < 0 else 1)) & TT256M1)
+            stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) *
+                       (-1 if s0 < 0 else 1)) & TT256M1)
         elif op == 'ADDMOD':
             s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
             stk.append((s0 + s1) % s2 if s2 else 0)

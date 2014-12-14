@@ -224,17 +224,12 @@ class Block(object):
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
             if not check_header_pow(uncle):
-                sys.stderr.write('1\n\n')
                 return False
-            # uncle's parent cannot be the block's own parent
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
                 log_error("%r: Uncle does not have a valid ancestor", self)
-                sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' +
-                                 str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
                 return False
             if uncle in ineligible:
-                sys.stderr.write('3\n\n')
                 log_error("%r: Duplicate uncle %r", self,
                           utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
@@ -305,12 +300,11 @@ class Block(object):
                                        timestamp=kargs['timestamp'],
                                        uncles=uncles)
 
-        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
+        # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
         # replay transactions
         for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
             success, output = processblock.apply_transaction(block, tx)
-
 
         block.finalize()
 
@@ -328,8 +322,8 @@ class Block(object):
         must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
         must_equal('state_root', block.state.root_hash, kargs['state_root'])
         must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
-        bloom_bits =  bloom.bits_in_number(block.bloom)
-        bloom_bits_expected =  bloom.bits_in_number(kargs['bloom'])
+        # bloom_bits = bloom.bits_in_number(block.bloom)
+        # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
         # print 'computed', bloom_bits
         # print 'expected', bloom_bits_expected
         # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
@@ -420,8 +414,8 @@ class Block(object):
         k = rlp.encode(utils.encode_int(self.transaction_count))
         self.transactions.update(k, tx.serialize())
         self.receipts.update(k, self.mk_transaction_receipt(tx))
-        self.bloom |= tx.log_bloom() # int
-        #print "newbits", bloom.bits_in_number(tx.log_bloom())
+        self.bloom |= tx.log_bloom()  # int
+        # print "newbits", bloom.bits_in_number(tx.log_bloom())
         # for log in tx.logs:q
         #     print 'log', log.address, log.topics
         #     print [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
@@ -686,17 +680,18 @@ class Block(object):
             tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
             tx = rlp.decode(tx_rlp)
             receipt_rlp = self.receipts.get(rlp.encode(utils.encode_int(i)))
-            msr, gas, bloom, logs = rlp.decode(receipt_rlp)
+            msr, gas, mybloom, mylogs = rlp.decode(receipt_rlp)
             if full_transactions:
                 txjson = transactions.Transaction.create(tx).to_dict()
             else:
-                txjson = utils.sha3(rlp.descend(tx_rlp, 0)).encode('hex')  # tx hash
+                # tx hash
+                txjson = utils.sha3(rlp.descend(tx_rlp, 0)).encode('hex')
             txlist.append({
                 "tx": txjson,
                 "medstate": msr.encode('hex'),
                 "gas": str(utils.decode_int(gas)),
-                "logs": logs,
-                "bloom": bloom.encode('hex')
+                "logs": mylogs,
+                "bloom": mybloom.encode('hex')
             })
         b["transactions"] = txlist
         if with_state:
@@ -706,7 +701,8 @@ class Block(object):
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         if with_uncles:
-            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex') for u in self.uncles]
+            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex')
+                           for u in self.uncles]
 
         return b
 
@@ -727,7 +723,7 @@ class Block(object):
             parent = get_block(self.prevhash)
         except KeyError:
             raise UnknownParentException(self.prevhash.encode('hex'))
-        #assert parent.state.db.db == self.state.db.db
+        # assert parent.state.db.db == self.state.db.db
         return parent
 
     def has_parent(self):
