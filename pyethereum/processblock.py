@@ -14,8 +14,18 @@ import copy
 import specials
 import bloom
 import vm
+from exceptions import *
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
+
+TT255 = 2**255
+TT256 = 2**256
+TT256M1 = 2**256 - 1
+
+OUT_OF_GAS = -1
+
+# contract creating transactions send to an empty address
+CREATE_CONTRACT_ADDRESS = ''
 
 
 class PBLogger(object):
@@ -62,18 +72,6 @@ class PBLogger(object):
 
 pblogger = PBLogger()
 
-code_cache = {}
-
-
-TT255 = 2**255
-TT256 = 2**256
-TT256M1 = 2**256 - 1
-
-OUT_OF_GAS = -1
-
-# contract creating transactions send to an empty address
-CREATE_CONTRACT_ADDRESS = ''
-
 
 def verify(block, parent):
     try:
@@ -111,29 +109,6 @@ class Log(object):
                     data='0x' + self.data.encode('hex'))
 
 
-
-class InvalidTransaction(Exception):
-    pass
-
-class UnsignedTransaction(InvalidTransaction):
-    pass
-
-class InvalidNonce(InvalidTransaction):
-    pass
-
-class InsufficientBalance(InvalidTransaction):
-    pass
-
-class InsufficientStartGas(InvalidTransaction):
-    pass
-
-class BlockGasLimitReached(InvalidTransaction):
-    pass
-
-class GasPriceTooLow(InvalidTransaction):
-    pass
-
-
 def apply_transaction(block, tx):
 
     def rp(actual, target):
@@ -157,7 +132,6 @@ def apply_transaction(block, tx):
                           + opcodes.GTXDATAZERO * num_zero_bytes
                           + opcodes.GTXDATANONZERO * num_non_zero_bytes)
     if tx.startgas < intrinsic_gas_used:
-        print tx.data.encode('hex'), 'gogogogogogo'
         raise InsufficientStartGas(rp(tx.startgas, intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
@@ -166,10 +140,6 @@ def apply_transaction(block, tx):
     if block.get_balance(tx.sender) < total_cost:
         raise InsufficientBalance(
             rp(block.get_balance(tx.sender), total_cost))
-
-    # check offered gas price is enough
-    # if tx.gasprice < block.min_gas_price:
-        # raise GasPriceTooLow(rp(tx.gasprice, block.min_gas_price))
 
     # check block gas limit
     if block.gas_used + tx.startgas > block.gas_limit:
@@ -278,13 +248,6 @@ def apply_msg(ext, msg, code):
         return 0, 0, []
     snapshot = ext._block.snapshot()
 
-    #if block.get_code(msg.to) == '' and msg.to != CREATE_CONTRACT_ADDRESS and msg.value > 0:
-    #    topics = [utils.coerce_to_int(msg.sender) + 1]
-    #    data = ''  # utils.zpad(utils.encode_int(msg.value), 32)
-    #    block.logs.append(Log(msg.to, topics, data))
-    #    pblogger.log('LOG', to=msg.to, topics=topics, data=data)
-    #    return 1, compustate.gas, []
-
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
     if pblogger.log_msg:
@@ -332,14 +295,4 @@ def create_contract(ext, msg):
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:
-        ext._block.del_account(msg.to)
         return res, gas, dat
-
-
-def get_opcode(code, index):
-    return ord(code[index]) if index < len(code) else 0
-
-
-def get_op_data(code, index):
-    opcode = ord(code[index]) if index < len(code) else 0
-    return opcodes.opcodes.get(opcode, ['INVALID', 0, 0, 0])

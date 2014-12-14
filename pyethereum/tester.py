@@ -143,7 +143,7 @@ class state():
         self.send(sender, to, value, data)
         pb.pblogger.listeners.remove(log_receiver)
         return log
-        
+
     def mine(self, n=1, coinbase=a0):
         for i in range(n):
             self.block.finalize()

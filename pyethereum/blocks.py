@@ -10,6 +10,7 @@ import logging
 import copy
 import sys
 from repoze.lru import lru_cache
+from exceptions import *
 
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
@@ -91,13 +92,6 @@ def calc_gaslimit(parent):
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
 
-
-class UnknownParentException(Exception):
-    pass
-
-
-class VerificationFailed(Exception):
-    pass
 
 
 def must_equal(what, a, b):
