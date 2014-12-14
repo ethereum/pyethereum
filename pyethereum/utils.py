@@ -1,5 +1,3 @@
-import logging
-import logging.config
 from sha3 import sha3_256
 from bitcoin import privtopub
 import struct
@@ -11,7 +9,6 @@ import random
 from rlp import big_endian_to_int, int_to_big_endian
 
 
-logger = logging.getLogger(__name__)
 TT256 = 2**256
 TT256M1 = 2**256 - 1
 TT255 = 2**255
@@ -369,49 +366,6 @@ def dump_state(trie):
     for k, v in trie.to_dict().items():
         res += '%r:%r\n' % (k.encode('hex'), v.encode('hex'))
     return res
-
-def configure_logging(loggerlevels=':DEBUG', verbosity=1):
-    logconfig = dict(
-        version=1,
-        disable_existing_loggers=False,
-        formatters=dict(
-            debug=dict(
-                format='%(threadName)s:%(module)s: %(message)s'
-            ),
-            minimal=dict(
-                format='%(message)s'
-            ),
-        ),
-        handlers=dict(
-            default={
-                'level': 'INFO',
-                'class': 'logging.StreamHandler',
-                'formatter': 'minimal'
-            },
-            verbose={
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-                'formatter': 'debug'
-            },
-        ),
-        loggers=dict()
-    )
-
-    for loggerlevel in filter(lambda _: ':' in _, loggerlevels.split(',')):
-        name, level = loggerlevel.split(':')
-        logconfig['loggers'][name] = dict(
-            handlers=['verbose'], level=level, propagate=False)
-
-    if len(logconfig['loggers']) == 0:
-        logconfig['loggers'][''] = dict(
-            handlers=['default'],
-            level={0: 'ERROR', 1: 'WARNING', 2: 'INFO', 3: 'DEBUG'}.get(
-                verbosity),
-            propagate=True)
-
-    logging.config.dictConfig(logconfig)
-    # logging.debug("logging set up like that: %r", logconfig)
-
 
 class Denoms():
     def __init__(self):

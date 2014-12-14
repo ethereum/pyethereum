@@ -233,11 +233,13 @@ class Block(object):
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
                 logger.debug("%r: Uncle does not have a valid ancestor", self)
-                sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' + str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
+                sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' +
+                                 str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
                 return False
             if uncle in ineligible:
                 sys.stderr.write('3\n\n')
-                logger.debug("%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
+                logger.debug(
+                    "%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)
         return True
@@ -492,19 +494,19 @@ class Block(object):
         return trie.Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
-        if 'storage:'+address in self.caches:
-            if index in self.caches['storage:'+address]:
-                return self.caches['storage:'+address][index]
+        if 'storage:' + address in self.caches:
+            if index in self.caches['storage:' + address]:
+                return self.caches['storage:' + address][index]
         t = self.get_storage(address)
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         val = rlp.decode(t.get(key))
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
-        if 'storage:'+address not in self.caches:
-            self.caches['storage:'+address] = {}
+        if 'storage:' + address not in self.caches:
+            self.caches['storage:' + address] = {}
             self.set_and_journal('all', address, True)
-        self.set_and_journal('storage:'+address, index, val)
+        self.set_and_journal('storage:' + address, index, val)
 
     def commit_state(self):
         changes = []
@@ -518,7 +520,7 @@ class Block(object):
             for i, (key, typ, default) in enumerate(acct_structure):
                 if key == 'storage':
                     t = trie.Trie(utils.get_db_path(), acct[i])
-                    for k, v in self.caches.get('storage:'+address, {}).iteritems():
+                    for k, v in self.caches.get('storage:' + address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
                         changes.append(['storage', address, k, v])
@@ -560,18 +562,18 @@ class Block(object):
         if with_storage:
             med_dict['storage'] = {}
             d = strie.to_dict()
-            subcache = self.caches.get('storage:'+address, {})
+            subcache = self.caches.get('storage:' + address, {})
             subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32) for kk in subcache.keys()]
             for k in d.keys() + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x'+utils.zunpad(k).encode('hex')
+                hexkey = '0x' + utils.zunpad(k).encode('hex')
                 if v2 is not None:
                     if v2 != 0:
                         med_dict['storage'][hexkey] = \
-                            '0x'+utils.int_to_big_endian(v2).encode('hex')
+                            '0x' + utils.int_to_big_endian(v2).encode('hex')
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x'+rlp.decode(v).encode('hex')
+                    med_dict['storage'][hexkey] = '0x' + rlp.decode(v).encode('hex')
         return med_dict
 
     def reset_cache(self):
@@ -683,7 +685,7 @@ class Block(object):
         return rlp.encode(self.list_header()).encode('hex')
 
     def to_dict(self, with_state=False, full_transactions=False,
-                      with_storage_roots=False, with_uncles=False):
+                with_storage_roots=False, with_uncles=False):
         """
         serializes the block
         with_state:             include state for all accounts
@@ -729,7 +731,6 @@ class Block(object):
     def hash(self):
         return self._hash()
 
-
     def hex_hash(self):
         return self.hash.encode('hex')
 
@@ -754,14 +755,14 @@ class Block(object):
         # calculate the summarized_difficulty
         if self.is_genesis():
             return self.difficulty
-        elif 'difficulty:'+self.hex_hash() in self.state.db:
+        elif 'difficulty:' + self.hex_hash() in self.state.db:
             return utils.decode_int(
-                self.state.db.get('difficulty:'+self.hex_hash()))
+                self.state.db.get('difficulty:' + self.hex_hash()))
         else:
             _idx, _typ, _ = block_structure_rev['difficulty']
             o = self.difficulty + self.get_parent().chain_difficulty()
             o += sum([utils.decoders[_typ](u[_idx]) for u in self.uncles])
-            self.state.db.put('difficulty:'+self.hex_hash(), utils.encode_int(o))
+            self.state.db.put('difficulty:' + self.hex_hash(), utils.encode_int(o))
             return o
 
     def __eq__(self, other):
@@ -805,10 +806,17 @@ class CachedBlock(Block):
     # note: immutable refers to: do not manipulate!
     _hash_cached = None
 
-    def _set_acct_item(self): raise NotImplementedError
-    def set_state_root(self): raise NotImplementedError
-    def revert(self): raise NotImplementedError
-    def commit_state(self): pass
+    def _set_acct_item(self):
+        raise NotImplementedError
+
+    def set_state_root(self):
+        raise NotImplementedError
+
+    def revert(self):
+        raise NotImplementedError
+
+    def commit_state(self):
+        pass
 
     def _hash(self):
         if not self._hash_cached:
@@ -819,6 +827,7 @@ class CachedBlock(Block):
     def create_cached(cls, blk):
         blk.__class__ = CachedBlock
         return blk
+
 
 @lru_cache(500)
 def get_block(blockhash):
