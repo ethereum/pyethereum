@@ -152,222 +152,224 @@ def vm_execute(ext, msg, code):
 
             log_vm_op('vm', **trace_data)
 
-        if op == 'STOP':
-            return peaceful_exit('STOP', compustate.gas, [])
-        elif op == 'INVALID':
-            return vm_exception('INVALID OP', opcode=opcode)
-        elif op == 'ADD':
-            stk.append((stk.pop() + stk.pop()) & TT256M1)
-        elif op == 'SUB':
-            stk.append((stk.pop() - stk.pop()) & TT256M1)
-        elif op == 'MUL':
-            stk.append((stk.pop() * stk.pop()) & TT256M1)
-        elif op == 'DIV':
-            s0, s1 = stk.pop(), stk.pop()
-            stk.append(0 if s1 == 0 else s0 / s1)
-        elif op == 'MOD':
-            s0, s1 = stk.pop(), stk.pop()
-            stk.append(0 if s1 == 0 else s0 % s1)
-        elif op == 'SDIV':
-            s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) *
-                       (-1 if s0*s1 < 0 else 1)) & TT256M1)
-        elif op == 'SMOD':
-            s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) *
-                       (-1 if s0 < 0 else 1)) & TT256M1)
-        elif op == 'ADDMOD':
-            s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-            stk.append((s0 + s1) % s2 if s2 else 0)
-        elif op == 'MULMOD':
-            s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-            stk.append((s0 * s1) % s2 if s2 else 0)
-        elif op == 'EXP':
-            base, exponent = stk.pop(), stk.pop()
-            # fee for exponent is dependent on its bytes
-            # calc n bytes to represent exponent
-            nbytes = len(utils.encode_int(exponent))
-            expfee = nbytes * opcodes.GEXPONENTBYTE
-            if compustate.gas < expfee:
-                compustate.gas = 0
-                return vm_exception('OOG EXPONENT')
-            compustate.gas -= expfee
-            stk.append(pow(base, exponent, TT256))
-        elif op == 'SIGNEXTEND':
-            s0, s1 = stk.pop(), stk.pop()
-            if s0 <= 31:
-                testbit = s0 * 8 + 7
-                if s1 & (1 << testbit):
-                    stk.append(s1 | (TT256 - (1 << testbit)))
+        if opcode < 0x10:
+            if op == 'STOP':
+                return peaceful_exit('STOP', compustate.gas, [])
+            elif op == 'ADD':
+                stk.append((stk.pop() + stk.pop()) & TT256M1)
+            elif op == 'SUB':
+                stk.append((stk.pop() - stk.pop()) & TT256M1)
+            elif op == 'MUL':
+                stk.append((stk.pop() * stk.pop()) & TT256M1)
+            elif op == 'DIV':
+                s0, s1 = stk.pop(), stk.pop()
+                stk.append(0 if s1 == 0 else s0 / s1)
+            elif op == 'MOD':
+                s0, s1 = stk.pop(), stk.pop()
+                stk.append(0 if s1 == 0 else s0 % s1)
+            elif op == 'SDIV':
+                s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
+                stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) *
+                           (-1 if s0*s1 < 0 else 1)) & TT256M1)
+            elif op == 'SMOD':
+                s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
+                stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) *
+                           (-1 if s0 < 0 else 1)) & TT256M1)
+            elif op == 'ADDMOD':
+                s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+                stk.append((s0 + s1) % s2 if s2 else 0)
+            elif op == 'MULMOD':
+                s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+                stk.append((s0 * s1) % s2 if s2 else 0)
+            elif op == 'EXP':
+                base, exponent = stk.pop(), stk.pop()
+                # fee for exponent is dependent on its bytes
+                # calc n bytes to represent exponent
+                nbytes = len(utils.encode_int(exponent))
+                expfee = nbytes * opcodes.GEXPONENTBYTE
+                if compustate.gas < expfee:
+                    compustate.gas = 0
+                    return vm_exception('OOG EXPONENT')
+                compustate.gas -= expfee
+                stk.append(pow(base, exponent, TT256))
+            elif op == 'SIGNEXTEND':
+                s0, s1 = stk.pop(), stk.pop()
+                if s0 <= 31:
+                    testbit = s0 * 8 + 7
+                    if s1 & (1 << testbit):
+                        stk.append(s1 | (TT256 - (1 << testbit)))
+                    else:
+                        stk.append(s1 & ((1 << testbit) - 1))
                 else:
-                    stk.append(s1 & ((1 << testbit) - 1))
-            else:
-                stk.append(s1)
-        elif op == 'LT':
-            stk.append(1 if stk.pop() < stk.pop() else 0)
-        elif op == 'GT':
-            stk.append(1 if stk.pop() > stk.pop() else 0)
-        elif op == 'SLT':
-            s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(1 if s0 < s1 else 0)
-        elif op == 'SGT':
-            s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
-            stk.append(1 if s0 > s1 else 0)
-        elif op == 'EQ':
-            stk.append(1 if stk.pop() == stk.pop() else 0)
-        elif op == 'ISZERO':
-            stk.append(0 if stk.pop() else 1)
-        elif op == 'AND':
-            stk.append(stk.pop() & stk.pop())
-        elif op == 'OR':
-            stk.append(stk.pop() | stk.pop())
-        elif op == 'XOR':
-            stk.append(stk.pop() ^ stk.pop())
-        elif op == 'NOT':
-            stk.append(TT256M1 - stk.pop())
-        elif op == 'BYTE':
-            s0, s1 = stk.pop(), stk.pop()
-            if s0 >= 32:
-                stk.append(0)
-            else:
-                stk.append((s1 / 256 ** (31 - s0)) % 256)
-
-        elif op == 'SHA3':
-            s0, s1 = stk.pop(), stk.pop()
-            compustate.gas -= 10 * (utils.ceil32(s1) / 32)
-            if compustate.gas < 0:
-                return vm_exception('OOG PAYING FOR SHA3')
-            if not mem_extend(mem, compustate, op, s0, s1):
-                return vm_exception('OOG EXTENDING MEMORY')
-            data = ''.join(map(chr, mem[s0: s0 + s1]))
-            stk.append(utils.big_endian_to_int(utils.sha3(data)))
-        elif op == 'ADDRESS':
-            stk.append(utils.coerce_to_int(msg.to))
-        elif op == 'BALANCE':
-            stk.append(ext.get_balance(utils.coerce_addr_to_hex(stk.pop())))
-        elif op == 'ORIGIN':
-            stk.append(utils.coerce_to_int(ext.tx_origin))
-        elif op == 'CALLER':
-            stk.append(utils.coerce_to_int(msg.sender))
-        elif op == 'CALLVALUE':
-            stk.append(msg.value)
-        elif op == 'CALLDATALOAD':
-            s0 = stk.pop()
-            if s0 >= len(msg.data):
-                stk.append(0)
-            else:
-                dat = msg.data[s0: s0 + 32]
-                stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
-        elif op == 'CALLDATASIZE':
-            stk.append(len(msg.data))
-        elif op == 'CALLDATACOPY':
-            start, s1, size = stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, start, size):
-                return vm_exception('OOG EXTENDING MEMORY')
-            if not data_copy(compustate, size):
-                return vm_exception('OOG COPY DATA')
-            for i in range(size):
-                if s1 + i < len(msg.data):
-                    mem[start + i] = ord(msg.data[s1 + i])
+                    stk.append(s1)
+        elif opcode < 0x20:
+            if op == 'LT':
+                stk.append(1 if stk.pop() < stk.pop() else 0)
+            elif op == 'GT':
+                stk.append(1 if stk.pop() > stk.pop() else 0)
+            elif op == 'SLT':
+                s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
+                stk.append(1 if s0 < s1 else 0)
+            elif op == 'SGT':
+                s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
+                stk.append(1 if s0 > s1 else 0)
+            elif op == 'EQ':
+                stk.append(1 if stk.pop() == stk.pop() else 0)
+            elif op == 'ISZERO':
+                stk.append(0 if stk.pop() else 1)
+            elif op == 'AND':
+                stk.append(stk.pop() & stk.pop())
+            elif op == 'OR':
+                stk.append(stk.pop() | stk.pop())
+            elif op == 'XOR':
+                stk.append(stk.pop() ^ stk.pop())
+            elif op == 'NOT':
+                stk.append(TT256M1 - stk.pop())
+            elif op == 'BYTE':
+                s0, s1 = stk.pop(), stk.pop()
+                if s0 >= 32:
+                    stk.append(0)
                 else:
-                    mem[start + i] = 0
-        elif op == 'CODESIZE':
-            stk.append(len(processed_code))
-        elif op == 'CODECOPY':
-            start, s1, size = stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, start, size):
-                return vm_exception('OOG EXTENDING MEMORY')
-            if not data_copy(compustate, size):
-                return vm_exception('OOG COPY DATA')
-            for i in range(size):
-                if s1 + i < len(processed_code):
-                    mem[start + i] = processed_code[s1 + i][4]
+                    stk.append((s1 / 256 ** (31 - s0)) % 256)
+        elif opcode < 0x40:
+            if op == 'SHA3':
+                s0, s1 = stk.pop(), stk.pop()
+                compustate.gas -= 10 * (utils.ceil32(s1) / 32)
+                if compustate.gas < 0:
+                    return vm_exception('OOG PAYING FOR SHA3')
+                if not mem_extend(mem, compustate, op, s0, s1):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                data = ''.join(map(chr, mem[s0: s0 + s1]))
+                stk.append(utils.big_endian_to_int(utils.sha3(data)))
+            elif op == 'ADDRESS':
+                stk.append(utils.coerce_to_int(msg.to))
+            elif op == 'BALANCE':
+                stk.append(ext.get_balance(utils.coerce_addr_to_hex(stk.pop())))
+            elif op == 'ORIGIN':
+                stk.append(utils.coerce_to_int(ext.tx_origin))
+            elif op == 'CALLER':
+                stk.append(utils.coerce_to_int(msg.sender))
+            elif op == 'CALLVALUE':
+                stk.append(msg.value)
+            elif op == 'CALLDATALOAD':
+                s0 = stk.pop()
+                if s0 >= len(msg.data):
+                    stk.append(0)
                 else:
-                    mem[start + i] = 0
-        elif op == 'GASPRICE':
-            stk.append(ext.tx_gasprice)
-        elif op == 'EXTCODESIZE':
-            stk.append(len(ext.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
-        elif op == 'EXTCODECOPY':
-            addr, start, s2, size = stk.pop(), stk.pop(), stk.pop(), stk.pop()
-            extcode = ext.get_code(utils.coerce_addr_to_hex(addr)) or ''
-            if not mem_extend(mem, compustate, op, start, size):
-                return vm_exception('OOG EXTENDING MEMORY')
-            if not data_copy(compustate, size):
-                return vm_exception('OOG COPY DATA')
-            for i in range(size):
-                if s2 + i < len(extcode):
-                    mem[start + i] = ord(extcode[s2 + i])
+                    dat = msg.data[s0: s0 + 32]
+                    stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
+            elif op == 'CALLDATASIZE':
+                stk.append(len(msg.data))
+            elif op == 'CALLDATACOPY':
+                start, s1, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, start, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not data_copy(compustate, size):
+                    return vm_exception('OOG COPY DATA')
+                for i in range(size):
+                    if s1 + i < len(msg.data):
+                        mem[start + i] = ord(msg.data[s1 + i])
+                    else:
+                        mem[start + i] = 0
+            elif op == 'CODESIZE':
+                stk.append(len(processed_code))
+            elif op == 'CODECOPY':
+                start, s1, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, start, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not data_copy(compustate, size):
+                    return vm_exception('OOG COPY DATA')
+                for i in range(size):
+                    if s1 + i < len(processed_code):
+                        mem[start + i] = processed_code[s1 + i][4]
+                    else:
+                        mem[start + i] = 0
+            elif op == 'GASPRICE':
+                stk.append(ext.tx_gasprice)
+            elif op == 'EXTCODESIZE':
+                stk.append(len(ext.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
+            elif op == 'EXTCODECOPY':
+                addr, start, s2, size = stk.pop(), stk.pop(), stk.pop(), stk.pop()
+                extcode = ext.get_code(utils.coerce_addr_to_hex(addr)) or ''
+                if not mem_extend(mem, compustate, op, start, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not data_copy(compustate, size):
+                    return vm_exception('OOG COPY DATA')
+                for i in range(size):
+                    if s2 + i < len(extcode):
+                        mem[start + i] = ord(extcode[s2 + i])
+                    else:
+                        mem[start + i] = 0
+        elif opcode < 0x50:
+            if op == 'PREVHASH':
+                stk.append(utils.big_endian_to_int(ext.block_prevhash))
+            elif op == 'COINBASE':
+                stk.append(utils.big_endian_to_int(ext.block_coinbase.decode('hex')))
+            elif op == 'TIMESTAMP':
+                stk.append(ext.block_timestamp)
+            elif op == 'NUMBER':
+                stk.append(ext.block_number)
+            elif op == 'DIFFICULTY':
+                stk.append(ext.block_difficulty)
+            elif op == 'GASLIMIT':
+                stk.append(ext.block_gas_limit)
+        elif opcode < 0x60:
+            if op == 'POP':
+                stk.pop()
+            elif op == 'MLOAD':
+                s0 = stk.pop()
+                if not mem_extend(mem, compustate, op, s0, 32):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                data = ''.join(map(chr, mem[s0: s0 + 32]))
+                stk.append(utils.big_endian_to_int(data))
+            elif op == 'MSTORE':
+                s0, s1 = stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, s0, 32):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                v = s1
+                for i in range(31, -1, -1):
+                    mem[s0 + i] = v % 256
+                    v /= 256
+            elif op == 'MSTORE8':
+                s0, s1 = stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, s0, 1):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                mem[s0] = s1 % 256
+            elif op == 'SLOAD':
+                stk.append(ext.get_storage_data(msg.to, stk.pop()))
+            elif op == 'SSTORE':
+                s0, s1 = stk.pop(), stk.pop()
+                if ext.get_storage_data(msg.to, s0):
+                    gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
                 else:
-                    mem[start + i] = 0
-        elif op == 'PREVHASH':
-            stk.append(utils.big_endian_to_int(ext.block_prevhash))
-        elif op == 'COINBASE':
-            stk.append(utils.big_endian_to_int(ext.block_coinbase.decode('hex')))
-        elif op == 'TIMESTAMP':
-            stk.append(ext.block_timestamp)
-        elif op == 'NUMBER':
-            stk.append(ext.block_number)
-        elif op == 'DIFFICULTY':
-            stk.append(ext.block_difficulty)
-        elif op == 'GASLIMIT':
-            stk.append(ext.block_gas_limit)
-        elif op == 'POP':
-            stk.pop()
-        elif op == 'MLOAD':
-            s0 = stk.pop()
-            if not mem_extend(mem, compustate, op, s0, 32):
-                return vm_exception('OOG EXTENDING MEMORY')
-            data = ''.join(map(chr, mem[s0: s0 + 32]))
-            stk.append(utils.big_endian_to_int(data))
-        elif op == 'MSTORE':
-            s0, s1 = stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, s0, 32):
-                return vm_exception('OOG EXTENDING MEMORY')
-            v = s1
-            for i in range(31, -1, -1):
-                mem[s0 + i] = v % 256
-                v /= 256
-        elif op == 'MSTORE8':
-            s0, s1 = stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, s0, 1):
-                return vm_exception('OOG EXTENDING MEMORY')
-            mem[s0] = s1 % 256
-        elif op == 'SLOAD':
-            stk.append(ext.get_storage_data(msg.to, stk.pop()))
-        elif op == 'SSTORE':
-            s0, s1 = stk.pop(), stk.pop()
-            if ext.get_storage_data(msg.to, s0):
-                gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
-            else:
-                gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
-            if compustate.gas < gascost:
-                return vm_exception('OUT OF GAS')
-            compustate.gas -= max(gascost, 0)
-            ext.add_refund(min(gascost, 0))  # adds neg gascost as a refund if below zero
-            ext.set_storage_data(msg.to, s0, s1)
-        elif op == 'JUMP' or op == 'JUMPSTATIC':
-            compustate.pc = stk.pop()
-            opnew = processed_code[compustate.pc][0] if \
-                compustate.pc < len(processed_code) else 'STOP'
-            if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
-                    opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
-                return vm_exception('BAD JUMPDEST')
-        elif op == 'JUMPI' or op == 'JUMPISTATIC':
-            s0, s1 = stk.pop(), stk.pop()
-            if s1:
-                compustate.pc = s0
+                    gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
+                if compustate.gas < gascost:
+                    return vm_exception('OUT OF GAS')
+                compustate.gas -= max(gascost, 0)
+                ext.add_refund(min(gascost, 0))  # adds neg gascost as a refund if below zero
+                ext.set_storage_data(msg.to, s0, s1)
+            elif op == 'JUMP' or op == 'JUMPSTATIC':
+                compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][0] if \
                     compustate.pc < len(processed_code) else 'STOP'
-                if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
+                if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
                         opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
                     return vm_exception('BAD JUMPDEST')
-        elif op == 'PC':
-            stk.append(compustate.pc - 1)
-        elif op == 'MSIZE':
-            stk.append(len(mem))
-        elif op == 'GAS':
-            stk.append(compustate.gas)  # AFTER subtracting cost 1
+            elif op == 'JUMPI' or op == 'JUMPISTATIC':
+                s0, s1 = stk.pop(), stk.pop()
+                if s1:
+                    compustate.pc = s0
+                    opnew = processed_code[compustate.pc][0] if \
+                        compustate.pc < len(processed_code) else 'STOP'
+                    if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
+                            opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
+                        return vm_exception('BAD JUMPDEST')
+            elif op == 'PC':
+                stk.append(compustate.pc - 1)
+            elif op == 'MSIZE':
+                stk.append(len(mem))
+            elif op == 'GAS':
+                stk.append(compustate.gas)  # AFTER subtracting cost 1
         elif op[:4] == 'PUSH':
             pushnum = int(op[4:])
             compustate.pc += pushnum
@@ -478,8 +480,10 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
             return 1, compustate.gas, []
-        for a in stk:
-            assert isinstance(a, (int, long))
+        elif op == 'INVALID':
+            return vm_exception('INVALID OP', opcode=opcode)
+        # for a in stk:
+        #     assert isinstance(a, (int, long))
 
 
 class VmExtBase():
