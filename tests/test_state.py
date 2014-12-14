@@ -4,6 +4,7 @@ import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
+import pyethereum.tlogging as tlogging
 import os
 import sys
 import pyethereum.vm as vm
@@ -11,20 +12,10 @@ import pyethereum.vm as vm
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
-pblogger = pb.pblogger
-vmlogger = vm.pblogger
 
 # customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-pblogger.log_pre_state = False    # dump storage at account before execution
-pblogger.log_post_state = False   # dump storage at account after execution
-pblogger.log_block = False       # dump block after TX was applied
-vmlogger.log_memory = True      # dump memory before each op
-vmlogger.log_op = True           # log op, gas, stack before each op
-pblogger.log_json = False        # generate machine readable output
-vmlogger.log_apply_op = True     # generate machine readable output
-vmlogger.log_stack = True        # generate machine readable output
-
+tlogging.configure_logging(['pb', 'vm'])
+vm.log_vm = ['op', 'stack', 'memory', 'storage']
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -112,7 +103,6 @@ def do_test_vm(filename, testname=None, limit=99999999):
             blk.set_storage_data(address,
                                  u.big_endian_to_int(k.decode('hex')),
                                  u.big_endian_to_int(v.decode('hex')))
-        pblogger.log('PRE Balance', address=address, balance=h['balance'])
 
     # execute transactions
     tx = transactions.Transaction(
@@ -122,8 +112,6 @@ def do_test_vm(filename, testname=None, limit=99999999):
         to=exek['to'],
         value=int(exek['value']),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
-    pblogger.log_apply_op = False
-    pblogger.log_op = False
 
     try:
         success, output = pb.apply_transaction(blk, tx)

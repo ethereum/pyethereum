@@ -2,65 +2,14 @@ import utils
 import copy
 import opcodes
 import json
+from pyethereum.tlogging import log_vm_exit, log_vm_op, log_log
 
 
 TT256 = 2**256
 TT256M1 = 2**256 - 1
 TT255 = 2**255
 
-import logging
-logger = logging.getLogger(__name__)
-
-
-class PBLogger(object):
-    log_apply_op = False    # general flag for logging inside apply_op
-    log_op = False          # log op, gas, stack before each op
-    log_pre_state = False   # dump storage at account before execution
-    log_post_state = False  # dump storage at account after execution
-    log_block = False       # dump block after TX was applied
-    log_memory = False      # dump memory before each op
-    log_stack = False       # dump stack before each op
-    log_storage = False     # dump storage before each op
-    log_json = False        # generate machine readable output
-    log_state_delta = False  # dump state delta post tx execution
-    log_exits = False       # log exit conditions
-
-    def __init__(self):
-        self.listeners = []  # register callbacks here
-
-    def log(self, name, **kargs):
-        # call callbacks
-        for l in self.listeners:
-            l({name: kargs})
-        if self.log_json:
-            logger.debug(json.dumps({name: kargs}))
-        else:
-            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-            items = sorted(kargs.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-            logger.debug("%s: %s", name.ljust(15), msg)
-
-    def multilog(self, data):
-        for l in self.listeners:
-            l(data)
-        if self.log_json:
-            logger.debug(json.dumps(data))
-        else:
-            for key, datum in data.iteritems():
-                if isinstance(datum, dict):
-                    order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-                    items = sorted(datum.items(), key=lambda x: order.get(x[0], 0))
-                    msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-                elif isinstance(datum, list):
-                    msg = ", ".join(map(str, datum))
-                else:
-                    msg = str(datum)
-                logger.debug("%s: %s", key.ljust(15), msg)
-            logger.debug("")
-
-
-pblogger = PBLogger()
-
+log_vm = []
 
 class Message(object):
 
@@ -139,14 +88,12 @@ def data_copy(compustate, size):
 
 
 def vm_exception(error, **kargs):
-    if pblogger.log_exits:
-        pblogger.log('EXCEPTION', cause=error, **kargs)
+    log_vm_exit('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
 
 
 def peaceful_exit(cause, gas, data, **kargs):
-    if pblogger.log_exits:
-        pblogger.log('EXIT', cause=cause, **kargs)
+    log_vm_exit('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
 code_cache = {}
@@ -184,22 +131,23 @@ def vm_execute(ext, msg, code):
         compustate.gas -= fee
         compustate.pc += 1
 
-        if pblogger.log_apply_op:
+        if log_vm:
             trace_data = {}
-            if pblogger.log_stack:
+            if 'stack' in log_vm:
                 trace_data['stack'] = map(str, list(compustate.stack))
-            if pblogger.log_memory:
-                trace_data['memory'] = ''.join([chr(x).encode('hex') for x in compustate.memory])
-            if pblogger.log_storage:
+            if 'memory' in log_vm:
+                trace_data['memory'] = \
+                    ''.join([chr(x).encode('hex') for x in compustate.memory])
+            if 'storage' in log_vm:
                 trace_data['storage'] = ext.log_storage(msg.to)
-            if pblogger.log_op:
+            if 'op' in log_vm:
                 trace_data['gas'] = str(compustate.gas + fee)
                 trace_data['pc'] = str(compustate.pc - 1)
                 trace_data['op'] = op
                 if op[:4] == 'PUSH':
                     trace_data['pushvalue'] = pushval
 
-            pblogger.multilog(trace_data)
+            log_vm_op('vm', **trace_data)
 
         if op == 'STOP':
             return peaceful_exit('STOP', compustate.gas, [])
@@ -449,7 +397,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            pblogger.log('LOG', to=msg.to, topics=topics, data=map(ord, data))
+            log_log('LOG', to=msg.to, topics=topics, data=map(ord, data))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()

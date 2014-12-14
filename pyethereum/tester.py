@@ -6,6 +6,7 @@ import logging
 import sys
 import spv
 import pyethereum.opcodes as opcodes
+import pyethereum.tlogging as tlogging
 
 serpent = None
 
@@ -26,13 +27,6 @@ k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 seed = 3**160
-
-
-def listen_for_logs(l):
-    if 'LOG' in l:
-        print l['LOG']
-
-pb.pblogger.listeners.append(listen_for_logs)
 
 
 # Pseudo-RNG (deterministic for now for testing purposes)
@@ -159,24 +153,22 @@ class state():
 
 def set_logging_level(lvl=1):
     if lvl == 0:
-        logging.basicConfig(level=logging.ERROR, format='%(message)s')
-        pb.pblogger.log_msg = False
-    elif lvl >= 1 and lvl <= 2:
-        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-        vm.pblogger.log_apply_op = False
-        vm.pblogger.log_exits = (lvl == 2)
-        pb.pblogger.log_msg = (lvl == 2)
-    elif lvl >= 3:
-        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-        pb.pblogger.log_msg = True
-        vm.pblogger.log_exits = True
-        vm.pblogger.log_apply_op = True
-        vm.pblogger.log_stack = True
-        vm.pblogger.log_op = True
-        vm.pblogger.log_memory = (lvl >= 4)
-        vm.pblogger.log_storage = (lvl >= 4)
+        tlogging.configure_logging([])
+        vm.log_vm = None
+    elif lvl == 1:
+        tlogging.configure_logging(['log'])
+        vm.log_vm = None
+    elif lvl == 2:
+        tlogging.configure_logging(['pb', 'log', 'vm_exit'])
+        vm.log_vm = None
+    elif lvl == 3:
+        tlogging.configure_logging(['pb', 'vm'])
+        vm.log_vm = ['op', 'stack']
+    elif lvl >= 4:
+        tlogging.configure_logging(['pb', 'vm'])
+        vm.log_vm = ['op', 'stack', 'memory', 'storage']
     else:
-        raise Exception("Invalid loging level")
+        raise Exception("Invalid logging level")
     print 'Set logging level: %d' % lvl
 
 

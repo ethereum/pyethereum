@@ -6,14 +6,11 @@ import utils
 import processblock
 import transactions
 import bloom
-import logging
 import copy
 import sys
 from repoze.lru import lru_cache
 from exceptions import *
-
-# logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger()
+from pyethereum.tlogging import log_state_delta, log_error
 
 INITIAL_DIFFICULTY = 2 ** 17
 GENESIS_PREVHASH = '\00' * 32
@@ -232,14 +229,14 @@ class Block(object):
             # uncle's parent cannot be the block's own parent
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
-                logger.debug("%r: Uncle does not have a valid ancestor", self)
+                log_error("%r: Uncle does not have a valid ancestor", self)
                 sys.stderr.write('2 ' + prevhash.encode('hex') + ' ' +
                                  str(map(lambda x: x.encode('hex'), eligible_ancestor_hashes)) + '\n\n')
                 return False
             if uncle in ineligible:
                 sys.stderr.write('3\n\n')
-                logger.debug(
-                    "%r: Duplicate uncle %r", self, utils.sha3(rlp.encode(uncle)).encode('hex'))
+                log_error("%r: Duplicate uncle %r", self,
+                          utils.sha3(rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)
         return True
@@ -312,15 +309,7 @@ class Block(object):
         # replay transactions
         for tx_lst_serialized in transaction_list:
             tx = transactions.Transaction.create(tx_lst_serialized)
-#            logger.debug('state:\n%s', utils.dump_state(block.state))
-#            logger.debug('applying %r', tx)
             success, output = processblock.apply_transaction(block, tx)
-#            logger.debug('state:\n%s', utils.dump_state(block.state))
-
-            # for log in tx.logs:
-            #     print "newbits", [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
-            #     bloom_bits = set(bloom.bits_in_number(bloom.bloom_from_list(log.bloomables())))
-            #     print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
 
 
         block.finalize()
@@ -396,7 +385,6 @@ class Block(object):
         :param param: parameter to set
         :param value: new value
         '''
-#        logger.debug('set acct %r %r %d', address, param, value)
         self.set_and_journal(param, address, value)
         self.set_and_journal('all', address, True)
 
@@ -511,8 +499,7 @@ class Block(object):
     def commit_state(self):
         changes = []
         if not len(self.journal):
-            if processblock.pblogger.log_state_delta:
-                processblock.pblogger.log('delta', changes=[])
+            log_state_delta('delta', changes=[])
             return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \
@@ -535,8 +522,7 @@ class Block(object):
                         changes.append([key, address, v])
                         acct[i] = utils.encoders[acct_structure[i][1]](v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
-        if processblock.pblogger.log_state_delta:
-            processblock.pblogger.log('delta', changes=changes)
+        log_state_delta('delta', changes=changes)
         self.reset_cache()
 
     def del_account(self, address):
@@ -603,10 +589,10 @@ class Block(object):
 
     def revert(self, mysnapshot):
         self.journal = mysnapshot['journal']
-        logger.debug('reverting')
+        log_state_delta('reverting')
         while len(self.journal) > mysnapshot['journal_size']:
             cache, index, prev, post = self.journal.pop()
-            logger.debug('%r %r %r %r', cache, index, prev, post)
+            log_state_delta('%r %r %r %r', cache, index, prev, post)
             if prev is not None:
                 self.caches[cache][index] = prev
             else:

@@ -17,6 +17,7 @@ import vm
 from exceptions import *
 logger = logging.getLogger(__name__)
 sys.setrecursionlimit(100000)
+from pyethereum.tlogging import log_tx, log_msg, log_state
 
 TT255 = 2**255
 TT256 = 2**256
@@ -26,51 +27,6 @@ OUT_OF_GAS = -1
 
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = ''
-
-
-class PBLogger(object):
-    log_pre_state = False   # dump storage at account before execution
-    log_post_state = False  # dump storage at account after execution
-    log_msg = False         # log messages
-    log_block = False       # dump block after TX was applied
-    log_json = False        # generate machine readable output
-    log_state_delta = False  # dump state delta post tx execution
-
-    def __init__(self):
-        self.listeners = []  # register callbacks here
-
-    def log(self, name, **kargs):
-        # call callbacks
-        for l in self.listeners:
-            l({name: kargs})
-        if self.log_json:
-            logger.debug(json.dumps({name: kargs}))
-        else:
-            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-            items = sorted(kargs.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-            logger.debug("%s: %s", name.ljust(15), msg)
-
-    def multilog(self, data):
-        for l in self.listeners:
-            l(data)
-        if self.log_json:
-            logger.debug(json.dumps(data))
-        else:
-            for key, datum in data.iteritems():
-                if isinstance(datum, dict):
-                    order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-                    items = sorted(datum.items(), key=lambda x: order.get(x[0], 0))
-                    msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-                elif isinstance(datum, list):
-                    msg = ", ".join(map(str, datum))
-                else:
-                    msg = str(datum)
-                logger.debug("%s: %s", key.ljust(15), msg)
-            logger.debug("")
-
-
-pblogger = PBLogger()
 
 
 def verify(block, parent):
@@ -145,7 +101,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    pblogger.log('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
+    log_tx('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
@@ -169,20 +125,19 @@ def apply_transaction(block, tx):
 
     assert gas_remained >= 0
 
-    pblogger.log("TX APPLIED", result=result, gas_remained=gas_remained,
-                 data=''.join(map(chr, data)).encode('hex'))
-    if pblogger.log_block:
-        pblogger.log('BLOCK', block=block.to_dict(with_state=True, full_transactions=True))
+    log_tx("TX APPLIED", result=result, gas_remained=gas_remained,
+           data=''.join(map(chr, data)).encode('hex'))
 
     if not result:  # 0 = OOG failure in both cases
-        pblogger.log('TX FAILED', reason='out of gas', startgas=tx.startgas, gas_remained=gas_remained)
+        log_tx('TX FAILED', reason='out of gas',
+               startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
-        pblogger.log('TX SUCCESS')
+        log_tx('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
         if block.refunds > 0:
-            pblogger.log('Refunding: %r gas' % min(block.refunds, gas_used // 2))
+            log_tx('Refunding: %r gas' % min(block.refunds, gas_used // 2))
             gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
@@ -232,17 +187,15 @@ class VMExt():
 def apply_msg(ext, msg, code):
     # print 'init', map(ord, msg.data), msg.gas, \
     #     msg.sender, block.get_nonce(msg.sender)
-    if pblogger.log_msg:
-        pblogger.log("MSG APPLY", sender=msg.sender, to=msg.to,
-                     gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
-    if pblogger.log_pre_state:
-        pblogger.log('MSG PRE STATE', account=msg.to,
-                     state=ext.log_storage(msg.to))
+    log_msg("MSG APPLY", sender=msg.sender, to=msg.to,
+            gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
+    log_state('MSG PRE STATE', account=msg.to,
+              state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        if pblogger.log_msg:
-            pblogger.log('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
+        log_msg('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
+                want=msg.value)
         return 1, msg.gas, []
     if msg.depth >= 1024:
         return 0, 0, []
@@ -250,16 +203,13 @@ def apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
-    if pblogger.log_msg:
-        pblogger.log('MSG APPLIED', result=o, gas_remained=gas,
-                     sender=msg.sender, to=msg.to, data=dat)
-    if pblogger.log_post_state:
-        pblogger.log('MSG POST STATE', account=msg.to,
-                     state=ext.log_storage(msg.to))
+    log_msg('MSG APPLIED', result=o, gas_remained=gas,
+            sender=msg.sender, to=msg.to, data=dat)
+    log_state('MSG POST STATE', account=msg.to,
+              state=ext.log_storage(msg.to))
 
     if res == 0:
-        if pblogger.log_msg:
-            pblogger.log('REVERTING')
+        log_msg('REVERTING')
         ext._block.revert(snapshot)
 
     return res, gas, dat
@@ -290,8 +240,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            if pblogger.log_msg:
-                pblogger.log('CONTRACT CREATION OOG', have=gas, want=gcost)
+            log_msg('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:

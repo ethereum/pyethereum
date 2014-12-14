@@ -6,28 +6,19 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
 import pyethereum.bloom as bloom
+import pyethereum.tlogging as tlogging
 import os
 import sys
 
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger()
-pblogger = pb.pblogger
-vmlogger = vm.pblogger
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 def toggle_logging(log_active):
-    pblogger = pb.pblogger
-    pblogger.log_pre_state = log_active    # dump storage at account before execution
-    pblogger.log_post_state = log_active   # dump storage at account after execution
-    pblogger.log_block = False       # dump block after TX was applied
-    pblogger.log_json = False        # generate machine readable output
-    vmlogger.log_memory = log_active      # dump memory before each op
-    vmlogger.log_stack = log_active      # dump stack before each op
-    vmlogger.log_storage = log_active      # dump storage before each op
-    vmlogger.log_op = log_active           # log op, gas, stack before each op
-    vmlogger.log_apply_op = log_active     # log anything per operation at all
+    tlogging.configure_logging(['pb', 'vm'])
+    vm.log_vm = ['op', 'stack', 'memory', 'storage']
 toggle_logging(True)
 
 def check_testdata(data_keys, expected_keys):
@@ -120,7 +111,6 @@ def run_test_vm(params):
             blk.set_storage_data(address,
                                  u.big_endian_to_int(k.decode('hex')),
                                  u.big_endian_to_int(v.decode('hex')))
-        pblogger.log('PRE Balance', address=address, balance=h['balance'])
 
     # execute transactions
     sender = exek['caller']  # a party that originates a call
@@ -133,10 +123,6 @@ def run_test_vm(params):
         value=int(exek['value']),
         data=exek['data'][2:].decode('hex'))
     tx.sender = sender
-    pblogger.log_apply_op = True
-    pblogger.log_op = True
-    pblogger.log('TX', tx=tx.hex_hash(), sender=sender, to=recvaddr,
-                 value=tx.value, startgas=tx.startgas, gasprice=tx.gasprice)
 
     # capture apply_message calls
     apply_message_calls = []

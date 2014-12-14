@@ -44,12 +44,11 @@ class LogGroup(object):
 
     def activate(self):
         for l in self.list():
-            l.is_active += 1 # loggers can be in multiple groups
+            l.is_active += 1  # loggers can be in multiple groups
 
     def deactivate(self):
         for l in self.list():
             l.is_active = max(0, l.is_active - 1)
-
 
     def add_logger(self, logger_or_group):
         assert isinstance(logger_or_group, (LogGroup, Logger))
@@ -112,6 +111,7 @@ class LogManager(object):
         return self.groups[:]
 
     def get(self, name):
+        print name
         try:
             return [i for n, i in self.items().items() if n == name][0]
         except IndexError:
@@ -220,6 +220,7 @@ class Logger(object):
     def log(self, name_or_lazylog, *args, **kargs):
         if not self.is_active:
             return
+        print args, kargs
         if isinstance(name_or_lazylog, LazyLog):
             kargs = name_or_lazylog.func()
             event_name = name_or_lazylog.name
@@ -236,7 +237,7 @@ def configure_logging(logger_names):
     g = LogGroup('user')
     for name in logger_names:
         g.add_logger(logging.get(name.lower().strip()))
-    g.activate() # can only activate known loggers
+    g.activate()  # can only activate known loggers
     logging.writer.clear()
     logging.writer.add_logger(g)
 
@@ -262,14 +263,23 @@ log_miner = logging.create('miner', level='debug')
 log_chain_warn = logging.create('chain_warn', level='warn')
 log_chain_info = logging.create('chain', level='info')
 log_chain_debug = logging.create('chain_debug', level='debug')
+log_vm_exit = logging.create('vm_exit', level='debug')
+log_vm_op = logging.create('vm_op', level='debug')
+log_log = logging.create('log', level='info')
+log_tx = logging.create('tx', level='debug')
+log_msg = logging.create('msg', level='debug')
+log_state = logging.create('state', level='debug')
+log_block = logging.create('block', level='debug')
+log_state_delta = logging.create('state_delta', level='debug')
+
+log_pb = logging.group('pb', log_tx, log_msg, log_state, log_block)
+log_vm = logging.group('vm', log_vm_op, log_vm_exit, log_log)
 
 # default logger
 log_basics = logging.group('default', *logging.list(level='info'))
 
 # all logger
 log_all = logging.group('all', *logging.list())
-
-
 
 
 # configure log groups here
