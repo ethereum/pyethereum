@@ -161,7 +161,7 @@ def vm_execute(ext, msg, code):
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval
 
-            log_vm_op('vm', **trace_data)
+            log_vm_op.trace('vm', **trace_data)
 
         if opcode < 0x10:
             if op == 'STOP':
