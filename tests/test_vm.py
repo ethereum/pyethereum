@@ -10,16 +10,12 @@ import pyethereum.tlogging as tlogging
 import os
 import sys
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
 
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-def toggle_logging(log_active):
-    tlogging.configure_logging(['pb', 'vm'])
-    vm.log_vm = ['op', 'stack', 'memory', 'storage']
-toggle_logging(True)
+configure_logging(':trace')
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -68,9 +64,9 @@ def do_test_vm(filename, testname=None, limit=99999999):
             do_test_vm(filename, testname)
         return
     if testname in faulty:
-        logger.debug('skipping test:%r in %r', testname, filename)
+        logger.debug('skipping test:%r in %r' %(testname, filename))
         return
-    logger.debug('running test:%r in %r', testname, filename)
+    logger.debug('running test:%r in %r' %(testname, filename))
     params = vm_tests_fixtures()[filename][testname]
     run_test_vm(params)
 
@@ -205,8 +201,7 @@ def run_test_vm(params):
 
 def random():
     "used for external random vm tests"
-    toggle_logging(False)
-    logger.setLevel('ERROR')
+    configure_logging(':critical')
     import sys
     data = json.loads(sys.argv[1])
     for test_data in data.values():

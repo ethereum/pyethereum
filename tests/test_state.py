@@ -9,13 +9,12 @@ import os
 import sys
 import pyethereum.vm as vm
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
-
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
 # customize VM log output to your needs
-tlogging.configure_logging(['pb', 'vm'])
-vm.log_vm = ['op', 'stack', 'memory', 'storage']
+# hint: use 'py.test' with the '-s' option to dump logs to the console
+configure_logging(':trace')
+
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -64,9 +63,9 @@ def do_test_vm(filename, testname=None, limit=99999999):
             do_test_vm(filename, testname)
         return
     if testname in faulty:
-        logger.debug('skipping test:%r in %r', testname, filename)
+        logger.debug('skipping test:%r in %r' %(testname, filename))
         return
-    logger.debug('running test:%r in %r', testname, filename)
+    logger.debug('running test:%r in %r' % (testname, filename))
     params = vm_tests_fixtures()[filename][testname]
 
     pre = params['pre']
@@ -118,7 +117,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
         blk.commit_state()
     except pb.InvalidTransaction:
         output = ''
-        print 'Transaction not valid'
+        logger.debug('Transaction not valid')
         pass
 
     assert '0x' + output.encode('hex') == params['out']

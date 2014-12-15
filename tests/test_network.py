@@ -14,9 +14,10 @@ from pyethereum import __version__
 
 idec = utils.big_endian_to_int
 
-import logging
-logging.basicConfig(level=logging.DEBUG) # , format='%(message)s')
-logger = logging.getLogger()
+
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+configure_logging(':trace')
 
 set_db()
 
@@ -42,20 +43,20 @@ class Connection(object):
         return Connection(self.local_buffer, self.remote_buffer)
 
     def shutdown(self, *args):
-        logger.debug('%r shutdown %r', self, args)
+        logger.debug('%r shutdown %r' %(self, args))
 
     def close(self, *args):
-        logger.debug('%r close %r', self, args)
+        logger.debug('%r close %r' %(self, args))
 
 
 class Peer(peer.Peer):
 
     def send_Disconnect(self, reason=None):
-        logger.info('%r sending disconnect: %r', self, reason)
+        logger.info('%r sending disconnect: %r' % (self, reason))
         self.send_packet(packeter.Packeter().dump_Disconnect(reason=reason))
 
     def _receive_Disconnect(self, reason=None):
-        logger.debug('%r received Disconnect %r', self, reason)
+        logger.debug('%r received Disconnect %r' %(self, reason))
         raise Exception('%r received Disconnect')
 
     def recv(self):

@@ -5,9 +5,9 @@ import pyethereum.blocks as blocks
 import pyethereum.rlp as rlp
 import pyethereum.utils as utils
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+configure_logging(':trace')
 
 @pytest.fixture(scope="module")
 def genesis_fixture():

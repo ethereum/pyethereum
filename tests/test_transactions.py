@@ -6,9 +6,11 @@ import pyethereum.utils as utils
 import pyethereum.rlp as rlp
 import serpent
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+# customize VM log output to your needs
+# hint: use 'py.test' with the '-s' option to dump logs to the console
+configure_logging(':trace')
 
 
 @pytest.fixture(scope="module")
@@ -109,7 +111,7 @@ def test_deserialize_cpp_block_42():
         hex_rlp_data.decode('hex'))
     for tx_data, _state_root, _gas_used_encoded in transaction_list:
         tx = transactions.Transaction.create(tx_data)
-        logger.debug('Block #48 failing tx %r', tx.to_dict())
+        logger.debug('Block #48 failing tx %r' % tx.to_dict())
         processblock.apply_transaction(genesis, tx)
 
 
@@ -132,15 +134,15 @@ def deserialize_child(parent, rlpdata):
     for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
 
         tx = transactions.Transaction.create(tx_lst_serialized)
-        logger.debug("data %r", tx.data)
-        logger.debug('applying %r', tx)
-        logger.debug('applying %r', tx.to_dict())
-        logger.debug('block.gas_used before: %r', block.gas_used)
+        logger.debug("data %r" % tx.data)
+        logger.debug('applying %r' % tx)
+        logger.debug('applying %r' % tx.to_dict())
+        logger.debug('block.gas_used before: %r' % block.gas_used)
         success, output = processblock.apply_transaction(block, tx)
-        logger.debug('block.gas_used after: %r', block.gas_used)
-        logger.debug('success: %r', success)
+        logger.debug('block.gas_used after: %r' % block.gas_used)
+        logger.debug('success: %r' % success)
         diff = utils.decode_int(_gas_used_encoded) - block.gas_used
-        logger.debug("GAS_USED DIFF %r", diff)
+        logger.debug("GAS_USED DIFF %r" % diff)
         assert utils.decode_int(_gas_used_encoded) == block.gas_used
         assert _state_root.encode('hex') == block.state.root_hash.encode('hex')
 

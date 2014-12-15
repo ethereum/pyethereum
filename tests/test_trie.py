@@ -4,11 +4,13 @@ import json
 import tempfile
 import pyethereum.trie as trie
 import pyethereum.db as db
-
 import itertools
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+
+# customize VM log output to your needs
+# hint: use 'py.test' with the '-s' option to dump logs to the console
+configure_logging(':trace')
 
 
 
@@ -31,7 +33,7 @@ def load_tests():
 
 def run_test(name):
 
-    logger.debug('testing %s', name)
+    logger.debug('testing %s' % name)
     pairs = load_tests()[name]
 
     def _dec(x):
@@ -48,7 +50,7 @@ def run_test(name):
             break
         t = trie.Trie(db.EphemDB())
         for k,v in permut:
-            #logger.debug('updating with (%s, %s)', k, v)
+            #logger.debug('updating with (%s, %s)' %(k, v))
             if v is not None:
                 t.update(k, v)
             else:

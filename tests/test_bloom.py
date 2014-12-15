@@ -6,12 +6,6 @@ import pyethereum.bloom as bloom
 import os
 import sys
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
-pblogger = pb.pblogger
-
-
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
         "test data changed, please adjust tests"

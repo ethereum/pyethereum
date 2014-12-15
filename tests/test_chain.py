@@ -12,22 +12,11 @@ from pyethereum.db import DB as DB
 from pyethereum.config import get_default_config
 from tests.utils import set_db
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+configure_logging('eth.vm:trace,eth.vm.memory:info')
 
 set_db()
-
-pblogger = processblock.pblogger
-
-# customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-pblogger.log_pre_state = True    # dump storage at account before execution
-pblogger.log_post_state = True   # dump storage at account after execution
-pblogger.log_block = False       # dump block after TX was applied
-pblogger.log_memory = False      # dump memory before each op
-pblogger.log_op = True           # log op, gas, stack before each op
-pblogger.log_json = False        # generate machine readable output
 
 
 @pytest.fixture(scope="module")
@@ -266,11 +255,11 @@ def test_block_serialization_with_transaction_other_db():
     a_blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db_store(a_blk)
     tx = get_transaction()
-    logger.debug('a: state_root before tx %r', hx(a_blk.state_root))
-    logger.debug('a: state:\n%s', utils.dump_state(a_blk.state))
+    logger.debug('a: state_root before tx %r' % hx(a_blk.state_root))
+    logger.debug('a: state:\n%s' % utils.dump_state(a_blk.state))
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
-    logger.debug('a: state_root after tx %r', hx(a_blk2.state_root))
-    logger.debug('a: state:\n%s', utils.dump_state(a_blk2.state))
+    logger.debug('a: state_root after tx %r' % hx(a_blk2.state_root))
+    logger.debug('a: state:\n%s' % utils.dump_state(a_blk2.state))
     assert tx in a_blk2.get_transactions()
     db_store(a_blk2)
     assert tx in a_blk2.get_transactions()
@@ -282,10 +271,10 @@ def test_block_serialization_with_transaction_other_db():
 
     assert b_blk.number == 0
     assert b_blk == a_blk
-    logger.debug('b: state_root before tx %r', hx(b_blk.state_root))
+    logger.debug('b: state_root before tx %r' % hx(b_blk.state_root))
     logger.debug('starting deserialization of remote block w/ tx')
     b_blk2 = b_blk.deserialize(a_blk2.serialize()) # BOOM
-    logger.debug('b: state_root after %r', hx(b_blk2.state_root))
+    logger.debug('b: state_root after %r' % hx(b_blk2.state_root))
 
     assert a_blk2.hex_hash() == b_blk2.hex_hash()
 

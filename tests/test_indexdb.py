@@ -5,10 +5,10 @@ import pyethereum.indexdb
 import pyethereum.utils
 import pyethereum.db
 from tests.utils import set_db
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger()
 
+from pyethereum.slogging import get_logger, configure_logging
+logger = get_logger()
+configure_logging(':trace')
 
 def act(num):
     return pyethereum.utils.sha3(str(num)).encode('hex')[:40]
