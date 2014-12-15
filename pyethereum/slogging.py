@@ -181,6 +181,9 @@ def configure(config_string='', log_json=False):
     if config_string:
         configure_loglevels(config_string)
 
+configure_logging = configure # for unambigious imports
+### setup default config
+configure()
 
 def get_configuration():
     """
