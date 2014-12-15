@@ -7,7 +7,7 @@ log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
 log_vm_op = get_logger('eth.vm.op')
 log_vm_op_stack = get_logger('eth.vm.op.stack')
-log_vm_op_memmory = get_logger('eth.vm.op.memory')
+log_vm_op_memory = get_logger('eth.vm.op.memory')
 log_vm_op_storage = get_logger('eth.vm.op.storage')
 
 TT256 = 2 ** 256

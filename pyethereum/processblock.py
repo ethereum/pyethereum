@@ -27,8 +27,6 @@ TT256M1 = 2 ** 256 - 1
 
 OUT_OF_GAS = -1
 
-enable_log_state = False
-
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = ''
 
