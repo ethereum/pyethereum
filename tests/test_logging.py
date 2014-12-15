@@ -92,9 +92,9 @@ def test_incremental():
 
 def test_jsonconfig():
     th = setup_logging(log_json=True)
-    log = slogging.get_logger('a')
+    log = slogging.get_logger('prefix')
     log.warn('abc', a=1)
-    assert json.loads(th.logged) == dict(event='abc', a=1)
+    assert json.loads(th.logged) == dict(event='prefix.abc', a=1)
 
 
 def test_kvprinter():
