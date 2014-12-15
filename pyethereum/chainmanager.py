@@ -403,8 +403,8 @@ log_api = get_logger('chain.api')
 
 @receiver(signals.get_block_hashes_received)
 def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
-    log_api = log_api.bind(block_hash=block_hash.encode('hex'))
-    log_api.debug("handle_get_block_hashes", count=count)
+    _log_api = log_api.bind(block_hash=block_hash.encode('hex'))
+    _log_api.debug("handle_get_block_hashes", count=count)
     max_hashes = min(count, MAX_GET_CHAIN_SEND_HASHES)
     found = []
     if not block_hash in chain_manager:
@@ -417,7 +417,7 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
             found.append(last.hash)
         else:
             break
-    log_api.debug("sending: found block_hashes", count=len(found))
+    _log_api.debug("sending: found block_hashes", count=len(found))
     with peer.lock:
         peer.send_BlockHashes(found)
 
