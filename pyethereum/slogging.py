@@ -1,6 +1,7 @@
 import structlog
 import logging
 import sys
+import json
 """
 See test_logging.py for examples
 
@@ -23,16 +24,22 @@ eth.chain.new_block
 
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
-
     """
     Render `event_dict` as a list of ``Key=repr(Value)`` pairs.
     Prefix with event
     """
-
     def __call__(self, _, __, event_dict):
         msg = event_dict.pop('event', '')
         kvs = ' '.join(k + '=' + repr(v) for k, v in self._ordered_items(event_dict))
         return "%s\t%s" % (msg, kvs)
+
+class JSONRenderer(structlog.processors.JSONRenderer):
+   "JSON Render which prefixes namespace"
+   def __call__(self, logger, name, event_dict):
+        event_dict = dict(event_dict)
+        event_dict['event'] = logger.name + '.' + event_dict['event'].lower().replace(' ', '_')
+        return json.dumps(event_dict, cls=structlog.processors._JSONFallbackEncoder,
+                          **self._dumps_kw)
 
 
 ######## TRACE ##########
@@ -158,7 +165,7 @@ def configure(config_string='', log_json=False):
         structlog.processors.StackInfoRenderer()
     ]
     if log_json:
-        processors.append(structlog.processors.JSONRenderer(sort_keys=True))
+        processors.append(JSONRenderer(sort_keys=True))
     else:
         processors.extend([
             structlog.processors.ExceptionPrettyPrinter(file=None),
