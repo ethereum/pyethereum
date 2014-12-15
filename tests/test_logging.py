@@ -146,7 +146,8 @@ def test_listeners():
     slogging.log_listeners.listeners.append(log_cb)
     log.error('test listener', abc='thislistener')
     assert 'thislistener' in th.logged
-    assert 'abc' in called.pop()
+    r = called.pop()
+    assert r == dict(event='test listener', abc='thislistener')
 
     log.trace('trace is usually filtered', abc='thislistener')
     assert th.logged is None
@@ -160,11 +161,10 @@ def test_listeners():
 
 def test_logger_names():
     th = setup_logging()
-    assert not slogging.get_logger_names()
     names = set(['a','b','c'])
     for n in names:
-        slogging.get_logger(n).warn('x')
-    assert set(slogging.get_logger_names()) == names
+        slogging.get_logger(n)
+    assert names.issubset(set(slogging.get_logger_names()))
 
 def test_is_active():
     th = setup_logging()
@@ -219,6 +219,56 @@ def test_lazy_log():
     assert not called_json
     assert called_print.pop()
 
+
+def test_get_configuration():
+    config_string = ':INFO,a:TRACE,a.b:DEBUG'
+    log_json = False
+    slogging.configure(config_string=config_string, log_json=log_json)
+    config = slogging.get_configuration()
+    assert config['log_json'] == log_json
+    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+
+    log_json = True
+    slogging.configure(config_string=config_string, log_json=log_json)
+    config = slogging.get_configuration()
+    assert config['log_json'] == log_json
+    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+
+    # set config differntly
+    slogging.configure(config_string=':TRACE', log_json=False)
+    config2 = slogging.get_configuration()
+
+    # test whether we get original config
+    slogging.configure(**config)
+    config = slogging.get_configuration()
+    assert config['log_json'] == log_json
+    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+
+
+
+def test_recorder():
+    th = setup_logging()
+    log = slogging.get_logger()
+
+    # test info
+    recorder = slogging.LogRecorder()
+    assert len(slogging.log_listeners.listeners) == 1
+    log.info('a', v=1)
+    assert th.logged
+    r = recorder.pop_records()
+    assert r[0] == dict(event='a', v=1)
+    assert len(slogging.log_listeners.listeners) == 0
+
+    # test trace
+    recorder = slogging.LogRecorder()
+    assert len(slogging.log_listeners.listeners) == 1
+    log.trace('a', v=1)
+    assert not th.logged
+    r = recorder.pop_records()
+    assert r[0] == dict(event='a', v=1)
+    assert len(slogging.log_listeners.listeners) == 0
+
+# examples
 
 def test_howto_use_in_tests():
     # select what you want to see.
