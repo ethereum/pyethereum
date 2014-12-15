@@ -55,7 +55,7 @@ def parse_arguments():
     parser.add_argument(
         "-r", "--remote",
         dest="remote_host",
-        help="<host> Connect to remote host (default: 54.76.56.74)")
+        help="<host> Connect to remote host (default: 207.12.89.180)")
     parser.add_argument(
         "-p", "--port",
         dest="remote_port",
