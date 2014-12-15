@@ -6,7 +6,7 @@ import logging
 import sys
 import spv
 import pyethereum.opcodes as opcodes
-from pyethereum.slogging import get_logger, LogRecorder
+from pyethereum.slogging import get_logger, LogRecorder, configure_logging
 
 serpent = None
 
@@ -152,7 +152,7 @@ def set_logging_level(lvl=1):
         ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,' +
         'eth.vm.storage:trace,eth.vm.memory:trace'
     ]
-    slogging.configure(query_string=trace_lvl_map[lvl])
+    configure_logging(config_string=trace_lvl_map[lvl])
     print 'Set logging level: %d' % lvl
 
 
