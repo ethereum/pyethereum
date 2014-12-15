@@ -18,8 +18,10 @@ blooms in this module are of type 'int'
 
 BUCKETS_PER_VAL = 3
 
+
 def bloom(val):
     return bloom_insert(0, val)
+
 
 def bloom_insert(bloom, val):
     h = utils.sha3(val)
@@ -28,9 +30,11 @@ def bloom_insert(bloom, val):
         bloom |= 1 << ((ord(h[i + 1]) + (ord(h[i]) << 8)) & 511)
     return bloom
 
+
 def bloom_bits(val):
     h = utils.sha3(val)
     return [bits_in_number(1 << ((ord(h[i + 1]) + (ord(h[i]) << 8)) & 511)) for i in range(0, BUCKETS_PER_VAL * 2, 2)]
+
 
 def bits_in_number(val):
     assert isinstance(val, (int, long))
@@ -51,6 +55,7 @@ def bloom_combine(*args):
 
 def bloom_from_list(args):
     return bloom_combine(*[bloom_insert(0, arg) for arg in args])
+
 
 def b64(int_bloom):
     "returns b64"

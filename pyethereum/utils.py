@@ -9,9 +9,9 @@ import random
 from rlp import big_endian_to_int, int_to_big_endian
 
 
-TT256 = 2**256
-TT256M1 = 2**256 - 1
-TT255 = 2**255
+TT256 = 2 ** 256
+TT256M1 = 2 ** 256 - 1
+TT255 = 2 ** 255
 
 
 # decorator
@@ -44,7 +44,7 @@ def bytearray_to_int(arr):
 def int_to_32bytearray(i):
     o = [0] * 32
     for x in range(32):
-        o[31-x] = i & 0xff
+        o[31 - x] = i & 0xff
         i >>= 8
     return o
 
@@ -73,7 +73,7 @@ def zunpad(x):
 def int_to_addr(x):
     o = [''] * 20
     for i in range(20):
-        o[19-i] = chr(x & 0xff)
+        o[19 - i] = chr(x & 0xff)
         x >>= 8
     return ''.join(o).encode('hex')
 
@@ -249,8 +249,8 @@ encoders = {
 }
 
 printers = {
-    "hash": lambda v: '0x'+v.encode('hex'),
-    "bin": lambda v: '0x'+v.encode('hex'),
+    "hash": lambda v: '0x' + v.encode('hex'),
+    "bin": lambda v: '0x' + v.encode('hex'),
     "addr": lambda v: v,
     "int": lambda v: str(v),
     "trie_root": lambda v: v.encode('hex'),
@@ -361,21 +361,24 @@ def db_get(key):
     database = db.DB(get_db_path())
     return database.get(key)
 
+
 def dump_state(trie):
     res = ''
     for k, v in trie.to_dict().items():
         res += '%r:%r\n' % (k.encode('hex'), v.encode('hex'))
     return res
 
+
 class Denoms():
+
     def __init__(self):
         self.wei = 1
-        self.babbage = 10**3
-        self.lovelace = 10**6
-        self.shannon = 10**9
-        self.szabo = 10**12
-        self.finney = 10**15
-        self.ether = 10**18
-        self.turing = 2**256
+        self.babbage = 10 ** 3
+        self.lovelace = 10 ** 6
+        self.shannon = 10 ** 9
+        self.szabo = 10 ** 12
+        self.finney = 10 ** 15
+        self.ether = 10 ** 18
+        self.turing = 2 ** 256
 
 denoms = Denoms()

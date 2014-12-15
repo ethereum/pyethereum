@@ -2,14 +2,17 @@ import utils
 import copy
 import opcodes
 import json
-from pyethereum.tlogging import log_vm_exit, log_vm_op, log_log
+from pyethereum.slogging import get_logger
+log_log = get_logger('eth.vm.log')
+log_vm_exit = get_logger('eth.vm.exit')
+log_vm_op = get_logger('eth.vm.op')
+log_vm_op_stack = get_logger('eth.vm.op.stack')
+log_vm_op_memmory = get_logger('eth.vm.op.memory')
+log_vm_op_storage = get_logger('eth.vm.op.storage')
 
-
-TT256 = 2**256
-TT256M1 = 2**256 - 1
-TT255 = 2**255
-
-log_vm = []
+TT256 = 2 ** 256
+TT256M1 = 2 ** 256 - 1
+TT255 = 2 ** 255
 
 
 class Message(object):
@@ -89,18 +92,22 @@ def data_copy(compustate, size):
 
 
 def vm_exception(error, **kargs):
-    log_vm_exit('EXCEPTION', cause=error, **kargs)
+    log_vm_exit.trace('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
 
 
 def peaceful_exit(cause, gas, data, **kargs):
-    log_vm_exit('EXIT', cause=cause, **kargs)
+    log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
 code_cache = {}
 
 
 def vm_execute(ext, msg, code):
+    # precompute trace flag
+    # if we trace vm, we're in slow mode anyway
+    trace_vm = log_vm_op.is_active('trace')
+
     compustate = Compustate(gas=msg.gas)
     stk = compustate.stack
     mem = compustate.memory
@@ -134,21 +141,25 @@ def vm_execute(ext, msg, code):
         compustate.gas -= fee
         compustate.pc += 1
 
-        if log_vm:
+        if trace_vm:
+            """
+            This diverges from normal logging, as we use the logging namespace
+            only to decide which features get logged in 'eth.vm.op'
+            i.e. tracing can not be activated by activating a sub like 'eth.vm.op.stack'
+            """
             trace_data = {}
-            if 'stack' in log_vm:
+            if log_vm_op_stack.is_active():
                 trace_data['stack'] = map(str, list(compustate.stack))
-            if 'memory' in log_vm:
+            if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
                     ''.join([chr(x).encode('hex') for x in compustate.memory])
-            if 'storage' in log_vm:
+            if log_vm_op_storage.is_active():
                 trace_data['storage'] = ext.log_storage(msg.to)
-            if 'op' in log_vm:
-                trace_data['gas'] = str(compustate.gas + fee)
-                trace_data['pc'] = str(compustate.pc - 1)
-                trace_data['op'] = op
-                if op[:4] == 'PUSH':
-                    trace_data['pushvalue'] = pushval
+            trace_data['gas'] = str(compustate.gas + fee)
+            trace_data['pc'] = str(compustate.pc - 1)
+            trace_data['op'] = op
+            if op[:4] == 'PUSH':
+                trace_data['pushvalue'] = pushval
 
             log_vm_op('vm', **trace_data)
 
@@ -170,7 +181,7 @@ def vm_execute(ext, msg, code):
             elif op == 'SDIV':
                 s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
                 stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) *
-                           (-1 if s0*s1 < 0 else 1)) & TT256M1)
+                           (-1 if s0 * s1 < 0 else 1)) & TT256M1)
             elif op == 'SMOD':
                 s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
                 stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) *
@@ -379,8 +390,8 @@ def vm_execute(ext, msg, code):
             stk.append(stk[-depth])
         elif op[:4] == 'SWAP':
             depth = int(op[4:])
-            temp = stk[-depth-1]
-            stk[-depth-1] = stk[-1]
+            temp = stk[-depth - 1]
+            stk[-depth - 1] = stk[-1]
             stk[-1] = temp
 
         elif op[:3] == 'LOG':
@@ -404,7 +415,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            log_log('LOG', to=msg.to, topics=topics, data=map(ord, data))
+            log_log.trace('LOG', to=msg.to, topics=topics, data=map(ord, data))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
@@ -487,6 +498,7 @@ def vm_execute(ext, msg, code):
 
 
 class VmExtBase():
+
     def __init__(self):
         self.get_code = lambda addr: ''
         self.get_balance = lambda addr: 0
@@ -503,7 +515,7 @@ class VmExtBase():
         self.block_difficulty = 0
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: 0
-        self.tx_origin = '0'*40
+        self.tx_origin = '0' * 40
         self.tx_gasprice = 0
         self.create = lambda msg: 0, 0, 0
         self.call = lambda msg: 0, 0, 0

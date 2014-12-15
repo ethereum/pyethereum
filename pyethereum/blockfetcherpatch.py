@@ -14,10 +14,12 @@ fn = 'tests/raw_remote_blocks_hex.txt'
 import pyethereum.config
 import tempfile
 
+
 def read_config(fn=None):
     print "Read config called"
     cfg = pyethereum.config.get_default_config()
-    cfg.set('network', 'num_peers', '1')  # set to 2 as, the bootsrapping server does not talk 'eth'
+    # set to 2 as, the bootsrapping server does not talk 'eth'
+    cfg.set('network', 'num_peers', '1')
     #cfg.set('network', 'remote_host', '77.101.50.246')
     cfg.set('misc', 'data_dir', tempfile.mktemp())
     cfg.set('misc', 'mining', '0')
@@ -47,11 +49,13 @@ peer.Peer.blk_requested = set()
 collected_blocks = []
 peer.Peer.lowest_block = None
 
+
 def _recv_Blocks(self, data):
     print("RECEIVED BLOCKS", len(data))
     if len(data) < MIN_BLOCKS:
         return
-    assert blocks.TransientBlock(rlp.encode(data[0])).number >= blocks.TransientBlock(rlp.encode(data[-1])).number
+    assert blocks.TransientBlock(rlp.encode(data[0])).number >= blocks.TransientBlock(
+        rlp.encode(data[-1])).number
     for x in data:
         enc = rlp.encode(x)
         tb = blocks.TransientBlock(enc)
@@ -80,6 +84,8 @@ def _recv_Blocks(self, data):
 peer.Peer._recv_Blocks = _recv_Blocks
 
 old_status = peer.Peer._recv_Status
+
+
 def _recv_Status(self, data):
     #old_status(self, data)
     h = blocks.genesis().hash
@@ -93,13 +99,15 @@ def _recv_Status(self, data):
 
 peer.Peer._recv_Status = _recv_Status
 
+
 def _recv_BlockHashes(self, data):
     print("RECEIVED BLOCKHASHES", len(data))  # youngest to oldest
-    #print [x.encode('hex') for x in data]
+    # print [x.encode('hex') for x in data]
     block_hashes = data  # youngest to oldest
     self.send_GetBlocks(block_hashes)
 
 peer.Peer._recv_BlockHashes = _recv_BlockHashes
+
 
 def mine(self):
     pass

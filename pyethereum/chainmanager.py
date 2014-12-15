@@ -13,11 +13,11 @@ import peermanager
 from transactions import Transaction
 from miner import Miner
 from synchronizer import Synchronizer
-from pyethereum.tlogging import log_chain_debug as log_debug
-from pyethereum.tlogging import log_chain_info as log_info
-from pyethereum.tlogging import log_chain_warn as log_warn
 from peer import MAX_GET_CHAIN_SEND_HASHES
 from peer import MAX_GET_CHAIN_REQUEST_BLOCKS
+from pyethereum.slogging import get_logger
+log = get_logger('eth.chain')
+
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
@@ -126,12 +126,12 @@ class ChainManager(StoppableLoopThread):
 
     def configure(self, config, genesis=None):
         self.config = config
-        log_info('Opening chain @ %s', utils.get_db_path())
+        log.info('opening chain', path=utils.get_db_path())
         db = self.blockchain = DB(utils.get_db_path())
         self.index = Index(db)
         if genesis:
             self._initialize_blockchain(genesis)
-        log_debug('Chain @ #%d %s', self.head.number, self.head.hex_hash())
+        log.debug('chain @', head=self.head)
         self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
         self.new_miner()
         self.synchronizer = Synchronizer(self)
@@ -147,7 +147,7 @@ class ChainManager(StoppableLoopThread):
         if not block.is_genesis():
             assert self.head.chain_difficulty() < block.chain_difficulty()
             if block.get_parent() != self.head:
-                log_debug('New Head %r is on a different branch. Old was:%r', block, self.head)
+                log.debug('New Head is on a different branch', new=block, old=self.head)
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
         self.new_miner()  # reset mining
@@ -172,7 +172,7 @@ class ChainManager(StoppableLoopThread):
         self.blockchain.commit()
 
     def _initialize_blockchain(self, genesis=None):
-        log_info('Initializing new chain @ %s', utils.get_db_path())
+        log.info('Initializing new chain', path=utils.get_db_path())
         if not genesis:
             genesis = blocks.genesis()
             self.index.add_block(genesis)
@@ -195,18 +195,15 @@ class ChainManager(StoppableLoopThread):
         "new miner is initialized if HEAD is updated"
         # prepare uncles
         uncles = set(self.get_uncles(self.head))
-#        log_debug('%d uncles for next block %r', len(uncles), uncles)
         ineligible = set()  # hashes
         blk = self.head
         for i in range(8):
             for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
-#                    log_debug('ineligible uncle %r', u.encode('hex'))
                     uncles.discard(self.get(u))
             if blk.has_parent():
                 blk = blk.get_parent()
-#        log_debug('%d uncles after filtering %r', len(uncles), uncles)
 
         miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
         if self.miner:
@@ -220,7 +217,7 @@ class ChainManager(StoppableLoopThread):
             if block:
                 # create new block
                 if not self.add_block(block, forward=True):
-                    log_debug("newly mined %r is invalid!?" % block)
+                    log.debug("newly mined block is invalid!?", block=block)
                     self.new_miner()
 
     def receive_chain(self, transient_blocks, peer=None):
@@ -234,109 +231,105 @@ class ChainManager(StoppableLoopThread):
             self.synchronizer.received_blocks(peer, transient_blocks)
 
             for t_block in transient_blocks:  # oldest to newest
-                logger.debug('Checking PoW %r', t_block)
+                log.debug('Checking PoW', block=t_block)
                 if not blocks.check_header_pow(t_block.header_args):
-                    logger.debug('Invalid PoW %r', t_block)
+                    log.debug('Invalid PoW', block=t_block)
                     continue
-                logger.debug('Deserializing %r', t_block)
-                # logger.debug(t_block.rlpdata.encode('hex'))
+                log.debug('Deserializing', block=t_block)
                 try:
                     block = blocks.Block.deserialize(t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
                     # if this fails, we need to rewind state
-                    log_debug('%r w/ invalid Transaction %r', t_block, e)
+                    log.debug('invalid transaction', block=t_block, error=e)
                     # stop current syncing of this chain and skip the child blocks
                     self.synchronizer.stop_synchronization(peer)
                     return
                 except blocks.UnknownParentException:
                     if t_block.prevhash == blocks.GENESIS_PREVHASH:
-                        log_debug('Rec Incompatible Genesis %r', t_block)
+                        log.debug('Rec Incompatible Genesis', block=t_block)
                         if peer:
                             peer.send_Disconnect(reason='Wrong genesis block')
                     else:  # should be a single newly mined block
                         assert t_block.prevhash not in self
                         assert t_block.prevhash != blocks.genesis().hash
-                        log_debug('%s with unknown parent %s, peer:%r', t_block, t_block.prevhash.encode('hex'), peer)
+                        log.debug('unknown parent', block=t_block,
+                                  parent=t_block.prevhash.encode('hex'), peer=peer)
                         if len(transient_blocks) != 1:
                             # strange situation here.
                             # we receive more than 1 block, so it's not a single newly mined one
                             # sync/network/... failed to add the needed parent at some point
                             # well, this happens whenever we can't validate a block!
                             # we should disconnect!
-                            log_warn('%s received, but unknown parent.', len(transient_blocks))
+                            log.warn(
+                                'blocks received, but unknown parent.', num=len(transient_blocks))
                         if peer:
                             # request chain for newest known hash
-                            self.synchronizer.synchronize_unknown_block(peer, transient_blocks[-1].hash)
+                            self.synchronizer.synchronize_unknown_block(
+                                peer, transient_blocks[-1].hash)
                     break
                 if block.hash in self:
-                    log_debug('Known %r', block)
+                    log.debug('known', block=block)
                 else:
                     assert block.has_parent()
                     # assume single block is newly mined block
                     forward = len(transient_blocks) == 1
                     success = self.add_block(block, forward=forward)
                     if success:
-                        log_debug('Added %r', block)
-                        # print block.hex_serialize()
+                        log.debug('added', block=block)
 
     def add_block(self, block, forward=False):
         "returns True if block was added sucessfully"
+        _log = log.bind(block=block)
         # make sure we know the parent
         if not block.has_parent() and not block.is_genesis():
-            log_debug('Missing parent for block %r', block)
+            _log.debug('missing parent')
             return False
 
         if not block.validate_uncles():
-            log_debug('Invalid uncles %r', block)
+            _log.debug('invalid uncles')
             return False
 
         # check PoW and forward asap in order to avoid stale blocks
         if not len(block.nonce) == 32:
-            log_debug('Nonce not set %r', block)
+            _log.debug('nonce not set')
             return False
         elif not block.check_proof_of_work(block.nonce) and\
                 not block.is_genesis():
-            log_debug('Invalid nonce %r', block)
+            _log.debug('invalid nonce')
             return False
         # Forward block w/ valid PoW asap (if not syncing)
         # FIXME: filter peer by wich block was received
         if forward:
+            _log.debug("broadcasting new")
             signals.broadcast_new_block.send(sender=None, block=block)
-            log_debug("broadcasting new %r" % block)
 
         if block.has_parent():
             try:
-                #log_debug('verifying: %s', block)
-                #log_debug('GETTING ACCOUNT FOR COINBASE:')
-                #acct = block.get_acct(block.coinbase)
-                #log_debug('GOT ACCOUNT FOR COINBASE: %r', acct)
                 processblock.verify(block, block.get_parent())
             except processblock.VerificationFailed as e:
-                log_debug('### VERIFICATION FAILED ### %r', e)
+                _log.critical('VERIFICATION FAILED', error=e)
                 f = os.path.join(utils.data_dir, 'badblock.log')
                 open(f, 'w').write(str(block.hex_serialize()))
-                print block.hex_serialize()
                 return False
 
         if block.number < self.head.number:
-            log_debug("%r is older than head %r", block, self.head)
+            _log.debug("older than head", head=self.head)
             # Q: Should we have any limitations on adding blocks?
 
         self.index.add_block(block)
         self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work for that number
-        #log_debug('Head: %r @%s  New:%r @%d', self.head, self.head.chain_difficulty(), block, block.chain_difficulty())
         if block.chain_difficulty() > self.head.chain_difficulty():
-            log_debug('New Head %r', block)
+            _log.debug('new head')
             self._update_head(block)
         elif block.number > self.head.number:
-            log_warn('%r has higher blk number than head %r but lower chain_difficulty of %d vs %d',
-                        block, self.head, block.chain_difficulty(), self.head.chain_difficulty())
+            _log.warn('has higher blk number than head but lower chain_difficulty',
+                      head=self.head, block_difficulty=block.chain_difficulty(),
+                      head_difficulty=self.head.chain_difficulty())
         self.commit()  # batch commits all changes that came with the new block
-
         return True
 
     def get_children(self, block):
@@ -356,22 +349,23 @@ class ChainManager(StoppableLoopThread):
         return o
 
     def add_transaction(self, transaction):
-        log_debug("add transaction %r" % transaction)
+        _log = log.bind(tx=transaction)
+        _log.debug("add transaction")
         with self.lock:
             res = self.miner.add_transaction(transaction)
             if res:
-                log_debug("broadcasting valid %r" % transaction)
+                _log.debug("broadcasting valid")
                 signals.send_local_transactions.send(
                     sender=None, transactions=[transaction])
             return res
 
     def get_transactions(self):
-        log_debug("get_transactions called")
+        log.debug("get_transactions called")
         return self.miner.get_transactions()
 
     def get_chain(self, start='', count=NUM_BLOCKS_PER_REQUEST):
         "return 'count' blocks starting from head or start"
-        log_debug("get_chain: start:%s count%d", start.encode('hex'), count)
+        log.debug("get_chain", start=start.encode('hex'), count=count)
         blocks = []
         block = self.head
         if start:
@@ -394,26 +388,27 @@ class ChainManager(StoppableLoopThread):
             return False
 
     def get_descendants(self, block, count=1):
-        log_debug("get_descendants: %r ", block)
+        log.debug("get_descendants", block=block)
         assert block.hash in self
-        block_numbers = range(block.number+1, min(self.head.number, block.number+count))
+        block_numbers = range(block.number + 1, min(self.head.number, block.number + count))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
-
 
 
 chain_manager = ChainManager()
 
 
-
 # receivers ###########
+log_api = get_logger('chain.api')
+
 
 @receiver(signals.get_block_hashes_received)
 def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
-    log_debug("handle_get_block_hashes: %r %d", block_hash.encode('hex'), count)
+    log_api = log_api.bind(block_hash=block_hash.encode('hex'))
+    log_api.debug("handle_get_block_hashes", count=count)
     max_hashes = min(count, MAX_GET_CHAIN_SEND_HASHES)
     found = []
     if not block_hash in chain_manager:
-        log_debug("unknown block: %r", block_hash.encode('hex'))
+        log_api.debug("unknown block")
         peer.send_BlockHashes([])
     last = chain_manager.get(block_hash)
     while len(found) < max_hashes:
@@ -422,21 +417,21 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
             found.append(last.hash)
         else:
             break
-    log_debug("sending: found: %d block_hashes", len(found))
+    log_api.debug("sending: found block_hashes", count=len(found))
     with peer.lock:
         peer.send_BlockHashes(found)
 
 
 @receiver(signals.get_blocks_received)
 def handle_get_blocks(sender, block_hashes, peer, **kwargs):
-    log_debug("handle_get_blocks: %d", len(block_hashes))
+    log_api.debug("handle_get_blocks", count=len(block_hashes))
     found = []
     for bh in block_hashes[:MAX_GET_CHAIN_REQUEST_BLOCKS]:
         if bh in chain_manager:
             found.append(chain_manager.get(bh))
         else:
-            log_debug("Unknown block %r requested", bh.encode('hex'))
-    log_debug("sending: found: %d blocks", len(found))
+            log.debug("unknown block requested", block_hash=bh.encode('hex'))
+    log_api.debug("found", count=len(found))
     with peer.lock:
         peer.send_Blocks(found)
 
@@ -448,14 +443,14 @@ def config_chainmanager(sender, config, **kwargs):
 
 @receiver(signals.peer_status_received)
 def peer_status_received(sender, peer, **kwargs):
-    log_debug("%r received status", peer)
+    log_api.debug("received status", peer=peer)
     # request chain
     with peer.lock:
         chain_manager.synchronizer.synchronize_status(
             peer, peer.status_head_hash, peer.status_total_difficulty)
     # send transactions
     with peer.lock:
-        log_debug("%r sending transactions", peer)
+        log_api.debug("sending transactions", peer=peer)
         transactions = chain_manager.get_transactions()
         transactions = [rlp.decode(x.serialize()) for x in transactions]
         peer.send_Transactions(transactions)
@@ -465,18 +460,18 @@ def peer_status_received(sender, peer, **kwargs):
 def peer_handshake(sender, peer, **kwargs):
     # reply with status if not yet sent
     if peer.has_ethereum_capabilities() and not peer.status_sent:
-        log_debug("handshake, sending status", peer=peer)
+        log_api.debug("handshake, sending status", peer=peer)
         peer.send_Status(
             chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
     else:
-        log_debug("handshake, but peer has no 'eth' capablities", peer=peer)
+        log_api.debug("handshake, but peer has no 'eth' capablities", peer=peer)
 
 
 @receiver(signals.remote_transactions_received)
 def remote_transactions_received_handler(sender, transactions, peer, **kwargs):
     "receives rlp.decoded serialized"
     txl = [Transaction.deserialize(rlp.encode(tx)) for tx in transactions]
-    log_debug('remote_transactions_received', num=len(txl))
+    log_api.debug('remote_transactions_received', num=len(txl))
     for tx in txl:
         peermanager.txfilter.add(tx, peer)  # FIXME
         chain_manager.add_transaction(tx)
@@ -485,27 +480,29 @@ def remote_transactions_received_handler(sender, transactions, peer, **kwargs):
 @receiver(signals.local_transaction_received)
 def local_transaction_received_handler(sender, transaction, **kwargs):
     "receives transaction object"
-    log_debug('local_transaction_received: %r', transaction)
+    log_api.debug('local_transaction_received', tx=transaction)
     chain_manager.add_transaction(transaction)
 
 
 @receiver(signals.new_block_received)
 def new_block_received_handler(sender, block, peer, **kwargs):
-    log_debug("recv new remote block: %r", block.number)
+    log_api.debug("recv new remote block", block=block)
     chain_manager.receive_chain([block], peer)
 
 
 @receiver(signals.remote_blocks_received)
 def remote_blocks_received_handler(sender, transient_blocks, peer, **kwargs):
-    log_debug("recv %d remote blocks: %r", len(transient_blocks), map(lambda x: x.number, transient_blocks))
+    log_api.debug("recv remote blocks", count=len(transient_blocks),
+                  highest_number=max(map(lambda x: x.number, transient_blocks)))
     if transient_blocks:
         chain_manager.receive_chain(transient_blocks, peer)
+
 
 @receiver(signals.remote_block_hashes_received)
 def remote_block_hashes_received_handler(sender, block_hashes, peer, **kwargs):
     if block_hashes:
-        log_debug("recv %d remote block_hashes: %r", len(block_hashes), [block_hashes[0].encode('hex'), '...', block_hashes[-1].encode('hex')])
+        log_api.debug("recv remote block_hashes", count=len(block_hashes),
+                      first=block_hashes[0].encode('hex'), last=block_hashes[-1].encode('hex'))
     else:
-        log_debug("recv 0 remore block hashes, signifying genesis block")
+        log_api.debug("recv 0 remore block hashes, signifying genesis block")
     chain_manager.synchronizer.received_block_hashes(peer, block_hashes)
-

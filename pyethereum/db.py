@@ -2,7 +2,8 @@ import os
 import leveldb
 import threading
 import compress
-from pyethereum.tlogging import log_db as log_debug
+from pyethereum.slogging import get_logger
+log = get_logger('db')
 
 databases = {}
 
@@ -12,13 +13,11 @@ class DB(object):
     def __init__(self, dbfile):
         self.dbfile = os.path.abspath(dbfile)
         if dbfile not in databases:
-            log_debug('opening db', num=len(databases)+1, fn=dbfile)
+            log.debug('opening db', num=len(databases) + 1, fn=dbfile)
             databases[dbfile] = (leveldb.LevelDB(dbfile), dict(), threading.Lock())
         self.db, self.uncommitted, self.lock = databases[dbfile]
-#        log_debug('%r initialized', self)
 
     def get(self, key):
-#        log_debug('%r: get:%r uncommited:%r', self, key, key in self.uncommitted)
         if key in self.uncommitted:
             if self.uncommitted[key] is None:
                 raise Exception("key not in db")
@@ -28,12 +27,11 @@ class DB(object):
         return o
 
     def put(self, key, value):
-#       log_debug('%r: put:%r:%r', self, key, value)
         with self.lock:
             self.uncommitted[key] = value
 
     def commit(self):
-        log_debug('commit', db=self)
+        log.debug('commit', db=self)
         with self.lock:
             batch = leveldb.WriteBatch()
             for k, v in self.uncommitted.iteritems():
@@ -45,7 +43,6 @@ class DB(object):
             self.uncommitted.clear()
 
     def delete(self, key):
-#       log_debug('%r: delete %r', self, key)
         with self.lock:
             self.uncommitted[key] = None
 

@@ -20,13 +20,17 @@ from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
 from pyethereum.chainmanager import chain_manager
 from pyethereum.db import DB
-from pyethereum.tlogging import log_info, log_error, log_debug, configure_logging, all_loggers
+import pyethereum.slogging
 import pyethereum.config as konfig
 from . import __version__
 
+
+pyethereum.slogging.configure()
+log = pyethereum.slogging.get_logger()
+
 try:
     import pyethereum.monkeypatch
-    log_info("Loaded your customizations from monkeypatch.py")
+    log.critical("Loaded your customizations from monkeypatch.py")
 except ImportError, e:
     pass
 
@@ -63,9 +67,13 @@ def parse_arguments():
     parser.add_argument(
         "-L", "--logging",
         dest="logging",
-        help="<logger1,logger2> set the console log for interests"
+        help="<logger1:LEVEL,logger2:LEVEL> set the console log for interests"
         " logger1, logger2, etc. Empty loggername means 'default'"
-        "available loggers: %r" % all_loggers())
+        "available loggers: %r" % pyethereum.slogging.get_logger_names())
+    parser.add_argument(
+        "-J", "--log_json",
+        dest="log_json",
+        help="emit logs as json")
     parser.add_argument(
         "-x", "--peers",
         dest="num_peers",
@@ -86,14 +94,8 @@ def check_chain_version(config):
     if not key in db:
         db.put(key, chain_version)
     if db.get(key) != chain_version:
-        log_error('ATTENTION',
-                  """
---------- --------------------------------------------------------------------
-the chain in the db (V:%r) doesn't match the the software version (V:%r)
-This may lead to unexpected errors.
-Consider to delete the db directory: %s
---------- --------------------------------------------------------------------
-""" % (db.get(key), chain_version, db_path))
+        log.critical('db version mismatch', db_version=db.get(
+            key), chain_version=chain_version, db_path=db_path)
         time.sleep(5)
 
 
@@ -122,18 +124,19 @@ def create_config():
 
 
 def main():
-    log_info('starting', version=__version__)
+    log.info('starting', version=__version__)
 
     config = create_config()
     # configure logging
-    names = config.get('misc', 'logging') or 'default'
-    configure_logging(names.split(','))
+    config_string = config.get('misc', 'logging') or ':INFO'
+    pyethereum.slogging.configure(config_string,
+                                  log_json=bool(config.getint('misc', 'log_json')))
 
     # log config
-    log_debug("config ready")
+    log.debug("config ready")
     for section in config.sections():
         for a, v in config.items(section):
-            log_debug(section, **{a:v})
+            log.debug(section, **{a: v})
 
     config_ready.send(sender=None, config=config)
 
@@ -144,9 +147,8 @@ def main():
     try:
         tcp_server.start()
     except IOError as e:
-        log_error("Could not start TCP server", error=e)
+        log.error("Could not start TCP server", error=e)
         sys.exit(1)
-
 
     # PEER MANAGER THREAD
     peer_manager.start()
@@ -159,7 +161,7 @@ def main():
 
     # handle termination signals
     def signal_handler(signum=None, frame=None):
-        log_info('Signal handler called', signal=signum)
+        log.info('Signal handler called', signal=signum)
         peer_manager.stop()
         chain_manager.stop()
         tcp_server.stop()
@@ -177,9 +179,9 @@ def main():
     while not peer_manager.stopped():
         time.sleep(0.001)
 
-    log_info('exiting')
+    log.info('exiting')
     peer_manager.join()
-    log_debug('main thread finished')
+    log.debug('main thread finished')
 
 if __name__ == '__main__':
     main()

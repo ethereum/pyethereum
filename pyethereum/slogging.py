@@ -21,20 +21,24 @@ eth.chain
 eth.chain.new_block
 """
 
+
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
+
     """
     Render `event_dict` as a list of ``Key=repr(Value)`` pairs.
     Prefix with event
     """
+
     def __call__(self, _, __, event_dict):
-        msg = event_dict.pop('event','')
+        msg = event_dict.pop('event', '')
         kvs = ' '.join(k + '=' + repr(v) for k, v in self._ordered_items(event_dict))
-        return "'%s':\t%s" % (msg, kvs)
+        return "%s\t%s" % (msg, kvs)
 
 
 ######## TRACE ##########
 
 class BoundLoggerTrace(structlog.stdlib.BoundLogger):
+
     "adds trace"
 
     def trace(self, event=None, **kw):
@@ -50,8 +54,8 @@ class BoundLoggerTrace(structlog.stdlib.BoundLogger):
         """
         # any listeners?
         if self._processors and isinstance(self._processors[0], LogListeners) \
-            and self._processors[0].listeners:
-                return True
+                and self._processors[0].listeners:
+            return True
         # log level filter
         return self._logger.isEnabledFor(structlog.stdlib._nameToLevel[level_name])
 
@@ -59,6 +63,8 @@ class BoundLoggerTrace(structlog.stdlib.BoundLogger):
 structlog.stdlib.TRACE = TRACE = 5
 structlog.stdlib._nameToLevel['trace'] = TRACE
 logging.addLevelName(TRACE, "TRACE")
+
+
 def _trace(self, message, *args, **kws):
     # Yes, logger takes its '*args' as 'args'.
     if self.isEnabledFor(TRACE):
@@ -68,26 +74,60 @@ logging.TRACE = TRACE
 
 ######### listeners ###############
 
+
 class LogListeners(object):
+
     """
     allow to register listeners
     """
+
     def __init__(self):
         self.listeners = []
 
     def __call__(self, logger, name, event_dict):
+        #raise Exception
+        e = dict(event_dict)
         for l in self.listeners:
-            l(event_dict)
+            l(e)
         return event_dict
 
 log_listeners = LogListeners()
 
 
+class LogRecorder(object):
+
+    """
+    temporarily records all logs, w/o level filtering
+    use only once!
+    """
+    max_capacity = 10 * 1000  # check we are not forgotten or abused
+
+    def __init__(self):
+        self._records = []
+        log_listeners.listeners.append(self.add_log)
+
+    def add_log(self, msg):
+        self._records.append(msg)
+        assert len(self._records) < self.max_capacity
+
+    def pop_records(self):
+        # can only be called once
+        r = self._records[:]
+        self._records = None
+        log_listeners.listeners.remove(self.add_log)
+        return r
+
 ### configure #####################
 
 DEFAULT_LOGLEVEL = logging.INFO
-JSON_FORMAT='%(message)s'
-PRINT_FORMAT='%(levelname)-8s %(name)-12s %(message)s'
+JSON_FORMAT = '%(message)s'
+PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
+
+
+def set_level(name, level):
+    assert not isinstance(level, int)
+    logging.getLogger(name).setLevel(getattr(logging, level.upper()))
+
 
 def configure_loglevels(config_string):
     """
@@ -96,7 +136,7 @@ def configure_loglevels(config_string):
     assert ':' in config_string
     for name_levels in config_string.split(','):
         name, level = name_levels.split(':')
-        logging.getLogger(name).setLevel(getattr(logging, level.upper()))
+        set_level(name, level)
 
 
 def setup_stdlib_logging(level, fmt):
@@ -109,13 +149,14 @@ def setup_stdlib_logging(level, fmt):
     hdlr.setFormatter(fmt)
     logging.root.addHandler(hdlr)
 
+
 def configure(config_string='', log_json=False):
     # configure structlog
-    processors=[
-        log_listeners, # before level filtering
+    processors = [
+        log_listeners,  # before level filtering
         structlog.stdlib.filter_by_level,
         structlog.processors.StackInfoRenderer()
-        ]
+    ]
     if log_json:
         processors.append(structlog.processors.JSONRenderer(sort_keys=True))
     else:
@@ -124,34 +165,55 @@ def configure(config_string='', log_json=False):
             KeyValueRenderer(sort_keys=True, key_order=None)
         ])
     structlog.configure(
-        processors = processors,
+        processors=processors,
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=BoundLoggerTrace,
-        cache_logger_on_first_use=True, # later calls on configure() dont have any effect on already cached loggers
-        )
+        # later calls on configure() dont have any effect on already cached loggers
+        cache_logger_on_first_use=True,
+    )
     # configure standard logging
     if log_json:
-        format=JSON_FORMAT
+        format = JSON_FORMAT
     else:
-        format=PRINT_FORMAT
+        format = PRINT_FORMAT
     setup_stdlib_logging(DEFAULT_LOGLEVEL, format)
     if config_string:
         configure_loglevels(config_string)
 
-### helpers
+
+def get_configuration():
+    """
+    get a configuration (snapshot) that can be used to call configure
+    snapshot = get_configuration()
+    configure(**snapshot)
+    """
+    name_levels = [('', logging.getLevelName(logging.getLogger().level))]
+    for name, logger in logging.Logger.manager.loggerDict.items():
+        name_levels.append((name, logging.getLevelName(logger.level)))
+    config_string = ','.join('%s:%s' % x for x in name_levels)
+    struct_root = get_logger().bind()
+    log_json = bool([p for p in struct_root._processors if
+                     isinstance(p, structlog.processors.JSONRenderer)])
+    return dict(config_string=config_string, log_json=log_json)
+
+# helpers
+known_loggers = set()  # know to structlog (i.e. maybe not yet initialized w/ logging)
+
 
 def get_logger_names():
-    return sorted(logging.Logger.manager.loggerDict.keys())
+    # logging.Logger.manager.loggerDict.keys() # used ones
+    return sorted(known_loggers)  # initialized at module load get_logger
+
 
 def get_logger(name=None):
+    known_loggers.add(name)
     return structlog.get_logger(name)
 
 
-####### quick debug
-
+# quick debug
 def DEBUG(msg, **kargs):
     "temporary logger during development that is always on"
     log = structlog.get_logger('DEBUG')
-    log.critical('-'*20)
+    log.critical('-' * 20)
     log.critical(msg, **kargs)

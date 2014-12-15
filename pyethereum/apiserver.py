@@ -13,9 +13,10 @@ from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
+from pyethereum.slogging import get_logger, LogRecorder
 from ._version import get_versions
 
-logger = logging.getLogger(__name__)
+log = get_logger('api')
 
 app = bottle.Bottle()
 app.config['autojson'] = False
@@ -46,6 +47,7 @@ class ApiServer(threading.Thread):
 
 api_server = ApiServer()
 
+
 @dispatch.receiver(signals.config_ready)
 def config_api_server(sender, config, **kwargs):
     api_server.configure(config)
@@ -69,7 +71,7 @@ class Middleware:
         if orig_path.startswith(self.app.api_path):
             environ['PATH_INFO'] = orig_path.replace(self.app.api_path, '', 1)
 
-        logger.debug('%r: %s => %s', environ['REQUEST_METHOD'], orig_path, environ['PATH_INFO'])
+        log.debug('%r: %s => %s' % (environ['REQUEST_METHOD'], orig_path, environ['PATH_INFO']))
 
         if environ["REQUEST_METHOD"] == "OPTIONS":
             start_response('200 OK', self.HEADERS + [('Content-Length', "0")])
@@ -92,7 +94,7 @@ def load_json_req():
 # ######## Version ###########
 @app.get('/version/')
 def version():
-    logger.debug('version')
+    log.debug('version')
     v = get_versions()
     v['name'] = 'pyethereum'
     return dict(version=v)
@@ -111,8 +113,9 @@ def make_blocks_response(blocks):
 
 @app.get('/blocks/')
 def blocks():
-    logger.debug('blocks/')
+    log.debug('blocks/')
     return make_blocks_response(chain_manager.get_chain(start='', count=20))
+
 
 @app.get('/blocks/<arg>')
 def block(arg=None):
@@ -122,7 +125,7 @@ def block(arg=None):
     /blocks/<int>       return block by number
     /blocks/<hex>       return block by hexhash
     """
-    logger.debug('blocks/%s', arg)
+    log.debug('blocks/%s' % arg)
     try:
         if arg is None:
             return blocks()
@@ -146,7 +149,7 @@ def block_children(arg=None):
     """
     /blocks/<hex>/children       return list of children hashes
     """
-    logger.debug('blocks/%s/children', arg)
+    log.debug('blocks/%s/children' % arg)
     try:
         h = arg.decode('hex')
         children = chain_manager.index.get_children(h)
@@ -158,6 +161,7 @@ def block_children(arg=None):
 # ######## Transactions ############
 def make_transaction_response(txs):
     return dict(transactions=[tx.to_dict() for tx in txs])
+
 
 @app.put('/transactions/')
 def add_transaction():
@@ -223,18 +227,7 @@ def get_pending():
     return dict(transactions=[tx.to_dict() for tx in chain_manager.miner.get_transactions()])
 
 
-
 # ########### Trace ############
-
-class TraceLogHandler(logging.Handler):
-    def __init__(self):
-        logging.Handler.__init__(self)
-        self.buffer = []
-
-    def emit(self, record):
-        self.buffer.append(record)
-
-
 def _get_block_before_tx(txhash):
     tx, blk, i = chain_manager.index.get_transaction(txhash.decode('hex'))
     # get the state we had before this transaction
@@ -261,21 +254,11 @@ def get_trace(txhash):
         return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
 
     # collect debug output
-    log = []
-
-    def log_receiver(data):
-        log.append(data)
-
-    processblock.pblogger.listeners.append(log_receiver)
-
+    recorder = LogRecorder()
     # apply tx (thread? we don't want logs from other invocations)
     processblock.apply_transaction(test_blk, tx)
 
-    # stop collecting debug output
-    processblock.pblogger.listeners.remove(log_receiver)
-
-    # format
-    return dict(tx=txhash, trace=log)
+    return dict(tx=txhash, trace=recorder.pop_records())
 
 
 @app.get('/trace/<txhash>')
@@ -293,18 +276,28 @@ def dtrace(params, txhash):
                                4-char binary string for op, stack, memory,
                                storage (eg. 1011 = op, mem, storage only)
     """
+    help = 'Params must be binary string of length 4 /op|stack|memory|storage/'
+
     if len(params) != 4:
-        return bottle.abort(404, 'Params must be binary string of length 4')
-    processblock.pblogger.log_apply_op = True
-    processblock.pblogger.log_op = (params[0] != '0')
-    processblock.pblogger.log_stack = (params[1] != '0')
-    processblock.pblogger.log_memory = (params[2] != '0')
-    processblock.pblogger.log_storage = (params[3] != '0')
-    return get_trace(txhash)
+        return bottle.abort(404, help)
+    t = get_trace(txhash)
+
+    def _remove(key):
+        for l in t['trace']:
+            if key in l:
+                del l[key]
+    #  params[0] log op can not be filtered
+    # see vm.py for details
+    if not params[1]:
+        _remove('stack')
+    if not params[2]:
+        _remove('memory')
+    if not params[2]:
+        _remove('storage')
+    return t
 
 
 # SPV proofs
-
 
 @app.get('/spv/tx/<txhash>')
 def spvtrace(txhash):
@@ -365,16 +358,13 @@ def dump(txblkhash):
     return blk.to_dict(with_state=True, with_uncles=True)
 
 
-
 # ######## Accounts ############
-
 @app.get('/accounts/<address>')
 def account(address=None):
-    logger.debug('accounts/%s', address)
+    log.debug('accounts/%s' % address)
     data = chain_manager.head.account_to_dict(address)
-    logger.debug(data)
+    log.debug(data)
     return data
-
 
 
 # ######## Peers ###################

@@ -17,8 +17,9 @@ assert api_path.startswith('/') and not api_path.endswith('/')
 
 DEFAULT_HOST = config.get('api', 'listen_host')
 DEFAULT_PORT = config.getint('api', 'listen_port')
-DEFAULT_GASPRICE = 10**12
+DEFAULT_GASPRICE = 10 ** 12
 DEFAULT_STARTGAS = 10000
+
 
 def sha3(x):
     return utils.sha3(x).encode('hex')
@@ -46,7 +47,6 @@ def sign(txdata, key):
     return transactions.Transaction.hex_deserialize(txdata).sign(key).hex_serialize(True)
 
 
-
 class APIClient(object):
 
     def __init__(self, host, port):
@@ -55,13 +55,12 @@ class APIClient(object):
         assert api_path.startswith('/') and not api_path.endswith('/')
         self.base_url = "http://%s:%d%s" % (host, port, api_path)
 
-
     def json_get_request(self, path):
         assert path.startswith('/')
         url = self.base_url + path
-        #print 'GET', url
+        # print 'GET', url
         r = requests.get(url)
-        #print r.status_code, r.reason, r.url, r.headers
+        # print r.status_code, r.reason, r.url, r.headers
         if r.status_code in [200, 201]:
             return r.json()
         else:
@@ -89,7 +88,7 @@ class APIClient(object):
     def applytx(self, txdata):
         tx = transactions.Transaction.hex_deserialize(txdata)
         url = self.base_url + '/transactions/'
-        #print 'PUT', url, txdata
+        # print 'PUT', url, txdata
         r = requests.put(url, txdata)
         return dict(status_code=r.status_code, reason=r.reason, url=r.url)
 
@@ -127,14 +126,14 @@ class APIClient(object):
     def trace(self, id):
         res = self.json_get_request(path='/trace/%s' % id)
         if 'trace' in res:
-          out = []
-          for l in res['trace']:
-            name, data = l.items()[0]
-            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-            items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-            out.append("%s: %s" % (name.ljust(15), msg))
-          return '\n'.join(out)
+            out = []
+            for l in res['trace']:
+                name, data = l.items()[0]
+                order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
+                items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
+                msg = ", ".join("%s=%s" % (k, v) for k, v in items)
+                out.append("%s: %s" % (name.ljust(15), msg))
+            return '\n'.join(out)
         return res
 
     def dump(self, id):
@@ -143,7 +142,7 @@ class APIClient(object):
 
 
 doc = \
-"""ethclient
+    """ethclient
 
 Usage:
   pyethclient getbalance [options] <address>
@@ -185,7 +184,7 @@ def main():
             sys.stdin.read().strip().split(' ') + sys.argv[3:]
     # Get command line arguments
     arguments = docopt(doc, version='pyethclient %s' % __version__)
-    #print(arguments)
+    # print(arguments)
 
     host = arguments.get('--host') or DEFAULT_HOST
     port = int(arguments.get('--port') or DEFAULT_PORT)
@@ -194,26 +193,29 @@ def main():
     gasprice = int(arguments.get('--gasprice') or DEFAULT_GASPRICE)
     startgas = int(arguments.get('--startgas') or DEFAULT_STARTGAS)
 
-
-    cmd_map = dict( getbalance=(api.getbalance, arguments['<address>']),
-                    getcode=(api.getcode,  arguments['<address>']),
-                    getstate=(api.getstate,  arguments['<address>']),
-                    getnonce=(api.getnonce,  arguments['<address>']),
-                    applytx=(api.applytx, arguments['<tx_hex>']),
-                    sha3=(sha3, arguments['<data>']),
-                    privtoaddr=(privtoaddr, arguments['<pkey_hex>']),
-                    mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments['<value>'], arguments['<code_hex>']),
-                    mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>']),
-                    quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments['<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
-                    quickcontract=(api.quickcontract, gasprice, startgas, arguments['<value>'], arguments['<code_hex>'], arguments['<pkey_hex>']),
-                    sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
-                    getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
-                    gettx=(api.gettx, arguments['<txid_hex>']),
-                    trace=(api.trace, arguments['<txid_hex>']),
-                    tracejson=(api.tracejson, arguments['<txid_hex>']),
-                    dump=(api.dump, arguments['<tx_blk_id_hex>']),
-                    getpending=(api.getpending,)
-                    )
+    cmd_map = dict(getbalance=(api.getbalance, arguments['<address>']),
+                   getcode=(api.getcode,  arguments['<address>']),
+                   getstate=(api.getstate,  arguments['<address>']),
+                   getnonce=(api.getnonce,  arguments['<address>']),
+                   applytx=(api.applytx, arguments['<tx_hex>']),
+                   sha3=(sha3, arguments['<data>']),
+                   privtoaddr=(privtoaddr, arguments['<pkey_hex>']),
+                   mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments[
+                       '<value>'], arguments['<code_hex>']),
+                   mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments[
+                       '<to>'], arguments['<value>'], arguments['<data_hex>']),
+                   quicktx=(api.quicktx, gasprice, startgas, arguments['<to>'], arguments[
+                       '<value>'], arguments['<data_hex>'], arguments['<pkey_hex>']),
+                   quickcontract=(api.quickcontract, gasprice, startgas, arguments[
+                       '<value>'], arguments['<code_hex>'], arguments['<pkey_hex>']),
+                   sign=(sign, arguments['<tx_hex>'], arguments['<pkey_hex>']),
+                   getblock=(api.getblock, arguments['<blockid_hex_or_num>']),
+                   gettx=(api.gettx, arguments['<txid_hex>']),
+                   trace=(api.trace, arguments['<txid_hex>']),
+                   tracejson=(api.tracejson, arguments['<txid_hex>']),
+                   dump=(api.dump, arguments['<tx_blk_id_hex>']),
+                   getpending=(api.getpending,)
+                   )
     for k in cmd_map:
         if arguments.get(k):
             cmd_args = cmd_map.get(k)
@@ -223,4 +225,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

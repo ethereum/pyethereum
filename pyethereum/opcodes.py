@@ -76,8 +76,8 @@ for i in range(1, 33):
     opcodes[0x5f + i] = ['PUSH' + str(i), 0, 1, 1]
 
 for i in range(1, 17):
-    opcodes[0x7f + i] = ['DUP' + str(i), i, i+1, 1]
-    opcodes[0x8f + i] = ['SWAP' + str(i), i+1, i+1, 1]
+    opcodes[0x7f + i] = ['DUP' + str(i), i, i + 1, 1]
+    opcodes[0x8f + i] = ['SWAP' + str(i), i + 1, i + 1, 1]
 
 reverse_opcodes = {}
 for o in opcodes:

@@ -10,9 +10,10 @@ import rlp
 import signals
 import bloom
 from peer import Peer
-from pyethereum.tlogging import log_net_info
-from pyethereum.tlogging import log_net_debug
-from pyethereum.tlogging import log_p2p
+from pyethereum.slogging import get_logger
+log_net = get_logger('net')
+log_p2p = get_logger('p2p')
+
 
 DEFAULT_SOCKET_TIMEOUT = 0.01
 CONNECT_SOCKET_TIMEOUT = .5
@@ -55,12 +56,12 @@ class PeerManager(StoppableLoopThread):
         path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
         if os.path.exists(path):
             peers = set((ip, port, "") for ip, port in json.load(open(path)))
-            log_net_debug('loaded peers', num=len(peers), path=path)
+            log_net.debug('loaded peers', num=len(peers), path=path)
             self._known_peers.update(peers)
 
     def save_peers(self):
         path = os.path.join(self.config.get('misc', 'data_dir'), 'peers.json')
-        log_net_debug('saving peers', num=len(self._known_peers), path=path)
+        log_net.debug('saving peers', num=len(self._known_peers), path=path)
         json.dump([[i, p] for i, p, n in self._known_peers], open(path, 'w'))
 
     def add_known_peer_address(self, ip, port, node_id):
@@ -112,14 +113,14 @@ class PeerManager(StoppableLoopThread):
         :param host:  domain notation or IP
         '''
         sock = self._create_peer_sock()
-        log_net_debug('attempting connect', host=host, port=port)
+        log_net.debug('attempting connect', host=host, port=port)
         try:
             sock.connect((host, port))
         except Exception as e:
-            log_net_debug('connecting failed', host=host, port=port, error=e)
+            log_net.debug('connecting failed', host=host, port=port, error=e)
             return None
         ip, port = sock.getpeername()
-        log_net_info('connected', ip=ip, port=port)
+        log_net.info('connected', ip=ip, port=port)
         peer = self.add_peer(sock, ip, port)
 
         peer.send_Hello()
@@ -143,12 +144,12 @@ class PeerManager(StoppableLoopThread):
 
         # if ping was sent and not returned within last second
         if self.max_ping_wait < dt_ping < dt_seen:
-            log_net_debug('silent', peer=peer, last_seen=dt_seen, last_ping=dt_ping)
-            log_net_debug('disconnecting unresponsive', peer=peer)
+            log_net.debug('silent', peer=peer, last_seen=dt_seen, last_ping=dt_ping)
+            log_net.debug('disconnecting unresponsive', peer=peer)
             self.remove_peer(peer)
         elif min(dt_seen, dt_ping) > self.max_silence:
             # ping silent peer
-            log_net_debug('pinging silent', peer=peer)
+            log_net.debug('pinging silent', peer=peer)
             with peer.lock:
                 peer.send_Ping()
 
@@ -157,14 +158,15 @@ class PeerManager(StoppableLoopThread):
         num_peers = self.config.getint('network', 'num_peers')
         candidates = self.get_peer_candidates()
         if len(self.connected_peers) < num_peers:
-            log_net_debug('not enough peers', num_connected=len(self.connected_peers), 
-                required=num_peers, candidates=len(candidates))
+            log_net.debug('not enough peers', num_connected=len(self.connected_peers),
+                          required=num_peers, candidates=len(candidates))
             if len(candidates):
                 ip, port, node_id = candidates.pop()
                 self.connect_peer(ip, port)
                 # don't use this node again in case of connect error > remove
                 self.remove_known_peer_address(ip, port, node_id)
             else:
+                log_net.debug('reqesting new peers', candidates=len(candidates))
                 for peer in list(self.connected_peers):
                     with peer.lock:
                         peer.send_GetPeers()
@@ -179,7 +181,7 @@ class PeerManager(StoppableLoopThread):
             self.load_saved_peers()
 
         SLEEP_TIME = 0.05
-        for i in range(int(CHECK_PEERCOUNT_INTERVAL/SLEEP_TIME)):
+        for i in range(int(CHECK_PEERCOUNT_INTERVAL / SLEEP_TIME)):
             if not self.stopped():
                 time.sleep(SLEEP_TIME)
 
@@ -206,6 +208,7 @@ class SentFilter(object):
     # FIXME Bllomfilter will match everything after a while ...
     # maybe fifo filter
     # filter for 10sseconds
+
     "filters data that should only be sent once"
     bloom = bloom.bloom_insert(0, '')
 
@@ -245,7 +248,7 @@ def getaddress_received_handler(sender, peer, **kwargs):
                    peer_manager.local_node_id))
         peers = [p for p in peers if sent_peers_filter.add(repr(p), peer)]
         if len(peers):
-            log_p2p('returning peers', peer=peer, num=len(peers))
+            log_p2p.debug('returning peers', peer=peer, num=len(peers))
             peer.send_Peers(peers)
 
 
@@ -281,5 +284,5 @@ def send_transactions(sender, transactions=[], **kwargs):
 
 @receiver(signals.peer_handshake_success)
 def new_peer_connected(sender, peer, **kwargs):
-    log_p2p("handshaked", peer=peer)
+    log_p2p.debug("handshaked", peer=peer)
     peer_manager.add_known_peer_address(peer.ip, peer.port, peer.node_id)

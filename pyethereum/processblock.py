@@ -1,13 +1,11 @@
 import rlp
 import opcodes
-
 import utils
 import time
 import blocks
 import transactions
 import trie
 import sys
-import logging
 import json
 import fastvm
 import copy
@@ -15,13 +13,17 @@ import specials
 import bloom
 import vm
 from exceptions import *
-logger = logging.getLogger(__name__)
-sys.setrecursionlimit(100000)
-from pyethereum.tlogging import log_tx, log_msg, log_state
 
-TT255 = 2**255
-TT256 = 2**256
-TT256M1 = 2**256 - 1
+sys.setrecursionlimit(100000)
+
+from pyethereum.slogging import get_logger
+log_tx = get_logger('eth.tx')
+log_msg = get_logger('eth.msg')
+log_state = get_logger('eth.msg.state')
+
+TT255 = 2 ** 255
+TT256 = 2 ** 256
+TT256M1 = 2 ** 256 - 1
 
 OUT_OF_GAS = -1
 
@@ -49,21 +51,22 @@ class Log(object):
     def serialize(self):
         return [
             self.address.decode('hex'),
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics], # why zpad?
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics],  # why zpad?
             self.data
         ]
 
     def bloomables(self):
         return [self.address.decode('hex')] + \
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics] # why zpad?
+            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]  # why zpad?
 
     def __repr__(self):
         return '<Log(address=%r, topics=%r, data=%r)>' % \
-                (self.address, self.topics, self.data)
+            (self.address, self.topics, self.data)
 
     def to_dict(self):
         return dict(address=self.address,
-                    topics=[utils.zpad(utils.int_to_big_endian(x), 32).encode('hex') for x in self.topics],
+                    topics=[utils.zpad(utils.int_to_big_endian(x), 32).encode('hex')
+                            for x in self.topics],
                     data='0x' + self.data.encode('hex'))
 
 
@@ -103,7 +106,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    log_tx('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
@@ -127,19 +130,19 @@ def apply_transaction(block, tx):
 
     assert gas_remained >= 0
 
-    log_tx("TX APPLIED", result=result, gas_remained=gas_remained,
-           data=''.join(map(chr, data)).encode('hex'))
+    log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
+                 data=''.join(map(chr, data)).encode('hex'))
 
     if not result:  # 0 = OOG failure in both cases
-        log_tx('TX FAILED', reason='out of gas',
-               startgas=tx.startgas, gas_remained=gas_remained)
+        log_tx.debug('TX FAILED', reason='out of gas',
+                     startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
         output = OUT_OF_GAS
     else:
-        log_tx('TX SUCCESS')
+        log_tx.debug('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
         if block.refunds > 0:
-            log_tx('Refunding: %r gas' % min(block.refunds, gas_used // 2))
+            log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
             gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
@@ -160,6 +163,7 @@ def apply_transaction(block, tx):
 
 
 class VMExt():
+
     def __init__(self, block, tx):
         self._block = block
         self.get_code = block.get_code
@@ -189,16 +193,16 @@ class VMExt():
 def apply_msg(ext, msg, code):
     # print 'init', map(ord, msg.data), msg.gas, \
     #     msg.sender, block.get_nonce(msg.sender)
-    log_msg("MSG APPLY", sender=msg.sender, to=msg.to,
+
+    log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
             gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
-    if enable_log_state:
-        log_state('MSG PRE STATE', account=msg.to,
-                  state=ext.log_storage(msg.to))
+    if log_state.is_active:
+        log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
-        log_msg('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
-                want=msg.value)
+        log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
+                      want=msg.value)
         return 1, msg.gas, []
     if msg.depth >= 1024:
         return 0, 0, []
@@ -206,14 +210,12 @@ def apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
-    log_msg('MSG APPLIED', result=o, gas_remained=gas,
-            sender=msg.sender, to=msg.to, data=dat)
-    if enable_log_state:
-        log_state('MSG POST STATE', account=msg.to,
-                  state=ext.log_storage(msg.to))
+    log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
+    if log_state.is_active:
+        log_state.trace('MSG POST STATE', account=msg.to, state=ext.log_storage(msg.to))
 
     if res == 0:
-        log_msg('REVERTING')
+        log_msg.debug('REVERTING')
         ext._block.revert(snapshot)
 
     return res, gas, dat
@@ -244,7 +246,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            log_msg('CONTRACT CREATION OOG', have=gas, want=gcost)
+            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return utils.coerce_to_int(msg.to), gas, dat
     else:

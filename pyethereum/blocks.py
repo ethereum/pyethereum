@@ -10,7 +10,10 @@ import copy
 import sys
 from repoze.lru import lru_cache
 from exceptions import *
-from pyethereum.tlogging import log_state_delta, log_error
+from pyethereum.slogging import get_logger
+log = get_logger('eth.block')
+log_state = get_logger('eth.msg.state')
+
 
 INITIAL_DIFFICULTY = 2 ** 17
 GENESIS_PREVHASH = '\00' * 32
@@ -226,11 +229,11 @@ class Block(object):
                 return False
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
-                log_error("%r: Uncle does not have a valid ancestor", self)
+                log.error("Uncle does not have a valid ancestor", block=self)
                 return False
             if uncle in ineligible:
-                log_error("%r: Duplicate uncle %r", self,
-                          utils.sha3(rlp.encode(uncle)).encode('hex'))
+                log.error("Duplicate uncle", block=self, uncle=utils.sha3(
+                    rlp.encode(uncle)).encode('hex'))
                 return False
             ineligible.append(uncle)
         return True
@@ -328,9 +331,7 @@ class Block(object):
         # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
         # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
         must_equal('bloom', block.bloom, kargs['bloom'])
-        must_equal('receipts_root',
-                   block.receipts.root_hash,
-                   kargs['receipts_root'])
+        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
         if not check_header_pow(block.list_header()):
             raise VerificationFailed('invalid nonce')
 
@@ -494,7 +495,7 @@ class Block(object):
     def commit_state(self):
         changes = []
         if not len(self.journal):
-            log_state_delta('delta', changes=[])
+            log_state.trace('delta', changes=[])
             return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \
@@ -517,7 +518,7 @@ class Block(object):
                         changes.append([key, address, v])
                         acct[i] = utils.encoders[acct_structure[i][1]](v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
-        log_state_delta('delta', changes=changes)
+        log_state.trace('delta', changes=changes)
         self.reset_cache()
 
     def del_account(self, address):
@@ -584,10 +585,10 @@ class Block(object):
 
     def revert(self, mysnapshot):
         self.journal = mysnapshot['journal']
-        log_state_delta('reverting')
+        log_state.trace('reverting')
         while len(self.journal) > mysnapshot['journal_size']:
             cache, index, prev, post = self.journal.pop()
-            log_state_delta('%r %r %r %r', cache, index, prev, post)
+            log_state.trace('%r %r %r %r' % (cache, index, prev, post))
             if prev is not None:
                 self.caches[cache][index] = prev
             else:

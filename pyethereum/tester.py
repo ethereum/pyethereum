@@ -6,7 +6,7 @@ import logging
 import sys
 import spv
 import pyethereum.opcodes as opcodes
-import pyethereum.tlogging as tlogging
+from pyethereum.slogging import get_logger, LogRecorder
 
 serpent = None
 
@@ -26,17 +26,18 @@ for i in range(10):
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
-seed = 3**160
+seed = 3 ** 160
 
 
 # Pseudo-RNG (deterministic for now for testing purposes)
 def rand():
     global seed
-    seed = pow(seed, 2, 2**512)
-    return seed % 2**256
+    seed = pow(seed, 2, 2 ** 512)
+    return seed % 2 ** 256
 
 
 class state():
+
     def __init__(self, num_accounts=len(keys)):
         global serpent
         if not serpent:
@@ -47,7 +48,7 @@ class state():
 
         o = {}
         for i in range(num_accounts):
-            o[accounts[i]] = 10**24
+            o[accounts[i]] = 10 ** 24
         self.block = b.genesis(o)
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
@@ -83,7 +84,7 @@ class state():
         if not s:
             raise Exception("Transaction failed")
         o = serpent.decode_datalist(r)
-        return map(lambda x: x-2**256 if x >= 2**255 else x, o)
+        return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
 
     def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used
@@ -122,21 +123,10 @@ class state():
         return spv.verify_transaction_spv_proof(self.block, tx, proof)
 
     def trace(self, sender, to, value, data=[]):
-
-        # collect debug output
-        log = []
-
-        def log_receiver(data):
-            log.append(data)
-
-        pb.pblogger.log_op = 1
-        pb.pblogger.log_stack = 1
-        pb.pblogger.log_memory = 1
-        pb.pblogger.log_storage = 1
-        pb.pblogger.listeners.append(log_receiver)
+        # collect log events (independent of loglevel filters)
+        recorder = LogRecorder()
         self.send(sender, to, value, data)
-        pb.pblogger.listeners.remove(log_receiver)
-        return log
+        return recorder.pop_records()
 
     def mine(self, n=1, coinbase=a0):
         for i in range(n):
@@ -150,31 +140,30 @@ class state():
     def revert(self, data):
         self.block = b.Block.deserialize(data)
 
+# logging
+
 
 def set_logging_level(lvl=1):
-    if lvl == 0:
-        tlogging.configure_logging([])
-        vm.log_vm = None
-        pb.enable_log_state = False
-    elif lvl == 1:
-        tlogging.configure_logging(['log'])
-        vm.log_vm = None
-        pb.enable_log_state = False
-    elif lvl == 2:
-        tlogging.configure_logging(['pb', 'log', 'vm_exit'])
-        vm.log_vm = None
-        pb.enable_log_state = True
-    elif lvl == 3:
-        tlogging.configure_logging(['pb', 'vm'])
-        vm.log_vm = ['op', 'stack']
-        pb.enable_log_state = True
-    elif lvl >= 4:
-        tlogging.configure_logging(['pb', 'vm'])
-        vm.log_vm = ['op', 'stack', 'memory', 'storage']
-        pb.enable_log_state = True
-    else:
-        raise Exception("Invalid logging level")
+    trace_lvl_map = [
+        ':info',
+        'eth.vm.log:trace',
+        ':info,eth.vm.log:trace,eth.vm.exit:trace',
+        ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace',
+        ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,' +
+        'eth.vm.storage:trace,eth.vm.memory:trace'
+    ]
+    slogging.configure(query_string=trace_lvl_map[lvl])
     print 'Set logging level: %d' % lvl
+
+
+def set_log_trace(logger_names=[]):
+    """
+    sets all named loggers to level 'trace'
+    attention: vm.op.* are only active if vm.op is active
+    """
+    for name in logger_names:
+        assert name in slogging.get_logger_names()
+        slogging.set_level(name, 'trace')
 
 
 def enable_logging():

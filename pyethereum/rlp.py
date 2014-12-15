@@ -31,11 +31,14 @@ First byte of an encoded item
 0xff == 255
 '''
 
+
 class EncodingError(Exception):
     pass
 
+
 class DecodingError(Exception):
     pass
+
 
 def int_to_big_endian(integer):
     '''convert a integer to big endian binary string'''
