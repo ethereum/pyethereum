@@ -972,7 +972,7 @@ macro f($a) % f($b):
 macro f($v) = f($w):
     $v = $w
 
-macro unfify(f($a)):
+macro(10) f($a):
     $a / 10000
 
 macro fify($a):
@@ -982,7 +982,7 @@ a = fify(5)
 b = fify(2)
 c = a / b
 e = c + (a / b)
-return(unfify(e))
+return(e)
 """
 
 
