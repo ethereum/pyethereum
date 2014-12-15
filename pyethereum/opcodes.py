@@ -81,6 +81,7 @@ for i in range(1, 17):
 
 reverse_opcodes = {}
 for o in opcodes:
+    vars()[opcodes[o][0]] = opcodes[o]
     reverse_opcodes[opcodes[o][0]] = o
 
 # Non-opcode gas prices

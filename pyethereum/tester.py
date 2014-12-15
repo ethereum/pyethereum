@@ -155,18 +155,23 @@ def set_logging_level(lvl=1):
     if lvl == 0:
         tlogging.configure_logging([])
         vm.log_vm = None
+        pb.enable_log_state = False
     elif lvl == 1:
         tlogging.configure_logging(['log'])
         vm.log_vm = None
+        pb.enable_log_state = False
     elif lvl == 2:
         tlogging.configure_logging(['pb', 'log', 'vm_exit'])
         vm.log_vm = None
+        pb.enable_log_state = True
     elif lvl == 3:
         tlogging.configure_logging(['pb', 'vm'])
         vm.log_vm = ['op', 'stack']
+        pb.enable_log_state = True
     elif lvl >= 4:
         tlogging.configure_logging(['pb', 'vm'])
         vm.log_vm = ['op', 'stack', 'memory', 'storage']
+        pb.enable_log_state = True
     else:
         raise Exception("Invalid logging level")
     print 'Set logging level: %d' % lvl

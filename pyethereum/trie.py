@@ -8,6 +8,12 @@ import copy
 
 DB = db.DB
 
+bin_to_nibbles_cache = {}
+
+hti = {}
+for i, c in enumerate('0123456789abcdef'):
+    hti[c] = i
+
 
 def bin_to_nibbles(s):
     """convert string s to nibbles (half-bytes)
@@ -21,10 +27,7 @@ def bin_to_nibbles(s):
     >>> bin_to_nibbles("hello")
     [6, 8, 6, 5, 6, 12, 6, 12, 6, 15]
     """
-    res = []
-    for x in s:
-        res += divmod(ord(x), 16)
-    return res
+    return [hti[c] for c in s.encode('hex')]
 
 
 def nibbles_to_bin(nibbles):

@@ -25,6 +25,8 @@ TT256M1 = 2**256 - 1
 
 OUT_OF_GAS = -1
 
+enable_log_state = False
+
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = ''
 
@@ -189,8 +191,9 @@ def apply_msg(ext, msg, code):
     #     msg.sender, block.get_nonce(msg.sender)
     log_msg("MSG APPLY", sender=msg.sender, to=msg.to,
             gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
-    log_state('MSG PRE STATE', account=msg.to,
-              state=ext.log_storage(msg.to))
+    if enable_log_state:
+        log_state('MSG PRE STATE', account=msg.to,
+                  state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
@@ -205,8 +208,9 @@ def apply_msg(ext, msg, code):
     res, gas, dat = vm.vm_execute(ext, msg, code)
     log_msg('MSG APPLIED', result=o, gas_remained=gas,
             sender=msg.sender, to=msg.to, data=dat)
-    log_state('MSG POST STATE', account=msg.to,
-              state=ext.log_storage(msg.to))
+    if enable_log_state:
+        log_state('MSG POST STATE', account=msg.to,
+                  state=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg('REVERTING')

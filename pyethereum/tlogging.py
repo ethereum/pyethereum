@@ -220,7 +220,6 @@ class Logger(object):
     def log(self, name_or_lazylog, *args, **kargs):
         if not self.is_active:
             return
-        print args, kargs
         if isinstance(name_or_lazylog, LazyLog):
             kargs = name_or_lazylog.func()
             event_name = name_or_lazylog.name

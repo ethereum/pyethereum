@@ -20,8 +20,12 @@ class DB(object):
     def get(self, key):
 #        log_debug('%r: get:%r uncommited:%r', self, key, key in self.uncommitted)
         if key in self.uncommitted:
+            if self.uncommitted[key] is None:
+                raise Exception("key not in db")
             return self.uncommitted[key]
-        return compress.decompress(self.db.Get(key))
+        o = compress.decompress(self.db.Get(key))
+        self.uncommitted[key] = o
+        return o
 
     def put(self, key, value):
 #       log_debug('%r: put:%r:%r', self, key, value)
@@ -33,19 +37,17 @@ class DB(object):
         with self.lock:
             batch = leveldb.WriteBatch()
             for k, v in self.uncommitted.iteritems():
-                batch.Put(k, compress.compress(v))
+                if v is None:
+                    batch.Delete(k)
+                else:
+                    batch.Put(k, compress.compress(v))
             self.db.Write(batch, sync=False)
             self.uncommitted.clear()
 
     def delete(self, key):
-#        log_debug('%r: delete %r', self, key)
+#       log_debug('%r: delete %r', self, key)
         with self.lock:
-            if key in self.uncommitted:
-                del self.uncommitted[key]
-                if key in self:
-                    self.db.Delete(key)
-            else:
-                self.db.Delete(key)
+            self.uncommitted[key] = None
 
     def _has_key(self, key):
         try:

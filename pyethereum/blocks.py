@@ -90,7 +90,6 @@ def calc_gaslimit(parent):
     return max(gl, MIN_GAS_LIMIT)
 
 
-
 def must_equal(what, a, b):
     if a != b:
         raise VerificationFailed(what, a, '==', b)
@@ -169,7 +168,7 @@ class Block(object):
         self.transaction_count = 0
 
         self.state = trie.Trie(utils.get_db_path(), state_root)
-        self.bloom = bloom # int
+        self.bloom = bloom  # int
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -329,8 +328,9 @@ class Block(object):
         # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
         # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
         must_equal('bloom', block.bloom, kargs['bloom'])
-        assert block.receipts.root_hash == kargs['receipts_root'], (block.receipts.root_hash.encode('hex'), kargs['receipts_root'].encode('hex'))
-        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
+        must_equal('receipts_root',
+                   block.receipts.root_hash,
+                   kargs['receipts_root'])
         if not check_header_pow(block.list_header()):
             raise VerificationFailed('invalid nonce')
 
@@ -476,19 +476,20 @@ class Block(object):
         return trie.Trie(utils.get_db_path(), storage_root)
 
     def get_storage_data(self, address, index):
-        if 'storage:' + address in self.caches:
-            if index in self.caches['storage:' + address]:
-                return self.caches['storage:' + address][index]
-        t = self.get_storage(address)
+        CACHE_KEY = 'storage:'+address
+        if CACHE_KEY in self.caches:
+            if index in self.caches[CACHE_KEY]:
+                return self.caches[CACHE_KEY][index]
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
-        val = rlp.decode(t.get(key))
+        val = rlp.decode(self.get_storage(address).get(key))
         return utils.big_endian_to_int(val) if val else 0
 
     def set_storage_data(self, address, index, val):
-        if 'storage:' + address not in self.caches:
-            self.caches['storage:' + address] = {}
+        CACHE_KEY = 'storage:'+address
+        if CACHE_KEY not in self.caches:
+            self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
-        self.set_and_journal('storage:' + address, index, val)
+        self.set_and_journal(CACHE_KEY, index, val)
 
     def commit_state(self):
         changes = []
