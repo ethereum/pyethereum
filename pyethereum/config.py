@@ -37,7 +37,7 @@ remote_port = 30300
 
 # Listen on the given host/port for incoming connections
 listen_host = 0.0.0.0
-listen_port = 50505
+listen_port = 30303
 
 # Number of peer to connections to establish
 num_peers = 10
@@ -50,7 +50,7 @@ node_id = {0}
 
 # Serve the restful json api on the given host/port
 listen_host = 0.0.0.0
-listen_port = 50405
+listen_port = 30203
 
 # path to server the api at
 api_path = /api/v02a
@@ -66,7 +66,7 @@ data_dir = {1}
 mining = 30
 
 # see help for available log groups
-logging = :DEBUG
+logging = :INFO
 
 
 # log as json output

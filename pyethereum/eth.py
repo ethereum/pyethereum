@@ -69,11 +69,14 @@ def parse_arguments():
         dest="logging",
         help="<logger1:LEVEL,logger2:LEVEL> set the console log for interests"
         " logger1, logger2, etc. Empty loggername means 'default'"
-        "available loggers: %r" % pyethereum.slogging.get_logger_names())
+        " loggers inherit the log level of their parent (e.g. 'eth.chain' inherits 'eth'"
+        " unless their level is explicitly set)"
+        " - available loglevels: ['critical', 'warn', 'info', 'debug', 'trace']"
+        " - available loggers: %r" % [x for x in pyethereum.slogging.get_logger_names() if x])
     parser.add_argument(
         "-J", "--log_json",
         dest="log_json",
-        help="emit logs as json")
+        help="set to 1 to emit logs as json")
     parser.add_argument(
         "-x", "--peers",
         dest="num_peers",
