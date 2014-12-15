@@ -289,23 +289,18 @@ def test_how_to_use_as_vm_logger():
     log = slogging.get_logger('eth.vm')
 
     # record all logs
-    recorder = []
-
     def run_vm(raise_error=False):
-        slogging.log_listeners.listeners.append(lambda x:recorder.append(x))
         log.trace('op', pc=1)
         log.trace('op', pc=2)
-        slogging.log_listeners.listeners.pop()
         if raise_error:
             raise Exception
 
-    run_vm()
-    recorder = []
+    recorder = slogging.LogRecorder()
     try:
         run_vm(raise_error=True)
     except:
         log = slogging.get_logger('eth.vm')
-        for x in recorder:
+        for x in recorder.pop_records():
             log.info(x.pop('event'), **x)
 
 
