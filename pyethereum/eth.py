@@ -10,8 +10,9 @@ from argparse import ArgumentParser
 from common import enable_full_qualified_import
 enable_full_qualified_import()
 
-from pyethereum.utils import data_dir
-from pyethereum.utils import get_db_path
+#from pyethereum.utils import data_dir
+from pyethereum.utils import default_data_dir
+from pyethereum.utils import db_path
 from pyethereum.utils import sha3
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
@@ -92,8 +93,7 @@ def parse_arguments():
 def check_chain_version(config):
     key = '__chain_version__'
     chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
-    db_path = get_db_path()
-    db = DB(db_path)
+    db = DB(db_path(config.get('misc', 'data_dir')))
     if not key in db:
         db.put(key, chain_version)
     if db.get(key) != chain_version:
@@ -120,9 +120,7 @@ def create_config():
         for a, v in config.items(section):
             if getattr(options, a, None) is not None:
                 config.set(section, a, getattr(options, a))
-
-    # set datadir
-    data_dir.set(config.get('misc', 'data_dir'))
+    
     return config
 
 

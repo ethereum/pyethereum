@@ -152,12 +152,6 @@ def rlp_encode(item):
 
 # Format encoders/decoders for bin, addr, int
 
-
-def decode_hash(v):
-    '''decodes a bytearray from hash'''
-    return db_get(v)
-
-
 def decode_bin(v):
     '''decodes a bytearray from serialization'''
     if not isinstance(v, (str, unicode)):
@@ -195,13 +189,6 @@ def decode_int64(v):
     return big_endian_to_int(v)
 
 
-def encode_hash(v):
-    '''encodes a bytearray into hash'''
-    k = sha3(v)
-    db_put(k, v)
-    return k
-
-
 def encode_bin(v):
     '''encodes a bytearray into serialization'''
     return v
@@ -231,7 +218,6 @@ def encode_int64(v):
 
 
 decoders = {
-    "hash": decode_hash,
     "bin": decode_bin,
     "addr": decode_addr,
     "int": decode_int,
@@ -240,7 +226,6 @@ decoders = {
 }
 
 encoders = {
-    "hash": encode_hash,
     "bin": encode_bin,
     "addr": encode_addr,
     "int": encode_int,
@@ -339,27 +324,33 @@ class DataDir(object):
             self._set_default()
         return self._path
 
-data_dir = DataDir()
+#data_dir = DataDir()
+
+default_data_dir = DataDir().path
+
+def db_path(data_dir):
+    return os.path.join(data_dir, 'statedb')
 
 
-def get_db_path():
-    return os.path.join(data_dir.path, 'statedb')
+
+# def get_db_path():
+#     return os.path.join(data_dir.path, 'statedb')
 
 
-def get_index_path():
-    return os.path.join(data_dir.path, 'indexdb')
+# def get_index_path():
+#     return os.path.join(data_dir.path, 'indexdb')
 
 
-def db_put(key, value):
-    database = db.DB(get_db_path())
-    res = database.put(key, value)
-    database.commit()
-    return res
+# def db_put(key, value):
+#     database = db.DB(get_db_path())
+#     res = database.put(key, value)
+#     database.commit()
+#     return res
 
 
-def db_get(key):
-    database = db.DB(get_db_path())
-    return database.get(key)
+# def db_get(key):
+#     database = db.DB(get_db_path())
+#     return database.get(key)
 
 
 def dump_state(trie):

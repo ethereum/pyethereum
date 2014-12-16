@@ -214,13 +214,10 @@ class Peer(StoppableLoopThread):
         if network_id != packeter.NETWORK_ID:
             return self.send_Disconnect(reason='Wrong genesis block')
 
-        if genesis_hash != blocks.genesis().hash:
-            return self.send_Disconnect(reason='Wrong genesis block')
-
         self.status_received = True
         self.status_head_hash = head_hash
         self.status_total_difficulty = total_difficulty
-        signals.peer_status_received.send(sender=Peer, peer=self)
+        signals.peer_status_received.send(sender=Peer, genesis_hash=genesis_hash, peer=self)
 
 # ping pong
 
