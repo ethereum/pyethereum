@@ -10,3 +10,4 @@ repoze.lru
 requests
 six
 waitress
+structlog
