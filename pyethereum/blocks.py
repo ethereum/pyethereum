@@ -177,8 +177,12 @@ class Block(object):
         # setup de/encoders
         self.encoders = dict(utils.encoders)
         self.decoders = dict(utils.decoders)
-        # hash: encodes a bytearray into hash and persists
-        self.encoders['hash'] = lambda v: self.db.put(sha3(v), v)
+        def encode_hash(v):
+            '''encodes a bytearray into hash'''
+            k = utils.sha3(v)
+            self.db.put(k, v)
+            return k
+        self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
 
 
@@ -826,10 +830,11 @@ class CachedBlock(Block):
 @lru_cache(500)
 def get_block(db, blockhash):
     """
-    Assumtion: blocks loaded from the db are not manipulated
+    Assumption: blocks loaded from the db are not manipulated
                 -> can be cached including hash
     """
-    return CachedBlock.create_cached(Block.deserialize(db, db.get(blockhash)))
+    blk = Block.deserialize(db, db.get(blockhash))
+    return CachedBlock.create_cached(blk)
 
 
 #def has_block(blockhash):
