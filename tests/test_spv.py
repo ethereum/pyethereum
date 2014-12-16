@@ -13,7 +13,7 @@ filename = "mul2_qwertyuioplkjhgfdsa.se"
 
 returnten_code = \
     '''
-extern doubler = [double]
+extern doubler: [double]
 
 x = create("%s")
 return(x.double(5, as=doubler))
