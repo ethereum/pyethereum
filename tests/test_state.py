@@ -8,6 +8,7 @@ import pyethereum.tlogging as tlogging
 import os
 import sys
 import pyethereum.vm as vm
+from tests.utils import new_db
 
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -77,7 +78,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
                                 'previousHash', 'currentCoinbase',
                                 'currentDifficulty', 'currentNumber'])
     # setup env
-    blk = blocks.Block(
+    blk = blocks.Block(new_db(),
         prevhash=env['previousHash'].decode('hex'),
         number=int(env['currentNumber']),
         coinbase=env['currentCoinbase'],

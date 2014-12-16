@@ -2,7 +2,7 @@ import pytest
 import json
 import tempfile
 import pyethereum.trie as trie
-
+from tests.utils import new_db
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 
@@ -28,7 +28,7 @@ def load_tests():
 def run_test(name):
 
     logger.debug('testing %s' % name)
-    t = trie.Trie(tempfile.mktemp())
+    t = trie.Trie(new_db())
     data = load_tests()[name]
 
     for k in data['in']:

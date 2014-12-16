@@ -21,5 +21,5 @@ def test_returnten():
     open(filename, 'w').write(mul2_code)
     c = s.contract(returnten_code)
     s.send(tester.k0, c, 0, [])
-    b2 = blocks.Block.deserialize(s.block.serialize())
+    b2 = blocks.Block.deserialize(s.db, s.block.serialize())
     assert b2.serialize() == s.block.serialize()

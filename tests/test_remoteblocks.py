@@ -7,7 +7,7 @@ import pyethereum.utils as utils
 import logging
 import pytest
 import tempfile
-from tests.utils import set_db
+from tests.utils import new_chainmanager
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
@@ -72,11 +72,8 @@ def test_profiled():
 
 
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
-    from pyethereum import chainmanager
-    utils.data_dir.set(test_db_path)
-    chain_manager = chainmanager.ChainManager()
-    chain_manager.configure(config=get_default_config(), genesis=None)
-
+    chain_manager = new_chainmanager()
+    
     fh = open(raw_blocks_fn)
     for i in range(skip):
         fh.readline()

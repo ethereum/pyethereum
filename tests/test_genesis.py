@@ -4,7 +4,7 @@ import json
 import pyethereum.blocks as blocks
 import pyethereum.rlp as rlp
 import pyethereum.utils as utils
-
+from tests.utils import new_db
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging(':trace')
@@ -25,11 +25,11 @@ def genesis_fixture():
 
 
 def test_genesis_state_root(genesis_fixture):
-    genesis = blocks.genesis()
+    genesis = blocks.genesis(new_db())
     assert genesis.state_root.encode('hex') == genesis_fixture['genesis_state_root']
 
 def test_genesis_initial_alloc(genesis_fixture):
-    genesis = blocks.genesis()
+    genesis = blocks.genesis(new_db())
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
         assert genesis.get_balance(k) == v
 
@@ -40,7 +40,7 @@ def test_genesis_hash(genesis_fixture):
     py poc6:        08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
     fixtures 19.9,: 08436a4d33c77e6acf013e586a3333ad152f25d31df8b68749d85046810e1f4b
     """
-    genesis = blocks.genesis()
+    genesis = blocks.genesis(new_db())
     assert genesis.hex_hash() == genesis_fixture['genesis_hash']
 
 
