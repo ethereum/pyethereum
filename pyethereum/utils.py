@@ -329,6 +329,8 @@ class DataDir(object):
 default_data_dir = DataDir().path
 
 def db_path(data_dir):
+    if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
     return os.path.join(data_dir, 'statedb')
 
 

@@ -133,9 +133,21 @@ class ChainManager(StoppableLoopThread):
         if genesis:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head=self.head)
-        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis(db=db))
+        self.genesis = blocks.genesis(db=db)
+        log.debug('got genesis', head=self.genesis)
         self.new_miner()
         self.synchronizer = Synchronizer(self)
+
+    def _initialize_blockchain(self, genesis=None):
+        log.info('Initializing new chain')
+        if not genesis:
+            genesis = blocks.genesis(self.blockchain)
+            log.info('new genesis', genesis=genesis)
+            self.index.add_block(genesis)
+        self._store_block(genesis)
+        assert genesis == blocks.get_block(self.blockchain, genesis.hash)
+        self._update_head(genesis)
+        assert genesis.hash in self
 
     @property
     def head(self):
@@ -172,14 +184,6 @@ class ChainManager(StoppableLoopThread):
     def commit(self):
         self.blockchain.commit()
 
-    def _initialize_blockchain(self, genesis=None):
-        log.info('Initializing new chain')
-        if not genesis:
-            genesis = blocks.genesis(self.db)
-            self.index.add_block(genesis)
-        self._store_block(genesis)
-        self._update_head(genesis)
-        assert genesis.hash in self
 
     def loop_body(self):
         ts = time.time()
@@ -444,7 +448,7 @@ def config_chainmanager(sender, config, **kwargs):
 
 @receiver(signals.peer_status_received)
 def peer_status_received(sender, genesis_hash, peer, **kwargs):
-    log_api.debug("received status", peer=peer, genesis_hash= genesis_hash.encode('hex'))
+    log_api.debug("received status", peer=peer, genesis_hash=genesis_hash.encode('hex'))
     # check genesis
     if genesis_hash != chain_manager.genesis.hash:
         return peer.send_Disconnect(reason='Wrong genesis block')
