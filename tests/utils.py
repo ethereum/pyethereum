@@ -18,9 +18,22 @@ __TESTDATADIR = "../tests"
 
 tempdir = tempfile.mktemp()
 
-def new_config():
+def new_chainmanager(genesis=None):
+    return get_chainmanager(db=new_db(), genesis=None)
+
+def get_chainmanager(db, genesis=None):
+    # creates cm with db or new
+    import pyethereum.chainmanager as chainmanager
+    cm = chainmanager.ChainManager()
+    cm.configure(db=db, config=new_config(), genesis=genesis)
+    return cm
+
+def new_config(data_dir=None):
     cfg = _get_default_config()
-    cfg.set('misc', 'data_dir', tempfile.mktemp())
+    if not data_dir:
+        tempfile.mktemp()
+    cfg.set('misc', 'data_dir', data_dir)
+    return cfg
 
 def load_test_data(fname):
     return json.loads(open(os.path.join(__TESTDATADIR, fname)).read())
