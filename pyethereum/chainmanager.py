@@ -124,11 +124,13 @@ class ChainManager(StoppableLoopThread):
     def __init__(self):
         super(ChainManager, self).__init__()
 
-    def configure(self, config, genesis=None):
+    def configure(self, config, genesis=None, db=None):
         self.config = config
-        db_path = utils.db_path(config.get('misc', 'data_dir'))
-        log.info('opening chain', path=db_path)
-        db = self.blockchain = DB(db_path)
+        if not db:
+            db_path = utils.db_path(config.get('misc', 'data_dir'))
+            log.info('opening chain', path=db_path)
+            db = self.blockchain = DB(db_path)
+        self.blockchain = db
         self.index = Index(db)
         if genesis:
             self._initialize_blockchain(genesis)
