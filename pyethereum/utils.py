@@ -334,27 +334,6 @@ def db_path(data_dir):
     return os.path.join(data_dir, 'statedb')
 
 
-
-# def get_db_path():
-#     return os.path.join(data_dir.path, 'statedb')
-
-
-# def get_index_path():
-#     return os.path.join(data_dir.path, 'indexdb')
-
-
-# def db_put(key, value):
-#     database = db.DB(get_db_path())
-#     res = database.put(key, value)
-#     database.commit()
-#     return res
-
-
-# def db_get(key):
-#     database = db.DB(get_db_path())
-#     return database.get(key)
-
-
 def dump_state(trie):
     res = ''
     for k, v in trie.to_dict().items():

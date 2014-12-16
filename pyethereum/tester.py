@@ -45,7 +45,7 @@ class state():
             serpent = __import__('serpent')
 
         self.temp_data_dir = tempfile.mkdtemp()
-        self.db = db.DB(u.get_db_path(self.temp_data_dir))
+        self.db = db.DB(u.db_path(self.temp_data_dir))
 
         o = {}
         for i in range(num_accounts):
