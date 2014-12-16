@@ -9,14 +9,11 @@ import pyethereum.trie as trie
 import pyethereum.miner as miner
 import pyethereum.utils as utils
 from pyethereum.db import DB as DB
-from pyethereum.config import get_default_config
-from tests.utils import set_db
+from tests.utils import new_db, new_config
 
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging('eth.vm:trace,eth.vm.memory:info')
-
-set_db()
 
 
 @pytest.fixture(scope="module")
@@ -30,13 +27,13 @@ def accounts():
 
 @pytest.fixture(scope="module")
 def mkgenesis(initial_alloc={}):
-    return blocks.genesis(initial_alloc)
+    return blocks.genesis(new_db(), initial_alloc)
 
 
 @pytest.fixture(scope="module")
 def mkquickgenesis(initial_alloc={}):
     "set INITIAL_DIFFICULTY to a value that is quickly minable"
-    return blocks.genesis(initial_alloc, difficulty=2 ** 16)
+    return blocks.genesis(new_db(), initial_alloc, difficulty=2 ** 16)
 
 
 def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
@@ -63,19 +60,18 @@ def get_transaction(gasprice=0, nonce=0):
 def get_chainmanager(genesis=None):
     import pyethereum.chainmanager as chainmanager
     cm = chainmanager.ChainManager()
-    cm.configure(config=get_default_config(), genesis=genesis)
+    cm.configure(config=new_config(), genesis=genesis)
     return cm
 
 
-def db_store(blk):
-    utils.db_put(blk.hash, blk.serialize())
-    assert blocks.get_block(blk.hash) == blk
+def store_block(db, blk):
+    db.put(blk.hash, blk.serialize())
+    assert blocks.get_block(db, blk.hash) == blk
 
 
 def test_db():
-    set_db()
-    db = DB(utils.get_db_path())
-    a, b = DB(utils.get_db_path()),  DB(utils.get_db_path())
+    db = new_db()
+    a, b = db, db
     assert a == b
     assert a.uncommitted == b.uncommitted
     a.put('a', 'b')
@@ -84,13 +80,14 @@ def test_db():
     a.commit()
     assert a.uncommitted == b.uncommitted
     assert 'test' not in db
-    set_db()
-    assert a != DB(utils.get_db_path())
+    db = new_db()
+    assert a != db
 
 
 def test_transfer():
+    db = new_db()
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = blocks.genesis(db, {v: utils.denoms.ether * 1})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
     value = 42
@@ -101,8 +98,9 @@ def test_transfer():
 
 
 def test_failing_transfer():
+    db = new_db()
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = blocks.genesis(db, {v: utils.denoms.ether * 1})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
     value =  utils.denoms.ether * 2
@@ -113,7 +111,8 @@ def test_failing_transfer():
     assert blk.get_balance(v2) == b_v2
 
 def test_transient_block():
-    blk = blocks.genesis()
+    db = new_db()
+    blk = blocks.genesis(db)
     tb_blk = blocks.TransientBlock(blk.serialize())
     assert blk.hash == tb_blk.hash
     assert blk.number == tb_blk.number
@@ -122,25 +121,40 @@ def test_transient_block():
 
 def test_genesis():
     k, v, k2, v2 = accounts()
-    set_db()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    db = new_db()
+    blk = blocks.genesis(db, {v: utils.denoms.ether * 1})
     sr = blk.state_root
-    db = DB(utils.get_db_path())
     assert blk.state.db.db == db.db
     db.put(blk.hash, blk.serialize())
     blk.state.db.commit()
     assert sr in db
     db.commit()
     assert sr in db
-    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
-    blk3 = blocks.genesis()
+    blk2 = blocks.genesis(db, {v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
-    set_db()
-    blk2 = blocks.genesis({v: utils.denoms.ether * 1})
-    blk3 = blocks.genesis()
+    db = new_db()
+    blk2 = blocks.genesis(db, {v: utils.denoms.ether * 1})
+    blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
+
+def test_deserialize():
+    k, v, k2, v2 = accounts()
+    db = new_db()
+    blk = blocks.genesis(db)
+    db.put(blk.hash, blk.serialize())
+    assert blk == blocks.get_block(db, blk.hash)
+
+
+def test_deserialize_commit():
+    k, v, k2, v2 = accounts()
+    db = new_db()
+    blk = blocks.genesis(db)
+    db.put(blk.hash, blk.serialize())
+    db.commit()
+    assert blk == blocks.get_block(db, blk.hash)
 
 
 def test_genesis_db():
