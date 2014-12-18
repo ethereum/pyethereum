@@ -763,7 +763,7 @@ saveload_code = """
 data store[1000]
 
 def kall():
-    a = "sir bobalot to the rescue !!1!1!!1!1"
+    a = text("sir bobalot to the rescue !!1!1!!1!1")
     save(self.store[0], a, chars=60)
     b = load(self.store[0], chars=60)
     c = load(self.store[0], chars=33)
@@ -992,7 +992,7 @@ def test_types():
     assert s.send(tester.k0, c, 0, []) == [5]
 
 sha256_code = """
-return([sha256(0, 0), sha256(3), sha256("dog", chars=3)], 3)
+return([sha256(0, 0), sha256(3), sha256(text("dog"), chars=3)], 3)
 """
 
 
