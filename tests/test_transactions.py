@@ -4,6 +4,7 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import pyethereum.rlp as rlp
+from tests.utils import new_db
 import serpent
 
 from pyethereum.slogging import get_logger, configure_logging
@@ -24,7 +25,7 @@ def accounts():
 
 @pytest.fixture(scope="module")
 def mkgenesis(initial_alloc={}):
-    return blocks.genesis(initial_alloc)
+    return blocks.genesis(new_db(), initial_alloc)
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +49,7 @@ else:
 
 def test_gas_deduction():
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis({v: utils.denoms.ether * 1})
+    blk = blocks.genesis(new_db(), {v: utils.denoms.ether * 1})
     v_old_balance = blk.get_balance(v)
     assert blk.get_balance(blk.coinbase) == 0
     gasprice = 1
@@ -114,56 +115,6 @@ def test_deserialize_cpp_block_42():
         logger.debug('Block #48 failing tx %r' % tx.to_dict())
         processblock.apply_transaction(genesis, tx)
 
-
-def deserialize_child(parent, rlpdata):
-    """
-    deserialization w/ replaying transactions
-    """
-    header_args, transaction_list, uncles = rlp.decode(rlpdata)
-    assert len(header_args) == len(blocks.block_structure)
-    kargs = dict(transaction_list=transaction_list, uncles=uncles)
-    # Deserialize all properties
-    for i, (name, typ, default) in enumerate(blocks.block_structure):
-        kargs[name] = utils.decoders[typ](header_args[i])
-
-    block = blocks.Block.init_from_parent(parent, kargs['coinbase'],
-                                          extra_data=kargs['extra_data'],
-                                          timestamp=kargs['timestamp'])
-    block.finalize()  # this is the first potential state change
-    # replay transactions
-    for tx_lst_serialized, _state_root, _gas_used_encoded in transaction_list:
-
-        tx = transactions.Transaction.create(tx_lst_serialized)
-        logger.debug("data %r" % tx.data)
-        logger.debug('applying %r' % tx)
-        logger.debug('applying %r' % tx.to_dict())
-        logger.debug('block.gas_used before: %r' % block.gas_used)
-        success, output = processblock.apply_transaction(block, tx)
-        logger.debug('block.gas_used after: %r' % block.gas_used)
-        logger.debug('success: %r' % success)
-        diff = utils.decode_int(_gas_used_encoded) - block.gas_used
-        logger.debug("GAS_USED DIFF %r" % diff)
-        assert utils.decode_int(_gas_used_encoded) == block.gas_used
-        assert _state_root.encode('hex') == block.state.root_hash.encode('hex')
-
-    # checks
-    assert block.prevhash == parent.hash
-    assert block.tx_list_root == kargs['tx_list_root']
-    assert block.gas_used == kargs['gas_used']
-    assert block.gas_limit == kargs['gas_limit']
-    assert block.timestamp == kargs['timestamp']
-    assert block.difficulty == kargs['difficulty']
-    assert block.number == kargs['number']
-    assert block.extra_data == kargs['extra_data']
-    assert utils.sha3(rlp.encode(block.uncles)) == kargs['uncles_hash']
-    assert block.state.root_hash.encode(
-        'hex') == kargs['state_root'].encode('hex')
-
-    block.uncles_hash = kargs['uncles_hash']
-    block.nonce = kargs['nonce']
-    block.min_gas_price = kargs['min_gas_price']
-
-    return block
 
 
 # TODO ##########################################

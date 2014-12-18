@@ -28,7 +28,7 @@ def verify_transaction_spv_proof(block, tx, proof):
 
 
 def mk_independent_transaction_spv_proof(block, index):
-    block = blocks.Block.init_from_header(block.list_header())
+    block = blocks.Block.init_from_header(block.db, block.list_header())
     tx = transactions.Transaction.create(block.get_transaction(index))
     block.get_receipt(index)
     if index > 0:
@@ -47,11 +47,11 @@ def mk_independent_transaction_spv_proof(block, index):
                        block.list_header(), utils.encode_int(index), nodes])
 
 
-def verify_independent_transaction_spv_proof(proof):
+def verify_independent_transaction_spv_proof(db, proof):
     _, prevheader, header, index, nodes = rlp.decode(proof)
     index = utils.decode_int(index)
     pb = blocks.Block.deserialize_header(prevheader)
-    b = blocks.Block.init_from_header(header)
+    b = blocks.Block.init_from_header(db, header)
     b.set_proof_mode(blocks.VERIFYING, nodes)
     if index != 0:
         pre_med, pre_gas, _, _ = b.get_receipt(index - 1)

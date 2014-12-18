@@ -1,10 +1,11 @@
-import pyethereum
 import shutil
 import tempfile
 import time
 import logging
 import sys
 import spv
+import pyethereum
+import pyethereum.db as db
 import pyethereum.opcodes as opcodes
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
 
@@ -44,12 +45,12 @@ class state():
             serpent = __import__('serpent')
 
         self.temp_data_dir = tempfile.mkdtemp()
-        u.data_dir.set(self.temp_data_dir)
+        self.db = db.DB(u.db_path(self.temp_data_dir))
 
         o = {}
         for i in range(num_accounts):
             o[accounts[i]] = 10 ** 24
-        self.block = b.genesis(o)
+        self.block = b.genesis(self.db, o)
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
 
@@ -138,7 +139,7 @@ class state():
         return self.block.serialize()
 
     def revert(self, data):
-        self.block = b.Block.deserialize(data)
+        self.block = b.Block.deserialize(self.db, data)
 
 # logging
 

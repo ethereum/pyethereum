@@ -84,7 +84,7 @@ class Index(object):
     def get_transaction(self, txhash):
         "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
-        blk = blocks.get_block(blockhash)
+        blk = blocks.get_block(self.blockchain, blockhash)
         num = utils.decode_int(tx_num_enc)
         tx_data, msr, gas = blk.get_transaction(num)
         return Transaction.create(tx_data), blk, num
@@ -124,24 +124,39 @@ class ChainManager(StoppableLoopThread):
     def __init__(self):
         super(ChainManager, self).__init__()
 
-    def configure(self, config, genesis=None):
+    def configure(self, config, genesis=None, db=None):
         self.config = config
-        log.info('opening chain', path=utils.get_db_path())
-        db = self.blockchain = DB(utils.get_db_path())
+        if not db:
+            db_path = utils.db_path(config.get('misc', 'data_dir'))
+            log.info('opening chain', path=db_path)
+            db = self.blockchain = DB(db_path)
+        self.blockchain = db
         self.index = Index(db)
         if genesis:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head=self.head)
-        self.genesis = blocks.CachedBlock.create_cached(blocks.genesis())
+        self.genesis = blocks.genesis(db=db)
+        log.debug('got genesis', head=self.genesis)
         self.new_miner()
         self.synchronizer = Synchronizer(self)
+
+    def _initialize_blockchain(self, genesis=None):
+        log.info('Initializing new chain')
+        if not genesis:
+            genesis = blocks.genesis(self.blockchain)
+            log.info('new genesis', genesis=genesis)
+            self.index.add_block(genesis)
+        self._store_block(genesis)
+        assert genesis == blocks.get_block(self.blockchain, genesis.hash)
+        self._update_head(genesis)
+        assert genesis.hash in self
 
     @property
     def head(self):
         if 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
-        return blocks.get_block(ptr)
+        return blocks.get_block(self.blockchain, ptr)
 
     def _update_head(self, block):
         if not block.is_genesis():
@@ -155,7 +170,7 @@ class ChainManager(StoppableLoopThread):
     def get(self, blockhash):
         assert isinstance(blockhash, str)
         assert len(blockhash) == 32
-        return blocks.get_block(blockhash)
+        return blocks.get_block(self.blockchain, blockhash)
 
     def has_block(self, blockhash):
         assert isinstance(blockhash, str)
@@ -171,14 +186,6 @@ class ChainManager(StoppableLoopThread):
     def commit(self):
         self.blockchain.commit()
 
-    def _initialize_blockchain(self, genesis=None):
-        log.info('Initializing new chain', path=utils.get_db_path())
-        if not genesis:
-            genesis = blocks.genesis()
-            self.index.add_block(genesis)
-        self._store_block(genesis)
-        self._update_head(genesis)
-        assert genesis.hash in self
 
     def loop_body(self):
         ts = time.time()
@@ -237,7 +244,7 @@ class ChainManager(StoppableLoopThread):
                     continue
                 log.debug('Deserializing', block=t_block)
                 try:
-                    block = blocks.Block.deserialize(t_block.rlpdata)
+                    block = blocks.Block.deserialize(self.blockchain, t_block.rlpdata)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
@@ -253,7 +260,7 @@ class ChainManager(StoppableLoopThread):
                             peer.send_Disconnect(reason='Wrong genesis block')
                     else:  # should be a single newly mined block
                         assert t_block.prevhash not in self
-                        assert t_block.prevhash != blocks.genesis().hash
+                        assert t_block.prevhash != self.genesis.hash
                         log.debug('unknown parent', block=t_block,
                                   parent=t_block.prevhash.encode('hex'), peer=peer)
                         if len(transient_blocks) != 1:
@@ -442,8 +449,12 @@ def config_chainmanager(sender, config, **kwargs):
 
 
 @receiver(signals.peer_status_received)
-def peer_status_received(sender, peer, **kwargs):
-    log_api.debug("received status", peer=peer)
+def peer_status_received(sender, genesis_hash, peer, **kwargs):
+    log_api.debug("received status", peer=peer, genesis_hash=genesis_hash.encode('hex'))
+    # check genesis
+    if genesis_hash != chain_manager.genesis.hash:
+        return peer.send_Disconnect(reason='Wrong genesis block')
+
     # request chain
     with peer.lock:
         chain_manager.synchronizer.synchronize_status(
@@ -462,7 +473,7 @@ def peer_handshake(sender, peer, **kwargs):
     if peer.has_ethereum_capabilities() and not peer.status_sent:
         log_api.debug("handshake, sending status", peer=peer)
         peer.send_Status(
-            chain_manager.head.hash, chain_manager.head.chain_difficulty(), blocks.genesis().hash)
+            chain_manager.head.hash, chain_manager.head.chain_difficulty(), chain_manager.genesis.hash)
     else:
         log_api.debug("handshake, but peer has no 'eth' capablities", peer=peer)
 

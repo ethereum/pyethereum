@@ -3,18 +3,15 @@ import os
 import uuid
 import StringIO
 import ConfigParser
-from pyethereum.utils import data_dir
+from pyethereum.utils import default_data_dir
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
 
 
-def default_data_dir():
-    data_dir._set_default()
-    return data_dir.path
 
 
 def default_config_path():
-    return os.path.join(default_data_dir(), 'config.txt')
+    return os.path.join(default_data_dir, 'config.txt')
 
 
 def default_client_version():
@@ -79,7 +76,7 @@ log_json = 0
 coinbase = 6c386a4b26f73c802f34673f7248bb118f97424a
 
 
-""".format(default_node_id(), default_data_dir())
+""".format(default_node_id(), default_data_dir)
 
 
 def get_default_config():

@@ -3,10 +3,8 @@
 import os
 import rlp
 import utils
-import db
 import copy
 
-DB = db.DB
 
 bin_to_nibbles_cache = {}
 
@@ -189,18 +187,27 @@ BLANK_ROOT = utils.sha3rlp('')
 
 class Trie(object):
 
-    def __init__(self, dbfile, root_hash=BLANK_ROOT):
+    def __init__(self, db, root_hash=BLANK_ROOT):
         '''it also present a dictionary like interface
 
-        :param dbfile: key value database
+        :param db key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
-        if isinstance(dbfile, str):
-            dbfile = os.path.abspath(dbfile)
-            self.db = DB(dbfile)
-        else:
-            self.db = dbfile  # Pass in a database object directly
+        self.db = db  # Pass in a database object directly
         self.set_root_hash(root_hash)
+
+    # def __init__(self, dbfile, root_hash=BLANK_ROOT):
+    #     '''it also present a dictionary like interface
+
+    #     :param dbfile: key value database
+    #     :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
+    #     '''
+    #     if isinstance(dbfile, str):
+    #         dbfile = os.path.abspath(dbfile)
+    #         self.db = DB(dbfile)
+    #     else:
+    #         self.db = dbfile  # Pass in a database object directly
+    #     self.set_root_hash(root_hash)
 
     # For SPV proof production/verification purposes
     def spv_grabbing(self, node):
@@ -823,6 +830,9 @@ def verify_spv_proof(root, key, proof):
 
 if __name__ == "__main__":
     import sys
+    import db
+
+    _db = db.DB(sys.argv[2])
 
     def encode_node(nd):
         if isinstance(nd, str):
@@ -832,9 +842,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
-            t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
+            t = Trie(_db, sys.argv[3].decode('hex'))
             t.update(sys.argv[4], sys.argv[5])
             print encode_node(t.root_hash)
         elif sys.argv[1] == 'get':
-            t = Trie(sys.argv[2], sys.argv[3].decode('hex'))
+            t = Trie(_db, sys.argv[3].decode('hex'))
             print t.get(sys.argv[4])

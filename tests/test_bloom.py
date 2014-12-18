@@ -61,70 +61,17 @@ def do_test_bloom(test_logs):
     data: The data of the logentry.
     topics: The topics of the logentry, given as an array of values.
     """
-
-    for test_bloom, data in test_logs.items():
-#        print "TEST", dict(bloom=data)
-#        print "test bits", bloom.bits_in_number(decode_int_from_hex(test_bloom))
+    for data in test_logs:
+        print data
         address = data['address']
         # Test via bloom
         b = bloom.bloom_insert(0, address.decode('hex'))
         for t in data['topics']:
             b = bloom.bloom_insert(b, t.decode('hex'))
-#       print "manual bits", bloom.bits_in_number(b)
-        assert test_bloom == encode_hex_from_int(b)
         # Test via Log
         topics = [decode_int_from_hex(x) for x in data['topics']]
         log = pb.Log(address, topics, '')
-        #print "LOG", log.to_dict()
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
-#        print "log bits", bloom.bits_in_number(utils.decode_int(utils.zunpad(log_bloom)))
         assert log_bloom.encode('hex') == encode_hex_from_int(b)
-        assert test_bloom == log_bloom.encode('hex')
-
-
-def test_addressX():
-    logs = {'00000000000000000000800000000000000000000000000000000880000000000000000000000000000000000000000000000000000000000000000000000000': 
-    {u'topics': [], u'data': u'0x', u'address': u'0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6'}}
-    do_test_bloom(logs)
-
-def test_address_dataX():
-    logs = {
-    "00000000000000000000800000000000000000000000000000000880000000000000000000000000000000000000000000000000000000000000000000000000" : {
-    "address" : "0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
-    "data" : "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    "topics" : []}}
-    do_test_bloom(logs)
-
-def test_address_data_topicX():
-    logs = {
-    "00000000000008000000808100000000000000000000000000000880000000000000000000000000000000000000000000000000000000000000000000000000" : {
-    "address" : "0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
-    "data" : "0xff00000000000000000000000000000000000000000000000000000000000000",
-    "topics" : ["000000000000000000000000cd1722f3947def4cf144679da39c4c32bdc35681"]
-    }}
-    do_test_bloom(logs)
-
-def test_address_all0topicX():
-    logs = {"00000000000000000000800000000000000000000000000000000880000020000000000002000000000000000000080000000000000000000000000000000000" : {
-    "address" : "0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
-    "data" : "0x",
-    "topics" : ["0000000000000000000000000000000000000000000000000000000000000000"]
-    }}
-    do_test_bloom(logs)
-
-
-def test_simple_bloom():
-    val = '0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6'
-    expectedR = '00000000000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000200000000000000000000' 
-    expected = '00000000000000000000800000000000000000000000000000000880000000000000000000000000000000000000000000000000000000000000000000000000'
-    a = val.decode('hex')
-    r = encode_hex_from_int(bloom.bloom(a))
-    print 'expected', expected
-    print 'bloom', r
-    assert len(r) == len(expected)
-    assert r == expected
-
-
-
-
+        assert data['bloom'] == log_bloom.encode('hex')
 
