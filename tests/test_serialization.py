@@ -4,15 +4,18 @@ from pyethereum import tester, blocks
 
 mul2_code = \
     '''
-return(msg.data[0]*2)
+def double(v):
+    return(v*2)
 '''
 
 filename = "mul2_qwertyuioplkjhgfdsa.se"
 
 returnten_code = \
     '''
+extern mul2: [double]
+
 x = create("%s")
-return(call(x, 5))
+return(x.double(5))
 ''' % filename
 
 

@@ -1,5 +1,6 @@
 import pytest
 import pyethereum.processblock as processblock
+import pyethereum.opcodes as opcodes
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
@@ -39,11 +40,12 @@ def get_transaction(gasprice=0, nonce=0):
 
 namecoin_code =\
     '''
-if !self.storage[msg.data[0]]:
-    self.storage[msg.data[0]] = msg.data[1]
-    return(1)
-else:
-    return(0)
+def register(k, v):
+    if !self.storage[k]:
+        self.storage[k] = v
+        return(1)
+    else:
+        return(0)
 '''
 
 
@@ -61,9 +63,9 @@ def test_gas_deduction():
     assert blk.coinbase != v
     assert v_old_balance > blk.get_balance(v)
     assert v_old_balance == blk.get_balance(v) + blk.get_balance(blk.coinbase)
-    intrinsic_gas_used = processblock.GTXCOST
-    intrinsic_gas_used += processblock.GTXDATAZERO * tx1.data.count(chr(0))
-    intrinsic_gas_used += processblock.GTXDATANONZERO * (len(tx1.data) - tx1.data.count(chr(0)))
+    intrinsic_gas_used = opcodes.GTXCOST
+    intrinsic_gas_used += opcodes.GTXDATAZERO * tx1.data.count(chr(0))
+    intrinsic_gas_used += opcodes.GTXDATANONZERO * (len(tx1.data) - tx1.data.count(chr(0)))
     assert v_old_balance - blk.get_balance(v) >= intrinsic_gas_used * gasprice
 
 
