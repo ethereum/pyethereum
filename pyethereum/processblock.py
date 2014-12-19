@@ -123,24 +123,24 @@ def apply_transaction(block, tx):
         result, gas_remained, data = apply_msg_send(ext, message)
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
-        if result > 0:
-            result = utils.coerce_addr_to_hex(result)
 
     assert gas_remained >= 0
 
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
-                 data=''.join(map(chr, data)).encode('hex'))
+                 data=data)
 
     if not result:  # 0 = OOG failure in both cases
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
-        output = OUT_OF_GAS
+        output = ''
+        success = 0
     else:
         log_tx.debug('TX SUCCESS')
         gas_used = tx.startgas - gas_remained
         if block.refunds > 0:
             log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
+            gas_remained += min(block.refunds, gas_used // 2)
             gas_used -= min(block.refunds, gas_used // 2)
         # sell remaining gas
         block.transfer_value(
@@ -149,15 +149,15 @@ def apply_transaction(block, tx):
         if tx.to:
             output = ''.join(map(chr, data))
         else:
-            output = result
+            output = data
+        success = 1
     block.commit_state()
     suicides = block.suicides
     block.suicides = []
     for s in suicides:
         block.del_account(s)
     block.add_transaction_to_list(tx)
-    success = output is not OUT_OF_GAS
-    return success, output if success else ''
+    return success, output
 
 
 class VMExt():
@@ -239,6 +239,8 @@ def create_contract(ext, msg):
     assert not ext.get_code(msg.to)
     res, gas, dat = apply_msg(ext, msg, msg.data)
     if res:
+        if not len(dat):
+            return 1, gas, ''
         gcost = len(dat) * opcodes.GCONTRACTBYTE
         if gas >= gcost:
             gas -= gcost
@@ -246,6 +248,6 @@ def create_contract(ext, msg):
             dat = []
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
-        return utils.coerce_to_int(msg.to), gas, dat
+        return 1, gas, msg.to
     else:
-        return res, gas, dat
+        return 0, gas, ''

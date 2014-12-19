@@ -357,7 +357,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= max(gascost, 0)
-                ext.add_refund(min(gascost, 0))  # adds neg gascost as a refund if below zero
+                ext.add_refund(max(-gascost, 0))  # adds neg gascost as a refund if below zero
                 ext.set_storage_data(msg.to, s0, s1)
             elif op == 'JUMP' or op == 'JUMPSTATIC':
                 compustate.pc = stk.pop()
@@ -424,9 +424,9 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value:
                 data = ''.join(map(chr, mem[mstart: mstart + msz]))
                 create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
-                addr, gas, code = ext.create(create_msg)
-                if addr:
-                    stk.append(addr)
+                o, gas, addr = ext.create(create_msg)
+                if o:
+                    stk.append(utils.coerce_to_int(addr))
                     compustate.gas = gas
                 else:
                     stk.append(0)
