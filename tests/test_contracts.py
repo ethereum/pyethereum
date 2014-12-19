@@ -1034,6 +1034,25 @@ def test_types_in_functions():
     assert s.send(tester.k0, c, 0, funid=0, abi=[25, 2]) == [156]
 
 
+more_infinites_code = """
+data a[](b, c)
+
+def testVerifyTx():
+
+    self.a[0].b = 33
+
+    self.a[0].c = 55
+
+    return(self.a[0].b)
+"""
+
+
+def test_more_infinites():
+    s = tester.state()
+    c = s.contract(more_infinites_code)
+    assert s.send(tester.k0, c, 0, funid=0, abi=[]) == [33]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1063,3 +1082,4 @@ def test_types_in_functions():
 # test_types = None
 # test_sha256 = None
 # test_types_in_functions = None
+# test_more_infinites = None

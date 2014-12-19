@@ -99,18 +99,18 @@ def do_test_vm(filename, testname=None, limit=99999999):
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, h['code'][2:].decode('hex'))
-        for k, v in h['storage']:
+        for k, v in h['storage'].iteritems():
             blk.set_storage_data(address,
-                                 u.big_endian_to_int(k.decode('hex')),
-                                 u.big_endian_to_int(v.decode('hex')))
+                                 u.big_endian_to_int(k[2:].decode('hex')),
+                                 u.big_endian_to_int(v[2:].decode('hex')))
 
     # execute transactions
     tx = transactions.Transaction(
-        nonce=int(exek['nonce']),
-        gasprice=int(exek['gasPrice']),
-        startgas=int(exek['gasLimit']),
+        nonce=int(exek['nonce'] or "0"),
+        gasprice=int(exek['gasPrice'] or "0"),
+        startgas=int(exek['gasLimit'] or "0"),
         to=exek['to'],
-        value=int(exek['value']),
+        value=int(exek['value'] or "0"),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
 
     try:
