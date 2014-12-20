@@ -56,6 +56,7 @@ def test_sixten():
 mul2_code = \
     '''
 def double(v):
+    log(v)
     return(v*2)
 '''
 
@@ -803,7 +804,7 @@ def argcall(args:a):
     return(args[0] + args[1] * 10 + args[2] * 100)
 
 def argkall(args:a):
-    return self.argcall(args:arglen(args))
+    return self.argcall(args)
 """
 
 
@@ -813,17 +814,34 @@ def test_argcall():
     assert [375] == s.send(tester.k0, c, 0, funid=0, abi=[[5, 7, 3]])
     assert [376] == s.send(tester.k0, c, 0, funid=1, abi=[[6, 7, 3]])
 
+more_complex_argcall_code = """
+def argcall(args:a):
+    args[0] *= 2
+    args[1] *= 2
+    return(args, len(args))
+
+def argkall(args:a):
+    return(self.argcall(args, outsz=2), 2)
+"""
+
+
+def test_argcall2():
+    s = tester.state()
+    c = s.contract(more_complex_argcall_code)
+    assert [4, 8] == s.send(tester.k0, c, 0, funid=0, abi=[[2, 4]])
+    assert [6, 10] == s.send(tester.k0, c, 0, funid=1, abi=[[3, 5]])
+
 
 sort_code = """
 def sort(args:a):
-    if arglen(args) < 2:
-        return(args, arglen(args))
-    h = array(arglen(args))
+    if len(args) < 2:
+        return(args, len(args))
+    h = array(len(args))
     hpos = 0
-    l = array(arglen(args))
+    l = array(len(args))
     lpos = 0
     i = 1
-    while i < arglen(args):
+    while i < len(args):
         if args[i] < args[0]:
             l[lpos] = args[i]
             lpos += 1
@@ -831,9 +849,11 @@ def sort(args:a):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    h = self.sort(h:hpos, outsz=hpos)
-    l = self.sort(l:lpos, outsz=lpos)
-    o = array(arglen(args))
+    shrink_array(h, hpos)
+    shrink_array(l, lpos)
+    h = self.sort(h, outsz=hpos)
+    l = self.sort(l, outsz=lpos)
+    o = array(len(args))
     i = 0
     while i < lpos:
         o[i] = l[i]
@@ -843,7 +863,7 @@ def sort(args:a):
     while i < hpos:
         o[lpos + 1 + i] = h[i]
         i += 1
-    return(o, arglen(args))
+    return(o, len(args))
 """
 
 
@@ -870,8 +890,8 @@ def init():
     self.sorter = create("%s")
 
 def test(args:a):
-    ac = arglen(args)
-    return(self.sorter.sort(args:ac, outsz=ac), ac)
+    ac = len(args)
+    return(self.sorter.sort(args, outsz=ac), ac)
 ''' % filename9
 
 
@@ -886,7 +906,7 @@ def test_indirect_sort():
 multiarg_code = """
 def kall(a:a, b, c:a, d:s, e):
     x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
-    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), arglen(d)], 3)
+    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)], 3)
 """
 
 
@@ -1075,6 +1095,7 @@ def test_more_infinites():
 # test_crowdfund = None
 # test_sdiv = None
 # test_argcall = None
+# test_argcall2 = None
 # test_sort = None
 # test_indirect_sort = None
 # test_multiarg_code = None
