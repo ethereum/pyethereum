@@ -5,7 +5,7 @@ import serpent
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(4)
+tester.set_logging_level(2)
 
 gasprice = 0
 startgas = 10000
@@ -207,7 +207,7 @@ def main(datafeed, index):
         othervalue = ethvalue * c
         self.fiatValue = othervalue
         self.maturity = block.timestamp + 500
-        return([2, othervalue],2)
+        return([2, othervalue]:a)
     else:
         othervalue = self.fiatValue
         ethvalue = othervalue / self.datafeed.get(self.index)
@@ -494,13 +494,13 @@ def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y], 3)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
 
 def query_items(u, i):
     return(self.users[u].items[i])
 
 def query_person():
-    a = array(20)
+    a = array(15)
     a[0] = self.person.head
     a[1] = self.person.arms[0].elbow
     a[2] = self.person.arms[1].elbow
@@ -511,10 +511,10 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a, 15)
+    return(a:a)
 
 def testping(x, y):
-    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)], 2)
+    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)]:a)
 
 def testping2(x):
     return(x*x)
@@ -567,13 +567,13 @@ def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y], 3)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
 
 def query_items(u, i):
     return(self.users[u].items[i])
 
 def query_person():
-    a = array(20)
+    a = array(15)
     a[0] = self.person.head
     a[1] = self.person.arms[0].elbow
     a[2] = self.person.arms[1].elbow
@@ -584,7 +584,7 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a, 15)
+    return(a:a)
 """
 
 
@@ -768,7 +768,7 @@ def kall():
     save(self.store[0], a, chars=60)
     b = load(self.store[0], chars=60)
     c = load(self.store[0], chars=33)
-    return([a[0], a[1], b[0], b[1], c[0], c[1]], 8)
+    return([a[0], a[1], b[0], b[1], c[0], c[1]]:a)
 
 """
 
@@ -789,7 +789,7 @@ def test_saveload():
 
 sdiv_code = """
 def kall():
-    return([2^255 / 2^253, 2^255 % 3], 2)
+    return([2^255 / 2^253, 2^255 % 3]:a)
 """
 
 
@@ -818,10 +818,10 @@ more_complex_argcall_code = """
 def argcall(args:a):
     args[0] *= 2
     args[1] *= 2
-    return(args, len(args))
+    return(args:a)
 
 def argkall(args:a):
-    return(self.argcall(args, outsz=2), 2)
+    return(self.argcall(args, outsz=2):a)
 """
 
 
@@ -835,7 +835,7 @@ def test_argcall2():
 sort_code = """
 def sort(args:a):
     if len(args) < 2:
-        return(args, len(args))
+        return(args:a)
     h = array(len(args))
     hpos = 0
     l = array(len(args))
@@ -863,7 +863,7 @@ def sort(args:a):
     while i < hpos:
         o[lpos + 1 + i] = h[i]
         i += 1
-    return(o, len(args))
+    return(o:a)
 """
 
 
@@ -890,8 +890,7 @@ def init():
     self.sorter = create("%s")
 
 def test(args:a):
-    ac = len(args)
-    return(self.sorter.sort(args, outsz=ac), ac)
+    return(self.sorter.sort(args, outsz=len(args)):a)
 ''' % filename9
 
 
@@ -906,7 +905,7 @@ def test_indirect_sort():
 multiarg_code = """
 def kall(a:a, b, c:a, d:s, e):
     x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
-    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)], 3)
+    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:a)
 """
 
 
@@ -960,7 +959,7 @@ macro three():
 macro five():
     padd(three(), two())
 
-return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))], 2)
+return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:a)
 
 """
 
@@ -1012,7 +1011,7 @@ def test_types():
     assert s.send(tester.k0, c, 0, []) == [5]
 
 sha256_code = """
-return([sha256(0, 0), sha256(3), sha256(text("dog"), chars=3)], 3)
+return([sha256(0, 0), sha256(3), sha256(text("dog"), chars=3)]:a)
 """
 
 

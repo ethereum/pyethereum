@@ -416,6 +416,7 @@ def vm_execute(ext, msg, code):
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=map(ord, data))
+            print ('LOG', msg.to, topics, map(ord, data))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
