@@ -849,8 +849,8 @@ def sort(args:a):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    shrink_array(h, hpos)
-    shrink_array(l, lpos)
+    shrink(h, hpos)
+    shrink(l, lpos)
     h = self.sort(h, outsz=hpos)
     l = self.sort(l, outsz=lpos)
     o = array(len(args))
