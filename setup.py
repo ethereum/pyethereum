@@ -16,6 +16,7 @@ setup(name="pyethereum",
       install_requires=[
           'bitcoin',
           'bottle',
+          'click',
           'docopt',
           'ethereum-serpent',
           'leveldb',
