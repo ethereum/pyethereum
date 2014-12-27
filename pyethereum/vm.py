@@ -458,6 +458,7 @@ def vm_execute(ext, msg, code):
                         mem[memoutstart + i] = data[i]
             else:
                 stk.append(0)
+                compustate.gas += gas
         elif op == 'CALLCODE':
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()

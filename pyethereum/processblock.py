@@ -142,6 +142,7 @@ def apply_transaction(block, tx):
             log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
             gas_remained += min(block.refunds, gas_used // 2)
             gas_used -= min(block.refunds, gas_used // 2)
+            block.refunds = 0
         # sell remaining gas
         block.transfer_value(
             block.coinbase, tx.sender, tx.gasprice * gas_remained)

@@ -5,12 +5,18 @@ import compress
 from pyethereum.slogging import get_logger
 log = get_logger('db')
 
+databases = {}
+
 
 class DB(object):
 
     def __init__(self, dbfile):
         self.dbfile = os.path.abspath(dbfile)
-        self.db = leveldb.LevelDB(dbfile)
+        if dbfile in databases:
+            self.db = databases[dbfile]
+        else:
+            self.db = leveldb.LevelDB(dbfile)
+            databases[dbfile] = self.db
         self.uncommitted = dict()
         self.lock = threading.Lock()
 

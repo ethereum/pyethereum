@@ -91,9 +91,17 @@ def calc_gaslimit(parent):
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
 
+aux = [None]
+
+
+def set_aux(auxval):
+    aux[0] = auxval
+
 
 def must_equal(what, a, b):
     if a != b:
+        if aux[0]:
+            sys.stderr.write('%r' % aux[0])
         raise VerificationFailed(what, a, '==', b)
 
 
@@ -327,6 +335,7 @@ class Block(object):
         block.nonce = kargs['nonce']
 
         # checks
+        set_aux(block.to_dict())
         must_equal('prev_hash', block.prevhash, self.hash)
         must_equal('gas_used', block.gas_used, kargs['gas_used'])
         must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
@@ -345,6 +354,7 @@ class Block(object):
         # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
         must_equal('bloom', block.bloom, kargs['bloom'])
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
+        set_aux(None)
         if not check_header_pow(block.list_header()):
             raise VerificationFailed('invalid nonce')
 
@@ -508,7 +518,7 @@ class Block(object):
     def commit_state(self):
         changes = []
         if not len(self.journal):
-            log_state.trace('delta', changes=[])
+            # log_state.trace('delta', changes=[])
             return
         for address in self.caches['all']:
             acct = rlp.decode(self.state.get(address.decode('hex'))) \
