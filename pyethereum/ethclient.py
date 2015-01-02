@@ -1,12 +1,14 @@
 import codecs
 from functools import wraps
 import json
+from urlparse import urljoin, urlunsplit
 
 from bitcoin import decode_privkey, encode_privkey
 import click
 import requests
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, HTTPError
 
+from blocks import TransientBlock, block_structure
 import rlp
 from transactions import Transaction, contract
 import utils
@@ -19,104 +21,134 @@ DEFAULT_STARTGAS = 10000
 
 
 class APIClient(object):
+    """A client sending HTTP request to an :class:`APIServer`.
 
-    def __init__(self, host, port, path):
-        self.host = host
-        self.port = port
-        assert path.startswith('/') and not path.endswith('/')
-        self.base_url = "http://%s:%d%s" % (host, port, path)
+    :param host: the hostname of the server
+    :param port: the server port to use
+    :param path: the api path prefix
+    """
 
-    def json_get_request(self, path):
-        assert path.startswith('/')
-        url = self.base_url + path
-        #print 'GET', url
-        r = requests.get(url)
-        #print r.status_code, r.reason, r.url, r.headers
-        if r.status_code in [200, 201]:
-            return r.json()
-        else:
-            return dict((k, getattr(r, k)) for k in ('status_code', 'reason'))
+    def __init__(self, host, port, path=''):
+        self.base_url = urlunsplit((
+            'http', '{0}:{1}'.format(host, port), path, '', ''))
 
-    def account_to_dict(self, address):
-        return self.json_get_request(path='/accounts/%s' % address)
+    def request(self, path, method='GET', data=None):
+        """Send a request to the server.
 
-    def getbalance(self, address):
-        account = self.account_to_dict(address)
-        return int(account['balance'])
+        :param path: path specifying the api command
+        :param method: the HTTP method to use ('GET', 'PUT', etc.)
+        :param data: the data to attach to the request
+        :returns: the server's JSON response deserialized to a python object
+        :raises :class:`requests.HTTPError`: if the server reports an error
+        :raises :class:`requests.ConnectionError`: if setting up the connection
+                                                   to the server failed
+        """
+        url = urljoin(self.base_url, path)
+        response = requests.request(method, url, data=data)
+        response.raise_for_status()
+        return response.json()
 
-    def getcode(self, address):
-        return self.account_to_dict(address)['code']
+    def getaccount(self, address):
+        """Request data associated with an account.
 
-    def getnonce(self, address):
-        ptxs = self.getpending()['transactions']
-        nonce = max([0] + [int(tx['nonce']) for tx in ptxs if tx['sender'] == address])
-        if nonce:
-            return nonce + 1
-        return int(self.account_to_dict(address)['nonce'])
+        The returned `dict` will have the following keys:
 
-    def getstate(self, address):
-        return self.account_to_dict(address)['storage']
+        - `'nonce'`
+        - `'balance'`
+        - `'code'`
+        - `'storage'`
 
-    def applytx(self, txdata):
-        url = self.base_url + '/transactions/'
-        #print 'PUT', url, txdata
-        r = requests.put(url, codecs.encode(txdata, 'hex'))
-        return dict(status_code=r.status_code, reason=r.reason, url=r.url)
+        :param address: the account's hex-encoded address
+        """
+        return self.request('/accounts/{0}'.format(address))
 
-    def quicktx(self, gasprice, startgas, to, value, data, pkey_hex):
-        nonce = self.getnonce(utils.privtoaddr(pkey_hex))
-        tx = Transaction(nonce, gasprice, startgas, to, value, str(data))
-        tx.sign(pkey_hex)
-        return self.applytx(tx.serialize(True))
+    def applytx(self, tx):
+        """Send a transaction to the server
 
-    def quickcontract(self, gasprice, startgas, value, code, pkey_hex):
-        sender = utils.privtoaddr(pkey_hex)
-        nonce = self.getnonce(sender)
-        tx = contract(nonce, gasprice, startgas, value, str(code))
-        tx.sign(pkey_hex)
-        formatted_rlp = [sender.decode('hex'), utils.int_to_big_endian(nonce)]
-        addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
-        o = self.applytx(tx.serialize(True))
-        o['addr'] = addr
-        return o
+        The server will validate the transaction, add it to its list of pending
+        transactions and further broadcast it to its peers.
+
+        :param tx: a :class:`Transaction`
+        :returns: the response from the server
+        :raises :class:`requests.HTTPError`: if the validation on the server
+                                             fails, e.g. due to a forged
+                                             signature or an invalid nonce
+                                             (status code 400).
+        """
+        txdata = tx.hex_serialize(True)
+        return self.request('/transactions/', 'PUT', txdata)['transactions'][0]
 
     def getblock(self, id):
-        return self.json_get_request(path='/blocks/%s' % id)
+        """Request a certain block in the server's blockchain.
 
-    def getchildren(self, id):
-        return self.json_get_request(path='/blocks/%s/children' % id)
+        :param id: the block hash, the block number, or the hash of an
+                   arbitrary transaction in the block
+        :raises :class:`requests.HTTPError`: if the server can not find the
+                                             requested block (status code 404)
+        """
+        response = self.request('/blocks/{0}'.format(id))
+        return response['blocks'][0]
 
-    def gettx(self, id):
-        return self.json_get_request(path='/transactions/%s' % id)
+    def getchildren(self, block_hash):
+        """For a given parent block, request the block hashes of its children.
+
+        :param block_hash: the hash of the parent block
+        :raises :class:`requests.HTTPError`: if the server can not find a block
+                                             with the given hash (status code
+                                             404)
+        """
+        return self.request('/blocks/{0}/children'.format(id))['children']
+
+    def gettx(self, tx_hash):
+        """Request a specific transaction.
+
+        :param tx_hash: the hex-encoded transaction hash
+        :returns: a :class:`Transaction`
+        :raises :class:`requests.HTTPError`: if the server does not know about
+                                             the requested transaction (status
+                                             code 404)
+        """
+        response = self.request('/transactions/{0}'.format(tx_hash))
+        tx_dict = response['transactions'][0]
+        tx = Transaction(int(tx_dict['nonce']),
+                         int(tx_dict['gasprice']),
+                         int(tx_dict['startgas']),
+                         tx_dict['to'],
+                         int(tx_dict['value']),
+                         tx_dict['data'][2:],
+                         int(tx_dict['v']),
+                         int(tx_dict['r']),
+                         int(tx_dict['s']))
+        return tx
 
     def getpending(self):
-        return self.json_get_request(path='/pending/')
+        """Request a list of pending transactions."""
+        return self.request('/pending/')['transactions']
 
-    def tracejson(self, id):
-        res = self.json_get_request(path='/trace/%s' % id)
-        return json.dumps(res, indent=2)
+    def trace(self, tx_hash):
+        """Request the trace left by a transaction during its processing.
 
-    def trace(self, id):
-        res = self.json_get_request(path='/trace/%s' % id)
-        if 'trace' in res:
-          out = []
-          for l in res['trace']:
-            name, data = l.items()[0]
-            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-            items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
-            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
-            out.append("%s: %s" % (name.ljust(15), msg))
-          return '\n'.join(out)
-        return res
+        :param tx_hash: the hex-encoded transaction hash
+        :raises :class:`requests.HTTPError`: if the server can not find the
+                                             transaction (status code 404)
+        :returns: a `list` of `dict`s, expressing the single footprints
+        """
+        res = self.request('/trace/{0}'.format(tx_hash))
+        return res['trace']
 
     def dump(self, id):
-        res = self.json_get_request(path='/dump/%s' % id)
-        return json.dumps(res, sort_keys=True, indent=2)
+        """Request a block including the corresponding world state.
+
+        :param id: either the block hash or the hash of one transaction in the
+                   block
+        """
+        res = self.request('/dump/{0}'.format(id))
+        return res
 
 
-def handle_connection_error(f):
-    """Decorator that handles `ConnectionError`s by printing the request error
-    message.
+def handle_connection_errors(f):
+    """Decorator that handles `ConnectionError`s and `HTTPError`s by printing
+    an appropriate error message and exiting.
     """
     @wraps(f)
     def new_f(*args, **kwargs):
@@ -126,6 +158,11 @@ def handle_connection_error(f):
             msg = ('Could not establish connection to server '
                    '{0}'.format(e.message))
             raise click.ClickException(msg)
+        except HTTPError as e:
+            res = e.response
+            msg = 'HTTP request failed ({0} {1})'.format(res.status_code,
+                                                         res.reason)
+            raise click.ClickException(msg)
     return new_f
 
 
@@ -134,7 +171,7 @@ def pass_client(f):
     possible `ConnectionError`s.
     """
     raw_pass_client = click.make_pass_decorator(APIClient)
-    return raw_pass_client(handle_connection_error(f))
+    return raw_pass_client(handle_connection_errors(f))
 
 
 class PrivateKey(click.ParamType):
@@ -383,9 +420,14 @@ def signtx(transaction, key):
     click.echo(tx.hex_serialize(True))
 
 
+def pecho(json_dict):
+    """Pretty print a `dict`"""
+    click.echo(json.dumps(json_dict, indent=4))
+
+
 @ethclient.command()
-@click.argument('transaction', type=Binary())
 @pass_client
+@click.argument('transaction', type=Binary())
 def applytx(client, transaction):
     """Absorb a transaction into the next block.
 
@@ -395,34 +437,38 @@ def applytx(client, transaction):
 
     TRANSACTION must a signed transaction in hex-encoding.
     """
-    click.echo(client.applytx(str(transaction)))
+    tx = Transaction.deserialize(str(transaction))
+    pecho(client.applytx(tx))
 
 
 @ethclient.command()
+@pass_client
 @gasprice_option
 @startgas_option
 @receiver_option
 @value_option
 @data_option
 @privkey_option
-@pass_client
 def quicktx(client, gasprice, startgas, to, value, data, key):
     """Create and finalize a transaction.
 
     This command is a shortcut that chains getnonce, mktx, signtx, and applytx.
     It returns the server's response.
     """
-    click.echo(client.quicktx(gasprice, startgas, to, value, data,
-                              encode_privkey(key, 'hex')))
+    encoded_key = encode_privkey(key, 'hex')
+    nonce = int(client.getaccount(utils.privtoaddr(encoded_key))['nonce'])
+    tx = Transaction(nonce, gasprice, startgas, to, value, str(data))
+    tx.sign(encode_privkey(key, 'hex'))
+    pecho(client.applytx(tx))
 
 
 @ethclient.command()
+@pass_client
 @gasprice_option
 @startgas_option
 @value_option
 @code_option
 @privkey_option
-@pass_client
 def quickcontract(client, gasprice, startgas, value, code, key):
     """Create and finalize a contract.
 
@@ -430,53 +476,60 @@ def quickcontract(client, gasprice, startgas, value, code, key):
     applytx. In addition to the server's response, it returns the address of
     the newly created contract.
     """
-    click.echo(client.quickcontract(gasprice, startgas, value, code,
-                                    encode_privkey(key, 'hex')))
+    encoded_key = encode_privkey(key, 'hex')
+    sender = utils.privtoaddr(encoded_key)
+    nonce = int(client.getaccount(sender)['nonce'])
+    tx = contract(nonce, gasprice, startgas, value, str(code))
+    tx.sign(encoded_key)
+    response = client.applytx(tx)
+    pecho({
+        'address': tx.contract_address(),
+        'transaction': response})
 
 
 @ethclient.command()
-@click.argument('address', type=ADDRESS)
 @pass_client
+@click.argument('address', type=ADDRESS)
 def getbalance(client, address):
     """Retrieve the balance of an account."""
-    click.echo(client.getbalance(address))
+    click.echo(client.getaccount(address)['balance'])
 
 
 @ethclient.command()
-@click.argument('address', type=ADDRESS)
 @pass_client
+@click.argument('address', type=ADDRESS)
 def getcode(client, address):
     """Print the EVM code of an account."""
-    click.echo(client.getcode(address))
+    click.echo(client.getaccount(address)['code'])
 
 
 @ethclient.command()
-@click.argument('address', type=ADDRESS)
 @pass_client
+@click.argument('address', type=ADDRESS)
 def getnonce(client, address):
     """Return an account's nonce."""
-    click.echo(client.getnonce(address))
+    click.echo(client.getaccount(address)['nonce'])
 
 
 @ethclient.command()
-@click.argument('address', type=ADDRESS)
 @pass_client
+@click.argument('address', type=ADDRESS)
 def getstate(client, address):
     """Print an account's storage contents.
 
     The output will be hex encoded. Non-contract accounts have empty storages.
     """
-    click.echo(client.account_to_dict(address)['storage'])
+    click.echo(client.getaccount(address)['storage'])
 
 
 @ethclient.command()
+@pass_client
 @click.option('--txhash', '-t', type=TXHASH, default=None,
               help='the hash of one transaction in the block')
 @click.option('--blockhash', '-b', type=BLOCKHASH, default=None,
               help='the hash of the block')
 @click.option('--blocknumber', '-n', type=NONNEG_INT, default=None,
               help='the block\'s number in the chain')
-@pass_client
 def getblock(client, txhash, blockhash, blocknumber):
     """Fetch a block from the block chain.
 
@@ -488,49 +541,56 @@ def getblock(client, txhash, blockhash, blocknumber):
                                  '--blockhash and --blocknumber must be '
                                  'given.')
     else:
-        click.echo(client.getblock(txhash or blockhash or blocknumber))
+        pecho(client.getblock(txhash or blockhash or blocknumber))
 
 
 @ethclient.command()
-@click.argument('txhash', type=TXHASH)
 @pass_client
+@click.argument('txhash', type=TXHASH)
 def gettx(client, txhash):
     """Show a transaction from the block chain.
 
     TXHASH must be the hex encoded hash of the transaction.
     """
-    click.echo(client.gettx(txhash))
+    pecho(client.gettx(txhash).to_dict())
 
 
 @ethclient.command()
 @pass_client
 def getpending(client):
     """List all pending transactions."""
-    click.echo(client.getpending()['transactions'])
+    pecho(client.getpending())
 
 
 @ethclient.command()
+@pass_client
 @click.argument('txhash', type=TXHASH)
 @click.option('--print/--json', 'print_', is_flag=True, default=True,
               help='Display the trace human readably [default] or in JSON.')
-@pass_client
 def trace(client, txhash, print_):
     """Read the trace left by a transaction.
 
     The transaction must be specified by its hash TXHASH.
     """
     if print_:
-        click.echo(client.trace(txhash))
+        out = []
+        for l in client.trace(txhash):
+            name, data = l.items()[0]
+            order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
+            items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
+            msg = ", ".join("%s=%s" % (k, v) for k, v in items)
+            out.append("%s: %s" % (name.ljust(15), msg))
+        click.echo('\n'.join(out))
     else:
-        click.echo(client.tracejson(txhash))
+        pecho(client.trace(txhash))
 
 
 @ethclient.command()
+@pass_client
 @click.option('--blockhash', '-b', type=BLOCKHASH, default=None,
               help='the hash of the block')
 @click.option('--txhash', '-t', type=TXHASH, default=None,
               help='the hash of one transaction in the block')
-@pass_client
 def dump(client, blockhash, txhash):
     """Dump the state of a block.
 
@@ -544,4 +604,4 @@ def dump(client, blockhash, txhash):
         raise click.BadParameter('Either --blockhash or --txhash must be '
                                  'specified')
     else:
-        click.echo(client.dump(blockhash or txhash))
+        pecho(client.dump(blockhash or txhash))

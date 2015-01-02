@@ -60,7 +60,6 @@ class Transaction(object):
 
     @classmethod
     def deserialize(cls, rlpdata):
-        assert isinstance(rlpdata, str)
         return cls.create(rlp.decode(rlpdata))
 
     @classmethod
@@ -111,6 +110,22 @@ class Transaction(object):
         h['sender'] = self.sender
         h['hash'] = self.hash.encode('hex')
         return h
+
+    def contract_address(self):
+        """For contract creation transactions, return the address of the new
+        account.
+
+        :raises `ValueError`: if the transaction is not signed
+        :raises `ValueError`: if the transaction is not a contract creation
+        """
+        if self.sender == 0:
+            raise ValueError('Transaction is not signed')
+        if bool(self.to):
+            raise ValueError('Transaction is not a contract creation')
+        formatted_rlp = [self.sender.decode('hex'),
+                         utils.int_to_big_endian(self.nonce)]
+        address = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
+        return address
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
