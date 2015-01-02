@@ -117,11 +117,25 @@ class APIClient(object):
                          int(tx_dict['v']),
                          int(tx_dict['r']),
                          int(tx_dict['s']))
+        print tx_dict
         return tx
 
     def getpending(self):
         """Request a list of pending transactions."""
-        return self.request('/pending/')['transactions']
+        response = self.request('/pending/')['transactions']
+        print response
+        txs = []
+        for tx_dict in response:
+            txs.append(Transaction(int(tx_dict['nonce']),
+                                   int(tx_dict['gasprice']),
+                                   int(tx_dict['startgas']),
+                                   tx_dict['to'],
+                                   int(tx_dict['value']),
+                                   tx_dict['data'][2:],
+                                   int(tx_dict['v']),
+                                   int(tx_dict['r']),
+                                   int(tx_dict['s'])))
+        return txs
 
     def trace(self, tx_hash):
         """Request the trace left by a transaction during its processing.
@@ -558,7 +572,7 @@ def gettx(client, txhash):
 @pass_client
 def getpending(client):
     """List all pending transactions."""
-    pecho(client.getpending())
+    pecho([tx.to_dict() for tx in client.getpending()])
 
 
 @ethclient.command()
