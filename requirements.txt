@@ -1,5 +1,6 @@
 bitcoin
 bottle
+click
 docopt
 ethereum-serpent
 leveldb

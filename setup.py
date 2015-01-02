@@ -7,7 +7,7 @@ versioneer.tag_prefix = '' # tags are like 1.2.0
 versioneer.parentdir_prefix = 'pyethereum-' # dirname like 'myproject-1.2.0'
 
 console_scripts = ['pyeth=pyethereum.eth:main',
-                   'pyethclient=pyethereum.ethclient:main']
+                   'pyethclient=pyethereum.ethclient:ethclient']
 
 setup(name="pyethereum",
       packages=find_packages("."),
@@ -16,6 +16,7 @@ setup(name="pyethereum",
       install_requires=[
           'bitcoin',
           'bottle',
+          'click',
           'docopt',
           'ethereum-serpent',
           'leveldb',
