@@ -21,7 +21,7 @@ DEFAULT_STARTGAS = 10000
 
 
 class APIClient(object):
-    """A client sending HTTP request to an :class:`APIServer`.
+    """A client sending HTTP request to an :class:`~apiserver.APIServer`.
 
     :param host: the hostname of the server
     :param port: the server port to use
@@ -39,9 +39,10 @@ class APIClient(object):
         :param method: the HTTP method to use ('GET', 'PUT', etc.)
         :param data: the data to attach to the request
         :returns: the server's JSON response deserialized to a python object
-        :raises :class:`requests.HTTPError`: if the server reports an error
-        :raises :class:`requests.ConnectionError`: if setting up the connection
-                                                   to the server failed
+        :raises: :exc:`~requests.exceptions.HTTPError` if the server reports an
+                 error
+        :raises: :exc:`~requests.exceptions.ConnectionError` if setting up the
+                 connection to the server failed
         """
         url = urljoin(self.base_url, path)
         response = requests.request(method, url, data=data)
@@ -53,10 +54,10 @@ class APIClient(object):
 
         The returned `dict` will have the following keys:
 
-        - `'nonce'`
-        - `'balance'`
-        - `'code'`
-        - `'storage'`
+        - ``'nonce'``
+        - ``'balance'``
+        - ``'code'``
+        - ``'storage'``
 
         :param address: the account's hex-encoded address
         """
@@ -68,12 +69,11 @@ class APIClient(object):
         The server will validate the transaction, add it to its list of pending
         transactions and further broadcast it to its peers.
 
-        :param tx: a :class:`Transaction`
+        :param tx: a :class:`~transactions.Transaction`
         :returns: the response from the server
-        :raises :class:`requests.HTTPError`: if the validation on the server
-                                             fails, e.g. due to a forged
-                                             signature or an invalid nonce
-                                             (status code 400).
+        :raises: :exc:`~requests.exceptions.HTTPError` if the validation on the
+                 server fails, e.g. due to a forged signature or an invalid
+                 nonce (status code 400).
         """
         txdata = tx.hex_serialize(True)
         return self.request('/transactions/', 'PUT', txdata)['transactions'][0]
@@ -83,8 +83,8 @@ class APIClient(object):
 
         :param id: the block hash, the block number, or the hash of an
                    arbitrary transaction in the block
-        :raises :class:`requests.HTTPError`: if the server can not find the
-                                             requested block (status code 404)
+        :raises: :exc:`~requests.exceptions.HTTPError` if the server can not
+                 find the requested block (status code 404)
         """
         response = self.request('/blocks/{0}'.format(id))
         return response['blocks'][0]
@@ -93,9 +93,8 @@ class APIClient(object):
         """For a given parent block, request the block hashes of its children.
 
         :param block_hash: the hash of the parent block
-        :raises :class:`requests.HTTPError`: if the server can not find a block
-                                             with the given hash (status code
-                                             404)
+        :raises: :exc:`~requests.exceptions.HTTPError`: if the server can not
+                 find a block with the given hash (status code 404)
         """
         return self.request('/blocks/{0}/children'.format(id))['children']
 
@@ -103,10 +102,9 @@ class APIClient(object):
         """Request a specific transaction.
 
         :param tx_hash: the hex-encoded transaction hash
-        :returns: a :class:`Transaction`
-        :raises :class:`requests.HTTPError`: if the server does not know about
-                                             the requested transaction (status
-                                             code 404)
+        :returns: a :class:`~transactions.Transaction`
+        :raises: :exc:`~requests.exceptions.HTTPError`: if the server does not
+                 know about the requested transaction (status code 404)
         """
         response = self.request('/transactions/{0}'.format(tx_hash))
         tx_dict = response['transactions'][0]
@@ -129,9 +127,9 @@ class APIClient(object):
         """Request the trace left by a transaction during its processing.
 
         :param tx_hash: the hex-encoded transaction hash
-        :raises :class:`requests.HTTPError`: if the server can not find the
-                                             transaction (status code 404)
-        :returns: a `list` of `dict`s, expressing the single footprints
+        :raises: :exc:`~requests.exceptions.HTTPError` if the server can not
+                 find the transaction (status code 404)
+        :returns: a list of dicts, expressing the single footprints
         """
         res = self.request('/trace/{0}'.format(tx_hash))
         return res['trace']
@@ -147,8 +145,8 @@ class APIClient(object):
 
 
 def handle_connection_errors(f):
-    """Decorator that handles `ConnectionError`s and `HTTPError`s by printing
-    an appropriate error message and exiting.
+    """Decorator that handles ConnectionErrors and HTTPErrors by printing an
+    appropriate error message and exiting.
     """
     @wraps(f)
     def new_f(*args, **kwargs):
@@ -167,8 +165,9 @@ def handle_connection_errors(f):
 
 
 def pass_client(f):
-    """Decorator that passes an `APIClient` instance to commands and handles
-    possible `ConnectionError`s.
+    """Decorator that passes a :class:`~ethclient.APIClient` instance and
+    handles unsuccessful requests as well as failed connections by printing an
+    error message.
     """
     raw_pass_client = click.make_pass_decorator(APIClient)
     return raw_pass_client(handle_connection_errors(f))
