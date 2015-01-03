@@ -82,7 +82,8 @@ def run_test_vm(params):
                                 'previousHash', 'currentCoinbase',
                                 'currentDifficulty', 'currentNumber'])
     # setup env
-    blk = blocks.Block(new_db(),
+    db = new_db()
+    blk = blocks.Block(db,
         prevhash=env['previousHash'].decode('hex'),
         number=int(env['currentNumber']),
         coinbase=env['currentCoinbase'],
@@ -125,9 +126,10 @@ def run_test_vm(params):
     orig_apply_msg = pb.apply_msg
 
     def apply_msg_wrapper(_ext, msg, code, toplevel=False):
+        hexdata = ''.join([chr(x) for x in msg.data]).encode('hex')
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
-                                        data=msg.data.encode('hex')))
+                                        data=hexdata))
         if not toplevel:
             pb.apply_msg = orig_apply_msg
         result, gas_rem, data = orig_apply_msg(_ext, msg, code)
@@ -138,7 +140,8 @@ def run_test_vm(params):
     pb.apply_msg = apply_msg_wrapper
 
     ext = pb.VMExt(blk, tx)
-    msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas, tx.data)
+    msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
+                     [ord(x) for x in tx.data])
     success, gas_remained, output = \
         vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
@@ -198,6 +201,9 @@ def run_test_vm(params):
         state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)  # attribute not present in vmtest fixtures
         assert data == state
+
+    db.delete_db()
+
 
 def random():
     "used for external random vm tests"

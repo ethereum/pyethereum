@@ -115,7 +115,8 @@ def apply_transaction(block, tx):
     assert success
 
     message_gas = tx.startgas - intrinsic_gas_used
-    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, tx.data)
+    message_data = [ord(x) for x in tx.data]
+    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data)
 
     # MESSAGE
     ext = VMExt(block, tx)
@@ -193,8 +194,9 @@ def apply_msg(ext, msg, code):
     # print 'init', map(ord, msg.data), msg.gas, \
     #     msg.sender, block.get_nonce(msg.sender)
 
-    log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
-            gas=msg.gas, value=msg.value, data=msg.data.encode('hex'))
+    if log_msg.is_active:
+        log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
+                      gas=msg.gas, value=msg.value, data=msg.data)
     if log_state.is_active:
         log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
@@ -209,7 +211,8 @@ def apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
-    log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
+    if log_msg.is_active:
+        log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active:
         log_state.trace('MSG POST STATE', account=msg.to, state=ext.log_storage(msg.to))
 
@@ -238,7 +241,7 @@ def create_contract(ext, msg):
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     assert not ext.get_code(msg.to)
-    res, gas, dat = apply_msg(ext, msg, msg.data)
+    res, gas, dat = apply_msg(ext, msg, ''.join([chr(x) for x in msg.data]))
     if res:
         if not len(dat):
             return 1, gas, ''

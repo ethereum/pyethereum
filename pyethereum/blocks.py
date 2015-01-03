@@ -29,6 +29,7 @@ GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 DIFF_ADJUSTMENT_CUTOFF = 5
+MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 
 RECORDING = 1
 NONE = 0
@@ -236,7 +237,7 @@ class Block(object):
         # Check uncle validity
         ancestor_chain = [self]
         # Uncle can have a block from 2-7 blocks ago as its parent
-        for i in [1, 2, 3, 4, 5, 6, 7]:
+        for i in range(1, MAX_UNCLE_DEPTH + 2):
             if ancestor_chain[-1].number > 0:
                 ancestor_chain.append(ancestor_chain[-1].get_parent())
         ineligible = []

@@ -17,12 +17,14 @@ TT255 = 2 ** 255
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0):
+    def __init__(self, sender, to, value, gas, data, offset=0, data_size=None, depth=0):
         self.sender = sender
         self.to = to
         self.value = value
         self.gas = gas
         self.data = data
+        self.data_offset = offset
+        self.data_size = len(data) if data_size is None else data_size
         self.depth = depth
         self.logs = []
 
@@ -268,7 +270,7 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     dat = msg.data[s0: s0 + 32]
-                    stk.append(utils.big_endian_to_int(dat + '\x00' * (32 - len(dat))))
+                    stk.append(utils.bytearray_to_int(dat + [0] * (32 - len(dat))))
             elif op == 'CALLDATASIZE':
                 stk.append(len(msg.data))
             elif op == 'CALLDATACOPY':
@@ -279,7 +281,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s1 + i < len(msg.data):
-                        mem[start + i] = ord(msg.data[s1 + i])
+                        mem[start + i] = msg.data[s1 + i]
                     else:
                         mem[start + i] = 0
             elif op == 'CODESIZE':
@@ -423,7 +425,7 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
             if ext.get_balance(msg.to) >= value:
-                data = ''.join(map(chr, mem[mstart: mstart + msz]))
+                data = mem[mstart: mstart + msz]
                 create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
                 if o:
@@ -446,7 +448,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value:
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-                data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
+                data = mem[meminstart: meminstart + meminsz]
                 call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
                 if result == 0:
@@ -470,7 +472,7 @@ def vm_execute(ext, msg, code):
             compustate.gas -= gas
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            data = ''.join(map(chr, mem[meminstart: meminstart + meminsz]))
+            data = mem[meminstart: meminstart + meminsz]
             call_msg = Message(msg.to, msg.to, value, gas, data, msg.depth + 1)
             result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
             if result == 0:

@@ -65,6 +65,9 @@ class DB(object):
     def __repr__(self):
         return '<DB at %d uncommitted=%d>' % (id(self.db), len(self.uncommitted))
 
+    def delete_db(self):
+        del databases[self.dbfile]
+
 
 class EphemDB(object):
 

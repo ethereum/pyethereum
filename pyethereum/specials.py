@@ -8,11 +8,11 @@ def proc_ecrecover(ext, msg):
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
-    indata = msg.data + '\x00' * 128
-    h = indata[:32]
-    v = utils.big_endian_to_int(indata[32:64])
-    r = utils.big_endian_to_int(indata[64:96])
-    s = utils.big_endian_to_int(indata[96:128])
+    indata = msg.data
+    h = ''.join([chr(x) for x in indata[:32]])
+    v = utils.bytearray_to_int(indata[32:64])
+    r = utils.bytearray_to_int(indata[64:96])
+    s = utils.bytearray_to_int(indata[96:128])
     if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - 500, [0] * 32
     pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
@@ -26,7 +26,8 @@ def proc_sha256(ext, msg):
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
-    o = [ord(x) for x in bitcoin.bin_sha256(msg.data)]
+    d = ''.join([chr(x) for x in msg.data])
+    o = [ord(x) for x in bitcoin.bin_sha256(d)]
     return 1, msg.gas - gas_cost, o
 
 
@@ -36,7 +37,8 @@ def proc_ripemd160(ext, msg):
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
-    o = [0] * 12 + [ord(x) for x in bitcoin.ripemd.RIPEMD160(msg.data).digest()]
+    d = ''.join([chr(x) for x in msg.data])
+    o = [0] * 12 + [ord(x) for x in bitcoin.ripemd.RIPEMD160(d).digest()]
     return 1, msg.gas - gas_cost, o
 
 specials = {
