@@ -126,7 +126,7 @@ def run_test_vm(params):
     orig_apply_msg = pb.apply_msg
 
     def apply_msg_wrapper(_ext, msg, code, toplevel=False):
-        hexdata = ''.join([chr(x) for x in msg.data]).encode('hex')
+        hexdata = msg.data.extract_all().encode('hex')
         apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                         destination=msg.to,
                                         data=hexdata))
@@ -141,7 +141,7 @@ def run_test_vm(params):
 
     ext = pb.VMExt(blk, tx)
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
-                     [ord(x) for x in tx.data])
+                     vm.CallData([ord(x) for x in tx.data]))
     success, gas_remained, output = \
         vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg

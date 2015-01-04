@@ -15,16 +15,41 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 
+class CallData(object):
+
+    def __init__(self, parent_memory, offset=0, size=None):
+        self.data = parent_memory
+        self.offset = offset
+        self.size = len(self.data) if size is None else size
+        self.rlimit = self.offset + self.size
+
+    def extract_all(self):
+        d = self.data[self.offset: self.offset + self.size]
+        d += [0] * (self.size - len(d))
+        return ''.join([chr(x) for x in d])
+
+    def extract32(self, i):
+        if i >= self.size:
+            return 0
+        o = self.data[self.offset + i: min(self.offset + i + 32, self.rlimit)]
+        return utils.bytearray_to_int(o + [0] * (32 - len(o)))
+
+    def extract_copy(self, mem, memstart, datastart, size):
+        for i in range(size):
+            if datastart + i < self.size:
+                mem[memstart + i] = self.data[self.offset + datastart + i]
+            else:
+                mem[memstart + i] = 0
+
+
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, offset=0, data_size=None, depth=0):
+    def __init__(self, sender, to, value, gas, data, depth=0):
         self.sender = sender
         self.to = to
         self.value = value
         self.gas = gas
         self.data = data
-        self.data_offset = offset
-        self.data_size = len(data) if data_size is None else data_size
         self.depth = depth
         self.logs = []
 
@@ -265,25 +290,16 @@ def vm_execute(ext, msg, code):
             elif op == 'CALLVALUE':
                 stk.append(msg.value)
             elif op == 'CALLDATALOAD':
-                s0 = stk.pop()
-                if s0 >= len(msg.data):
-                    stk.append(0)
-                else:
-                    dat = msg.data[s0: s0 + 32]
-                    stk.append(utils.bytearray_to_int(dat + [0] * (32 - len(dat))))
+                stk.append(msg.data.extract32(stk.pop()))
             elif op == 'CALLDATASIZE':
-                stk.append(len(msg.data))
+                stk.append(msg.data.size)
             elif op == 'CALLDATACOPY':
-                start, s1, size = stk.pop(), stk.pop(), stk.pop()
-                if not mem_extend(mem, compustate, op, start, size):
+                mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, mstart, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
-                for i in range(size):
-                    if s1 + i < len(msg.data):
-                        mem[start + i] = msg.data[s1 + i]
-                    else:
-                        mem[start + i] = 0
+                msg.data.extract_copy(mem, mstart, dstart, size)
             elif op == 'CODESIZE':
                 stk.append(len(processed_code))
             elif op == 'CODECOPY':
@@ -425,8 +441,8 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
             if ext.get_balance(msg.to) >= value:
-                data = mem[mstart: mstart + msz]
-                create_msg = Message(msg.to, '', value, compustate.gas, data, msg.depth + 1)
+                cd = CallData(mem, mstart, msz)
+                create_msg = Message(msg.to, '', value, compustate.gas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
@@ -448,8 +464,8 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value:
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-                data = mem[meminstart: meminstart + meminsz]
-                call_msg = Message(msg.to, to, value, gas, data, msg.depth + 1)
+                cd = CallData(mem, meminstart, meminsz)
+                call_msg = Message(msg.to, to, value, gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
                 if result == 0:
                     stk.append(0)
@@ -472,8 +488,8 @@ def vm_execute(ext, msg, code):
             compustate.gas -= gas
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            data = mem[meminstart: meminstart + meminsz]
-            call_msg = Message(msg.to, msg.to, value, gas, data, msg.depth + 1)
+            cd = CallData(mem, meminstart, meminsz)
+            call_msg = Message(msg.to, msg.to, value, gas, cd, msg.depth + 1)
             result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
             if result == 0:
                 stk.append(0)

@@ -115,7 +115,7 @@ def apply_transaction(block, tx):
     assert success
 
     message_gas = tx.startgas - intrinsic_gas_used
-    message_data = [ord(x) for x in tx.data]
+    message_data = vm.CallData([ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data)
 
     # MESSAGE
@@ -241,7 +241,7 @@ def create_contract(ext, msg):
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     assert not ext.get_code(msg.to)
-    res, gas, dat = apply_msg(ext, msg, ''.join([chr(x) for x in msg.data]))
+    res, gas, dat = apply_msg(ext, msg, msg.data.extract_all())
     if res:
         if not len(dat):
             return 1, gas, ''

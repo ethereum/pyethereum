@@ -53,6 +53,7 @@ class state():
         self.block = b.genesis(self.db, o)
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
+        self.block.gas_limit = 10 ** 9
 
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
@@ -175,4 +176,4 @@ def disable_logging():
     set_logging_level(0)
 
 
-gas_limit = 100000
+gas_limit = 1000000
