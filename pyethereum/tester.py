@@ -51,6 +51,7 @@ class state():
         for i in range(num_accounts):
             o[accounts[i]] = 10 ** 24
         self.block = b.genesis(self.db, o)
+        self.blocks = [self.block]
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
         self.block.gas_limit = 10 ** 9
@@ -135,6 +136,7 @@ class state():
             self.block.finalize()
             t = self.block.timestamp + 6 + rand() % 12
             self.block = b.Block.init_from_parent(self.block, coinbase, '', t)
+            self.blocks.append(self.block)
 
     def snapshot(self):
         return self.block.serialize()

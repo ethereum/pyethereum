@@ -330,8 +330,8 @@ def vm_execute(ext, msg, code):
                     else:
                         mem[start + i] = 0
         elif opcode < 0x50:
-            if op == 'PREVHASH':
-                stk.append(utils.big_endian_to_int(ext.block_prevhash))
+            if op == 'BLOCKHASH':
+                stk.append(utils.big_endian_to_int(ext.block_hash(stk.pop())))
             elif op == 'COINBASE':
                 stk.append(utils.big_endian_to_int(ext.block_coinbase.decode('hex')))
             elif op == 'TIMESTAMP':
@@ -440,7 +440,7 @@ def vm_execute(ext, msg, code):
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            if ext.get_balance(msg.to) >= value:
+            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
                 create_msg = Message(msg.to, '', value, compustate.gas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
@@ -461,7 +461,7 @@ def vm_execute(ext, msg, code):
             if compustate.gas < gas:
                 return vm_exception('OUT OF GAS')
             compustate.gas -= gas
-            if ext.get_balance(msg.to) >= value:
+            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)
@@ -485,19 +485,22 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if compustate.gas < gas:
                 return vm_exception('OUT OF GAS')
-            compustate.gas -= gas
-            to = utils.encode_int(to)
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            cd = CallData(mem, meminstart, meminsz)
-            call_msg = Message(msg.to, msg.to, value, gas, cd, msg.depth + 1)
-            result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
-            if result == 0:
-                stk.append(0)
+            if msg.depth < 1024:
+                compustate.gas -= gas
+                to = utils.encode_int(to)
+                to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+                cd = CallData(mem, meminstart, meminsz)
+                call_msg = Message(msg.to, msg.to, value, gas, cd, msg.depth + 1)
+                result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
+                if result == 0:
+                    stk.append(0)
+                else:
+                    stk.append(1)
+                    compustate.gas += gas
+                    for i in range(min(len(data), memoutsz)):
+                        mem[memoutstart + i] = data[i]
             else:
-                stk.append(1)
-                compustate.gas += gas
-                for i in range(min(len(data), memoutsz)):
-                    mem[memoutstart + i] = data[i]
+                stk.append(0)
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):

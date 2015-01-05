@@ -42,7 +42,7 @@ opcodes = {
     0x3a: ['GASPRICE', 0, 1, 1],
     0x3b: ['EXTCODESIZE', 1, 1, 1],
     0x3c: ['EXTCODECOPY', 4, 0, 1],
-    0x40: ['PREVHASH', 0, 1, 1],
+    0x40: ['BLOCKHASH', 1, 1, 1],
     0x41: ['COINBASE', 0, 1, 1],
     0x42: ['TIMESTAMP', 0, 1, 1],
     0x43: ['NUMBER', 0, 1, 1],

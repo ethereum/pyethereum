@@ -1073,6 +1073,36 @@ def test_more_infinites():
     assert s.send(tester.k0, c, 0, funid=0, abi=[]) == [33]
 
 
+prevhashes_code = """
+def get_prevhashes(k):
+    o = array(k)
+    i = 0
+    while i < k:
+        o[i] = block.prevhash(i)
+        i += 1
+    return(o:a)
+"""
+
+
+def test_prevhashes():
+    s = tester.state()
+    c = s.contract(prevhashes_code)
+    s.mine(7)
+    # Hashes of last 14 blocks including existing one
+    o1 = [x % 2**256 for x in s.send(tester.k0, c, 0, funid=0, abi=[14])]
+    # hash of self = 0, hash of blocks back to genesis block as is, hash of
+    # blocks before genesis block = 0
+    t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
+        + [0] * 6
+    assert o1 == t1
+    s.mine(256)
+    # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
+    o2 = [x % 2**256 for x in s.send(tester.k0, c, 0, funid=0, abi=[270])]
+    t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
+        + [0] * 13
+    assert o2 == t2
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1104,3 +1134,4 @@ def test_more_infinites():
 # test_sha256 = None
 # test_types_in_functions = None
 # test_more_infinites = None
+# test_prevhashes = None

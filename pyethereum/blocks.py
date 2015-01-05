@@ -193,6 +193,7 @@ class Block(object):
             return k
         self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
+        self.ancestors = [self]
 
 
 
@@ -230,6 +231,20 @@ class Block(object):
             raise Exception("Extra data cannot exceed 1024 bytes")
         if self.coinbase == '':
             raise Exception("Coinbase cannot be empty address")
+
+    # Returns [self, p(self), p(p(self)) ... p^n(self)] (n+1 length list)
+    def get_ancestor_list(self, n):
+        if self.number == 0:
+            self.ancestors = [self] + [None] * 256
+        elif len(self.ancestors) <= n:
+            p = self.ancestors[-1] \
+                .get_parent() \
+                .get_ancestor_list(n - len(self.ancestors))
+            self.ancestors += p
+        return self.ancestors[:n+1]
+
+    def get_ancestor(self, n):
+        return self.get_ancestor_list(n)[-1]
 
     def validate_uncles(self):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
@@ -791,8 +806,8 @@ class Block(object):
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
                          timestamp=int(time.time()), uncles=[]):
-        return Block(
-            db = parent.db,
+        b = Block(
+            db=parent.db,
             prevhash=parent.hash,
             uncles_hash=utils.sha3rlp(uncles),
             coinbase=coinbase,
@@ -809,6 +824,8 @@ class Block(object):
             nonce='',
             transaction_list=[],
             uncles=uncles)
+        b.ancestors += parent.ancestors
+        return b
 
 
 class CachedBlock(Block):
