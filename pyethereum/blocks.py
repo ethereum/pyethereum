@@ -124,6 +124,9 @@ class TransientBlock(object):
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
 
+    def __structlog__(self):
+        return self.hash.encode('hex')
+
 
 def check_header_pow(header):
     rlp_Hn = rlp.encode(header[:-1])
@@ -802,6 +805,10 @@ class Block(object):
 
     def __repr__(self):
         return '<Block(#%d %s)>' % (self.number, self.hex_hash()[:8])
+
+    def __structlog__(self):
+        return self.hash.encode('hex')
+
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, extra_data='',
