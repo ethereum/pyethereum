@@ -27,8 +27,8 @@ class Miner():
                                                    uncles=[u.list_header() for u in uncles])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
-        log.debug('Mining', number=self.block.number, hash=self.block.hex_hash(),
-                  difficulty=self.block.difficulty)
+        log.debug('mining', block_number=self.block.number, block_hash=self.block.hex_hash(),
+                  block_difficulty=self.block.difficulty)
 
     def add_transaction(self, transaction):
         old_state_root = self.block.state_root
@@ -39,7 +39,7 @@ class Miner():
         except processblock.InvalidTransaction as e:
             # if unsuccessfull the prerequistes were not fullfilled
             # and the tx isinvalid, state must not have changed
-            log.debug('invalid tx', transaction=transaction, error=e)
+            log.debug('invalid tx', tx_hash=transaction, error=e)
             success = False
 
         # finalize
@@ -47,13 +47,13 @@ class Miner():
         self.block.finalize()
 
         if not success:
-            log.debug('tx not applied', transaction=transaction)
+            log.debug('tx not applied', tx_hash=transaction)
             assert old_state_root == self.block.state_root
             return False
         else:
             assert transaction in self.block.get_transactions()
-            log.debug('transaction applied', transaction=transaction,
-                      block=self.block.hex_hash(), result=output)
+            log.debug('transaction applied', tx_hash=transaction,
+                      block_hash=self.block, result=output)
             assert old_state_root != self.block.state_root
             return True
 
@@ -87,7 +87,7 @@ class Miner():
                 self.block.nonce = nonce_bin
                 assert self.block.check_proof_of_work(self.block.nonce) is True
                 assert self.block.get_parent()
-                log.debug('Nonce found', nonce=nonce, block=self.block.hex_hash())
+                log.debug('nonce found', block_nonce=nonce, block_hash=self.block.hex_hash())
                 return self.block
 
         self.nonce = nonce

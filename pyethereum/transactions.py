@@ -133,6 +133,9 @@ class Transaction(object):
     def __repr__(self):
         return '<Transaction(%s)>' % self.hex_hash()[:4]
 
+    def __structlog__(self):
+        return self.hex_hash()
+
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):
     ''' a contract is a special transaction without the `to` arguments
