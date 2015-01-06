@@ -13,7 +13,6 @@ from pyethereum.utils import sha3
 def default_config_path():
     return os.path.join(default_data_dir, 'config.txt')
 
-
 def default_client_version():
     return Packeter.CLIENT_VERSION  # FIXME
 
@@ -97,3 +96,8 @@ def read_config(cfg_path=default_config_path()):
     config = get_default_config()
     config.read(cfg_path)
     return config
+
+
+def validate_config(config):
+    assert len(config.get('network', 'node_id')) == 64  # 256bit hex encoded
+    assert len(config.get('wallet', 'coinbase')) == 40  # 160bit hex encoded
