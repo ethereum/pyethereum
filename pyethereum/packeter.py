@@ -33,7 +33,7 @@ class Packeter(object):
     """
     NETWORK_PROTOCOL_VERSION = 2
     # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
-    ETHEREUM_PROTOCOL_VERSION = 49
+    ETHEREUM_PROTOCOL_VERSION = 51
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     # the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
@@ -251,9 +251,9 @@ class Packeter(object):
 
     def dump_NewBlock(self, block):
         """
-        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty] 
-        Specify a single block that the peer should know about. 
-        The composite item in the list (following the message ID) is a block in 
+        NewBlock [+0x07, [blockHeader, transactionList, uncleList], totalDifficulty]
+        Specify a single block that the peer should know about.
+        The composite item in the list (following the message ID) is a block in
         the format described in the main Ethereum specification.
 
         totalDifficulty is the total difficulty of the block (aka score).
