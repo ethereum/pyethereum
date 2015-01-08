@@ -166,18 +166,24 @@ class Peer(StoppableLoopThread):
             log_p2p.debug('could not decode Hello', remote_id=self, error=e)
             return self.send_Disconnect(reason='Incompatible network protocols')
 
-        assert node_id
+        assert len(node_id) == 512/8
         if node_id == packeter.NODE_ID:
             log_p2p.critical('connected myself')
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         self.capabilities = [(p, ord(v)) for p, v in capabilities]
-        log_p2p.debug('received Hello', remote_id=self, network_protocol_version=network_protocol_version,
-                      node_id=node_id.encode('hex')[:8], client_version=client_version, capabilities=self.capabilities)
+        log_p2p.debug('received Hello',
+                      remote_id=self,
+                      network_protocol_version=network_protocol_version,
+                      node_id=node_id.encode('hex')[:8],
+                      client_version=client_version,
+                      capabilities=self.capabilities)
 
         if network_protocol_version != packeter.NETWORK_PROTOCOL_VERSION:
-            log_p2p.debug('Incompatible network protocols', remote_id=self,
-                          expected=packeter.NETWORK_PROTOCOL_VERSION, received=network_protocol_version)
+            log_p2p.debug('Incompatible network protocols',
+                          remote_id=self,
+                          expected=packeter.NETWORK_PROTOCOL_VERSION,
+                          received=network_protocol_version)
             return self.send_Disconnect(reason='Incompatible network protocols')
 
         self.hello_received = True
@@ -192,8 +198,10 @@ class Peer(StoppableLoopThread):
 # Status
 
     def send_Status(self, head_hash, head_total_difficulty, genesis_hash):
-        log_eth.debug('sending status', total_difficulty=head_total_difficulty,
-                      head=head_hash.encode('hex'), genesis=genesis_hash.encode('hex'))
+        log_eth.debug('sending status',
+                      total_difficulty=head_total_difficulty,
+                      head=head_hash.encode('hex'),
+                      genesis=genesis_hash.encode('hex'))
 
         self.send_packet(packeter.dump_Status(head_total_difficulty, head_hash, genesis_hash))
         self.status_sent = True
@@ -207,9 +215,12 @@ class Peer(StoppableLoopThread):
         except IndexError:
             return self.send_Disconnect(reason='Incompatible network protocols')
 
-        log_eth.debug('received Status', remote_id=self,
-                      ethereum_protocol_version=ethereum_protocol_version, total_difficulty=total_difficulty,
-                      head=head_hash.encode('hex'), genesis=genesis_hash.encode('hex'))
+        log_eth.debug('received Status',
+                      remote_id=self,
+                      ethereum_protocol_version=ethereum_protocol_version,
+                      total_difficulty=total_difficulty,
+                      head=head_hash.encode('hex'),
+                      genesis=genesis_hash.encode('hex'))
 
         if ethereum_protocol_version != packeter.ETHEREUM_PROTOCOL_VERSION:
             return self.send_Disconnect(reason='Incompatible network protocols')

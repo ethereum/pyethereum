@@ -37,7 +37,7 @@ class Packeter(object):
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     # the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
-    NODE_ID = sha3('')  # set in config
+    NODE_ID = sha3('')*2  # 512bit, set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
 
@@ -95,7 +95,7 @@ class Packeter(object):
         self.config = config
         self.CLIENT_VERSION = self.config.get('network', 'client_version') \
             or self.CLIENT_VERSION
-        self.NODE_ID = self.config.get('network', 'node_id')
+        self.NODE_ID = self.config.get('network', 'node_id').decode('hex')
 
     @classmethod
     def packet_size(cls, packet):
