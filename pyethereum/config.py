@@ -90,7 +90,6 @@ def get_default_config():
 
 
 def read_config(cfg_path=default_config_path()):
-    print cfg_path
     # create default if not existent
     if not os.path.exists(cfg_path):
         open(cfg_path, 'w').write(config_template)
