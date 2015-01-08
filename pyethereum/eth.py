@@ -61,7 +61,7 @@ def parse_arguments():
     parser.add_argument(
         "-p", "--port",
         dest="remote_port",
-        help="<port> Connect to remote port (default: 30303)")
+        help="<port> Connect to remote port (default: %s)" % config.get('network', 'remote_port'))
     parser.add_argument(
         "-m", "--mining",
         dest="mining",
