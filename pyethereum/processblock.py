@@ -162,6 +162,9 @@ def apply_transaction(block, tx):
     return success, output
 
 
+# External calls that can be made from inside the VM. To use the EVM with a
+# different blockchain system, database, set parameters for testing, just
+# swap out the functions here 
 class VMExt():
 
     def __init__(self, block, tx):
@@ -192,9 +195,6 @@ class VMExt():
 
 
 def apply_msg(ext, msg, code):
-    # print 'init', map(ord, msg.data), msg.gas, \
-    #     msg.sender, block.get_nonce(msg.sender)
-
     if log_msg.is_active:
         log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
                       gas=msg.gas, value=msg.value, data=msg.data)

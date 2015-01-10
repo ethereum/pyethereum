@@ -10,42 +10,37 @@ import sys
 from repoze.lru import lru_cache
 from exceptions import *
 from pyethereum.slogging import get_logger
+from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 
-
-INITIAL_DIFFICULTY = 2 ** 17
+# Genesis block difficulty
+GENESIS_DIFFICULTY = 2 ** 17
+# Genesis block gas limit
+GENESIS_GAS_LIMIT = 10 ** 6
+# Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = "0" * 40
 GENESIS_NONCE = utils.sha3(chr(42))
-GENESIS_GAS_LIMIT = 10 ** 6
+# Minimum gas limit
 MIN_GAS_LIMIT = 125000
+# Gas limit adjustment algo:
+# block.gas_limit = block.parent.gas_limit * 1023/1024 +
+#                   (block.gas_used * 6 / 5) / 1024
 GASLIMIT_EMA_FACTOR = 1024
-BLOCK_REWARD = 1500 * utils.denoms.finney
-UNCLE_REWARD = 15 * BLOCK_REWARD / 16
-NEPHEW_REWARD = BLOCK_REWARD / 32
-BLOCK_DIFF_FACTOR = 1024
-GENESIS_MIN_GAS_PRICE = 0
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
-DIFF_ADJUSTMENT_CUTOFF = 5
+# Block reward
+BLOCK_REWARD = 1500 * utils.denoms.finney
+# GHOST constants
+UNCLE_REWARD = 15 * BLOCK_REWARD / 16
+NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
+# Difficulty adjustment constants
+DIFF_ADJUSTMENT_CUTOFF = 5
+BLOCK_DIFF_FACTOR = 1024
 
-RECORDING = 1
-NONE = 0
-VERIFYING = -1
-
-GENESIS_INITIAL_ALLOC = \
-    {"51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,  # (G)
-     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,  # (J)
-     "b9c015918bdaba24b4ff057a92a3873d6eb201be": 2 ** 200,  # (V)
-     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,  # (A)
-     "2ef47100e0787b915105fd5e3f4ff6752079d5cb": 2 ** 200,  # (M)
-     "cd2a3d9f938e13cd947ec05abc7fe734df8dd826": 2 ** 200,  # (R)
-     "6c386a4b26f73c802f34673f7248bb118f97424a": 2 ** 200,  # (HH)
-     "e4157b34ea9615cfbde6b4fda419828124b70c78": 2 ** 200,  # (CH)
-     }
-
+# Block header parameters
 block_structure = [
     ["prevhash", "bin", "\00" * 32],
     ["uncles_hash", "bin", utils.sha3rlp([])],
@@ -54,7 +49,7 @@ block_structure = [
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],
     ["receipts_root", "trie_root", trie.BLANK_ROOT],
     ["bloom", "int64", 0],
-    ["difficulty", "int", INITIAL_DIFFICULTY],
+    ["difficulty", "int", GENESIS_DIFFICULTY],
     ["number", "int", 0],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
@@ -67,6 +62,7 @@ block_structure_rev = {}
 for i, (name, typ, default) in enumerate(block_structure):
     block_structure_rev[name] = [i, typ, default]
 
+# Account field parameters
 acct_structure = [
     ["nonce", "int", 0],
     ["balance", "int", 0],
@@ -80,18 +76,21 @@ for i, (name, typ, default) in enumerate(acct_structure):
     acct_structure_rev[name] = [i, typ, default]
 
 
+# Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
     return parent.difficulty + offset * sign
 
 
+# Gas limit adjustment algo
 def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
     new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
 
+# Auxiliary value for must_equal error message
 aux = [None]
 
 
@@ -128,6 +127,7 @@ class TransientBlock(object):
         return self.hash.encode('hex')
 
 
+# Block header PoW verification
 def check_header_pow(header):
     rlp_Hn = rlp.encode(header[:-1])
     nonce = header[-1]
@@ -137,6 +137,7 @@ def check_header_pow(header):
     return utils.big_endian_to_int(h) < 2 ** 256 / diff
 
 
+# Primary block class
 class Block(object):
 
     def __init__(self,
@@ -171,6 +172,7 @@ class Block(object):
         self.suicides = []
         self.logs = []
         self.refunds = 0
+        # Journaling cache for state tree updates
         self.caches = {
             'balance': {},
             'nonce': {},
@@ -189,6 +191,7 @@ class Block(object):
         # setup de/encoders
         self.encoders = dict(utils.encoders)
         self.decoders = dict(utils.decoders)
+
         def encode_hash(v):
             '''encodes a bytearray into hash'''
             k = utils.sha3(v)
@@ -197,8 +200,6 @@ class Block(object):
         self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
         self.ancestors = [self]
-
-
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -253,11 +254,7 @@ class Block(object):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
             return False
         # Check uncle validity
-        ancestor_chain = [self]
-        # Uncle can have a block from 2-7 blocks ago as its parent
-        for i in range(1, MAX_UNCLE_DEPTH + 2):
-            if ancestor_chain[-1].number > 0:
-                ancestor_chain.append(ancestor_chain[-1].get_parent())
+        ancestor_chain = self.get_ancestor_list(MAX_UNCLE_DEPTH + 1)
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago
@@ -458,10 +455,6 @@ class Block(object):
         self.transactions.update(k, tx.serialize())
         self.receipts.update(k, self.mk_transaction_receipt(tx))
         self.bloom |= tx.log_bloom()  # int
-        # print "newbits", bloom.bits_in_number(tx.log_bloom())
-        # for log in tx.logs:q
-        #     print 'log', log.address, log.topics
-        #     print [bloom.bits_in_number(bloom.bloom(x)) for x in log.bloomables()]
         self.transaction_count += 1
 
     def _list_transactions(self):
@@ -876,7 +869,7 @@ def get_block(db, blockhash):
 #    return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=INITIAL_DIFFICULTY):
+def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY):
     # https://ethereum.etherpad.mozilla.org/11
     block = Block(db=db, prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
                   tx_list_root=trie.BLANK_ROOT,
