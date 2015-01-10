@@ -10,6 +10,7 @@ import rlp
 import blocks
 import processblock
 import peermanager
+import config
 from transactions import Transaction
 from miner import Miner
 from synchronizer import Synchronizer
@@ -120,6 +121,7 @@ class ChainManager(StoppableLoopThread):
     miner = None
     blockchain = None
     synchronizer = None
+    config = None
 
     def __init__(self):
         super(ChainManager, self).__init__()
@@ -153,7 +155,9 @@ class ChainManager(StoppableLoopThread):
 
     @property
     def head(self):
-        if 'HEAD' not in self.blockchain:
+        if not self.config:
+            self.configure(config.read_config())
+        if not self.blockchain or 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
         return blocks.get_block(self.blockchain, ptr)

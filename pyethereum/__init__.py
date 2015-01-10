@@ -4,6 +4,7 @@ import trie
 import blocks
 import transactions
 import processblock
+import chainmanager
 import tester
 
 from ._version import get_versions

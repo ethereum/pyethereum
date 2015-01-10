@@ -6,7 +6,7 @@ from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
 from pyethereum.utils import sha3
 from pyethereum import dispatch
-from . import __version__
+from .version import __version__
 from pyethereum.slogging import get_logger
 log = get_logger('net.wire')
 
