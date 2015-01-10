@@ -150,7 +150,7 @@ def run_test_vm(params):
     """
      generally expected that the test implementer will read env, exec and pre
      then check their results against gas, logs, out, post and callcreates.
-     If an exception is expected, then latter sections are absent in the test. 
+     If an exception is expected, then latter sections are absent in the test.
      Since the reverting of the state is not part of the VM tests.
      """
 
@@ -213,7 +213,9 @@ def random():
     for test_data in data.values():
         try:
             run_test_vm(test_data)
+            print 0,
         except Exception:
+            print 1,
             sys.exit(1)
 
 if __name__ == '__main__':

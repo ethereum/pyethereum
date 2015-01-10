@@ -2,7 +2,6 @@
 import os
 import sys
 import time
-import uuid
 import signal
 from argparse import ArgumentParser
 
@@ -11,9 +10,6 @@ from common import enable_full_qualified_import
 enable_full_qualified_import()
 
 #from pyethereum.utils import data_dir
-from pyethereum.utils import default_data_dir
-from pyethereum.utils import db_path
-from pyethereum.utils import sha3
 from pyethereum.signals import config_ready
 from pyethereum.tcpserver import tcp_server
 from pyethereum.peermanager import peer_manager
@@ -21,6 +17,7 @@ from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
 from pyethereum.chainmanager import chain_manager
 from pyethereum.db import DB
+from pyethereum.utils import db_path
 import pyethereum.slogging
 import pyethereum.config as konfig
 from . import __version__
@@ -49,6 +46,10 @@ def parse_arguments():
         dest="coinbase",
         help="Set the coinbase (mining payout) address")
     parser.add_argument(
+        "-n", "--nodeid",
+        dest="node_id",
+        help="Set the unique nodeid")
+    parser.add_argument(
         "-d", "--data_dir",
         dest="data_dir",
         help="<path>  Load database from path (default: %s)" %
@@ -60,7 +61,7 @@ def parse_arguments():
     parser.add_argument(
         "-p", "--port",
         dest="remote_port",
-        help="<port> Connect to remote port (default: 30303)")
+        help="<port> Connect to remote port (default: %s)" % config.get('network', 'remote_port'))
     parser.add_argument(
         "-m", "--mining",
         dest="mining",
@@ -120,11 +121,13 @@ def create_config():
         for a, v in config.items(section):
             if getattr(options, a, None) is not None:
                 config.set(section, a, getattr(options, a))
-    
+
+    konfig.validate_config(config)
     return config
 
 
 def main():
+    log = pyethereum.slogging.get_logger('app')
     log.info('starting', version=__version__)
 
     config = create_config()
@@ -132,7 +135,7 @@ def main():
     config_string = config.get('misc', 'logging') or ':INFO'
     pyethereum.slogging.configure(config_string,
                                   log_json=bool(config.getint('misc', 'log_json')))
-
+    log = pyethereum.slogging.get_logger('app')  # get updated logger
     # log config
     log.debug("config ready")
     for section in config.sections():
