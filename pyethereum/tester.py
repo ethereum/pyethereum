@@ -65,6 +65,42 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
+    def abi_contract(me, code, sender=k0, endowment=0):
+
+        class _abi_contract():
+
+            def __init__(self, _state, code, sender=k0, endowment=0):
+                evm = serpent.compile(code)
+                myaddr = me.evm(evm, sender, endowment)
+                assert len(me.block.get_code(myaddr)), "Contract code empty"
+                sig = serpent.mk_signature(code)
+                sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
+                for i, s in enumerate(sig):
+                    fun = s[:s.find(':')].strip()
+                    funsig = s[s.find(':')+1:].strip()
+
+                    def kall_factory(fun, funsig):
+
+                        def kall(*abi, **kwargs):
+                            print fun, funsig, abi
+                            if len(funsig) != len(abi):
+                                raise Exception("Wrong number of arguments!")
+                            for typ, val in zip(funsig, abi):
+                                typ2 = 'i' if isinstance(val, (int, long)) else \
+                                       's' if isinstance(val, (str, unicode)) else \
+                                       'a' if isinstance(val, list) else 'err'
+                                if typ != typ2:
+                                    raise Exception('Type mismatch!')
+                            return _state.send(kwargs.get('sender', k0),
+                                               myaddr,
+                                               kwargs.get('value', 0),
+                                               funid=i, abi=abi)
+                        return kall
+
+                    vars(self)[fun] = kall_factory(fun, funsig)
+
+        return _abi_contract(me, code, sender, endowment)
+
     def evm(self, evm, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
