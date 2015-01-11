@@ -71,8 +71,9 @@ class state():
 
             def __init__(self, _state, code, sender=k0, endowment=0):
                 evm = serpent.compile(code)
-                myaddr = me.evm(evm, sender, endowment)
-                assert len(me.block.get_code(myaddr)), "Contract code empty"
+                self.address = me.evm(evm, sender, endowment)
+                assert len(me.block.get_code(self.address)), \
+                    "Contract code empty"
                 sig = serpent.mk_signature(code)
                 sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
                 for i, s in enumerate(sig):
@@ -82,7 +83,6 @@ class state():
                     def kall_factory(fun, funsig):
 
                         def kall(*abi, **kwargs):
-                            print fun, funsig, abi
                             if len(funsig) != len(abi):
                                 raise Exception("Wrong number of arguments!")
                             for typ, val in zip(funsig, abi):
@@ -92,7 +92,7 @@ class state():
                                 if typ != typ2:
                                     raise Exception('Type mismatch!')
                             return _state.send(kwargs.get('sender', k0),
-                                               myaddr,
+                                               self.address,
                                                kwargs.get('value', 0),
                                                funid=i, abi=abi)
                         return kall
