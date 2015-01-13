@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import pytest
 import json
 import pyethereum.processblock as pb
@@ -62,7 +63,7 @@ def gen_func(filename, testname):
 
 for filename, tests in vm_tests_fixtures().items():
     for testname, testdata in tests.items():
-        func_name = 'test_%s_%s' % (filename, testname)
+        func_name = 'test_%s_%s' % (filename.replace(os.path.sep, '_'), testname)
         func = gen_func(filename, testname)
         globals()[func_name] = func
 
