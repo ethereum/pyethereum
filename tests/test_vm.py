@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import pytest
 import json
 import pyethereum.processblock as pb
@@ -30,13 +31,17 @@ def vm_tests_fixtures():
     """
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
-    filenames = os.listdir(os.path.join('fixtures', 'VMTests'))
-    files = [os.path.join('fixtures', 'VMTests', f) for f in filenames]
-    vm_fixtures = {}
+    paths = [os.path.join('fixtures', 'VMTests'),
+             os.path.join('fixtures', 'VMTests', 'RandomTests')]
+    files = []
+    for p in paths:
+        for fn in os.listdir(p):
+            files.append(os.path.join(p, fn))
+    vm_fixtures = OrderedDict()
     try:
-        for f, fn in zip(files, filenames):
-            if f[-5:] == '.json':
-                vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
+        for f in files:
+            if f.endswith('.json'):
+                vm_fixtures[f.rsplit('.', 1)[0]] = json.load(open(f, 'r'))
     except IOError, e:
         raise IOError("Could not read vmtests.json from fixtures",
                       "Make sure you did 'git submodule init'")
@@ -49,7 +54,7 @@ def gen_func(filename, testname):
 
 for filename, tests in vm_tests_fixtures().items():
     for testname, testdata in tests.items():
-        func_name = 'test_%s_%s' % (filename, testname)
+        func_name = 'test_%s_%s' % (filename.replace(os.path.sep, '_'), testname)
         func = gen_func(filename, testname)
         globals()[func_name] = func
 
