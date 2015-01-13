@@ -73,17 +73,11 @@ class Compustate():
 def preprocess_code(code):
     i = 0
     ops = []
-    last_push = False
     while i < len(code):
         o = copy.copy(opcodes.opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) +
                       [ord(code[i]), 0])
-        if last_push:
-            last_push = False
-            if o[0] == 'JUMP' or o[0] == 'JUMPI':
-                o[0] += 'STATIC'
         ops.append(o)
         if o[0][:4] == 'PUSH':
-            last_push = True
             for j in range(int(o[0][4:])):
                 i += 1
                 byte = ord(code[i]) if i < len(code) else 0
@@ -190,6 +184,9 @@ def vm_execute(ext, msg, code):
 
             log_vm_op.trace('vm', **trace_data)
 
+
+        if op == 'INVALID':
+            return vm_exception('INVALID OP', opcode=opcode)
         if opcode < 0x10:
             if op == 'STOP':
                 return peaceful_exit('STOP', compustate.gas, [])
@@ -282,7 +279,8 @@ def vm_execute(ext, msg, code):
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == 'BALANCE':
-                stk.append(ext.get_balance(utils.coerce_addr_to_hex(stk.pop())))
+                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                stk.append(ext.get_balance(addr))
             elif op == 'ORIGIN':
                 stk.append(utils.coerce_to_int(ext.tx_origin))
             elif op == 'CALLER':
@@ -316,10 +314,12 @@ def vm_execute(ext, msg, code):
             elif op == 'GASPRICE':
                 stk.append(ext.tx_gasprice)
             elif op == 'EXTCODESIZE':
-                stk.append(len(ext.get_code(utils.coerce_addr_to_hex(stk.pop())) or ''))
+                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                stk.append(len(ext.get_code(addr) or ''))
             elif op == 'EXTCODECOPY':
-                addr, start, s2, size = stk.pop(), stk.pop(), stk.pop(), stk.pop()
-                extcode = ext.get_code(utils.coerce_addr_to_hex(addr)) or ''
+                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                start, s2, size = stk.pop(), stk.pop(), stk.pop()
+                extcode = ext.get_code(addr) or ''
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
@@ -377,21 +377,19 @@ def vm_execute(ext, msg, code):
                 compustate.gas -= max(gascost, 0)
                 ext.add_refund(max(-gascost, 0))  # adds neg gascost as a refund if below zero
                 ext.set_storage_data(msg.to, s0, s1)
-            elif op == 'JUMP' or op == 'JUMPSTATIC':
+            elif op == 'JUMP':
                 compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][0] if \
                     compustate.pc < len(processed_code) else 'STOP'
-                if (op != 'JUMPSTATIC' and opnew != 'JUMPDEST') or \
-                        opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
+                if opnew != 'JUMPDEST':
                     return vm_exception('BAD JUMPDEST')
-            elif op == 'JUMPI' or op == 'JUMPISTATIC':
+            elif op == 'JUMPI':
                 s0, s1 = stk.pop(), stk.pop()
                 if s1:
                     compustate.pc = s0
                     opnew = processed_code[compustate.pc][0] if \
                         compustate.pc < len(processed_code) else 'STOP'
-                    if (op != 'JUMPISTATIC' and opnew != 'JUMPDEST') or \
-                            opnew in ['JUMP', 'JUMPI', 'JUMPSTATIC', 'JUMPISTATIC']:
+                    if opnew != 'JUMPDEST':
                         return vm_exception('BAD JUMPDEST')
             elif op == 'PC':
                 stk.append(compustate.pc - 1)
@@ -514,8 +512,6 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
             return 1, compustate.gas, []
-        elif op == 'INVALID':
-            return vm_exception('INVALID OP', opcode=opcode)
         # for a in stk:
         #     assert isinstance(a, (int, long))
 

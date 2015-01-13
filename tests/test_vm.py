@@ -118,10 +118,10 @@ def run_test_vm(params):
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, h['code'][2:].decode('hex'))
-        for k, v in h['storage']:
+        for k, v in h['storage'].iteritems():
             blk.set_storage_data(address,
-                                 u.big_endian_to_int(k.decode('hex')),
-                                 u.big_endian_to_int(v.decode('hex')))
+                                 u.big_endian_to_int(k[2:].decode('hex')),
+                                 u.big_endian_to_int(v[2:].decode('hex')))
 
     # execute transactions
     sender = exek['caller']  # a party that originates a call
@@ -154,6 +154,15 @@ def run_test_vm(params):
     pb.apply_msg = apply_msg_wrapper
 
     ext = pb.VMExt(blk, tx)
+
+    def blkhash(n):
+        if n >= ext.block_number or n < ext.block_number - 256:
+            return ''
+        else:
+            return u.sha3(str(n))
+
+    ext.block_hash = blkhash
+
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
                      vm.CallData([ord(x) for x in tx.data]))
     success, gas_remained, output = \
@@ -168,8 +177,9 @@ def run_test_vm(params):
      Since the reverting of the state is not part of the VM tests.
      """
 
-
     if not success:
+        assert 'gas' not in params
+        assert 'post' not in params
         return
 
     for k in ['gas', 'logs', 'out', 'post', 'callcreates']:
