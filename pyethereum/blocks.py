@@ -254,7 +254,7 @@ class Block(object):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
             return False
         # Check uncle validity
-        ancestor_chain = self.get_ancestor_list(MAX_UNCLE_DEPTH + 1)
+        ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago
