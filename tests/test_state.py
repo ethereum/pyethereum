@@ -113,6 +113,21 @@ def do_test_vm(filename, testname=None, limit=99999999):
         value=int(exek['value'] or "0"),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
 
+    orig_apply_msg = pb.apply_msg
+
+    def apply_msg_wrapper(ext, msg, code):
+
+        def blkhash(n):
+            if n >= blk.number or n < blk.number - 256:
+                return ''
+            else:
+                return u.sha3(str(n))
+
+        ext.block_hash = blkhash
+        return orig_apply_msg(ext, msg, code)
+
+    pb.apply_msg = apply_msg_wrapper
+
     try:
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
@@ -120,6 +135,11 @@ def do_test_vm(filename, testname=None, limit=99999999):
         output = ''
         logger.debug('Transaction not valid')
         pass
+
+    if tx.to == '':
+        output = blk.get_code(output)
+
+    pb.apply_msg = orig_apply_msg
 
     assert '0x' + output.encode('hex') == params['out']
 

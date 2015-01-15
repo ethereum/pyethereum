@@ -41,10 +41,22 @@ def proc_ripemd160(ext, msg):
     o = [0] * 12 + [ord(x) for x in bitcoin.ripemd.RIPEMD160(d).digest()]
     return 1, msg.gas - gas_cost, o
 
+
+def proc_identity(ext, msg):
+    print 'identity proc', msg.gas
+    OP_GAS = 1 + (utils.ceil32(msg.data.size) / 32)
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    o = [0] * msg.data.size
+    msg.data.extract_copy(o, 0, len(o))
+    return 1, msg.gas - gas_cost, o
+
 specials = {
     '0000000000000000000000000000000000000001': proc_ecrecover,
     '0000000000000000000000000000000000000002': proc_sha256,
     '0000000000000000000000000000000000000003': proc_ripemd160,
+    '0000000000000000000000000000000000000004': proc_identity,
 }
 
 if __name__ == '__main__':

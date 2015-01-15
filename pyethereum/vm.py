@@ -44,7 +44,7 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0):
+    def __init__(self, sender, to, value, gas, data, depth=0, is_create=False):
         self.sender = sender
         self.to = to
         self.value = value
@@ -52,6 +52,7 @@ class Message(object):
         self.data = data
         self.depth = depth
         self.logs = []
+        self.is_create = is_create
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -458,8 +459,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if compustate.gas < gas:
                 return vm_exception('OUT OF GAS')
-            compustate.gas -= gas
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+                compustate.gas -= gas
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)
@@ -474,7 +475,6 @@ def vm_execute(ext, msg, code):
                         mem[memoutstart + i] = data[i]
             else:
                 stk.append(0)
-                compustate.gas += gas
         elif op == 'CALLCODE':
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
