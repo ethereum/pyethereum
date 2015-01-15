@@ -17,7 +17,7 @@ from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-configure_logging(':trace')
+#configure_logging(':trace')
 
 MAX_TESTS_PER_FILE = 200
 
@@ -258,7 +258,7 @@ def random():
                 do_test_vm(filename, testname)
                 print 0
     else:
-        data = json.loads(open(sys.argv[1]).read())
+        data = json.loads(sys.argv[1])
         for test_data in data.values():
             try:
                 run_test_vm(test_data)
