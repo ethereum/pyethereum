@@ -199,7 +199,7 @@ class Block(object):
             return k
         self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
-        self.ancestors = [self]
+        self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
