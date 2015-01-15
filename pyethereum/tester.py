@@ -76,11 +76,11 @@ class state():
                     "Contract code empty"
                 sig = serpent.mk_signature(code)
                 sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
-                for i, s in enumerate(sig):
+                for funid, s in enumerate(sig):
                     fun = s[:s.find(':')].strip()
                     funsig = s[s.find(':')+1:].strip()
 
-                    def kall_factory(fun, funsig):
+                    def kall_factory(funid, fun, funsig):
 
                         def kall(*abi, **kwargs):
                             if len(funsig) != len(abi):
@@ -94,10 +94,10 @@ class state():
                             return _state.send(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
-                                               funid=i, abi=abi)
+                                               funid=funid, abi=abi)
                         return kall
 
-                    vars(self)[fun] = kall_factory(fun, funsig)
+                    vars(self)[fun] = kall_factory(funid, fun, funsig)
 
         return _abi_contract(me, code, sender, endowment)
 

@@ -1103,6 +1103,22 @@ def test_prevhashes():
     assert o2 == t2
 
 
+abi_contract_code = """
+def mul2(a):
+    return(a * 2)
+
+def returnten():
+    return(10)
+"""
+
+
+def test_abi_contract():
+    s = tester.state()
+    c = s.abi_contract(abi_contract_code)
+    assert c.mul2(3) == [6]
+    assert c.returnten() == [10]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1135,3 +1151,4 @@ def test_prevhashes():
 # test_types_in_functions = None
 # test_more_infinites = None
 # test_prevhashes = None
+# test_abi_contract = None
