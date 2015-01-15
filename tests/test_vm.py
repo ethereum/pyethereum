@@ -258,7 +258,11 @@ def random():
                 do_test_vm(filename, testname)
                 print 0
     else:
-        data = json.loads(open(sys.argv[1]).read())
+        if os.path.isfile(sys.argv[1]):
+            data = open(sys.argv[1]).read()
+        else:
+            data = sys.argv[1]
+        data = json.loads(data)
         for test_data in data.values():
             try:
                 run_test_vm(test_data)
