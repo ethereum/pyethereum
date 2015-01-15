@@ -331,6 +331,10 @@ def test_invalid_transaction():
     assert blk.get_balance(v2) == utils.denoms.ether * 1
     assert tx not in blk.get_transactions()
 
+def test_prevhash():
+    cm = new_chainmanager()
+    L1 = mine_next_block(cm.head)
+    L1.get_ancestor_list(2)
 
 def test_add_side_chain():
     """"
