@@ -12,7 +12,7 @@ import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
-import pyethereum.rlp as rlp
+import rlp
 from pyethereum.slogging import get_logger, LogRecorder
 from ._version import get_versions
 

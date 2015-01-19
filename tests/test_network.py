@@ -1,6 +1,6 @@
 import os
 import pytest
-import pyethereum.rlp as rlp
+import rlp
 import pyethereum.trie as trie
 import pyethereum.utils as utils
 import pyethereum.packeter as packeter

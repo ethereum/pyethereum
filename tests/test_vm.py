@@ -8,7 +8,7 @@ import pyethereum.transactions as transactions
 import pyethereum.utils as u
 import pyethereum.bloom as bloom
 import pyethereum.tlogging as tlogging
-import pyethereum.rlp as rlp
+import rlp
 import os
 import sys
 from tests.utils import new_db

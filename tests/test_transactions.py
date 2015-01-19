@@ -4,7 +4,7 @@ import pyethereum.opcodes as opcodes
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
-import pyethereum.rlp as rlp
+import rlp
 from tests.utils import new_db
 import serpent
 

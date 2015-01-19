@@ -36,7 +36,7 @@ from pyethereum.packeter import packeter
 import pyethereum.chainmanager as chainmanager
 import pyethereum.utils as utils
 import pyethereum.blocks as blocks
-import pyethereum.rlp as rlp
+import rlp
 import pyethereum.peer as peer
 
 MIN_BLOCKS = 2

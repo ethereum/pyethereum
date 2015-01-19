@@ -2,7 +2,7 @@ import os
 import pytest
 import json
 import pyethereum.blocks as blocks
-import pyethereum.rlp as rlp
+import rlp
 import pyethereum.utils as utils
 from tests.utils import new_db
 from pyethereum.slogging import get_logger, configure_logging
@@ -51,9 +51,9 @@ if __name__ == '__main__':
     cpp_genesis_rlp = cpp_genesis_rlp_hex.decode('hex')
 
     poc7_genesis_hash_hex = '955f36d073ccb026b78ab3424c15cf966a7563aa270413859f78702b9e8e22cb'
-    cpp_genesis = rlp.decode(cpp_genesis_rlp) 
+    cpp_genesis = rlp.decode(cpp_genesis_rlp)
     cpp_genesis_hash_hex = utils.sha3(rlp.encode(cpp_genesis[0])).encode('hex')
-    
+
     cpp_header = cpp_genesis[0]
     cpp_header_hex = [x.encode('hex') for x in cpp_header]
 
@@ -78,4 +78,4 @@ if __name__ == '__main__':
     for i in range(3):
         assert py_genesis[i] == cpp_genesis[i]
 
-    
+

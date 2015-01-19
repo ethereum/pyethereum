@@ -1,7 +1,7 @@
 import os, sys
 import pytest
-from pyethereum import tester, rlp
-
+from pyethereum import tester
+import rlp
 
 mul2_code = \
     '''

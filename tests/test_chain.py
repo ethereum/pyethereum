@@ -4,7 +4,7 @@ import json
 import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
-import pyethereum.rlp as rlp
+import rlp
 import pyethereum.trie as trie
 import pyethereum.miner as miner
 import pyethereum.utils as utils
