@@ -7,6 +7,7 @@ leveldb
 miniupnpc
 pysha3
 pytest
+pytest-timeout
 repoze.lru
 requests
 waitress

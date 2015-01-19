@@ -867,6 +867,8 @@ def sort(args:a):
 """
 
 
+@pytest.mark.xfail
+@pytest.mark.timeout(10)
 def test_sort():
     s = tester.state()
     c = s.contract(sort_code)
@@ -894,6 +896,8 @@ def test(args:a):
 ''' % filename9
 
 
+@pytest.mark.xfail
+@pytest.mark.timeout(10)
 def test_indirect_sort():
     s = tester.state()
     open(filename9, 'w').write(sort_code)
@@ -1083,7 +1087,8 @@ def get_prevhashes(k):
     return(o:a)
 """
 
-
+@pytest.mark.xfail
+@pytest.mark.timeout(10)
 def test_prevhashes():
     s = tester.state()
     c = s.contract(prevhashes_code)
