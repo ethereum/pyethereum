@@ -6,8 +6,24 @@ versioneer.versionfile_build = 'pyethereum/_version.py'
 versioneer.tag_prefix = '' # tags are like 1.2.0
 versioneer.parentdir_prefix = 'pyethereum-' # dirname like 'myproject-1.2.0'
 
+from setuptools.command.test import test as TestCommand
+class PyTest(TestCommand):
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+        self.test_suite = True
+    def run_tests(self):
+        #import here, cause outside the eggs aren't loaded
+        import pytest
+        pytest.main(self.test_args)
+
+
 console_scripts = ['pyeth=pyethereum.eth:main',
                    'pyethclient=pyethereum.ethclient:main']
+
+
+cmdclass=versioneer.get_cmdclass()
+cmdclass['test'] = PyTest
 
 setup(name="pyethereum",
       packages=find_packages("."),
@@ -26,7 +42,9 @@ setup(name="pyethereum",
           'requests',
           'waitress',
           'structlog',
+          'rlp',
       ],
       entry_points=dict(console_scripts=console_scripts),
       version=versioneer.get_version(),
-      cmdclass=versioneer.get_cmdclass())
+      cmdclass=cmdclass
+      )
