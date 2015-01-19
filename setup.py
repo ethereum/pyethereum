@@ -25,25 +25,13 @@ console_scripts = ['pyeth=pyethereum.eth:main',
 cmdclass=versioneer.get_cmdclass()
 cmdclass['test'] = PyTest
 
+install_requires = [x.strip() for x in open('requirements.txt')]
+
 setup(name="pyethereum",
       packages=find_packages("."),
       description='Next generation cryptocurrency network',
       url='https://github.com/ethereum/pyethereum/',
-      install_requires=[
-          'bitcoin',
-          'bottle',
-          'docopt',
-          'ethereum-serpent',
-          'leveldb',
-          'miniupnpc',
-          'pysha3',
-          'pytest',
-          'repoze.lru',
-          'requests',
-          'waitress',
-          'structlog',
-          'rlp',
-      ],
+      install_requires=install_requires,
       entry_points=dict(console_scripts=console_scripts),
       version=versioneer.get_version(),
       cmdclass=cmdclass
