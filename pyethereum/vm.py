@@ -185,9 +185,11 @@ def vm_execute(ext, msg, code):
 
             log_vm_op.trace('vm', **trace_data)
 
-
+        # Invalid operation
         if op == 'INVALID':
             return vm_exception('INVALID OP', opcode=opcode)
+
+        # Valid operations
         if opcode < 0x10:
             if op == 'STOP':
                 return peaceful_exit('STOP', compustate.gas, [])

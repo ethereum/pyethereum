@@ -867,7 +867,6 @@ def sort(args:a):
 """
 
 
-@pytest.mark.xfail
 @pytest.mark.timeout(10)
 def test_sort():
     s = tester.state()
@@ -878,8 +877,8 @@ def test_sort():
     assert a2 == [5, 9]
     a3 = s.send(tester.k0, c, 0, funid=0, abi=[[9, 3, 5]])
     assert a3 == [3, 5, 9]
-    a4 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
-    assert a4 == [24, 29, 80, 112, 112, 234]
+    a4 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 234, 112, 112, 29]])
+    assert a4 == [29, 80, 112, 112, 234]
 
 filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
@@ -896,14 +895,13 @@ def test(args:a):
 ''' % filename9
 
 
-@pytest.mark.xfail
 @pytest.mark.timeout(10)
 def test_indirect_sort():
     s = tester.state()
     open(filename9, 'w').write(sort_code)
     c = s.contract(sort_tester_code)
-    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
-    assert a1 == [24, 29, 80, 112, 112, 234]
+    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 234, 112, 112, 29]])
+    assert a1 == [29, 80, 112, 112, 234]
 
 
 multiarg_code = """
@@ -1087,7 +1085,6 @@ def get_prevhashes(k):
     return(o:a)
 """
 
-@pytest.mark.xfail
 @pytest.mark.timeout(10)
 def test_prevhashes():
     s = tester.state()

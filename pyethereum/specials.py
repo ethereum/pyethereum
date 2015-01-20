@@ -49,7 +49,7 @@ def proc_identity(ext, msg):
     if msg.gas < gas_cost:
         return 0, 0, []
     o = [0] * msg.data.size
-    msg.data.extract_copy(o, 0, len(o))
+    msg.data.extract_copy(o, 0, 0, len(o))
     return 1, msg.gas - gas_cost, o
 
 specials = {
