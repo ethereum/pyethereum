@@ -207,7 +207,7 @@ def main(datafeed, index):
         othervalue = ethvalue * c
         self.fiatValue = othervalue
         self.maturity = block.timestamp + 500
-        return([2, othervalue]:a)
+        return([2, othervalue]:arr)
     else:
         othervalue = self.fiatValue
         ethvalue = othervalue / self.datafeed.get(self.index)
@@ -494,7 +494,7 @@ def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:arr)
 
 def query_items(u, i):
     return(self.users[u].items[i])
@@ -511,10 +511,10 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a:a)
+    return(a:arr)
 
 def testping(x, y):
-    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)]:a)
+    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)]:arr)
 
 def testping2(x):
     return(x*x)
@@ -567,7 +567,7 @@ def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:arr)
 
 def query_items(u, i):
     return(self.users[u].items[i])
@@ -584,7 +584,7 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a:a)
+    return(a:arr)
 """
 
 
@@ -768,7 +768,7 @@ def kall():
     save(self.store[0], a, chars=60)
     b = load(self.store[0], chars=60)
     c = load(self.store[0], chars=33)
-    return([a[0], a[1], b[0], b[1], c[0], c[1]]:a)
+    return([a[0], a[1], b[0], b[1], c[0], c[1]]:arr)
 
 """
 
@@ -789,7 +789,7 @@ def test_saveload():
 
 sdiv_code = """
 def kall():
-    return([2^255 / 2^253, 2^255 % 3]:a)
+    return([2^255 / 2^253, 2^255 % 3]:arr)
 """
 
 
@@ -800,10 +800,10 @@ def test_sdiv():
 
 
 basic_argcall_code = """
-def argcall(args:a):
+def argcall(args:arr):
     return(args[0] + args[1] * 10 + args[2] * 100)
 
-def argkall(args:a):
+def argkall(args:arr):
     return self.argcall(args)
 """
 
@@ -815,13 +815,13 @@ def test_argcall():
     assert [376] == s.send(tester.k0, c, 0, funid=1, abi=[[6, 7, 3]])
 
 more_complex_argcall_code = """
-def argcall(args:a):
+def argcall(args:arr):
     args[0] *= 2
     args[1] *= 2
-    return(args:a)
+    return(args:arr)
 
-def argkall(args:a):
-    return(self.argcall(args, outsz=2):a)
+def argkall(args:arr):
+    return(self.argcall(args, outsz=2):arr)
 """
 
 
@@ -833,9 +833,9 @@ def test_argcall2():
 
 
 sort_code = """
-def sort(args:a):
+def sort(args:arr):
     if len(args) < 2:
-        return(args:a)
+        return(args:arr)
     h = array(len(args))
     hpos = 0
     l = array(len(args))
@@ -863,7 +863,7 @@ def sort(args:a):
     while i < hpos:
         o[lpos + 1 + i] = h[i]
         i += 1
-    return(o:a)
+    return(o:arr)
 """
 
 
@@ -884,14 +884,14 @@ filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
 sort_tester_code = \
     '''
-extern sorter: [sort:a]
+extern sorter: [sort:arr]
 data sorter
 
 def init():
     self.sorter = create("%s")
 
-def test(args:a):
-    return(self.sorter.sort(args, outsz=len(args)):a)
+def test(args:arr):
+    return(self.sorter.sort(args, outsz=len(args)):arr)
 ''' % filename9
 
 
@@ -905,9 +905,9 @@ def test_indirect_sort():
 
 
 multiarg_code = """
-def kall(a:a, b, c:a, d:s, e):
+def kall(a:arr, b, c:arr, d:str, e):
     x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
-    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:a)
+    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:arr)
 """
 
 
@@ -961,7 +961,7 @@ macro three():
 macro five():
     padd(three(), two())
 
-return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:a)
+return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:arr)
 
 """
 
@@ -1013,7 +1013,7 @@ def test_types():
     assert s.send(tester.k0, c, 0, []) == [5]
 
 sha256_code = """
-return([sha256(0, 0), sha256(3), sha256(text("dog"):s), sha256([0,0,0,0,0]:a)]:a)
+return([sha256(0, 0), sha256(3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr)]:arr)
 """
 
 
@@ -1082,7 +1082,7 @@ def get_prevhashes(k):
     while i < k:
         o[i] = block.prevhash(i)
         i += 1
-    return(o:a)
+    return(o:arr)
 """
 
 @pytest.mark.timeout(10)
