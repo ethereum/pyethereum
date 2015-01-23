@@ -1121,7 +1121,7 @@ def test_abi_contract():
     assert c.returnten() == [10]
 
 
-mcopy = """
+mcopy_code = """
 def mcopy_test(foo:str, a, b, c):
     info = string(32*3 + len(foo))
     info[0] = a
@@ -1134,9 +1134,27 @@ def mcopy_test(foo:str, a, b, c):
 
 def test_mcopy():
     s = tester.state()
-    c = s.abi_contract(mcopy)
+    c = s.abi_contract(mcopy_code)
     assert c.mcopy_test("123", 5, 6, 259, output='raw') == \
         '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
+
+
+array_saveload_code = """
+data a[5]
+
+def array_saveload():
+    a = [1,2,3,4,5]
+    save(self.a[0], a, items=5)
+    a = load(self.a[0], items=4)
+    log(len(a))
+    return(load(self.a[0], items=4):arr)
+"""
+
+
+def test_saveload2():
+    s = tester.state()
+    c = s.abi_contract(array_saveload_code)
+    assert c.array_saveload() == [1, 2, 3, 4]
 
 
 # test_evm = None
@@ -1173,3 +1191,4 @@ def test_mcopy():
 # test_prevhashes = None
 # test_abi_contract = None
 # test_mcopy = None
+# test_saveload2 = None
