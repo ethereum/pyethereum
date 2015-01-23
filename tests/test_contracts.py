@@ -1157,6 +1157,25 @@ def test_saveload2():
     assert c.array_saveload() == [1, 2, 3, 4]
 
 
+string_manipulation_code = """
+def f1(istring:str):
+    setch(istring, 0, "a")
+    setch(istring, 1, "b")
+    return(istring:str)
+
+def t1():
+    istring = text("cd")
+    res = self.f1(istring, outbytes=2)
+    return([getch(res,0), getch(res,1)]:arr)  # should return [97,98]
+"""
+
+
+def test_string_manipulation():
+    s = tester.state()
+    c = s.abi_contract(string_manipulation_code)
+    assert c.t1() == [97, 98]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1192,3 +1211,4 @@ def test_saveload2():
 # test_abi_contract = None
 # test_mcopy = None
 # test_saveload2 = None
+# test_string_manipulation = None
