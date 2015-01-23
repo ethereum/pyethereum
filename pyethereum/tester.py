@@ -83,14 +83,18 @@ class state():
                     def kall_factory(funid, fun, funsig):
 
                         def kall(*abi, **kwargs):
+                            abi = list(abi)
                             if len(funsig) != len(abi):
                                 raise Exception("Wrong number of arguments!")
-                            for typ, val in zip(funsig, abi):
+                            for i, (typ, val) in enumerate(zip(funsig, abi)):
                                 typ2 = 'i' if isinstance(val, (int, long)) else \
                                        's' if isinstance(val, (str, unicode)) else \
                                        'a' if isinstance(val, list) else 'err'
                                 if typ != typ2:
-                                    raise Exception('Type mismatch!')
+                                    if typ == 'i' and typ2 == 's' and len(val) == 40:
+                                        abi[i] = u.coerce_to_int(val)
+                                    else:
+                                        raise Exception('Type mismatch!')
                             return _state.send(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
