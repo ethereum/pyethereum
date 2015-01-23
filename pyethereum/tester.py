@@ -95,10 +95,13 @@ class state():
                                         abi[i] = u.coerce_to_int(val)
                                     else:
                                         raise Exception('Type mismatch!')
+                                elif typ == 's':
+                                    abi[i] = '"' + val + '"'
                             return _state.send(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
-                                               funid=funid, abi=abi)
+                                               funid=funid, abi=abi,
+                                               output=kwargs.get('output', None))
                         return kall
 
                     vars(self)[fun] = kall_factory(funid, fun, funsig)
@@ -114,7 +117,7 @@ class state():
             raise Exception("Contract creation failed")
         return a
 
-    def send(self, sender, to, value, data=[], funid=None, abi=None):
+    def send(self, sender, to, value, data=[], funid=None, abi=None, output=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
             evmdata = serpent.encode_abi(funid, *abi)
@@ -126,8 +129,11 @@ class state():
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
-        o = serpent.decode_datalist(r)
-        return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
+        if output == 'raw':
+            return r
+        else:
+            o = serpent.decode_datalist(r)
+            return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
 
     def profile(self, sender, to, value, data=[], funid=None, abi=None):
         tm, g = time.time(), self.block.gas_used

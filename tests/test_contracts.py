@@ -1121,6 +1121,24 @@ def test_abi_contract():
     assert c.returnten() == [10]
 
 
+mcopy = """
+def mcopy_test(foo:str, a, b, c):
+    info = string(32*3 + len(foo))
+    info[0] = a
+    info[1] = b
+    info[2] = c
+    mcopy(info+(items=3), foo, len(foo))
+    return(info:str)
+"""
+
+
+def test_mcopy():
+    s = tester.state()
+    c = s.abi_contract(mcopy)
+    assert c.mcopy_test("123", 5, 6, 259, output='raw') == \
+        '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1154,3 +1172,4 @@ def test_abi_contract():
 # test_more_infinites = None
 # test_prevhashes = None
 # test_abi_contract = None
+# test_mcopy = None
