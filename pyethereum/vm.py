@@ -485,7 +485,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if compustate.gas < gas:
                 return vm_exception('OUT OF GAS')
-            if msg.depth < 1024:
+            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= gas
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
@@ -514,8 +514,9 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
             return 1, compustate.gas, []
-        # for a in stk:
-        #     assert isinstance(a, (int, long))
+        #for a in stk:
+        #    assert isinstance(a, (int, long))
+        #    assert a >= 0, a
 
 
 class VmExtBase():
