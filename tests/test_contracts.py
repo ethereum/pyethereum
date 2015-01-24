@@ -1013,7 +1013,7 @@ def test_types():
     assert s.send(tester.k0, c, 0, []) == [5]
 
 sha256_code = """
-return([sha256(0, 0), sha256(3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr)]:arr)
+return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
 """
 
 
@@ -1024,7 +1024,26 @@ def test_sha256():
         0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
         0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
         0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256,
         0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256
+    ]
+
+sha3_code = """
+return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
+"""
+
+
+def test_sha3():
+    s = tester.state()
+    c = s.contract(sha3_code)
+    assert s.send(tester.k0, c, 0, []) == [
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
+        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
+        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
+        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256
     ]
 
 types_in_functions_code = """
@@ -1205,6 +1224,7 @@ def test_string_manipulation():
 # test_macros = None
 # test_types = None
 # test_sha256 = None
+# test_sha3 = None
 # test_types_in_functions = None
 # test_more_infinites = None
 # test_prevhashes = None
