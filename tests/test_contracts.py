@@ -849,10 +849,8 @@ def sort(args:arr):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    shrink(h, hpos)
-    shrink(l, lpos)
-    h = self.sort(h, outsz=hpos)
-    l = self.sort(l, outsz=lpos)
+    h = self.sort(slice(h, items=0, items=hpos), outsz=hpos)
+    l = self.sort(slice(l, items=0, items=lpos), outsz=lpos)
     o = array(len(args))
     i = 0
     while i < lpos:
@@ -1158,6 +1156,25 @@ def test_mcopy():
         '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
 
 
+mcopy_code_2 = """
+def mcopy_test():
+    myarr = array(3)
+    myarr[0] = 99
+    myarr[1] = 111
+    myarr[2] = 119
+
+    mystr = string(96)
+    mcopy(mystr, myarr, items=3)
+    return(mystr:str)
+"""
+
+
+def test_mcopy2():
+    s = tester.state()
+    c = s.abi_contract(mcopy_code_2)
+    assert c.mcopy_test() == [99, 111, 119]
+
+
 array_saveload_code = """
 data a[5]
 
@@ -1184,7 +1201,7 @@ def f1(istring:str):
 
 def t1():
     istring = text("cd")
-    res = self.f1(istring, outbytes=2)
+    res = self.f1(istring, outchars=2)
     return([getch(res,0), getch(res,1)]:arr)  # should return [97,98]
 """
 
