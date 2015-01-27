@@ -24,18 +24,23 @@ eth.chain.new_block
 
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
+
     """
     Render `event_dict` as a list of ``Key=repr(Value)`` pairs.
     Prefix with event
     """
+
     def __call__(self, _, __, event_dict):
         msg = event_dict.pop('event', '')
         kvs = ' '.join(k + '=' + repr(v) for k, v in self._ordered_items(event_dict))
         return "%s\t%s" % (msg, kvs)
 
+
 class JSONRenderer(structlog.processors.JSONRenderer):
-   "JSON Render which prefixes namespace"
-   def __call__(self, logger, name, event_dict):
+
+    "JSON Render which prefixes namespace"
+
+    def __call__(self, logger, name, event_dict):
         event_dict = dict(event_dict)
         event_dict['event'] = logger.name + '.' + event_dict['event'].lower().replace(' ', '_')
         return json.dumps(event_dict, cls=structlog.processors._JSONFallbackEncoder,
@@ -64,11 +69,11 @@ class BoundLoggerTrace(structlog.stdlib.BoundLogger):
                 and self._processors[0].listeners:
             return True
         # log level filter
-        return self._logger.isEnabledFor(structlog.stdlib._nameToLevel[level_name])
+        return self._logger.isEnabledFor(structlog.stdlib._NAME_TO_LEVEL[level_name])
 
 
 structlog.stdlib.TRACE = TRACE = 5
-structlog.stdlib._nameToLevel['trace'] = TRACE
+structlog.stdlib._NAME_TO_LEVEL['trace'] = TRACE
 logging.addLevelName(TRACE, "TRACE")
 
 
@@ -188,9 +193,10 @@ def configure(config_string='', log_json=False):
     if config_string:
         configure_loglevels(config_string)
 
-configure_logging = configure # for unambigious imports
-### setup default config
+configure_logging = configure  # for unambigious imports
+# setup default config
 configure()
+
 
 def get_configuration():
     """

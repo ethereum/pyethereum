@@ -11,4 +11,4 @@ pytest-timeout
 repoze.lru
 requests
 waitress
-structlog
+structlog>=15.0.0
