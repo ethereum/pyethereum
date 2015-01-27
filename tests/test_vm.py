@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import pytest
 import json
 import pyethereum.processblock as pb
@@ -7,7 +6,6 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
 import pyethereum.bloom as bloom
-import pyethereum.tlogging as tlogging
 import rlp
 import os
 import sys
@@ -84,9 +82,9 @@ def do_test_vm(filename, testname=None, limit=99999999):
             do_test_vm(filename, testname)
         return
     if testname in faulty:
-        logger.debug('skipping test:%r in %r' %(testname, filename))
+        logger.debug('skipping test:%r in %r' % (testname, filename))
         return
-    logger.debug('running test:%r in %r' %(testname, filename))
+    logger.debug('running test:%r in %r' % (testname, filename))
     params = vm_tests_fixtures()[filename][testname]
     run_test_vm(params)
 
@@ -99,19 +97,19 @@ def run_test_vm(params):
     exek = params['exec']
     callcreates = params.get('callcreates', [])
     env = params['env']
-    post = params.get('post',{})
+    post = params.get('post', {})
 
     check_testdata(env.keys(), ['currentGasLimit', 'currentTimestamp',
                                 'previousHash', 'currentCoinbase',
                                 'currentDifficulty', 'currentNumber'])
     # setup env
     blk = blocks.Block(db,
-        prevhash=env['previousHash'].decode('hex'),
-        number=int(env['currentNumber']),
-        coinbase=env['currentCoinbase'],
-        difficulty=int(env['currentDifficulty']),
-        gas_limit=int(env['currentGasLimit']),
-        timestamp=int(env['currentTimestamp']))
+                       prevhash=env['previousHash'].decode('hex'),
+                       number=int(env['currentNumber']),
+                       coinbase=env['currentCoinbase'],
+                       difficulty=int(env['currentDifficulty']),
+                       gas_limit=int(env['currentGasLimit']),
+                       timestamp=int(env['currentTimestamp']))
 
     # code FIXME WHAT TO DO WITH THIS CODE???
     # if isinstance(env['code'], str):
@@ -234,7 +232,7 @@ def run_test_vm(params):
             vm_logs.append({
                 "bloom": bloom.b64(bloom.bloom_from_list(log.bloomables())).encode('hex'),
                 "address": log.address,
-                "data": '0x'+log.data.encode('hex'),
+                "data": '0x' + log.data.encode('hex'),
                 "topics": [u.zpad(u.int_to_big_endian(t), 32).encode('hex') for t in log.topics]
             })
 
