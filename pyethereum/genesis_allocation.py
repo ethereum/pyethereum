@@ -1,5 +1,5 @@
 GENESIS_INITIAL_ALLOC = {
-    "51ba59315b3a95761d0863b05ccc7a7f54703d99": 2 ** 200,
+    "dbdbdb2cbd23b783741e8d7fcf51e459b497e4a6": 2 ** 200,
     "e6716f9544a56c530d868e4bfbacb172315bdead": 2 ** 200,
     "b9c015918bdaba24b4ff057a92a3873d6eb201be": 2 ** 200,
     "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": 2 ** 200,

@@ -1,3 +1,9 @@
+"""
+also use json tx tests
+https://github.com/ethereum/tests/wiki/Transaction-Tests
+
+"""
+
 import pytest
 import pyethereum.processblock as processblock
 import pyethereum.opcodes as opcodes
