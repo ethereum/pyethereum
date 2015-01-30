@@ -363,7 +363,6 @@ def dump(txblkhash):
 def account(address=None):
     log.debug('accounts/%s' % address)
     data = chain_manager.head.account_to_dict(address)
-    log.debug(data)
     return data
 
 
