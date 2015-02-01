@@ -9,4 +9,4 @@ pytest
 repoze.lru
 requests
 waitress
-structlog
+structlog==0.4.2
