@@ -77,31 +77,19 @@ class state():
                 sig = serpent.mk_signature(code)
                 sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
                 for funid, s in enumerate(sig):
-                    fun = s[:s.find(':')].strip()
-                    funsig = s[s.find(':')+1:].strip()
+                    pos = s.find(':') if s.find(':') >= 0 else len(s)
+                    fun = s[:pos].strip()
+                    funsig = s[pos+1:].strip()
 
                     def kall_factory(funid, fun, funsig):
 
-                        def kall(*abi, **kwargs):
-                            abi = list(abi)
-                            if len(funsig) != len(abi):
-                                raise Exception("Wrong number of arguments!")
-                            for i, (typ, val) in enumerate(zip(funsig, abi)):
-                                typ2 = 'i' if isinstance(val, (int, long)) else \
-                                       's' if isinstance(val, (str, unicode)) else \
-                                       'a' if isinstance(val, list) else 'err'
-                                if typ != typ2:
-                                    if typ == 'i' and typ2 == 's' and len(val) == 40:
-                                        abi[i] = u.coerce_to_int(val)
-                                    else:
-                                        raise Exception('Type mismatch!')
-                                elif typ == 's':
-                                    abi[i] = '"' + val + '"'
-                            return _state.send(kwargs.get('sender', k0),
+                        def kall(*args, **kwargs):
+                            return _state.call(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
-                                               funid=funid, abi=abi,
-                                               output=kwargs.get('output', None))
+                                               fun, funsig, args,
+                                               output=kwargs.get('output',
+                                                                 None))
                         return kall
 
                     vars(self)[fun] = kall_factory(funid, fun, funsig)
@@ -117,12 +105,19 @@ class state():
             raise Exception("Contract creation failed")
         return a
 
-    def send(self, sender, to, value, data=[], funid=None, abi=None, output=None):
+    def call(self, sender, to, value, fun_name, sig, args, output=None):
+        data = serpent.encode_abi(fun_name, sig, *args)
+        return self.send(sender, to, value, data, output)
+
+    def send(self, sender, to, value, evmdata='', output=None,
+             funid=None, abi=None):
+        print evmdata, evmdata.encode('hex')
+        if funid is not None or abi is not None:
+            raise Exception(
+                "Send with funid+abi is deprecated. Please use the "
+                "abi_contract mechanism or s.call(sender, to, value, "
+                "function_name, function_signature, args)")
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        if funid is not None:
-            evmdata = serpent.encode_abi(funid, *abi)
-        else:
-            evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
