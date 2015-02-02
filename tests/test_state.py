@@ -4,7 +4,6 @@ import pyethereum.processblock as pb
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as u
-import pyethereum.tlogging as tlogging
 import os
 import sys
 import pyethereum.vm as vm
@@ -64,7 +63,7 @@ def do_test_vm(filename, testname=None, limit=99999999):
             do_test_vm(filename, testname)
         return
     if testname in faulty:
-        logger.debug('skipping test:%r in %r' %(testname, filename))
+        logger.debug('skipping test:%r in %r' % (testname, filename))
         return
     logger.debug('running test:%r in %r' % (testname, filename))
     params = vm_tests_fixtures()[filename][testname]
@@ -79,12 +78,12 @@ def do_test_vm(filename, testname=None, limit=99999999):
                                 'currentDifficulty', 'currentNumber'])
     # setup env
     blk = blocks.Block(new_db(),
-        prevhash=env['previousHash'].decode('hex'),
-        number=int(env['currentNumber']),
-        coinbase=env['currentCoinbase'],
-        difficulty=int(env['currentDifficulty']),
-        gas_limit=int(env['currentGasLimit']),
-        timestamp=int(env['currentTimestamp']))
+                       prevhash=env['previousHash'].decode('hex'),
+                       number=int(env['currentNumber']),
+                       coinbase=env['currentCoinbase'],
+                       difficulty=int(env['currentDifficulty']),
+                       gas_limit=int(env['currentGasLimit']),
+                       timestamp=int(env['currentTimestamp']))
 
     # code FIXME WHAT TO DO WITH THIS CODE???
     # if isinstance(env['code'], str):
