@@ -130,7 +130,11 @@ class state():
             o = serpent.decode_datalist(r)
             return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
 
-    def profile(self, sender, to, value, data=[], funid=None, abi=None):
+    def profile(self, sender, to, value, fun_name, sig, args, output=None, funid=None, abi=None):
+        #instead of just calling self.call, do something similar
+        #in order to trigger send warnings about deprecated shizz
+        data = serpent.encode_abi(fun_name, sig, *args)
+        self.send(sender, to, value, data, output=output, funid=funid, abi=abi)
         tm, g = time.time(), self.block.gas_used
         o = self.send(sender, to, value, data, funid, abi)
         zero_bytes = self.last_tx.data.count(chr(0))
