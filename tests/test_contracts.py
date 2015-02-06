@@ -1215,6 +1215,36 @@ def test_string_manipulation():
     assert c.t1() == [97, 98]
 
 
+more_infinite_storage_object_code = """
+data block[2^256](_blockHeader(_prevBlock))
+
+data numAncestorDepths
+
+data logs[2]
+
+def initAncestorDepths():
+    self.numAncestorDepths = 2
+
+def testStoreB(number, blockHash, hashPrevBlock, i):
+    self.block[blockHash]._blockHeader._prevBlock = hashPrevBlock
+
+    self.logs[i] = self.numAncestorDepths
+
+
+def test2():
+    self.initAncestorDepths()
+    self.testStoreB(45, 45, 44, 0)
+    self.testStoreB(46, 46, 45, 1)
+    return ([self.logs[0], self.logs[1]]:arr)
+"""
+
+
+def test_more_infinite_storage():
+    s = tester.state()
+    c = s.abi_contract(more_infinite_storage_object_code)
+    assert c.test2() == [2, 2]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1252,3 +1282,4 @@ def test_string_manipulation():
 # test_mcopy = None
 # test_saveload2 = None
 # test_string_manipulation = None
+# test_more_infinite_storage = None
