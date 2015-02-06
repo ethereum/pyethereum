@@ -1,4 +1,4 @@
-import utils, sys, re
+import utils, sys, re, json
 
 from utils import encode_int, zpad, decode_int
 
@@ -9,10 +9,24 @@ def encode_factory(id, types):
     return encode
 
 
+def json_non_unicode(x):
+    if isinstance(x, unicode):
+        return str(x)
+    elif isinstance(x, list):
+        return [json_non_unicode(y) for y in x]
+    elif isinstance(x, dict):
+        return {x: json_non_unicode(y) for x, y in x.items()}
+    else:
+        return x
+
+
 class ContractTranslator():
 
     def __init__(self, full_signature):
+        self._functions = {}
         v = vars(self)
+        if isinstance(full_signature, str):
+            full_signature = json_non_unicode(json.loads(full_signature))
         for sig_item in full_signature:
             types = [f['type'] for f in sig_item['inputs']]
             name = sig_item['name']
@@ -27,6 +41,7 @@ class ContractTranslator():
             sig = name + '(' + ','.join(types) + ')'
             id = utils.decode_int(utils.sha3(sig)[:4])
             v[name] = encode_factory(id, types)
+            self._functions[name] = v[name]
 
 
 # Encodes a base type

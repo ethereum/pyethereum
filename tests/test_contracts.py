@@ -1,6 +1,6 @@
 import os
 import pytest
-from pyethereum import tester, utils
+from pyethereum import tester, utils, abi
 import serpent
 
 # customize VM log output to your needs
@@ -17,13 +17,14 @@ def main(a,b):
     return(a ^ b)
 '''
 
-evm_code = serpent.compile(serpent_code)
-
 
 def test_evm():
+    evm_code = serpent.compile(serpent_code)
+    data = abi.ContractTranslator(
+        serpent.mk_full_signature(serpent_code)).main(2, 5)
     s = tester.state()
     c = s.evm(evm_code)
-    o = s.call(tester.k0, c, 0, 'main', 'ii', [2, 5])
+    o = s.send(tester.k0, c, 0, data)
     assert o == [32]
 
 

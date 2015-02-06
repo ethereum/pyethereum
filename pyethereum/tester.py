@@ -3,10 +3,12 @@ import tempfile
 import time
 import logging
 import sys
+import json
 import spv
 import pyethereum
 import pyethereum.db as db
 import pyethereum.opcodes as opcodes
+import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
 
 serpent = None
@@ -26,6 +28,8 @@ for i in range(10):
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
+
+languages = {}
 
 seed = 3 ** 160
 
@@ -65,36 +69,37 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(me, code, sender=k0, endowment=0):
+    def abi_contract(me, code, sender=k0, endowment=0, language='serpent'):
 
         class _abi_contract():
 
-            def __init__(self, _state, code, sender=k0, endowment=0):
-                evm = serpent.compile(code)
+            def __init__(self, _state, code, sender=k0,
+                         endowment=0, language='serpent'):
+                if language not in languages:
+                    languages[language] = __import__(language)
+                language = languages[language]
+                evm = language.compile(code)
                 self.address = me.evm(evm, sender, endowment)
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
-                sig = serpent.mk_signature(code)
-                sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
-                for funid, s in enumerate(sig):
-                    pos = s.find(':') if s.find(':') >= 0 else len(s)
-                    fun = s[:pos].strip()
-                    funsig = s[pos+1:].strip()
+                sig = language.mk_full_signature(code)
+                self._translator = abi.ContractTranslator(sig)
+                for f, fun in self._translator._functions.items():
 
-                    def kall_factory(funid, fun, funsig):
+                    def kall_factory(fun):
 
                         def kall(*args, **kwargs):
-                            return _state.call(kwargs.get('sender', k0),
+                            return _state.send(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
-                                               fun, funsig, args,
+                                               fun(*args),
                                                output=kwargs.get('output',
                                                                  None))
                         return kall
 
-                    vars(self)[fun] = kall_factory(funid, fun, funsig)
+                    vars(self)[f] = kall_factory(fun)
 
-        return _abi_contract(me, code, sender, endowment)
+        return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -105,18 +110,18 @@ class state():
             raise Exception("Contract creation failed")
         return a
 
-    def call(self, sender, to, value, fun_name, sig, args, output=None):
-        data = serpent.encode_abi(fun_name, sig, *args)
-        return self.send(sender, to, value, data, output)
+    def call(*args, **kwargs):
+        raise Exception("Call deprecated. Please use the abi_contract "
+                        "mechanism or send(sender, to, value, "
+                        "data) directly, using the abi module to generate "
+                        "data if needed")
 
     def send(self, sender, to, value, evmdata='', output=None,
-             funid=None, abi=None):
-        print evmdata, evmdata.encode('hex')
+             funid=None, abi=None, profiling=False):
         if funid is not None or abi is not None:
-            raise Exception(
-                "Send with funid+abi is deprecated. Please use the "
-                "abi_contract mechanism or s.call(sender, to, value, "
-                "function_name, function_signature, args)")
+            raise Exception("Send with funid+abi is deprecated. Please use"
+                            " the abi_contract mechanism")
+        tm, g = time.time(), self.block.gas_used
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
@@ -128,23 +133,22 @@ class state():
             return r
         else:
             o = serpent.decode_datalist(r)
-            return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
+            o2 = map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
+            if profiling:
+                zero_bytes = self.last_tx.data.count(chr(0))
+                non_zero_bytes = len(self.last_tx.data) - zero_bytes
+                intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
+                    opcodes.GTXDATANONZERO * non_zero_bytes
+                ntm, ng = time.time(), self.block.gas_used
+                return {"time": ntm - tm,
+                        "gas": ng - g - intrinsic_gas_used,
+                        "output": o2}
+            else:
+                return o2
 
-    def profile(self, sender, to, value, fun_name, sig, args, output=None, funid=None, abi=None):
-        #instead of just calling self.call, do something similar
-        #in order to trigger send warnings about deprecated shizz
-        data = serpent.encode_abi(fun_name, sig, *args)
-        tm, g = time.time(), self.block.gas_used
-        o = self.send(sender, to, value, data, output=output, funid=funid, abi=abi)
-        zero_bytes = self.last_tx.data.count(chr(0))
-        non_zero_bytes = len(self.last_tx.data) - zero_bytes
-        intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
-            opcodes.GTXDATANONZERO * non_zero_bytes
-        return {
-            "time": time.time() - tm,
-            "gas": self.block.gas_used - g - intrinsic_gas_used,
-            "output": o
-        }
+    def profile(self, *args, **kwargs):
+        kwargs['profiling'] = True
+        return self.send(*args, **kwargs)
 
     def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
