@@ -20,11 +20,12 @@ def main(a,b):
 
 def test_evm():
     evm_code = serpent.compile(serpent_code)
-    data = abi.ContractTranslator(
-        serpent.mk_full_signature(serpent_code)).main(2, 5)
+    translator = abi.ContractTranslator(serpent.mk_full_signature(
+                                        serpent_code))
+    data = translator.encode('main', [2, 5])
     s = tester.state()
     c = s.evm(evm_code)
-    o = s.send(tester.k0, c, 0, data)
+    o = translator.decode('main', s.send(tester.k0, c, 0, data))
     assert o == [32]
 
 
@@ -50,7 +51,7 @@ def test_sixten():
     c = '1231231231231234564564564564561231231231'
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
-    assert o1 == [610]
+    assert utils.big_endian_to_int(o1) == 610
 
 # Test Serpent's import mechanism
 
@@ -79,7 +80,7 @@ def test_returnten():
     c = s.contract(returnten_code)
     o1 = s.send(tester.k0, c, 0)
     os.remove(filename)
-    assert o1 == [10]
+    assert utils.big_endian_to_int(o1) == 10
 
 
 # Test a simple namecoin implementation
@@ -99,11 +100,11 @@ def test_namecoin():
     s = tester.state()
     c = s.abi_contract(namecoin_code)
     o1 = c.main("george", 45)
-    assert o1 == [1]
+    assert o1 == 1
     o2 = c.main("george", 20)
-    assert o2 == [0]
+    assert o2 == 0
     o3 = c.main("harry", 60)
-    assert o3 == [1]
+    assert o3 == 1
 
     assert s.block.to_dict()
 
@@ -135,13 +136,13 @@ def test_currency():
     s = tester.state()
     c = s.abi_contract(currency_code, sender=tester.k0)
     o1 = c.send(tester.a2, 200)
-    assert o1 == [1]
+    assert o1 == 1
     o2 = c.send(tester.a2, 900)
-    assert o2 == [0]
+    assert o2 == 0
     o3 = c.query(tester.a0)
-    assert o3 == [800]
+    assert o3 == 800
     o4 = c.query(tester.a2)
-    assert o4 == [200]
+    assert o4 == 200
 
 # Test a data feed
 
@@ -169,15 +170,15 @@ def test_data_feeds():
     s = tester.state()
     c = s.abi_contract(data_feed_code, sender=tester.k0)
     o2 = c.get(500)
-    assert o2 == [0]
+    assert o2 == 0
     o3 = c.set(500, 19)
-    assert o3 == [1]
+    assert o3 == 1
     o4 = c.get(500)
-    assert o4 == [19]
+    assert o4 == 19
     o5 = c.set(500, 726, sender=tester.k1)
-    assert o5 == [0]
+    assert o5 == 0
     o6 = c.set(500, 726)
-    assert o6 == [1]
+    assert o6 == 1
     return s, c
 
 # Test an example hedging contract, using the data feed. This tests
@@ -209,7 +210,7 @@ def main(datafeed, index):
         othervalue = ethvalue * c
         self.fiatValue = othervalue
         self.maturity = block.timestamp + 500
-        return([2, othervalue]:arr)
+        return(othervalue)
     else:
         othervalue = self.fiatValue
         ethvalue = othervalue / self.datafeed.get(self.index)
@@ -231,30 +232,30 @@ def test_hedge():
     # Have the first party register, sending 10^16 wei and
     # asking for a hedge using currency code 500
     o1 = c2.main(c.address, 500, value=10**16)
-    assert o1 == [1]
+    assert o1 == 1
     # Have the second party register. It should receive the
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
     o2 = c2.main(0, 0, value=10**16, sender=tester.k2)
-    assert o2 == [2, 7260000000000000000]
+    assert o2 == 7260000000000000000
     snapshot = s.snapshot()
     # Set the price of the asset down to 300 wei
     o3 = c.set(500, 300)
-    assert o3 == [1]
+    assert o3 == 1
     # Finalize the contract. Expect code 3, meaning a margin call
     o4 = c2.main(0, 0)
-    assert o4 == [3]
+    assert o4 == 3
     s.revert(snapshot)
     # Don't change the price. Finalize, and expect code 5, meaning
     # the time has not expired yet
     o5 = c2.main(0, 0)
-    assert o5 == [5]
+    assert o5 == 5
     s.mine(100, tester.a3)
     # Mine ten blocks, and try. Expect code 4, meaning a normal execution
     # where both get their share
     o6 = c2.main(0, 0)
-    assert o6 == [4]
+    assert o6 == 4
 
 
 # Test the LIFO nature of call
@@ -279,7 +280,7 @@ def test_lifo():
     s = tester.state()
     c = s.abi_contract(arither_code)
     c.f2()
-    assert c.f3() == [1010]
+    assert c.f3() == 1010
 
 
 # Test suicides and suicide reverts
@@ -315,7 +316,7 @@ def test_suicider():
     # contract fails
     c.entry(10)
     o2 = c.ping_ten()
-    assert o2 == []
+    assert o2 is None
     c = s.abi_contract(suicider_code)
     # Run the suicider in such a way that it suicides in a sub-call,
     # then runs out of gas, leading to a revert of the suicide and the
@@ -323,10 +324,10 @@ def test_suicider():
     c.entry(8000)
     # Check that the suicide got reverted
     o2 = c.ping_ten()
-    assert o2 == [10]
+    assert o2 == 10
     # Check that the storage op got reverted
     o3 = c.ping_storage15()
-    assert o3 == [20]
+    assert o3 == 20
     tester.gas_limit = prev_gas_limit
 
 
@@ -389,45 +390,48 @@ def test_callcode():
     c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0)
     os.remove(filename2)
-    assert o1 == [64]
+    assert utils.big_endian_to_int(o1) == 64
 
 
 # https://github.com/ethereum/serpent/issues/8
 array_code = '''
-a = array(1)
-a[0] = 1
-return(a, items=1)
+def main():
+    a = array(1)
+    a[0] = 1
+    return(a, items=1)
 '''
 
 
 def test_array():
     s = tester.state()
-    c = s.contract(array_code)
-    assert [1] == s.send(tester.k0, c, 0)
+    c = s.abi_contract(array_code)
+    assert c.main() == [1]
 
 array_code2 = '''
-a = array(1)
-something = 2
-a[0] = 1
-return(a, items=1)
+def main():
+    a = array(1)
+    something = 2
+    a[0] = 1
+    return(a, items=1)
 '''
 
 
 def test_array2():
     s = tester.state()
-    c = s.contract(array_code2)
-    assert [1] == s.send(tester.k0, c, 0)
+    c = s.abi_contract(array_code2)
+    assert c.main() == [1]
 
 array_code3 = """
-a = array(3)
-return(a, items=3)
+def main():
+    a = array(3)
+    return(a, items=3)
 """
 
 
 def test_array3():
     s = tester.state()
-    c = s.contract(array_code3)
-    assert [0, 0, 0] == s.send(tester.k0, c, 0)
+    c = s.abi_contract(array_code3)
+    assert c.main() == [0, 0, 0]
 
 
 calltest_code = """
@@ -454,13 +458,13 @@ def test_calls():
     s = tester.state()
     c = s.abi_contract(calltest_code)
     c.main()
-    assert [12345] == c.get(1)
-    assert [23456] == c.get(2)
-    assert [34567] == c.get(3)
+    assert 12345 == c.get(1)
+    assert 23456 == c.get(2)
+    assert 34567 == c.get(3)
     c.first(4, 5, 6, 7, 8)
-    assert [45678] == c.get(1)
+    assert 45678 == c.get(1)
     c.second(5, 6, 7, 8, 9)
-    assert [56789] == c.get(2)
+    assert 56789 == c.get(2)
 
 
 storage_object_test_code = """
@@ -527,14 +531,14 @@ def test_storage_objects():
     s = tester.state()
     c = s.abi_contract(storage_object_test_code)
     c.ping()
-    assert [1] == c.query_chessboard(0, 0)
-    assert [2] == c.query_chessboard(0, 1)
-    assert [3] == c.query_chessboard(3, 0)
+    assert 1 == c.query_chessboard(0, 0)
+    assert 2 == c.query_chessboard(0, 1)
+    assert 3 == c.query_chessboard(3, 0)
     assert [100, 0, 0] == c.query_stats(0)
     assert [0, 15, 12] == c.query_stats(1)
-    assert [0] == c.query_items(1, 3)
-    assert [0] == c.query_items(0, 2)
-    assert [9] == c.query_items(1, 2)
+    assert 0 == c.query_items(1, 3)
+    assert 0 == c.query_items(0, 2)
+    assert 9 == c.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
             657, 0,   0,   0,  658] == c.query_person()
@@ -594,14 +598,14 @@ def test_infinite_storage_objects():
     s = tester.state()
     c = s.abi_contract(infinite_storage_object_test_code)
     c.ping()
-    assert [1] == c.query_chessboard(0, 0)
-    assert [2] == c.query_chessboard(0, 1)
-    assert [3] == c.query_chessboard(3, 0)
+    assert 1 == c.query_chessboard(0, 0)
+    assert 2 == c.query_chessboard(0, 1)
+    assert 3 == c.query_chessboard(3, 0)
     assert [100, 0, 0] == c.query_stats(0)
     assert [0, 15, 12] == c.query_stats(1)
-    assert [0] == c.query_items(1, 3)
-    assert [0] == c.query_items(0, 2)
-    assert [9] == c.query_items(1, 2)
+    assert 0 == c.query_items(1, 3)
+    assert 0 == c.query_items(0, 2)
+    assert 9 == c.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
             657, 0,   0,   0,  658] == c.query_person()
@@ -750,10 +754,10 @@ def test_crowdfund():
     c.create_campaign(200, 48, 100000, 2)
     # Make some contributions
     c.contribute(100, value=1, sender=tester.k1)
-    assert [1] == c.progress_report(100)
+    assert 1 == c.progress_report(100)
     c.contribute(200, value=30000, sender=tester.k2)
     c.contribute(100, value=59049, sender=tester.k3)
-    assert [59050] == c.progress_report(100)
+    assert 59050 == c.progress_report(100)
     c.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
@@ -820,8 +824,8 @@ def argkall(args:arr):
 def test_argcall():
     s = tester.state()
     c = s.abi_contract(basic_argcall_code)
-    assert [375] == c.argcall([5, 7, 3])
-    assert [376] == c.argkall([6, 7, 3])
+    assert 375 == c.argcall([5, 7, 3])
+    assert 376 == c.argkall([6, 7, 3])
 
 more_complex_argcall_code = """
 def argcall(args:arr):
@@ -962,15 +966,16 @@ macro three():
 macro five():
     padd(three(), two())
 
-return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:arr)
+def main():
+    return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:arr)
 
 """
 
 
 def test_macros():
     s = tester.state()
-    c = s.contract(peano_code)
-    assert s.send(tester.k0, c, 0) == [27, 120]
+    c = s.abi_contract(peano_code)
+    assert c.main() == [27, 120]
 
 
 type_code = """
@@ -1011,17 +1016,18 @@ return(e)
 def test_types():
     s = tester.state()
     c = s.contract(type_code)
-    assert s.send(tester.k0, c, 0) == [5]
+    assert utils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
 
 sha256_code = """
-return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
+def main():
+    return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
 """
 
 
 def test_sha256():
     s = tester.state()
-    c = s.contract(sha256_code)
-    assert s.send(tester.k0, c, 0) == [
+    c = s.abi_contract(sha256_code)
+    assert c.main() == [
         0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
         0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
         0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
@@ -1031,14 +1037,15 @@ def test_sha256():
     ]
 
 sha3_code = """
-return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
+def main():
+    return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
 """
 
 
 def test_sha3():
     s = tester.state()
-    c = s.contract(sha3_code)
-    assert s.send(tester.k0, c, 0) == [
+    c = s.abi_contract(sha3_code)
+    assert c.main() == [
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
         0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
@@ -1073,7 +1080,7 @@ def sqrdiv(a, b):
 def test_types_in_functions():
     s = tester.state()
     c = s.abi_contract(types_in_functions_code)
-    assert c.sqrdiv(25, 2) == [156]
+    assert c.sqrdiv(25, 2) == 156
 
 
 more_infinites_code = """
@@ -1092,7 +1099,7 @@ def testVerifyTx():
 def test_more_infinites():
     s = tester.state()
     c = s.abi_contract(more_infinites_code)
-    assert c.testVerifyTx() == [33]
+    assert c.testVerifyTx() == 33
 
 
 prevhashes_code = """
@@ -1137,8 +1144,8 @@ def returnten():
 def test_abi_contract():
     s = tester.state()
     c = s.abi_contract(abi_contract_code)
-    assert c.mul2(3) == [6]
-    assert c.returnten() == [10]
+    assert c.mul2(3) == 6
+    assert c.returnten() == 10
 
 
 mcopy_code = """
@@ -1155,7 +1162,7 @@ def mcopy_test(foo:str, a, b, c):
 def test_mcopy():
     s = tester.state()
     c = s.abi_contract(mcopy_code)
-    assert c.mcopy_test("123", 5, 6, 259, output='raw') == \
+    assert c.mcopy_test("123", 5, 6, 259) == \
         '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
 
 
@@ -1175,7 +1182,9 @@ def mcopy_test():
 def test_mcopy2():
     s = tester.state()
     c = s.abi_contract(mcopy_code_2)
-    assert c.mcopy_test() == [99, 111, 119]
+    assert c.mcopy_test() == \
+        ''.join(map(lambda x: utils.zpad(utils.int_to_big_endian(x), 32),
+                [99, 111, 119]))
 
 
 array_saveload_code = """
