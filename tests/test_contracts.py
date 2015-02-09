@@ -894,6 +894,24 @@ def test_saveload():
     assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
 
 
+saveload_code2 = """
+data buf
+data buf2
+
+mystr = text("01ab")
+save(self.buf, mystr:str)
+save(self.buf2, mystr, chars=4)
+"""
+
+
+def test_saveload2():
+    s = tester.state()
+    c = s.contract(saveload_code2)
+    s.send(tester.k0, c, 0)
+    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == '01ab' + '\x00' * 28
+    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == '01ab' + '\x00' * 28
+
+
 sdiv_code = """
 def kall():
     return([2^255 / 2^253, 2^255 % 3]:arr)
@@ -1293,7 +1311,7 @@ def array_saveload():
 """
 
 
-def test_saveload2():
+def test_saveload3():
     s = tester.state()
     c = s.abi_contract(array_saveload_code)
     assert c.array_saveload() == [1, 2, 3, 4]
@@ -1370,6 +1388,7 @@ def test_more_infinite_storage():
 # test_type_system_fails = None
 # test_returnarray_code = None
 # test_saveload = None
+# test_saveload2 = None
 # test_crowdfund = None
 # test_sdiv = None
 # test_argcall = None
@@ -1386,6 +1405,6 @@ def test_more_infinite_storage():
 # test_prevhashes = None
 # test_abi_contract = None
 # test_mcopy = None
-# test_saveload2 = None
+# test_saveload3 = None
 # test_string_manipulation = None
 # test_more_infinite_storage = None
