@@ -646,6 +646,14 @@ data person(head, arms[2](elbow, fingers[5]), legs[2])
 x = self.person.arms[0].elbow.skin
 """
 
+fail7 = """
+def return_array():
+    return([1,2,3], items=3)
+
+def main():
+    return(self.return_array())
+"""
+
 
 def test_storagevar_fails():
     s = tester.state()
@@ -686,6 +694,27 @@ def test_storagevar_fails():
     except Exception, e:
         success6 = "Invalid object member" in str(e)
     assert success6, e
+
+    try:
+        s.contract(fail7)
+    except Exception, e:
+        success6 = "Please specify maximum" in str(e)
+    assert success6, e
+
+
+working_returnarray_code = """
+def return_array():
+    return([1,2,3], items=3)
+
+def main():
+    return(self.return_array(outitems=3):arr)
+"""
+
+
+def test_returnarray_code():
+    s = tester.state()
+    c = s.abi_contract(working_returnarray_code)
+    assert c.main() == [1, 2, 3]
 
 crowdfund_code = """
 data campaigns[2^80](recipient, goal, deadline, contrib_total, contrib_count, contribs[2^50](sender, value))
@@ -1272,6 +1301,7 @@ def test_more_infinite_storage():
 # test_storage_objects = None
 # test_infinite_storage_objects = None
 # test_storagevar_fails = None
+# test_returnarray_code = None
 # test_saveload = None
 # test_crowdfund = None
 # test_sdiv = None
