@@ -47,7 +47,6 @@ class ContractTranslator():
                 "decode_types": decode_types,
                 "is_unknown_type": is_unknown_type
             }
-            print self.function_data[name]
 
     def encode(self, name, args):
         fdata = self.function_data[name]
@@ -103,7 +102,7 @@ def encode_single(arg, base, sub):
     elif base == 'int':
         sub = int(sub)
         i = decint(arg)
-        assert -2**(sub-1) <= i < 2**(sub-1), "Value out of bounds: %r" % arg
+        assert -2**(sub-1) <= i < 2**sub, "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int(i % 2**sub), sub // 8)
     # Unsigned reals: ureal<high>x<low>
     elif base == 'ureal':
