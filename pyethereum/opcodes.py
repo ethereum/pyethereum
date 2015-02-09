@@ -87,6 +87,7 @@ for o in opcodes:
 # Non-opcode gas prices
 GDEFAULT = 1
 GMEMORY = 1
+GQUADRATICMEMDENOM = 9999999999999  # set to 1024 once tests exist
 GSTORAGEKILL = -100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300

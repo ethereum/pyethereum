@@ -91,14 +91,17 @@ def preprocess_code(code):
 
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
-        newsize = start + sz
-        if len(mem) < utils.ceil32(newsize):
-            m_extend = utils.ceil32(newsize) - len(mem)
-            memfee = opcodes.GMEMORY * (m_extend / 32)
+        oldsize = len(mem) / 32
+        old_qlen = oldsize + oldsize**2 // opcodes.GQUADRATICMEMDENOM
+        newsize = utils.ceil32(start + sz) / 32
+        new_qlen = newsize + newsize**2 // opcodes.GQUADRATICMEMDENOM
+        if old_qlen < new_qlen:
+            memfee = opcodes.GMEMORY * (new_qlen - old_qlen)
             if compustate.gas < memfee:
                 compustate.gas = 0
                 return False
             compustate.gas -= memfee
+            m_extend = (newsize - oldsize) * 32
             mem.extend([0] * m_extend)
     return True
 
