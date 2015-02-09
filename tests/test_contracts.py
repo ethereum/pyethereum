@@ -83,6 +83,66 @@ def test_returnten():
     assert utils.big_endian_to_int(o1) == 10
 
 
+# Test inset
+
+inset_inner_code = \
+    '''
+def g(n):
+    return(n + 10)
+
+def f(n):
+    return n*2
+'''
+
+filename2 = "inner_qwertyuioplkjhgfdsa.se"
+
+inset_outer_code = \
+    '''
+inset("%s")
+
+def foo():
+    res = self.g(12)
+    return res
+''' % filename2
+
+
+def test_inset():
+    s = tester.state()
+    open(filename2, 'w').write(inset_inner_code)
+    c = s.abi_contract(inset_outer_code)
+    assert c.foo() == 22
+
+# Inset at the end instead
+
+inset_inner_code2 = \
+    '''
+def g(n):
+    return(n + 10)
+
+def f(n):
+    return n*2
+'''
+
+filename25 = "inner_qwertyuioplkjhgfdsa.se"
+
+inset_outer_code2 = \
+    '''
+
+def foo():
+    res = self.g(12)
+    return res
+
+inset("%s")
+''' % filename25
+
+
+def test_inset2():
+    s = tester.state()
+    open(filename25, 'w').write(inset_inner_code2)
+    c = s.abi_contract(inset_outer_code2)
+    assert c.foo() == 22
+
+
 # Test a simple namecoin implementation
 
 namecoin_code =\
@@ -369,7 +429,7 @@ def main(x):
     self.storage[1] += x
 '''
 
-filename2 = "stateless_qwertyuioplkjhgfdsa.se"
+filename3 = "stateless_qwertyuioplkjhgfdsa.se"
 
 callcode_test_code = \
     '''
@@ -381,12 +441,12 @@ x.main(4, call=code)
 x.main(60, call=code)
 x.main(40)
 return(self.storage[1])
-''' % filename2
+''' % filename3
 
 
 def test_callcode():
     s = tester.state()
-    open(filename2, 'w').write(add1_code)
+    open(filename3, 'w').write(add1_code)
     c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0)
     os.remove(filename2)
@@ -695,11 +755,16 @@ def test_storagevar_fails():
         success6 = "Invalid object member" in str(e)
     assert success6, e
 
+
+def test_type_system_fails():
+    s = tester.state()
+    success7 = False
+
     try:
         s.contract(fail7)
     except Exception, e:
-        success6 = "Please specify maximum" in str(e)
-    assert success6, e
+        success7 = "Please specify maximum" in str(e)
+    assert success7, e
 
 
 working_returnarray_code = """
@@ -1287,6 +1352,7 @@ def test_more_infinite_storage():
 # test_sixten = None
 # test_returnten = None
 # test_namecoin = None
+# test_inset = None
 # test_currency = None
 # test_data_feeds = None
 # test_hedge = None
@@ -1301,6 +1367,7 @@ def test_more_infinite_storage():
 # test_storage_objects = None
 # test_infinite_storage_objects = None
 # test_storagevar_fails = None
+# test_type_system_fails = None
 # test_returnarray_code = None
 # test_saveload = None
 # test_crowdfund = None
