@@ -33,6 +33,23 @@ languages = {}
 seed = 3 ** 160
 
 
+def dict_without(d, *args):
+    o = {}
+    for k, v in d.items():
+        if k not in args:
+            o[k] = v
+    return o
+
+
+def dict_with(d, **kwargs):
+    o = {}
+    for k, v in d.items():
+        o[k] = v
+    for k, v in kwargs.items():
+        o[k] = v
+    return o
+
+
 # Pseudo-RNG (deterministic for now for testing purposes)
 def rand():
     global seed
@@ -83,23 +100,33 @@ class state():
                     "Contract code empty"
                 sig = language.mk_full_signature(code)
                 self._translator = abi.ContractTranslator(sig)
+
+                def kall_factory(f):
+
+                    def kall(*args, **kwargs):
+                        o = _state._send(kwargs.get('sender', k0),
+                                         self.address,
+                                         kwargs.get('value', 0),
+                                         self._translator.encode(f, args),
+                                         **dict_without(kwargs, 'sender',
+                                                        'value', 'output'))
+                        # Compute output data
+                        if kwargs.get('output', '') == 'raw':
+                            outdata = o['output']
+                        elif not o['output']:
+                            outdata = None
+                        else:
+                            outdata = self._translator.decode(f, o['output'])
+                            outdata = outdata[0] if len(outdata) == 1 \
+                                else outdata
+                        # Format output
+                        if kwargs.get('profiling', ''):
+                            return dict_with(o, output=outdata)
+                        else:
+                            return outdata
+                    return kall
+
                 for f in self._translator.function_data:
-
-                    def kall_factory(f):
-
-                        def kall(*args, **kwargs):
-                            o = _state.send(kwargs.get('sender', k0),
-                                            self.address,
-                                            kwargs.get('value', 0),
-                                            self._translator.encode(f, args))
-                            if kwargs.get('output', '') == 'raw':
-                                return o
-                            if not o:
-                                return None
-                            o = self._translator.decode(f, o)
-                            return o[0] if len(o) == 1 else o
-                        return kall
-
                     vars(self)[f] = kall_factory(f)
 
         return _abi_contract(me, code, sender, endowment, language)
@@ -119,8 +146,8 @@ class state():
                         "data) directly, using the abi module to generate "
                         "data if needed")
 
-    def send(self, sender, to, value, evmdata='', output=None,
-             funid=None, abi=None, profiling=False):
+    def _send(self, sender, to, value, evmdata='', output=None,
+              funid=None, abi=None, profiling=False):
         if funid is not None or abi is not None:
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
@@ -133,8 +160,8 @@ class state():
         if not s:
             raise Exception("Transaction failed")
         if profiling:
-            zero_bytes = self.last_tx.data.count(chr(0))
-            non_zero_bytes = len(self.last_tx.data) - zero_bytes
+            zero_bytes = tx.data.count(chr(0))
+            non_zero_bytes = len(tx.data) - zero_bytes
             intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
                 opcodes.GTXDATANONZERO * non_zero_bytes
             ntm, ng = time.time(), self.block.gas_used
@@ -142,11 +169,14 @@ class state():
                     "gas": ng - g - intrinsic_gas_used,
                     "output": o}
         else:
-            return o
+            return {"output": o}
 
     def profile(self, *args, **kwargs):
         kwargs['profiling'] = True
-        return self.send(*args, **kwargs)
+        return self._send(*args, **kwargs)
+
+    def send(self, *args, **kwargs):
+        return self._send(*args, **kwargs)["output"]
 
     def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))

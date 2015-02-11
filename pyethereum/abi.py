@@ -244,11 +244,12 @@ def encode_abi(types, args):
 
 
 def is_varsized(base, sub, arrlist):
-    return (len(arrlist) and arrlist[-1] == '[]') or (base == 'string' and sub == '')
+    return (len(arrlist) and arrlist[-1] == '[]') or \
+           (base == 'string' and sub == '')
 
 
 def getlen(base, sub, arrlist):
-    if base == 'string' and len(sub):
+    if base == 'string' and not len(sub):
         sz = 1
     else:
         sz = 32
@@ -262,7 +263,7 @@ def decode_single(data, base, sub):
     if base == 'address':
         return data[12:].encode('hex')
     elif base == 'string' or base == 'hash':
-        return data[:int(sub)]
+        return data[:int(sub)] if len(sub) else data
     elif base == 'uint':
         return big_endian_to_int(data)
     elif base == 'int':
