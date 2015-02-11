@@ -34,5 +34,4 @@ def test_interop():
     assert c1.sub1() == 5
     assert c2.sub2() == 7
     assert c1.main(c2.address) == 14
-    print c2.main(c1.address, output='raw').encode('hex')
     assert c2.main(c1.address) == 10

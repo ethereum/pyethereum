@@ -97,56 +97,57 @@ def encode_single(arg, base, sub):
         sub = int(sub)
         i = decint(arg)
         assert 0 <= i < 2**sub, "Value out of bounds: %r" % arg
-        normal_args = zpad(encode_int(i), sub // 8)
+        normal_args = zpad(encode_int(i), 32)
     # Signed integers: int<sz>
     elif base == 'int':
         sub = int(sub)
         i = decint(arg)
         assert -2**(sub-1) <= i < 2**sub, "Value out of bounds: %r" % arg
-        normal_args = zpad(encode_int(i % 2**sub), sub // 8)
+        normal_args = zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
         assert 0 <= arg < 2**high, "Value out of bounds: %r" % arg
-        normal_args = zpad(encode_int(arg * 2**low), (high + low) // 8)
+        normal_args = zpad(encode_int(arg * 2**low), 32)
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         assert -2**(high-1) <= arg < 2**(high-1), \
             "Value out of bounds: %r" % arg
-        normal_args = zpad(encode_int((arg % 2**high) * 2**low),
-                           (high + low) // 8)
+        normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
     elif base == 'string':
         if not isinstance(arg, str):
             raise Exception("Expecting string: %r" % arg)
         # Fixed length: string<sz>
         if len(sub):
+            assert int(sub) <= 32
             assert len(arg) <= int(sub)
-            normal_args = arg + '\x00' * (int(sub) - len(arg))
+            normal_args = arg + '\x00' * (32 - len(arg))
         # Variable length: string
         else:
             len_args = zpad(encode_int(len(arg)), 32)
             var_args = arg
     # Hashes: hash<sz>
     elif base == 'hash':
+        assert int(sub) and int(sub) <= 32
         if isinstance(arg, int):
-            normal_args = zpad(encode_int(arg), int(sub))
+            normal_args = zpad(encode_int(arg), 32)
         elif len(arg) == len(sub):
-            normal_args = arg
+            normal_args = zpad(arg, 32)
         elif len(arg) == len(sub) * 2:
-            normal_args = arg.decode('hex')
+            normal_args = zpad(arg.decode('hex'), 32)
         else:
             raise Exception("Could not parse hash: %r" % arg)
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
         if isinstance(arg, int):
-            normal_args = zpad(encode_int(arg), int(sub))
+            normal_args = zpad(encode_int(arg), 32)
         elif len(arg) == 20:
-            normal_args = arg
+            normal_args = zpad(arg, 32)
         elif len(arg) == 40:
-            normal_args = arg.decode('hex')
+            normal_args = zpad(arg.decode('hex'), 32)
         else:
             raise Exception("Could not parse address: %r" % arg)
     return len_args, normal_args, var_args
@@ -247,15 +248,10 @@ def is_varsized(base, sub, arrlist):
 
 
 def getlen(base, sub, arrlist):
-    if base == 'address':
-        sz = 20
-    elif base == 'string':
-        sz = int(sub) if len(sub) else 1
-    elif base == 'uint' or base == 'int' or base == 'hash':
-        sz = int(sub) // 8
-    elif base == 'ureal' or base == 'real':
-        high, low = [int(x) for x in sub.split('x')]
-        sz = int(high) // 8 + int(low) // 8
+    if base == 'string' and len(sub):
+        sz = 1
+    else:
+        sz = 32
     for a in arrlist:
         if len(a) > 2:
             sz *= int(a[1:-1])
@@ -264,9 +260,9 @@ def getlen(base, sub, arrlist):
 
 def decode_single(data, base, sub):
     if base == 'address':
-        return data.encode('hex')
+        return data[12:].encode('hex')
     elif base == 'string' or base == 'hash':
-        return data
+        return data[:int(sub)]
     elif base == 'uint':
         return big_endian_to_int(data)
     elif base == 'int':
