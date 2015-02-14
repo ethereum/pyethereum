@@ -28,6 +28,8 @@ class ContractTranslator():
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
             name = sig_item['name']
+            if '(' in name:
+                name = name[:name.find('(')]
             if name in v:
                 i = 2
                 while name+str(i) in v:
