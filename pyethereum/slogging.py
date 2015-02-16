@@ -112,7 +112,7 @@ class LogRecorder(object):
     temporarily records all logs, w/o level filtering
     use only once!
     """
-    max_capacity = 10 * 1000  # check we are not forgotten or abused
+    max_capacity = 1000 * 1000  # check we are not forgotten or abused
 
     def __init__(self):
         self._records = []

@@ -147,7 +147,7 @@ class state():
                         "data if needed")
 
     def _send(self, sender, to, value, evmdata='', output=None,
-              funid=None, abi=None, profiling=False):
+              funid=None, abi=None, profiling=0):
         if funid is not None or abi is not None:
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
@@ -156,20 +156,27 @@ class state():
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
+        recorder = LogRecorder() if profiling > 1 else None
         (s, o) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
-        if profiling:
+        out = {"output": o}
+        if profiling > 0:
             zero_bytes = tx.data.count(chr(0))
             non_zero_bytes = len(tx.data) - zero_bytes
             intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
                 opcodes.GTXDATANONZERO * non_zero_bytes
             ntm, ng = time.time(), self.block.gas_used
-            return {"time": ntm - tm,
-                    "gas": ng - g - intrinsic_gas_used,
-                    "output": o}
-        else:
-            return {"output": o}
+            out["time"] = ntm - tm
+            out["gas"] = ng - g - intrinsic_gas_used
+        if profiling > 1:
+            trace = recorder.pop_records()
+            ops = [x['op'] for x in trace if x['event'] == 'vm']
+            opdict = {}
+            for op in ops:
+                opdict[op] = opdict.get(op, 0) + 1
+            out["ops"] = opdict
+        return out
 
     def profile(self, *args, **kwargs):
         kwargs['profiling'] = True

@@ -67,7 +67,10 @@ def do_test_vm(filename, testname=None, limit=99999999):
         return
     logger.debug('running test:%r in %r' % (testname, filename))
     params = vm_tests_fixtures()[filename][testname]
+    run_test_vm(params)
 
+
+def run_test_vm(params):
     pre = params['pre']
     exek = params['transaction']
     env = params['env']
@@ -147,3 +150,22 @@ def do_test_vm(filename, testname=None, limit=99999999):
         state = blk.account_to_dict(address, for_vmtest=True)
         state.pop('storage_root', None)
         assert state == data
+
+
+def external():
+    "used for external vm tests"
+    if os.path.isfile(sys.argv[1]):
+        data = open(sys.argv[1]).read()
+    else:
+        data = sys.argv[1]
+    data = json.loads(data)
+    for test_data in data.values():
+        try:
+            run_test_vm(test_data)
+            print 0,
+        except Exception:
+            print 1,
+            sys.exit(1)
+
+if __name__ == '__main__':
+    external()
