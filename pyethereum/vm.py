@@ -519,7 +519,7 @@ def vm_execute(ext, msg, code):
             return 1, compustate.gas, []
         for a in stk:
             assert isinstance(a, (int, long))
-            assert a >= 0 and a < 2**256, a
+            assert a >= 0 and a < 2**256, (a, op, stk)
 
 
 class VmExtBase():

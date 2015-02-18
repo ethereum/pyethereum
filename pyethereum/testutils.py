@@ -32,9 +32,8 @@ def mktest(code, language, data=None, fun=None, args=None,
            gas=1000000, value=0, test_type=VM):
     s = t.state(1)
     if language == 'evm':
-        c = s.contract('x = 5')
-        s.block.set_code(c.address, code)
-        ca = c.address
+        ca = s.contract('x = 5')
+        s.block.set_code(ca, code)
         d = data or ''
     else:
         c = s.abi_contract(code, language=language)
@@ -42,10 +41,10 @@ def mktest(code, language, data=None, fun=None, args=None,
         ca = c.address
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
-        exek = {"address": ca, "caller": t.k0.encode('hex'),
+        exek = {"address": ca, "caller": t.a0,
                 "code": '0x'+s.block.get_code(ca).encode('hex'),
                 "data": '0x'+d.encode('hex'), "gas": str(gas),
-                "gasPrice": str(1), "origin": t.k0.encode('hex'),
+                "gasPrice": str(1), "origin": t.a0,
                 "value": str(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
