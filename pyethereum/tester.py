@@ -79,8 +79,11 @@ class state():
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
 
-    def contract(self, code, sender=k0, endowment=0):
-        evm = serpent.compile(code)
+    def contract(self, code, sender=k0, endowment=0, language='serpent'):
+        if language not in languages:
+            languages[language] = __import__(language)
+        language = languages[language]
+        evm = language.compile(code)
         o = self.evm(evm, sender, endowment)
         assert len(self.block.get_code(o)), "Contract code empty"
         return o

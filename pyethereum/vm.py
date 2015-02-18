@@ -517,9 +517,9 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
             return 1, compustate.gas, []
-        #for a in stk:
-        #    assert isinstance(a, (int, long))
-        #    assert a >= 0, a
+        for a in stk:
+            assert isinstance(a, (int, long))
+            assert a >= 0 and a < 2**256, a
 
 
 class VmExtBase():

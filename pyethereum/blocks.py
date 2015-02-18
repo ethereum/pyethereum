@@ -13,6 +13,7 @@ from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
+Log = processblock.Log
 
 # Genesis block difficulty
 GENESIS_DIFFICULTY = 2 ** 17
@@ -103,6 +104,32 @@ def must_equal(what, a, b):
         if aux[0]:
             sys.stderr.write('%r' % aux[0])
         raise VerificationFailed(what, a, '==', b)
+
+
+class Receipt(object):
+    def __init__(self, state_root, gas_used, logs):
+        self.state_root = state_root
+        self.gas_used = gas_used
+        self.logs = logs
+
+    def log_bloom(self):
+        bloomables = [x.bloomables() for x in self.logs]
+        return bloom.bloom_from_list(utils.flatten(bloomables))
+
+    def serialize(self):
+        return rlp.encode([
+            self.state_root,
+            utils.encode_int(self.gas_used),
+            bloom.b64(self.log_bloom()),
+            [x.serialize() for x in self.logs]
+        ])
+
+    @classmethod
+    def deserialize(cls, obj):
+        state_root, gas_used, bloom64, logs = rlp.decode(obj)
+        return cls(state_root,
+                   utils.big_endian_to_int(gas_used),
+                   [Log.deserialize(x) for x in logs])
 
 
 class TransientBlock(object):
@@ -438,23 +465,18 @@ class Block(object):
         value = self._get_acct_item(address, param) + value
         if value < 0:
             return False
-        self._set_acct_item(address, param, value)
+        self._set_acct_item(address, param, value % 2**256)
         return True
 
     def mk_transaction_receipt(self, tx):
-        o = [
-            self.state_root,
-            utils.encode_int(self.gas_used),
-            tx.log_bloom_b64(),
-            [x.serialize() for x in tx.logs]
-        ]
-        return rlp.encode(o)
+        return Receipt(self.state_root, self.gas_used, self.logs)
 
     def add_transaction_to_list(self, tx):
         k = rlp.encode(utils.encode_int(self.transaction_count))
         self.transactions.update(k, tx.serialize())
-        self.receipts.update(k, self.mk_transaction_receipt(tx))
-        self.bloom |= tx.log_bloom()  # int
+        r = self.mk_transaction_receipt(tx)
+        self.receipts.update(k, r.serialize())
+        self.bloom |= r.log_bloom()  # int
         self.transaction_count += 1
 
     def _list_transactions(self):
@@ -472,7 +494,7 @@ class Block(object):
 
     def get_receipt(self, num):
         # returns [tx_lst_serialized, state_root, gas_used_encoded]
-        return rlp.decode(self.receipts.get(rlp.encode(utils.encode_int(num))))
+        return Receipt.deserialize(self.receipts.get(rlp.encode(utils.encode_int(num))))
 
     def get_nonce(self, address):
         return self._get_acct_item(address, 'nonce')
@@ -631,8 +653,9 @@ class Block(object):
         self.suicides = mysnapshot['suicides']
         while len(self.suicides) > mysnapshot['suicides_size']:
             self.suicides.pop()
+        print 'Popping logs: ', len(self.logs), ' to ', mysnapshot['logs_size']
         self.logs = mysnapshot['logs']
-        while len(self.suicides) > mysnapshot['logs_size']:
+        while len(self.logs) > mysnapshot['logs_size']:
             self.logs.pop()
         self.refunds = mysnapshot['refunds']
         self.state.root_hash = mysnapshot['state']

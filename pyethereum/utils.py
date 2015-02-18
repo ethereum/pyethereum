@@ -209,7 +209,7 @@ def encode_addr(v):
 def encode_int(v):
     '''encodes an integer into serialization'''
     if not isinstance(v, (int, long)) or v < 0 or v >= TT256:
-        raise Exception("Integer invalid or out of range")
+        raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
 
 
