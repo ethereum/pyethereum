@@ -1,13 +1,5 @@
-import pytest
-import json
-import pyethereum.processblock as pb
-import pyethereum.blocks as blocks
-import pyethereum.transactions as transactions
-import pyethereum.utils as u
-import os
-import sys
-import pyethereum.vm as vm
-from tests.utils import new_db
+import pytest, os, sys
+import pyethereum.testutils as testutils
 
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -16,156 +8,26 @@ logger = get_logger()
 configure_logging(':trace')
 
 
-def check_testdata(data_keys, expected_keys):
-    assert set(data_keys) == set(expected_keys), \
-        "test data changed, please adjust tests"
-
-
-@pytest.fixture(scope="module")
-def vm_tests_fixtures():
-    """
-    Read vm tests from fixtures
-    fixtures/VMTests/*
-    """
-    # FIXME: assert that repo is uptodate
-    # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
-    filenames = os.listdir(os.path.join('fixtures', 'StateTests'))
-    files = [os.path.join('fixtures', 'StateTests', f) for f in filenames]
-    vm_fixtures = {}
-    try:
-        for f, fn in zip(files, filenames):
-            if f[-5:] == '.json':
-                vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
-    except IOError, e:
-        raise IOError("Could not read vmtests.json from fixtures",
-                      "Make sure you did 'git submodule init'")
-    return vm_fixtures
-
-
 # SETUP TESTS IN GLOBAL NAME SPACE
-def gen_func(filename, testname):
-    return lambda: do_test_vm(filename, testname)
-
-for filename, tests in vm_tests_fixtures().items():
-    for testname, testdata in tests.items():
-        func_name = 'test_%s_%s' % (filename, testname)
-        func = gen_func(filename, testname)
-        globals()[func_name] = func
-
-faulty = [
-    # Put a list of strings of known faulty tests here
-]
+def gen_func(filename, testname, testdata):
+    return lambda: do_test_vm(filename, testname, testdata)
 
 
-def do_test_vm(filename, testname=None, limit=99999999):
-    if testname is None:
-        for testname in vm_tests_fixtures()[filename].keys()[:limit]:
-            do_test_vm(filename, testname)
-        return
-    if testname in faulty:
-        logger.debug('skipping test:%r in %r' % (testname, filename))
-        return
+def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
-    params = vm_tests_fixtures()[filename][testname]
-    run_test_vm(params)
+    testutils.check_state_test(testdata)
 
-
-def run_test_vm(params):
-    pre = params['pre']
-    exek = params['transaction']
-    env = params['env']
-    post = params['post']
-
-    check_testdata(env.keys(), ['currentGasLimit', 'currentTimestamp',
-                                'previousHash', 'currentCoinbase',
-                                'currentDifficulty', 'currentNumber'])
-    # setup env
-    blk = blocks.Block(new_db(),
-                       prevhash=env['previousHash'].decode('hex'),
-                       number=int(env['currentNumber']),
-                       coinbase=env['currentCoinbase'],
-                       difficulty=int(env['currentDifficulty']),
-                       gas_limit=int(env['currentGasLimit']),
-                       timestamp=int(env['currentTimestamp']))
-
-    # code FIXME WHAT TO DO WITH THIS CODE???
-    # if isinstance(env['code'], str):
-    #     continue
-    # else:
-    # addr = 0 # FIXME
-    #     blk.set_code(addr, ''.join(map(chr, env['code'])))
-
-    # setup state
-    for address, h in pre.items():
-        check_testdata(h.keys(), ['code', 'nonce', 'balance', 'storage'])
-        blk.set_nonce(address, int(h['nonce']))
-        blk.set_balance(address, int(h['balance']))
-        blk.set_code(address, h['code'][2:].decode('hex'))
-        for k, v in h['storage'].iteritems():
-            blk.set_storage_data(address,
-                                 u.big_endian_to_int(k[2:].decode('hex')),
-                                 u.big_endian_to_int(v[2:].decode('hex')))
-
-    # execute transactions
-    tx = transactions.Transaction(
-        nonce=int(exek['nonce'] or "0"),
-        gasprice=int(exek['gasPrice'] or "0"),
-        startgas=int(exek['gasLimit'] or "0"),
-        to=exek['to'],
-        value=int(exek['value'] or "0"),
-        data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
-
-    orig_apply_msg = pb.apply_msg
-
-    def apply_msg_wrapper(ext, msg, code):
-
-        def blkhash(n):
-            if n >= blk.number or n < blk.number - 256:
-                return ''
-            else:
-                return u.sha3(str(n))
-
-        ext.block_hash = blkhash
-        return orig_apply_msg(ext, msg, code)
-
-    pb.apply_msg = apply_msg_wrapper
-
-    try:
-        success, output = pb.apply_transaction(blk, tx)
-        blk.commit_state()
-    except pb.InvalidTransaction:
-        output = ''
-        logger.debug('Transaction not valid')
-        pass
-
-    if tx.to == '':
-        output = blk.get_code(output)
-
-    pb.apply_msg = orig_apply_msg
-
-    assert '0x' + output.encode('hex') == params['out']
-
-    # check state
-    for address, data in post.items():
-        state = blk.account_to_dict(address, for_vmtest=True)
-        state.pop('storage_root', None)
-        assert state == data
-
-
-def external():
-    "used for external vm tests"
-    if os.path.isfile(sys.argv[1]):
-        data = open(sys.argv[1]).read()
-    else:
-        data = sys.argv[1]
-    data = json.loads(data)
-    for test_data in data.values():
-        try:
-            run_test_vm(test_data)
-            print 0,
-        except Exception:
-            print 1,
-            sys.exit(1)
 
 if __name__ == '__main__':
-    external()
+    assert len(sys.argv) >= 2, "Please specify file or dir name"
+    fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
+    for filename, tests in fixtures.items():
+        for testname, testdata in tests.items():
+            testutils.check_state_test(testdata)
+else:
+    fixtures = testutils.get_tests_from_file_or_dir(
+        os.path.join('fixtures', 'StateTests'))
+    for filename, tests in fixtures.items():
+        for testname, testdata in tests.items():
+            func_name = 'test_%s_%s' % (filename, testname)
+            globals()[func_name] = gen_func(filename, testname, testdata)

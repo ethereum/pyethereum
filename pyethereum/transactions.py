@@ -3,7 +3,6 @@ from rlp.sedes import big_endian_int, binary
 from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import utils
-import bloom
 
 
 class Transaction(rlp.Serializable):
@@ -25,6 +24,7 @@ class Transaction(rlp.Serializable):
     (ii) the sending account has enough funds to pay the fee and the value.
     """
 
+<<<<<<< HEAD
     fields = [
         ('nonce', big_endian_int),
         ('gasprice', big_endian_int),
@@ -41,6 +41,18 @@ class Transaction(rlp.Serializable):
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)
         self.logs = []
+=======
+    # nonce,gasprice,startgas,to,value,data,v,r,s
+    def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0,
+                 s=0):
+        self.nonce = nonce
+        self.gasprice = gasprice
+        self.startgas = startgas
+        self.to = to
+        self.value = value
+        self.data = data
+        self.v, self.r, self.s = v, r, s
+>>>>>>> dc53ec4695a13371e6f16cda8e6441ab7a686cf2
 
         # Determine sender
         if self.r < N and self.s < P and self.v >= 27 and self.v <= 28:
@@ -67,6 +79,7 @@ class Transaction(rlp.Serializable):
     def hash(self):
         return utils.sha3(rlp.encode(self))
 
+<<<<<<< HEAD
     def log_bloom(self):
         "returns int"
         bloomtables = [x.bloomables() for x in self.logs]
@@ -75,6 +88,8 @@ class Transaction(rlp.Serializable):
     def log_bloom_b64(self):
         return bloom.b64(self.log_bloom())
 
+=======
+>>>>>>> dc53ec4695a13371e6f16cda8e6441ab7a686cf2
     def to_dict(self):
         # TODO: previous version used printers
         for name, _ in self.__class__.fields:

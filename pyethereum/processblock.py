@@ -62,10 +62,22 @@ class Log(object):
             (self.address, self.topics, self.data)
 
     def to_dict(self):
-        return dict(address=self.address,
-                    topics=[utils.zpad(utils.int_to_big_endian(x), 32).encode('hex')
-                            for x in self.topics],
-                    data='0x' + self.data.encode('hex'))
+        return {
+            "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
+            "address": self.address,
+            "data": '0x' + self.data.encode('hex'),
+            "topics": [utils.zpad(utils.int_to_big_endian(t), 32).encode('hex')
+                       for t in self.topics]
+        }
+
+    @classmethod
+    def deserialize(cls, obj):
+        if isinstance(obj, str):
+            obj = rlp.decode(obj)
+        addr, topics, data = obj
+        return cls(addr.encode('hex'),
+                   [utils.big_endian_to_int(x) for x in topics],
+                   data)
 
 
 def apply_transaction(block, tx):
@@ -161,6 +173,7 @@ def apply_transaction(block, tx):
     for s in suicides:
         block.del_account(s)
     block.add_transaction_to_list(tx)
+    block.logs = []
     return success, output
 
 
@@ -188,7 +201,7 @@ class VMExt():
         self.block_difficulty = block.difficulty
         self.block_gas_limit = block.gas_limit
         self.log = lambda addr, topics, data: \
-            tx.logs.append(Log(addr, topics, data))
+            block.logs.append(Log(addr, topics, data))
         self.tx_origin = tx.sender
         self.tx_gasprice = tx.gasprice
         self.create = lambda msg: create_contract(self, msg)
