@@ -1,11 +1,11 @@
 import time
 import rlp
-from rlp.sedes import big_endian_int, Binary, binary, FixedLengthInt
+from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
 import trie
 import utils
-from utils import address, int64
+from utils import address, int64, trie_root, hash_
 import processblock
-import transactions
+from transactions import Transaction
 import bloom
 import copy
 import sys
@@ -69,6 +69,22 @@ class Receipt(rlp.Serializable):
         ('logs', CountableList(raw))  # TODO: replace raw
     ]
 
+    def __init__(self, state_root, gas_used, logs, bloom=None):
+        super(Receipt, self).__init__(state_root, gas_used, bloom, logs)
+        if bloom is not None and bloom != self.bloom:
+            raise ValueError("Invalid bloom filter")
+
+    @property
+    def bloom(self):
+        bloomtables = [x.bloomtables() for x in logs]
+        return bloom.bloom_from_list(bloomtables)
+
+    @bloom.setter
+    def bloom(self, value):
+        # bloom information will always be calculated from logs, but we need
+        # to provide this setter to allow initialization from RLP
+        pass
+
 
 class BlockHeader(rlp.Serializable):
 
@@ -80,7 +96,7 @@ class BlockHeader(rlp.Serializable):
         ('tx_list_root', trie_root),
         ('receipts_root', trie_root),
         ('bloom', int64),
-        ('difficulty', big_endian_int)
+        ('difficulty', big_endian_int),
         ('number', big_endian_int),
         ('gas_limit', big_endian_int),
         ('gas_used', big_endian_int),
@@ -93,39 +109,8 @@ class BlockHeader(rlp.Serializable):
     def hash(self):
         return utils.sha3(rlp.encode(self))
 
-<<<<<<< HEAD
-    # Block header PoW verification
     def check_pow(self):
         """Check if the proof-of-work of the block is valid.
-=======
-class Receipt(object):
-    def __init__(self, state_root, gas_used, logs):
-        self.state_root = state_root
-        self.gas_used = gas_used
-        self.logs = logs
-
-    def log_bloom(self):
-        bloomables = [x.bloomables() for x in self.logs]
-        return bloom.bloom_from_list(utils.flatten(bloomables))
-
-    def serialize(self):
-        return rlp.encode([
-            self.state_root,
-            utils.encode_int(self.gas_used),
-            bloom.b64(self.log_bloom()),
-            [x.serialize() for x in self.logs]
-        ])
-
-    @classmethod
-    def deserialize(cls, obj):
-        state_root, gas_used, bloom64, logs = rlp.decode(obj)
-        return cls(state_root,
-                   utils.big_endian_to_int(gas_used),
-                   [Log.deserialize(x) for x in logs])
-
-
-class TransientBlock(object):
->>>>>>> dc53ec4695a13371e6f16cda8e6441ab7a686cf2
 
         :returns: `True` or `False`
         """
@@ -140,19 +125,23 @@ class TransientBlock(rlp.Serializable):
 
     fields = [
         ('header', BlockHeader),
-        ('transaction_list', CountableListSedes(Transactions)),
-        ('uncles', CountableListSedes(BlockHeader))
+        ('transaction_list', CountableList(Transaction)),
+        ('uncles', CountableList(BlockHeader))
     ]
 
     def __init__(self, header, transactions, uncles):
         super(TransientBlock, self).__init__(header, transactions, uncles)
-        # mirror fields from header
+        # mirror fields on header: this makes block.prevhash equivalent to
+        # block.header.prevhash, etc.
+        def make_getter(field):
+            return lambda self_: getattr(self, field)
+        def make_setter(field):
+            return lambda self_, value: setattr(self, field, value)
         for field, _ in BlockHeader.fields:
-            def getter(self):
-                return getattr(self.header, field)
-            def setter(self, v):
-                setattr(self.header, field, v)
-            setattr(self.__class__, field, property(getter, setter))
+            setattr(self, field, getattr(header, field))
+            setattr(header.__class__, field, property(
+                make_getter(field),
+                make_setter(field)))
 
     @property
     def hash(self):
@@ -169,7 +158,8 @@ class TransientBlock(rlp.Serializable):
 class Block(TransientBlock):
     """The primary block class."""
 
-    def __init__(self, db, header, parent=None, transaction_list=[], uncles=[]):
+    def __init__(self, header, transaction_list=[], uncles=[], db=None,
+                 parent=None):
         # TransientBlock's init sets tx, receipts and state trie roots which
         # requires an existing database object
         self.db = db
@@ -181,14 +171,17 @@ class Block(TransientBlock):
         self.reset_cache()
         self.journal = []
 
+        if not db:
+            raise TypeError("No database object given")
+
         # if parent is given, check that this makes sense
         if parent:
             if self.db != parent.db:
-                raise ValueError('Parent lives in different database')
-            if self.prevhash != parent.hash:
+                raise ValueError("Parent lives in different database")
+            if self.prevhash != parent.header.hash:
                 raise ValueError("Block's prevhash and parent's hash do not "
                                  "match")
-            if self.number != parent.number + 1:
+            if self.number != parent.header.number + 1:
                 raise ValueError("Block's number is not the successor of its "
                                  "parent number")
             if self.gas_limit != calc_gaslimit(parent):
@@ -221,12 +214,14 @@ class Block(TransientBlock):
         elif self.prevhash == GENESIS_PREVHASH:
             pass  # genesis block
         else:
+            print self.prevhash, GENESIS_PREVHASH
             # get parent from db if it hasn't been passed as keyword argument
             if not parent:
                 try:
                     parent = get_block(db, self.prevhash)
                 except KeyError:
-                    raise UnknownParentException(self.prevhash.encode('hex'))
+                    encoded_hash = self.prevhash.encode('hex')
+                    raise UnknownParentException(encoded_hash)
             # replay
             self.state_root = parent.state_root
             for tx in self.transaction_list:
@@ -243,9 +238,9 @@ class Block(TransientBlock):
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
-        if len(self.extra_data) > 1024:
+        if len(self.header.extra_data) > 1024:
             raise ValueError("Extra data cannot exceed 1024 bytes")
-        if self.coinbase == '':
+        if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
         if not self.state.root_hash_valid():
             raise ValueError("State Merkle root of block %r not found in "
@@ -253,13 +248,16 @@ class Block(TransientBlock):
         if not self.transactions.root_hash_valid():
             raise ValueError("Transactions root of block %r not found in "
                              "database" % self)
-        if self.tx_list_root != self.transactions.root_hash:
+        if self.header.tx_list_root != self.transactions.root_hash:
             raise ValueError("Transaction list root hash does not match")
-        if all(not self.is_genesis(), self.nonce, not self.header.check_pow()):
+        if all((not self.is_genesis(), self.header.nonce,
+                not self.header.check_pow())):
             raise ValueError("PoW check failed")
+
         # make sure we are all on the same db
         # TODO: can this fail at all?
         assert self.state.db.db == self.transactions.db.db == self.db.db
+
 
     @classmethod
     def init_from_header(cls, rlpdata):
@@ -270,31 +268,24 @@ class Block(TransientBlock):
     def check_fields(self):
         """Check that the values of all fields are well formed."""
         # serialize and deserialize and check that the values didn't change
-        b = rlp.decode(rlp.encode(self), Block)
-        for field, type_ in Block.fields:
-            if getattr(self, field) != getattr(b, field):
-                return False
-        return True
+        l = Block.serialize(self)
+        return rlp.decode(rlp.encode(l)) == l
 
     @property
     def tx_list_root(self):
         return self.transactions.root_hash
 
     @tx_list_root.setter
-    def set_tx_list_root(self, value):
-        # should only be set once during initialization as it resets the whole
-        # transaction trie
-        self.transactions = Trie(self.db, value)
+    def tx_list_root(self, value):
+        self.transactions = trie.Trie(self.db, value)
 
     @property
     def receipts_root(self):
         return self.receipts.root_hash
 
     @receipts_root.setter
-    def set_receipts_root(self, value):
-        # should only be set once during initialization as it resets the whole
-        # receipts trie
-        self.receipts = Trie(self.db, value)
+    def receipts_root(self, value):
+        self.receipts = trie.Trie(self.db, value)
 
     @property
     def state_root(self):
@@ -302,7 +293,7 @@ class Block(TransientBlock):
         return self.state.root_hash
 
     @state_root.setter
-    def set_state_root(self):
+    def state_root(self, value):
         self.state = trie.Trie(self.db, value)
         self.reset_cache()
 
@@ -360,23 +351,17 @@ class Block(TransientBlock):
         """Get the `n`th ancestor of this block."""
         return self.get_ancestor_list(n)[-1]
 
-    def get_acct(self, address):
-        """Get the state of an account with a given address."""
-        if len(address) == 40:
-            address = address.decode('hex')
-        return rlp.decode(self.state.get(address), Account)
-
     def is_genesis(self):
         """`True` if this block is the genesis block, otherwise `False`."""
-        return all(self.prevhash == GENESIS_PREVHASH,
-                   self.nonce == GENESIS_NONCE)
+        return all((self.prevhash == GENESIS_PREVHASH,
+                    self.nonce == GENESIS_NONCE))
 
     def get_acct(self, address):
         """Get the account with the given address."""
         if len(address) == 40:
             address = address.decode('hex')
         rlpdata = self.state.get(address)
-        if rlpdata:
+        if rlpdata != trie.BLANK_NODE:
             return rlp.decode(rlpdata, Account)
         else:
             return Account.blank_account()
@@ -430,25 +415,17 @@ class Block(TransientBlock):
         new_value = self._get_acct_item(address, param) + value
         if new_value < 0:
             return False
-<<<<<<< HEAD
-        self._set_acct_item(address, param, new_value)
+        self._set_acct_item(address, param, new_value % 2**256)
         return True
 
     def mk_transaction_receipt(self, tx):
         """Create a receipt for a transaction."""
         return Receipt(
                 self.state_root,
-                utils.encode_int(self.gas_used),
+                self.gas_used,
                 tx.log_bloom64(),
                 [x.serialize() for x in tx.logs]
         )
-=======
-        self._set_acct_item(address, param, value % 2**256)
-        return True
-
-    def mk_transaction_receipt(self, tx):
-        return Receipt(self.state_root, self.gas_used, self.logs)
->>>>>>> dc53ec4695a13371e6f16cda8e6441ab7a686cf2
 
     def add_transaction_to_list(self, tx):
         """Add a transaction to the transaction trie."""
@@ -472,13 +449,12 @@ class Block(TransientBlock):
         return txs
 
     def get_receipt(self, num):
-        # returns [tx_lst_serialized, state_root, gas_used_encoded]
-<<<<<<< HEAD
-        # TODO: really does it? Why are logs missing?
-        return rlp.decode(self.receipts.get(rlp.encode(utils.encode_int(num))))
-=======
-        return Receipt.deserialize(self.receipts.get(rlp.encode(utils.encode_int(num))))
->>>>>>> dc53ec4695a13371e6f16cda8e6441ab7a686cf2
+        """Get the receipt of the `num`th transaction.
+        
+        :returns: an instance of :class:`Receipt`
+        """
+        index = rlp.encode(num)
+        return rlp.decode(self.receipts.get(index), Receipt)
 
     def get_nonce(self, address):
         """Get the nonce of an account.
@@ -613,26 +589,23 @@ class Block(TransientBlock):
             # log_state.trace('delta', changes=[])
             return
         for address in self.caches['all']:
-            acct = rlp.decode(self.state.get(address.decode('hex'))) \
-                or self.mk_blank_acct()
             acct = self.get_acct(address)
-            for i, (key, typ, default) in enumerate(acct_structure):
-                if key == 'storage':
-                    t = trie.Trie(self.db, acct[i])
+            for field, _ in Account.fields:
+                if field == 'storage':
+                    t = trie.Trie(self.db, acct.storage)
                     for k, v in self.caches.get('storage:' + address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
-                        val = rlp.encode(utils.int_to_big_endian(v))
+                        val = rlp.encode(v)
                         changes.append(['storage', address, k, v])
                         if v:
                             t.update(enckey, val)
                         else:
                             t.delete(enckey)
-                    acct[i] = t.root_hash
+                    acct.storage = t.root_hash
                 else:
-                    if address in self.caches[key]:
-                        v = self.caches[key].get(address, default)
-                        changes.append([key, address, v])
-                        acct[i] = self.encoders[acct_structure[i][1]](v)
+                    if address in self.caches[field]:
+                        v = self.caches[field].get(address, default)
+                        setattr(acct, field, v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
         log_state.trace('delta', changes=changes)
         self.reset_cache()
@@ -690,6 +663,7 @@ class Block(TransientBlock):
 
     # Revert computation
     def snapshot(self):
+        """Make a snapshot of the current state to enable later reverting."""
         return {
             'state': self.state.root_hash,
             'gas': self.gas_used,
@@ -706,8 +680,9 @@ class Block(TransientBlock):
 
     def revert(self, mysnapshot):
         """Revert to a previously made snapshot.
-        
-        This does not undo commited changes.
+
+        Reverting is for example necessary when a contract runs out of gas
+        during execution.
         """
         self.journal = mysnapshot['journal']
         log_state.trace('reverting')
@@ -843,24 +818,6 @@ class Block(TransientBlock):
         return self.hash.encode('hex')
 
 
-block_structure_rev = {}
-for i, (name, typ, default) in enumerate(block_structure):
-    block_structure_rev[name] = [i, typ, default]
-
-# Account field parameters
-acct_structure = [
-    ["nonce", "int", 0],
-    ["balance", "int", 0],
-    ["storage", "trie_root", trie.BLANK_ROOT],
-    ["code", "hash", ""],
-]
-
-
-acct_structure_rev = {}
-for i, (name, typ, default) in enumerate(acct_structure):
-    acct_structure_rev[name] = [i, typ, default]
-
-
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
@@ -888,27 +845,6 @@ def must_equal(what, a, b):
         if aux[0]:
             sys.stderr.write('%r' % aux[0])
         raise VerificationFailed(what, a, '==', b)
-
-
-class TransientBlock(object):
-    """
-    Read only, non persisted, not validated representation of a block
-    """
-
-    def __init__(self, rlpdata):
-        self.rlpdata = rlpdata
-        self.header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        self.hash = utils.sha3(rlp.encode(self.header_args))
-        self.transaction_list = transaction_list  # rlp encoded transactions
-        self.uncles = uncles
-        for i, (name, typ, default) in enumerate(block_structure):
-            setattr(self, name, utils.decoders[typ](self.header_args[i]))
-
-    def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
-
-    def __structlog__(self):
-        return self.hash.encode('hex')
 
 
 class CachedBlock(Block):
@@ -957,10 +893,9 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
     """Build the genesis block."""
     # https://ethereum.etherpad.mozilla.org/11
     # TODO: check values
-    block = Block(
-        db=db,
+    header = BlockHeader(
         prevhash=GENESIS_PREVHASH,
-        uncle_hash=utils.sha3(rlp.encode([]))
+        uncles_hash=utils.sha3(rlp.encode([])),
         coinbase=GENESIS_COINBASE,
         state_root=trie.BLANK_ROOT,
         tx_list_root=trie.BLANK_ROOT,
@@ -974,6 +909,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         extra_data='',
         nonce=GENESIS_NONCE,
     )
+    block = Block(header, db=db)
     for addr, balance in start_alloc.iteritems():
         block.set_balance(addr, balance)
     block.state.db.commit()

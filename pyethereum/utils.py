@@ -4,7 +4,7 @@ import struct
 import os
 import sys
 import rlp
-from rlp.sedes import big_endian_int
+from rlp.sedes import big_endian_int, BigEndianInt, Binary
 import db
 import random
 
@@ -32,6 +32,8 @@ def flatten(li):
     for l in li:
         o.extend(l)
     return o
+
+big_endian_to_int = lambda x: big_endian_int.deserialize(x)
 
 
 def bytearray_to_int(arr):
