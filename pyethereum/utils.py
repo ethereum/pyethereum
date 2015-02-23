@@ -4,9 +4,9 @@ import struct
 import os
 import sys
 import rlp
+from rlp.sedes import big_endian_int
 import db
 import random
-from rlp import big_endian_to_int, int_to_big_endian
 
 
 TT256 = 2 ** 256
@@ -80,7 +80,7 @@ def int_to_addr(x):
 
 def coerce_addr_to_bin(x):
     if isinstance(x, (int, long)):
-        return zpad(int_to_big_endian(x), 20).encode('hex')
+        return zpad(big_endian_int.serialize(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return x.decode('hex')
     else:
@@ -89,7 +89,7 @@ def coerce_addr_to_bin(x):
 
 def coerce_addr_to_hex(x):
     if isinstance(x, (int, long)):
-        return zpad(int_to_big_endian(x), 20).encode('hex')
+        return zpad(big_endian_int.serialize(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return x
     else:
@@ -100,14 +100,14 @@ def coerce_to_int(x):
     if isinstance(x, (int, long)):
         return x
     elif len(x) == 40:
-        return big_endian_to_int(x.decode('hex'))
+        return big_endian_int.serialize(x.decode('hex'))
     else:
-        return big_endian_to_int(x)
+        return big_endian_int.serialize(x)
 
 
 def coerce_to_bytes(x):
     if isinstance(x, (int, long)):
-        return int_to_big_endian(x)
+        return big_endian_int.serialize(x)
     elif len(x) == 40:
         return x.decode('hex')
     else:
@@ -135,7 +135,7 @@ def recursive_int_to_big_endian(item):
     ''' convert all int to int_to_big_endian recursively
     '''
     if isinstance(item, (int, long)):
-        return int_to_big_endian(item)
+        return big_endian_int.serialize(item)
     elif isinstance(item, (list, tuple)):
         res = []
         for item in item:
@@ -354,3 +354,9 @@ class Denoms():
         self.turing = 2 ** 256
 
 denoms = Denoms()
+
+
+address = Binary(20, allow_empty=True)
+int64 = BigEndianInt(64)
+hash_ = Binary(32)
+trie_root = Binary(32, allow_empty=True)
