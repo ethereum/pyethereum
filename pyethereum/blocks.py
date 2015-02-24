@@ -129,8 +129,8 @@ class TransientBlock(rlp.Serializable):
         ('uncles', CountableList(BlockHeader))
     ]
 
-    def __init__(self, header, transactions, uncles):
-        super(TransientBlock, self).__init__(header, transactions, uncles)
+    def __init__(self, header, transaction_list, uncles):
+        super(TransientBlock, self).__init__(header, transaction_list, uncles)
 
     @property
     def hash(self):
@@ -162,6 +162,8 @@ class Block(TransientBlock):
                  parent=None):
         # TransientBlock's init sets tx, receipts and state trie roots which
         # requires an existing database object
+        if not db:
+            raise TypeError("No database object given")
         self.db = db
         super(Block, self).__init__(header, transaction_list, uncles)
 
@@ -170,9 +172,7 @@ class Block(TransientBlock):
         self.refunds = 0
         self.reset_cache()
         self.journal = []
-
-        if not db:
-            raise TypeError("No database object given")
+        self.finalized = False
 
         # if parent is given, check that this makes sense
         if parent:
@@ -214,7 +214,6 @@ class Block(TransientBlock):
         elif self.prevhash == GENESIS_PREVHASH:
             pass  # genesis block
         else:
-            print self.prevhash, GENESIS_PREVHASH
             # get parent from db if it hasn't been passed as keyword argument
             if not parent:
                 try:
@@ -224,9 +223,10 @@ class Block(TransientBlock):
                     raise UnknownParentException(encoded_hash)
             # replay
             self.state_root = parent.state_root
-            for tx in self.transaction_list:
-                success, output = processblock.apply_transaction(block, tx)
-            self.finalize()
+            if len(self.transaction_list) > 0:
+                for tx in self.transaction_list:
+                    success, output = processblock.apply_transaction(block, tx)
+                self.finalize()
 
         # TODO: handle SPV case (probably in BlockHeader class)
 
@@ -250,7 +250,10 @@ class Block(TransientBlock):
                              "database" % self)
         if self.header.tx_list_root != self.transactions.root_hash:
             raise ValueError("Transaction list root hash does not match")
-        if not self.is_genesis() and self.nonce and self.header.check_pow():
+        print self.is_genesis()
+        print self.nonce
+        print self.header.check_pow()
+        if not self.is_genesis() and self.nonce and not self.header.check_pow():
             raise ValueError("PoW check failed")
 
         # make sure we are all on the same db
@@ -382,9 +385,10 @@ class Block(TransientBlock):
             address = address.decode('hex')
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
-            return rlp.decode(rlpdata, Account)
+            acct = rlp.decode(rlpdata, Account)
         else:
-            return Account.blank_account()
+            acct = Account.blank_account()
+        return acct
 
     def _get_acct_item(self, address, param):
         """Get a specific parameter of a specific account.
@@ -594,7 +598,7 @@ class Block(TransientBlock):
         :param index: the index of the item in the storage
         :param value: the new value of the item
         """
-        CACHE_KEY = 'storage:'+address
+        CACHE_KEY = 'storage:' + address
         if CACHE_KEY not in self.caches:
             self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
@@ -625,6 +629,7 @@ class Block(TransientBlock):
                 else:
                     if address in self.caches[field]:
                         v = self.caches[field][address]
+                        changes.append([field, address, v])
                         setattr(acct, field, v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
         log_state.trace('delta', changes=changes)
@@ -733,6 +738,9 @@ class Block(TransientBlock):
         We raise the block's coinbase account by Rb, the block reward, and the
         coinbase of each uncle by 7 of 8 that. Rb = 1500 finney
         """
+        assert not self.finalized, "Cannot finalize more than once"
+        self.finalized = True
+
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
         for uncle in self.uncles:
@@ -886,7 +894,7 @@ class CachedBlock(Block):
     @property
     def hash(self):
         if not self._hash_cached:
-            self._hash_cached = Block._hash(self)
+            self._hash_cached = super(CachedBlock, self).hash
         return self._hash_cached
 
     @classmethod
@@ -901,7 +909,7 @@ def get_block(db, blockhash):
     Assumption: blocks loaded from the db are not manipulated
                 -> can be cached including hash
     """
-    blk = Block.deserialize(db, db.get(blockhash))
+    blk = rlp.decode(db.get(blockhash), Block, db=db)
     return CachedBlock.create_cached(blk)
 
 

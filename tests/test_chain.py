@@ -54,7 +54,7 @@ def get_transaction(gasprice=0, nonce=0):
 
 
 def store_block(blk):
-    blk.db.put(blk.hash, blk.serialize())
+    blk.db.put(blk.hash, rlp.encode(blk))
     assert blocks.get_block(blk.db, blk.hash) == blk
 
 
@@ -102,7 +102,7 @@ def test_failing_transfer():
 def test_transient_block():
     db = new_db()
     blk = blocks.genesis(db)
-    tb_blk = blocks.TransientBlock(blk.serialize())
+    tb_blk = rlp.decode(rlp.encode(blk), blocks.TransientBlock)
     assert blk.hash == tb_blk.hash
     assert blk.number == tb_blk.number
 
@@ -114,7 +114,7 @@ def test_genesis():
     blk = blocks.genesis(db, {v: utils.denoms.ether * 1})
     sr = blk.state_root
     assert blk.state.db.db == db.db
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     blk.state.db.commit()
     assert sr in db
     db.commit()
@@ -133,7 +133,7 @@ def test_deserialize():
     k, v, k2, v2 = accounts()
     db = new_db()
     blk = blocks.genesis(db)
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     assert blk == blocks.get_block(db, blk.hash)
 
 
@@ -141,7 +141,7 @@ def test_deserialize_commit():
     k, v, k2, v2 = accounts()
     db = new_db()
     blk = blocks.genesis(db)
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     db.commit()
     assert blk == blocks.get_block(db, blk.hash)
 
@@ -218,14 +218,11 @@ def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
     blk = mkquickgenesis({v: utils.denoms.ether * 1})
     db = blk.db
-    assert blk.hex_hash() == \
-        blocks.Block.deserialize(db, blk.serialize()).hex_hash()
+    assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, db=db).hash
     store_block(blk)
     blk2 = mine_next_block(blk)
-    assert blk.hex_hash() == \
-        blocks.Block.deserialize(db, blk.serialize()).hex_hash()
-    assert blk2.hex_hash() == \
-        blocks.Block.deserialize(db, blk2.serialize()).hex_hash()
+    assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, db=db).hash
+    assert blk2.hash == rlp.decode(rlp.encode(blk2), blocks.Block, db=db).hash
 
 
 def test_block_serialization_other_db():
@@ -240,10 +237,10 @@ def test_block_serialization_other_db():
     b_blk = mkquickgenesis()
     assert b_blk == a_blk
     store_block(b_blk)
-    b_blk2 = blocks.Block.deserialize(b_blk.db, a_blk2.serialize())
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    b_blk2 = rlp.decode(rlp.encode(a_blk2), blocks.Block, db=b_blk.db)
+    assert a_blk2.hash == b_blk2.hash
     store_block(b_blk2)
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
 
 
 def test_block_serialization_with_transaction_other_db():
@@ -301,10 +298,7 @@ def test_transaction_serialization():
     k, v, k2, v2 = accounts()
     tx = get_transaction()
     assert tx in set([tx])
-    assert tx.hex_hash() == \
-        transactions.Transaction.deserialize(tx.serialize()).hex_hash()
-    assert tx.hex_hash() == \
-        transactions.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
+    assert tx.hash == rlp.decode(rlp.encode(tx, transactions.Transaction)).hash
     assert tx in set([tx])
 
 
@@ -362,8 +356,8 @@ def test_add_side_chain():
     cm.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [blocks.TransientBlock(R0.serialize()),
-                        blocks.TransientBlock(R1.serialize())]
+    transient_blocks = [rlp.decode(rlp.encode(R0), blocks.TransientBlock),
+                        rlp.decode(rlp.encode(R1), blocks.TransientBlock)]
     cm.receive_chain(transient_blocks=transient_blocks)
     assert L2.hash in cm
 
@@ -394,7 +388,8 @@ def test_add_longer_side_chain():
     cm.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [blocks.TransientBlock(b.serialize()) for b in remote_blocks]
+    transient_blocks = [rlp.decode(rlp.encode(b), blocks.TransientBlock)
+                        for b in remote_blocks]
     cm.receive_chain(transient_blocks=transient_blocks)
     assert cm.head == remote_blocks[-1]
 

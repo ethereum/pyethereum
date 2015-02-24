@@ -3,12 +3,12 @@ import struct
 import blocks
 import processblock
 import utils
+import rlp
 from pyethereum.slogging import get_logger
 log = get_logger('eth.miner')
 
 
 class Miner():
-
     """
     Mines on the current head
     Stores received transactions
@@ -27,7 +27,8 @@ class Miner():
                                                    uncles=[u.list_header() for u in uncles])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
-        log.debug('mining', block_number=self.block.number, block_hash=self.block.hex_hash(),
+        log.debug('mining', block_number=self.block.number,
+                  block_hash=self.block.hash.encode('hex'),
                   block_difficulty=self.block.difficulty)
 
     def add_transaction(self, transaction):
@@ -73,10 +74,10 @@ class Miner():
         BE(X) evaluates to the value equal to X when interpreted as a
             big-endian-encoded integer.
         """
-
         nonce_bin_prefix = '\x00' * (32 - len(struct.pack('>q', 0)))
         target = 2 ** 256 / self.block.difficulty
-        rlp_Hn = self.block.serialize_header_without_nonce()
+        rlp_Hn = rlp.encode(self.block.header,
+                            blocks.BlockHeader.exclude(['nonce']))
 
         for nonce in range(self.nonce, self.nonce + steps):
             nonce_bin = nonce_bin_prefix + struct.pack('>q', nonce)
@@ -85,9 +86,10 @@ class Miner():
             l256 = utils.big_endian_to_int(h)
             if l256 < target:
                 self.block.nonce = nonce_bin
-                assert self.block.check_proof_of_work(self.block.nonce) is True
+                assert self.block.header.check_pow() is True
                 assert self.block.get_parent()
-                log.debug('nonce found', block_nonce=nonce, block_hash=self.block.hex_hash())
+                log.debug('nonce found', block_nonce=nonce,
+                          block_hash=self.block.hash.encode('hex'))
                 return self.block
 
         self.nonce = nonce

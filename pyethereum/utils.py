@@ -33,7 +33,8 @@ def flatten(li):
         o.extend(l)
     return o
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(x)
+big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip('\x00'))
+int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 
 def bytearray_to_int(arr):
