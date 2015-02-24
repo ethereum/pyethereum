@@ -131,21 +131,21 @@ class TransientBlock(rlp.Serializable):
 
     def __init__(self, header, transactions, uncles):
         super(TransientBlock, self).__init__(header, transactions, uncles)
-        # mirror fields on header: this makes block.prevhash equivalent to
-        # block.header.prevhash, etc.
-        def make_getter(field):
-            return lambda self_: getattr(self, field)
-        def make_setter(field):
-            return lambda self_, value: setattr(self, field, value)
-        for field, _ in BlockHeader.fields:
-            setattr(self, field, getattr(header, field))
-            setattr(header.__class__, field, property(
-                make_getter(field),
-                make_setter(field)))
 
     @property
     def hash(self):
         return utils.sha3(rlp.encode(self.header))
+
+    @property
+    def header(self):
+        return BlockHeader(**{field: getattr(self, field)
+                              for field, _ in BlockHeader.fields})
+
+    @header.setter
+    def header(self, value):
+        # copy all fields from header to block
+        for field, _ in BlockHeader.fields:
+            setattr(self, field, getattr(value, field))
 
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.number,
@@ -250,20 +250,40 @@ class Block(TransientBlock):
                              "database" % self)
         if self.header.tx_list_root != self.transactions.root_hash:
             raise ValueError("Transaction list root hash does not match")
-        if all((not self.is_genesis(), self.header.nonce,
-                not self.header.check_pow())):
+        if not self.is_genesis() and self.nonce and self.header.check_pow():
             raise ValueError("PoW check failed")
 
         # make sure we are all on the same db
         # TODO: can this fail at all?
         assert self.state.db.db == self.transactions.db.db == self.db.db
 
+    @classmethod
+    def init_from_header(cls, rlpdata, db):
+        """Create a block without specifying transactions or uncles."""
+        header = rlp.decode(rlpdata, BlockHeader, db=db)
+        return cls(header, [], [], db=db)
 
     @classmethod
-    def init_from_header(cls, rlpdata):
-        """Create a block without specifying transactions or uncles."""
-        header = rlp.decode(rlpdata, BlockHeader)
-        return cls(header, [], [])
+    def init_from_parent(cls, parent, coinbase, extra_data='',
+                         timestamp=int(time.time()), uncles=[]):
+        """Create a new empty block based on a parent block."""
+        header = BlockHeader(prevhash=parent.hash,
+                             uncles_hash=utils.sha3(rlp.encode(uncles)),
+                             coinbase=coinbase,
+                             state_root=parent.state_root,
+                             tx_list_root=trie.BLANK_ROOT,
+                             receipts_root=trie.BLANK_ROOT,
+                             bloom=0,
+                             difficulty=calc_difficulty(parent, timestamp),
+                             number=parent.number + 1,
+                             gas_limit=calc_gaslimit(parent),
+                             gas_used=0,
+                             timestamp=timestamp,
+                             extra_data=extra_data,
+                             nonce='')
+        block = Block(header, [], uncles, db=parent.db, parent=parent)
+        block.ancestors += parent.ancestors
+        return block
 
     def check_fields(self):
         """Check that the values of all fields are well formed."""
@@ -604,7 +624,7 @@ class Block(TransientBlock):
                     acct.storage = t.root_hash
                 else:
                     if address in self.caches[field]:
-                        v = self.caches[field].get(address, default)
+                        v = self.caches[field][address]
                         setattr(acct, field, v)
             self.state.update(address.decode('hex'), rlp.encode(acct))
         log_state.trace('delta', changes=changes)
@@ -652,7 +672,7 @@ class Block(TransientBlock):
         return med_dict
 
     def reset_cache(self):
-        """Reset the cache and the journal without commiting any changes."""
+        """Reset cache and journal without commiting any changes."""
         self.caches = {
             'all': {},
             'balance': {},

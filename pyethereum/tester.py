@@ -221,7 +221,8 @@ class state():
         for i in range(n):
             self.block.finalize()
             t = self.block.timestamp + 6 + rand() % 12
-            self.block = b.Block.init_from_parent(self.block, coinbase, '', t)
+            self.block = b.Block.init_from_parent(self.block, coinbase,
+                                                  timestamp=t)
             self.blocks.append(self.block)
 
     def snapshot(self):
