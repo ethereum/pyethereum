@@ -23,7 +23,7 @@ keys = []
 
 for i in range(10):
     keys.append(u.sha3(str(i)))
-    accounts.append(u.privtoaddr(keys[-1]))
+    accounts.append(u.privtoaddr(keys[-1]).decode('hex'))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]

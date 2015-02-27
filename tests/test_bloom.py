@@ -70,7 +70,7 @@ def do_test_bloom(test_logs):
             b = bloom.bloom_insert(b, t.decode('hex'))
         # Test via Log
         topics = [decode_int_from_hex(x) for x in data['topics']]
-        log = pb.Log(address, topics, '')
+        log = pb.Log(address.decode('hex'), topics, '')
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
         assert log_bloom.encode('hex') == encode_hex_from_int(b)
         assert data['bloom'] == log_bloom.encode('hex')

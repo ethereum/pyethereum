@@ -1,14 +1,15 @@
+import copy
+import json
+import sys
+import time
 import rlp
+from rlp.sedes import CountableList, Binary
 import opcodes
 import utils
-import time
 import blocks
 import transactions
 import trie
-import sys
-import json
 import fastvm
-import copy
 import specials
 import bloom
 import vm
@@ -39,45 +40,30 @@ def verify(block, parent):
         return False
 
 
-class Log(object):
+class Log(rlp.Serializable):
 
-    def __init__(self, address, topics, data):
-        self.address = address
-        self.topics = topics
-        self.data = data
-
-    def serialize(self):
-        return [
-            self.address.decode('hex'),
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics],  # why zpad?
-            self.data
-        ]
+    # TODO: original version used zpad (here replaced by int32.serialize); had
+    # comment "why zpad"?
+    fields = [
+        ('address', utils.address),
+        ('topics', CountableList(utils.int32)),
+        ('data', Binary)
+    ]
 
     def bloomables(self):
-        return [self.address.decode('hex')] + \
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]  # why zpad?
-
-    def __repr__(self):
-        return '<Log(address=%r, topics=%r, data=%r)>' % \
-            (self.address, self.topics, self.data)
+        return [self.address] + [utils.int32.serialize(x) for x in self.topics]
 
     def to_dict(self):
         return {
             "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
-            "address": self.address,
+            "address": self.address.encode('hex'),
             "data": '0x' + self.data.encode('hex'),
-            "topics": [utils.zpad(utils.int_to_big_endian(t), 32).encode('hex')
-                       for t in self.topics]
+            "topics": [utils.int32.serialize(t).encode('hex') for t in topics]
         }
 
-    @classmethod
-    def deserialize(cls, obj):
-        if isinstance(obj, str):
-            obj = rlp.decode(obj)
-        addr, topics, data = obj
-        return cls(addr.encode('hex'),
-                   [utils.big_endian_to_int(x) for x in topics],
-                   data)
+    def __repr__(self):
+        return '<Log(address=%r, topics=%r, data=%r)>' %  \
+            (self.address.encode('hex'), self.topics, self.data)
 
 
 def apply_transaction(block, tx):
@@ -116,7 +102,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    log_tx.debug('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx=tx.hash.encode('hex'), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'

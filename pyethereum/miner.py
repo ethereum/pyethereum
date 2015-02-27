@@ -24,7 +24,7 @@ class Miner():
         self.nonce = 0
         ts = max(int(time.time()), parent.timestamp + 1)
         self.block = blocks.Block.init_from_parent(parent, coinbase, timestamp=ts,
-                                                   uncles=[u.list_header() for u in uncles])
+                                                   uncles=[u.header() for u in uncles])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         log.debug('mining', block_number=self.block.number,
@@ -35,6 +35,7 @@ class Miner():
         old_state_root = self.block.state_root
         # revert finalization
         self.block.state_root = self.pre_finalize_state_root
+        self.block.finalized = False
         try:
             success, output = processblock.apply_transaction(self.block, transaction)
         except processblock.InvalidTransaction as e:

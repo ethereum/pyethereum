@@ -1,7 +1,9 @@
-import rlp
-from rlp.sedes import big_endian_int, binary
 from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
+import rlp
+from rlp.sedes import big_endian_int, binary
+
+import bloom
 import utils
 
 
@@ -36,19 +38,20 @@ class Transaction(rlp.Serializable):
         ('s', big_endian_int),
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, nonce, gasprice, startgas, to, value, data,
+                 v=0, r=0, s=0):
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)
         self.logs = []
 
         # Determine sender
         if self.r < N and self.s < P and self.v >= 27 and self.v <= 28:
-            rlpdata = rlp.encode(self, Transaction.exclide(['nonce']))
+            rlpdata = rlp.encode(self, UnsignedTransaction)
             rawhash = utils.sha3(rlpdata)
             pub = encode_pubkey(
                 ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
                 'bin')
-            self.sender = utils.sha3(pub[1:])[-20:].encode('hex')
+            self.sender = utils.sha3(pub[1:])[-20:]
         # does not include signature
         else:
             self.sender = 0
@@ -58,8 +61,9 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
-        self.v, self.r, self.s = ecdsa_raw_sign(self.hash, key)
-        self.sender = utils.privtoaddr(key)
+        rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
+        self.sender = utils.privtoaddr(key).decode('hex')
         return self
 
     @property
@@ -68,14 +72,15 @@ class Transaction(rlp.Serializable):
 
     def log_bloom(self):
         "returns int"
-        bloomtables = [x.bloomables() for x in self.logs]
-        return bloom.bloom_from_list(utils.flatten(bloomtables))
+        bloomables = [x.bloomables() for x in self.logs]
+        return bloom.bloom_from_list(utils.flatten(bloomables))
 
     def log_bloom_b64(self):
         return bloom.b64(self.log_bloom())
 
     def to_dict(self):
         # TODO: previous version used printers
+        d = {}
         for name, _ in self.__class__.fields:
             d[name] = getattr(self, name)
         d['sender'] = self.sender
@@ -93,6 +98,9 @@ class Transaction(rlp.Serializable):
 
     def __structlog__(self):
         return self.hash.encode('hex')
+
+
+UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
 
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):

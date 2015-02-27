@@ -19,9 +19,9 @@ configure_logging('eth.vm:trace,eth.vm.memory:info')
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
-    v = utils.privtoaddr(k)
+    v = utils.privtoaddr(k).decode('hex')
     k2 = utils.sha3('horse')
-    v2 = utils.privtoaddr(k2)
+    v2 = utils.privtoaddr(k2).decode('hex')
     return k, v, k2, v2
 
 
@@ -269,14 +269,14 @@ def test_block_serialization_with_transaction_other_db():
     assert b_blk == a_blk
     logger.debug('b: state_root before tx %r' % hx(b_blk.state_root))
     logger.debug('starting deserialization of remote block w/ tx')
-    b_blk2 = b_blk.deserialize(b_blk.db, a_blk2.serialize()) # BOOM
+    b_blk2 = rlp.decode(rlp.encode(a_blk2), blocks.Block, db=b_blk.db)
     logger.debug('b: state_root after %r' % hx(b_blk2.state_root))
 
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
 
     assert tx in b_blk2.get_transactions()
     store_block(b_blk2)
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
     assert tx in b_blk2.get_transactions()
 
 
@@ -298,7 +298,7 @@ def test_transaction_serialization():
     k, v, k2, v2 = accounts()
     tx = get_transaction()
     assert tx in set([tx])
-    assert tx.hash == rlp.decode(rlp.encode(tx, transactions.Transaction)).hash
+    assert tx.hash == rlp.decode(rlp.encode(tx), transactions.Transaction).hash
     assert tx in set([tx])
 
 

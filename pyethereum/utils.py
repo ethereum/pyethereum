@@ -359,7 +359,8 @@ class Denoms():
 denoms = Denoms()
 
 
-address = Binary(20, allow_empty=True)
+address = Binary.fixed_length(20, allow_empty=True)
+int32 = BigEndianInt(32)
 int64 = BigEndianInt(64)
-hash_ = Binary(32)
-trie_root = Binary(32, allow_empty=True)
+hash32 = Binary.fixed_length(32)
+trie_root = Binary.fixed_length(32, allow_empty=True)
