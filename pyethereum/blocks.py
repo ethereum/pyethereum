@@ -570,7 +570,7 @@ class Block(object):
         self.set_and_journal(CACHE_KEY, index, val)
 
     def account_exists(self, address):
-        return self.state.get(address.decode('hex')) or address in self.caches['all']
+        return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
 
     def commit_state(self):
         changes = []
