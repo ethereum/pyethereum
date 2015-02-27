@@ -2,6 +2,7 @@ import utils
 import copy
 import opcodes
 import json
+import time
 from pyethereum.slogging import get_logger
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -102,6 +103,7 @@ def mem_extend(mem, compustate, op, start, sz):
                 return False
             compustate.gas -= memfee
             m_extend = (newsize - oldsize) * 32
+            print 'extending: %d' % m_extend
             mem.extend([0] * m_extend)
     return True
 
@@ -145,7 +147,12 @@ def vm_execute(ext, msg, code):
 
     codelen = len(processed_code)
 
+    s = time.time()
+    op = None
+
     while 1:
+        # print 'op: ', op, time.time() - s
+        # s = time.time()
         if compustate.pc >= codelen:
             return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
@@ -376,12 +383,14 @@ def vm_execute(ext, msg, code):
                 s0, s1 = stk.pop(), stk.pop()
                 if ext.get_storage_data(msg.to, s0):
                     gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
+                    refund = 0 if s1 else opcodes.GSTORAGEREFUND
                 else:
                     gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
+                    refund = 0
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
-                compustate.gas -= max(gascost, 0)
-                ext.add_refund(max(-gascost, 0))  # adds neg gascost as a refund if below zero
+                compustate.gas -= gascost
+                ext.add_refund(refund)  # adds neg gascost as a refund if below zero
                 ext.set_storage_data(msg.to, s0, s1)
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
@@ -462,12 +471,13 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            if compustate.gas < gas:
+            to = utils.encode_int(to)
+            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+            new_acct_gas = ext.account_exists(to) * opcodes.GNEWACCOUNT
+            if compustate.gas < gas + new_acct_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                compustate.gas -= gas
-                to = utils.encode_int(to)
-                to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+                compustate.gas -= (gas + new_acct_gas)
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
@@ -516,6 +526,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
+            print 'suiciding %s %s %d' % (msg.to, to, xfer)
             return 1, compustate.gas, []
         for a in stk:
             assert isinstance(a, (int, long))

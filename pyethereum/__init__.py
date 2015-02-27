@@ -1,5 +1,6 @@
 import utils
 import trie
+import securetrie
 import blocks
 import transactions
 import processblock

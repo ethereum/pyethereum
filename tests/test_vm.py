@@ -5,7 +5,8 @@ from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-configure_logging(':trace')
+if '--notrace' not in sys.argv:
+    configure_logging(':trace')
 
 
 # SETUP TESTS IN GLOBAL NAME SPACE

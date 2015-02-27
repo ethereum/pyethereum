@@ -122,9 +122,8 @@ def apply_transaction(block, tx):
     # print block.get_nonce(tx.sender), '@@@'
 
     # buy startgas
-    success = block.transfer_value(tx.sender, block.coinbase,
-                                   tx.gasprice * tx.startgas)
-    assert success
+    assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
+    block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
 
     message_gas = tx.startgas - intrinsic_gas_used
     message_data = vm.CallData([ord(x) for x in tx.data], 0, len(tx.data))
@@ -159,8 +158,8 @@ def apply_transaction(block, tx):
             gas_used -= min(block.refunds, gas_used // 2)
             block.refunds = 0
         # sell remaining gas
-        block.transfer_value(
-            block.coinbase, tx.sender, tx.gasprice * gas_remained)
+        block.delta_balance(tx.sender, tx.gasprice * gas_remained)
+        block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
         if tx.to:
             output = ''.join(map(chr, data))
@@ -207,6 +206,7 @@ class VMExt():
         self.create = lambda msg: create_contract(self, msg)
         self.call = lambda msg: apply_msg_send(self, msg)
         self.sendmsg = lambda msg, code: apply_msg(self, msg, code)
+        self.account_exists = block.account_exists
 
 
 def apply_msg(ext, msg, code):
@@ -256,7 +256,7 @@ def create_contract(ext, msg):
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
     msg.is_create = True
-    assert not ext.get_code(msg.to)
+    # assert not ext.get_code(msg.to)
     res, gas, dat = apply_msg(ext, msg, msg.data.extract_all())
     if res:
         if not len(dat):

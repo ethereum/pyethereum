@@ -7,6 +7,7 @@ import copy
 from db import DB
 import json
 import os
+import time
 db = DB(utils.db_path(tempfile.mktemp()))
 
 env = {
@@ -20,12 +21,22 @@ env = {
 
 FILL = 1
 VERIFY = 2
-VM = 3
-STATE = 4
+TIME = 3
+VM = 4
+STATE = 5
 fill_vm_test = lambda params: run_vm_test(params, FILL)
 check_vm_test = lambda params: run_vm_test(params, VERIFY)
+time_vm_test = lambda params: run_vm_test(params, TIME)
 fill_state_test = lambda params: run_state_test(params, FILL)
 check_state_test = lambda params: run_state_test(params, VERIFY)
+time_state_test = lambda params: run_state_test(params, TIME)
+
+
+def parse_int_or_hex(s):
+    if s[:2] == '0x':
+        return utils.big_endian_to_int(s[2:].decode('hex'))
+    else:
+        return int(s)
 
 
 def mktest(code, language, data=None, fun=None, args=None,
@@ -48,7 +59,7 @@ def mktest(code, language, data=None, fun=None, args=None,
                 "value": str(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": '0x'+d.encode('hex'), "gasLimit": str(gas),
+        tx = {"data": '0x'+d.encode('hex'), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": str(1), "nonce": str(s.block.get_nonce(t.a0)),
               "secretKey": t.k0.encode('hex'), "to": ca, "value": str(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -69,7 +80,7 @@ def run_vm_test(params, mode):
                        number=int(env['currentNumber']),
                        coinbase=env['currentCoinbase'],
                        difficulty=int(env['currentDifficulty']),
-                       gas_limit=int(env['currentGasLimit']),
+                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
 
     # setup state
@@ -143,12 +154,14 @@ def run_vm_test(params, mode):
 
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
                      vm.CallData([ord(x) for x in tx.data]))
+    time_pre = time.time()
     success, gas_remained, output = \
         vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
     blk.commit_state()
     for s in blk.suicides:
         blk.del_account(s)
+    time_post = time.time()
 
     """
      generally expected that the test implementer will read env, exec and pre
@@ -168,7 +181,7 @@ def run_vm_test(params, mode):
 
     if mode == FILL:
         return params2
-    if mode == VERIFY:
+    elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in params1['post'].items():
@@ -182,6 +195,8 @@ def run_vm_test(params, mode):
                   'out', 'gas', 'logs', 'post']:
             assert params1.get(k, None) == params2.get(k, None), \
                 k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+    elif mode == TIME:
+        return time_post - time_pre
 
 
 # Fills up a vm test without post data, or runs the test
@@ -199,7 +214,7 @@ def run_state_test(params, mode):
                        number=int(env['currentNumber']),
                        coinbase=env['currentCoinbase'],
                        difficulty=int(env['currentDifficulty']),
-                       gas_limit=int(env['currentGasLimit']),
+                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
 
     # setup state
@@ -217,7 +232,7 @@ def run_state_test(params, mode):
     tx = transactions.Transaction(
         nonce=int(exek['nonce'] or "0"),
         gasprice=int(exek['gasPrice'] or "0"),
-        startgas=int(exek['gasLimit'] or "0"),
+        startgas=parse_int_or_hex(exek['gasLimit'] or "0"),
         to=exek['to'][2:] if exek['to'][:2] == '0x' else exek['to'],
         value=int(exek['value'] or "0"),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
@@ -237,12 +252,14 @@ def run_state_test(params, mode):
 
     pb.apply_msg = apply_msg_wrapper
 
+    time_pre = time.time()
     try:
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
         success, output = False, ''
         pass
+    time_post = time.time()
 
     if tx.to == '':
         output = blk.get_code(output)
@@ -257,7 +274,7 @@ def run_state_test(params, mode):
 
     if mode == FILL:
         return params2
-    if mode == VERIFY:
+    elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in params1['post'].items():
@@ -271,6 +288,8 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'post']:
             assert params1.get(k, None) == params2.get(k, None), \
                 k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+    elif mode == TIME:
+        return time_post - time_pre
 
 
 def get_tests_from_file_or_dir(dname, json_only=False):

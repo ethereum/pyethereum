@@ -87,8 +87,9 @@ for o in opcodes:
 # Non-opcode gas prices
 GDEFAULT = 1
 GMEMORY = 1
-GQUADRATICMEMDENOM = 9999999999999  # set to 1024 once tests exist
-GSTORAGEKILL = -100
+GQUADRATICMEMDENOM = 1024  # set to 1024 once tests exist
+GSTORAGEREFUND = 200
+GSTORAGEKILL = 100
 GSTORAGEMOD = 100
 GSTORAGEADD = 300
 GEXPONENTBYTE = 1    # cost of EXP exponent per byte
@@ -101,3 +102,5 @@ GTXDATANONZERO = 5   # TX DATA NON ZERO BYTE GAS COST
 GSHA3WORD = 10       # Cost of SHA3 per word
 GSHA256WORD = 50     # Cost of SHA256 per word
 GRIPEMD160WORD = 50  # Cost of RIPEMD160 per word
+
+GNEWACCOUNT = 500

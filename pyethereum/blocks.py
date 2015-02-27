@@ -1,6 +1,7 @@
 import time
 import rlp
 import trie
+import securetrie
 import utils
 import processblock
 import transactions
@@ -16,7 +17,7 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 # Genesis block difficulty
-GENESIS_DIFFICULTY = 2 ** 17
+GENESIS_DIFFICULTY = 2 ** 10
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
@@ -39,7 +40,7 @@ NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 # Difficulty adjustment constants
 DIFF_ADJUSTMENT_CUTOFF = 5
-BLOCK_DIFF_FACTOR = 1024
+BLOCK_DIFF_FACTOR = 2048
 
 # Block header parameters
 block_structure = [
@@ -99,11 +100,23 @@ def set_aux(auxval):
     aux[0] = auxval
 
 
-def must_equal(what, a, b):
-    if a != b:
+def must(what, f, symb, a, b):
+    if not f(a, b):
         if aux[0]:
             sys.stderr.write('%r' % aux[0])
         raise VerificationFailed(what, a, '==', b)
+
+
+def must_equal(what, a, b):
+    return must(what, lambda x, y: x == y, "==", a, b)
+
+
+def must_ge(what, a, b):
+    return must(what, lambda x, y: x >= y, ">=", a, b)
+
+
+def must_le(what, a, b):
+    return must(what, lambda x, y: x <= y, "<=", a, b)
 
 
 class Receipt(object):
@@ -208,11 +221,11 @@ class Block(object):
         }
         self.journal = []
 
-        self.transactions = trie.Trie(self.db, tx_list_root)
-        self.receipts = trie.Trie(self.db, receipts_root)
+        self.transactions = securetrie.SecureTrie(trie.Trie(self.db, tx_list_root))
+        self.receipts = securetrie.SecureTrie(trie.Trie(self.db, receipts_root))
         self.transaction_count = 0
 
-        self.state = trie.Trie(self.db, state_root)
+        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root))
         self.bloom = bloom  # int
 
         # setup de/encoders
@@ -279,6 +292,8 @@ class Block(object):
 
     def validate_uncles(self):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
+            return False
+        if len(self.uncles) > 4:
             return False
         # Check uncle validity
         ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
@@ -381,7 +396,12 @@ class Block(object):
         set_aux(block.to_dict())
         must_equal('prev_hash', block.prevhash, self.hash)
         must_equal('gas_used', block.gas_used, kargs['gas_used'])
-        must_equal('gas_limit', block.gas_limit,  kargs['gas_limit'])
+        must_ge('gas_limit',
+                kargs['gas_limit'],
+                self.gas_limit - int(self.gas_limit / GASLIMIT_ADJMAX_FACTOR))
+        must_le('gas_limit',
+                kargs['gas_limit'],
+                self.gas_limit + int(self.gas_limit / GASLIMIT_ADJMAX_FACTOR))
         must_equal('timestamp', block.timestamp, kargs['timestamp'])
         must_equal('difficulty', block.difficulty, kargs['difficulty'])
         must_equal('number', block.number, kargs['number'])
@@ -548,6 +568,9 @@ class Block(object):
             self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
         self.set_and_journal(CACHE_KEY, index, val)
+
+    def account_exists(self, address):
+        return self.state.get(address.decode('hex')) or address in self.caches['all']
 
     def commit_state(self):
         changes = []
