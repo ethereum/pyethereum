@@ -103,7 +103,6 @@ def mem_extend(mem, compustate, op, start, sz):
                 return False
             compustate.gas -= memfee
             m_extend = (newsize - oldsize) * 32
-            print 'extending: %d' % m_extend
             mem.extend([0] * m_extend)
     return True
 

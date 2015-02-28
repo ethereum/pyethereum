@@ -354,7 +354,7 @@ def mainloop(rounds):
 
 def entry(rounds):
     self.storage[15] = 20
-    self.mainloop(rounds, gas=tx.gas - 100)
+    self.mainloop(rounds, gas=msg.gas - 600)
 
 def ping_ten():
     return(10)
@@ -395,8 +395,8 @@ def test_suicider():
 
 reverter_code = '''
 def entry():
-    self.non_recurse(gas=1000)
-    self.recurse(gas=1000)
+    self.non_recurse(gas=7000)
+    self.recurse(gas=7000)
 
 def non_recurse():
     send(7, 9)
@@ -408,7 +408,8 @@ def recurse():
     self.storage[8081] = 4039
     self.storage[160161] = 2019
     self.recurse()
-    self.storage["waste_some_gas"] = 0
+    while msg.gas > 0:
+        self.storage["waste_some_gas"] = 0
 '''
 
 
@@ -974,7 +975,8 @@ def sort(args:arr):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    h = self.sort(slice(h, items=0, items=hpos), outsz=hpos)
+    x = slice(h, items=0, items=hpos)
+    h = self.sort(x, outsz=hpos)
     l = self.sort(slice(l, items=0, items=lpos), outsz=lpos)
     o = array(len(args))
     i = 0
@@ -1366,6 +1368,32 @@ def test_more_infinite_storage():
     assert c.test2() == [2, 2]
 
 
+double_array_code = """
+def foo(a:arr, b:arr):
+    i = 0
+    tot = 0
+    while i < len(a):
+        tot = tot * 10 + a[i]
+        i += 1
+    j = 0
+    tot2 = 0
+    while j < len(b):
+        tot2 = tot2 * 10 + b[j]
+        j += 1
+    return ([tot, tot2]:arr)
+
+def bar(a:arr, m:str, b:arr):
+    return(self.foo(a, b, outitems=2):arr)
+"""
+
+
+def test_double_array():
+    s = tester.state()
+    c = s.abi_contract(double_array_code)
+    assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
+    assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
+
+
 # test_evm = None
 # test_sixten = None
 # test_returnten = None
@@ -1408,3 +1436,4 @@ def test_more_infinite_storage():
 # test_saveload3 = None
 # test_string_manipulation = None
 # test_more_infinite_storage = None
+# test_double_array = None

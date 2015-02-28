@@ -676,7 +676,6 @@ class Block(object):
         self.suicides = mysnapshot['suicides']
         while len(self.suicides) > mysnapshot['suicides_size']:
             self.suicides.pop()
-        print 'Popping logs: ', len(self.logs), ' to ', mysnapshot['logs_size']
         self.logs = mysnapshot['logs']
         while len(self.logs) > mysnapshot['logs_size']:
             self.logs.pop()
