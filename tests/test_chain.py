@@ -405,8 +405,8 @@ def test_reward_uncles():
     """
     k, v, k2, v2 = accounts()
     blk0 = mkquickgenesis()
-    local_coinbase = '1' * 40
-    uncle_coinbase = '2' * 40
+    local_coinbase = ('1' * 40).decode('hex')
+    uncle_coinbase = ('2' * 40).decode('hex')
     cm = get_chainmanager(db=blk0.db, genesis=blk0)
     blk1 = mine_next_block(blk0, coinbase=local_coinbase)
     cm.add_block(blk1)

@@ -124,14 +124,18 @@ class BlockHeader(rlp.Serializable):
     def hash(self):
         return utils.sha3(rlp.encode(self))
 
-    def check_pow(self):
+    def check_pow(self, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
+        :param nonce: if given the proof of work function will be evaluated
+                      with this nonce instead of the one already present in
+                      the header
         :returns: `True` or `False`
         """
+        nonce = nonce or self.nonce
         rlp_Hn = rlp.encode(self, BlockHeader.exclude(['nonce']))
-        assert len(self.nonce) == 32
-        h = utils.sha3(utils.sha3(rlp_Hn) + self.nonce)
+        assert len(nonce) == 32
+        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
         return utils.big_endian_to_int(h) < 2 ** 256 / self.difficulty
 
 
@@ -249,8 +253,8 @@ class Block(TransientBlock):
                 raise ValueError("Gas used does not match")
             if self.state_root != header.state_root:
                 raise ValueError("State root hash does not match")
-        if self.receipts_root != header.receipts_root:
-            raise ValueError("Receipts root hash does not match")
+            if self.receipts_root != header.receipts_root:
+                raise ValueError("Receipts root hash does not match")
         if self.transactions.root_hash != header.tx_list_root:
             raise ValueError("Transaction list root hash does not match")
 
@@ -308,6 +312,12 @@ class Block(TransientBlock):
         block = Block(header, None, uncles, db=parent.db, parent=parent)
         block.ancestors += parent.ancestors
         return block
+
+    @classmethod
+    def init_from_transient(cls, transient_block, db):
+        """Create a new block based on a :class:`TransientBlock`."""
+        return Block(transient_block.header, transient_block.transaction_list,
+                     transient_block.uncles, db=db)
 
     def check_fields(self):
         """Check that the values of all fields are well formed."""
@@ -371,7 +381,7 @@ class Block(TransientBlock):
         # be uncles included 1-6 blocks ago
         for ancestor in ancestor_chain[1:]:
             ineligible.extend(ancestor.uncles)
-        ineligible.extend([b.list_header() for b in ancestor_chain])
+        ineligible.extend([b.header for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
             if not uncle.check_pow():
@@ -397,7 +407,7 @@ class Block(TransientBlock):
         if self.number == 0:
             self.ancestors = [self] + [None] * 256
         elif len(self.ancestors) <= n:
-            first_unknown = self.ancestors[-1].getparent()
+            first_unknown = self.ancestors[-1].get_parent()
             missing = first_unknown.get_ancestor_list(n - len(self.ancestors))
             self.ancestors += missing
         return self.ancestors[:n + 1]
@@ -855,13 +865,13 @@ class Block(TransientBlock):
         """
         if self.is_genesis():
             return self.difficulty
-        elif 'difficulty:' + self.hex_hash() in self.state.db:
-            encoded = self.state.db.get('difficulty:' + self.hex_hash())
+        elif 'difficulty:' + self.hash.encode('hex') in self.db:
+            encoded = self.db.get('difficulty:' + self.hash.encode('hex'))
             return utils.decode_int(encoded)
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
-            o += sum([uncle.difficulty for uncle in uncles])
-            self.state.db.put('difficulty:' + self.hex_hash(),
+            o += sum([uncle.difficulty for uncle in self.uncles])
+            self.state.db.put('difficulty:' + self.hash.encode('hex'),
                               utils.encode_int(o))
             return o
 

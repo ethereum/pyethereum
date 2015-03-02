@@ -34,7 +34,9 @@ CREATE_CONTRACT_ADDRESS = ''
 
 def verify(block, parent):
     try:
-        parent.deserialize_child(block.serialize())
+        block2 = rlp.decode(rlp.encode(block), blocks.Block,
+                            db=parent.db, parent=parent)
+        assert block == block2
         return True
     except blocks.VerificationFailed:
         return False
