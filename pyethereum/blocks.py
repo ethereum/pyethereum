@@ -358,10 +358,6 @@ class Block(TransientBlock):
             txs.append(self.get_transaction(i))
         return txs
 
-    @transaction_list.setter
-    def transaction_list(self, transactions):
-        pass
-
     def validate_uncles(self):
         """Validate the uncles of this block.
         
@@ -632,12 +628,15 @@ class Block(TransientBlock):
             if index in self.caches[CACHE_KEY]:
                 return self.caches[CACHE_KEY][index]
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
-        val = rlp.decode(self.get_storage(address).get(key))
-        return utils.big_endian_to_int(val) if val else 0
+        storage = self.get_storage(address).get(key)
+        if storage:
+            return rlp.decode(storage, big_endian_int)
+        else:
+            return 0
 
     def set_storage_data(self, address, index, value):
         """Set a specific item in the storage of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :param index: the index of the item in the storage
         :param value: the new value of the item
@@ -805,25 +804,23 @@ class Block(TransientBlock):
         with_uncles:            include uncle hashes
         """
         b = {}
-        for name, typ, default in block_structure:
-            b[name] = utils.printers[typ](getattr(self, name))
+        for field, _ in Block.fields:
+            # TODO: original version used printers
+            b[field] = getattr(self, field)
         txlist = []
-        for i in range(self.transaction_count):
-            tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx = rlp.decode(tx_rlp)
-            receipt_rlp = self.receipts.get(rlp.encode(utils.encode_int(i)))
-            msr, gas, mybloom, mylogs = rlp.decode(receipt_rlp)
+        for i, tx in enumerate(self.get_transactions()):
+            receipt_rlp = self.receipts.get(rlp.encode(i))
+            receipt = rlp.decode(receipt_rlp, Receipt)
             if full_transactions:
-                txjson = transactions.Transaction.create(tx).to_dict()
+                txjson = tx.to_dict()
             else:
-                # tx hash
-                txjson = utils.sha3(rlp.descend(tx_rlp, 0)).encode('hex')
+                txjson = tx.hash
             txlist.append({
                 "tx": txjson,
-                "medstate": msr.encode('hex'),
-                "gas": str(utils.decode_int(gas)),
-                "logs": mylogs,
-                "bloom": mybloom.encode('hex')
+                "medstate": receipt.state_root.encode('hex'),
+                "gas": str(receipt.gas_used),
+                "logs": [Log.serialize(log) for log in receipt.logs],
+                "bloom": utils.int64.serialize(receipt.bloom)
             })
         b["transactions"] = txlist
         if with_state:
@@ -835,7 +832,6 @@ class Block(TransientBlock):
         if with_uncles:
             b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex')
                            for u in self.uncles]
-
         return b
 
     def get_parent(self):

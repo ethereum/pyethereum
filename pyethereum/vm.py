@@ -467,7 +467,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= gas
                 to = utils.encode_int(to)
-                to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+                to = (('\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)

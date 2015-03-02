@@ -103,9 +103,9 @@ def coerce_to_int(x):
     if isinstance(x, (int, long)):
         return x
     elif len(x) == 40:
-        return big_endian_int.serialize(x.decode('hex'))
+        return big_endian_to_int.deserialize(x.decode('hex'))
     else:
-        return big_endian_int.serialize(x)
+        return big_endian_to_int(x)
 
 
 def coerce_to_bytes(x):

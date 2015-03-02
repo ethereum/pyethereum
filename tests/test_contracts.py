@@ -48,7 +48,7 @@ sixten_code =\
 
 def test_sixten():
     s = tester.state()
-    c = '1231231231231234564564564564561231231231'
+    c = '1231231231231234564564564564561231231231'.decode('hex')
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610

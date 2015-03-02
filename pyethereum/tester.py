@@ -9,6 +9,7 @@ import pyethereum.db as db
 import pyethereum.opcodes as opcodes
 import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
+import rlp
 
 serpent = None
 
@@ -135,7 +136,7 @@ class state():
         return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         (s, a) = pb.apply_transaction(self.block, tx)
@@ -155,7 +156,7 @@ class state():
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -226,7 +227,7 @@ class state():
             self.blocks.append(self.block)
 
     def snapshot(self):
-        return self.block.serialize()
+        return rlp.encode(self.block)
 
     def revert(self, data):
         self.block = b.Block.deserialize(self.db, data)
