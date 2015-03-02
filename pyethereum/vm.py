@@ -170,6 +170,10 @@ def vm_execute(ext, msg, code):
                                 op=op, needed=str(in_args),
                                 available=str(len(compustate.stack)))
 
+        # stack size limit error
+        if len(compustate.stack) > 1024:
+            return vm_exception('STACK SIZE LIMIT EXCEEDED')
+
         # Apply operation
         compustate.gas -= fee
         compustate.pc += 1
@@ -474,8 +478,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            new_acct_gas = (not ext.account_exists(to)) * opcodes.GNEWACCOUNT + \
-                (value > 0) * opcodes.GNONZEROCALL
+            new_acct_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
+                (value > 0) * opcodes.GCALLVALUETRANSFER
             print 'calling', new_acct_gas, to, msg.to, ext.account_exists(to)
             if compustate.gas < gas + new_acct_gas:
                 return vm_exception('OUT OF GAS')
@@ -529,6 +533,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
+            ext.add_refund(opcodes.GSUICIDEREFUND)
             print 'suiciding %s %s %d' % (msg.to, to, xfer)
             return 1, compustate.gas, []
         for a in stk:

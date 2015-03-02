@@ -63,9 +63,9 @@ opcodes = {
     0xa4: ['LOG4', 6, 0, 10000],
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40],
-    0xf2: ['CALLCODE', 7, 1, 25],
-    0xf3: ['RETURN', 2, 1, 5],
-    0xff: ['SUICIDE', 1, 1, 10],
+    0xf2: ['CALLCODE', 7, 1, 40],
+    0xf3: ['RETURN', 2, 1, 0],
+    0xff: ['SUICIDE', 1, 1, 0],
 }
 
 for i in range(1, 33):
@@ -91,7 +91,7 @@ GSTORAGEADD = 20000
 GEXPONENTBYTE = 10    # cost of EXP exponent per byte
 GCOPY = 3             # cost to copy one 32 byte word
 GCONTRACTBYTE = 200   # one byte of code in contract creation
-GNONZEROCALL = 6710   # non-zero-valued call
+GCALLVALUETRANSFER = 6700   # non-zero-valued call
 
 GTXCOST = 21000       # TX BASE GAS COST
 GTXDATAZERO = 2       # TX DATA ZERO BYTE GAS COST
@@ -105,4 +105,5 @@ GIDENTITYBASE = 15    # Base cost of indentity
 GIDENTITYWORD = 3     # Cost of identity per word
 GECRECOVER = 3000     # Cost of ecrecover op
 
-GNEWACCOUNT = 25000
+GCALLNEWACCOUNT = 25000
+GSUICIDEREFUND = 24000
