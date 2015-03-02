@@ -93,11 +93,13 @@ def preprocess_code(code):
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
         oldsize = len(mem) / 32
-        old_qlen = oldsize + oldsize**2 // opcodes.GQUADRATICMEMDENOM
+        old_totalfee = oldsize * opcodes.GMEMORY + \
+            oldsize**2 // opcodes.GQUADRATICMEMDENOM
         newsize = utils.ceil32(start + sz) / 32
-        new_qlen = newsize + newsize**2 // opcodes.GQUADRATICMEMDENOM
-        if old_qlen < new_qlen:
-            memfee = opcodes.GMEMORY * (new_qlen - old_qlen)
+        new_totalfee = newsize * opcodes.GMEMORY + \
+            newsize**2 // opcodes.GQUADRATICMEMDENOM
+        if old_totalfee < new_totalfee:
+            memfee = new_totalfee - old_totalfee
             if compustate.gas < memfee:
                 compustate.gas = 0
                 return False
@@ -472,7 +474,9 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            new_acct_gas = ext.account_exists(to) * opcodes.GNEWACCOUNT
+            new_acct_gas = (not ext.account_exists(to)) * opcodes.GNEWACCOUNT + \
+                (value > 0) * opcodes.GNONZEROCALL
+            print 'calling', new_acct_gas, to, msg.to, ext.account_exists(to)
             if compustate.gas < gas + new_acct_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:

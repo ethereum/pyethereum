@@ -48,7 +48,7 @@ def mktest(code, language, data=None, fun=None, args=None,
         d = data or ''
     else:
         c = s.abi_contract(code, language=language)
-        d = c._translator.encode(fun, args) if fun else data
+        d = c._translator.encode(fun, args) if fun else (data or '')
         ca = c.address
     pre = s.block.to_dict(True)['state']
     if test_type == VM:

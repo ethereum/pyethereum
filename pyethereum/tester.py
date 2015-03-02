@@ -70,6 +70,8 @@ class state():
         o = {}
         for i in range(num_accounts):
             o[accounts[i]] = 10 ** 24
+        for i in range(1, 5):
+            o[u.int_to_addr(i)] = 1
         self.block = b.genesis(self.db, o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
@@ -138,6 +140,7 @@ class state():
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
+        print 'starring', tx.startgas, gas_limit
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Contract creation failed")

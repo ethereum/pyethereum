@@ -7,9 +7,6 @@ import serpent
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 tester.set_logging_level(2)
 
-gasprice = 0
-startgas = 10000
-
 
 # Test EVM contracts
 serpent_code = '''
@@ -351,6 +348,7 @@ def mainloop(rounds):
     i = 0
     while i < rounds:
         i += 1
+        self.storage[i] = i
 
 def entry(rounds):
     self.storage[15] = 20
@@ -371,10 +369,10 @@ def test_suicider():
     s = tester.state()
     c = s.abi_contract(suicider_code)
     prev_gas_limit = tester.gas_limit
-    tester.gas_limit = 8000
+    tester.gas_limit = 200000
     # Run normally: suicide processes, so the attempt to ping the
     # contract fails
-    c.entry(10)
+    c.entry(5)
     o2 = c.ping_ten()
     assert o2 is None
     c = s.abi_contract(suicider_code)
@@ -395,8 +393,8 @@ def test_suicider():
 
 reverter_code = '''
 def entry():
-    self.non_recurse(gas=7000)
-    self.recurse(gas=7000)
+    self.non_recurse(gas=100000)
+    self.recurse(gas=100000)
 
 def non_recurse():
     send(7, 9)
@@ -927,10 +925,16 @@ def test_sdiv():
 
 basic_argcall_code = """
 def argcall(args:arr):
-    return(args[0] + args[1] * 10 + args[2] * 100)
+    log(1)
+    o = (args[0] + args[1] * 10 + args[2] * 100)
+    log(4)
+    return o
 
 def argkall(args:arr):
-    return self.argcall(args)
+    log(2)
+    o = self.argcall(args)
+    log(3)
+    return o
 """
 
 

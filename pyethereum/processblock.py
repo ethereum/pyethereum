@@ -250,6 +250,7 @@ def apply_msg_send(ext, msg):
 
 
 def create_contract(ext, msg):
+    print 'CREATING WITH GAS', msg.gas
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
@@ -266,6 +267,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
+            print 'CONTRACT CREATION OOG', 'have', gas, 'want', gcost
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return 1, gas, msg.to
