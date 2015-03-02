@@ -285,7 +285,7 @@ def vm_execute(ext, msg, code):
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == 'BALANCE':
-                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                addr = utils.int_to_big_endian(stk.pop() % 2**160)
                 stk.append(ext.get_balance(addr))
             elif op == 'ORIGIN':
                 stk.append(utils.coerce_to_int(ext.tx_origin))
@@ -491,7 +491,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= gas
                 to = utils.encode_int(to)
-                to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+                to = (('\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, gas, cd, msg.depth + 1)
                 result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
@@ -511,7 +511,7 @@ def vm_execute(ext, msg, code):
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+            to = (('\x00' * (32 - len(to))) + to)[12:]
             xfer = ext.get_balance(msg.to)
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)

@@ -230,7 +230,7 @@ class state():
         return rlp.encode(self.block)
 
     def revert(self, data):
-        self.block = b.Block.deserialize(self.db, data)
+        self.block = rlp.decode(data, b.Block, db=self.db)
 
 # logging
 

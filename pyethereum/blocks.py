@@ -623,7 +623,8 @@ class Block(TransientBlock):
         :param address: the address of the account (binary or hex string)
         :param index: the index of the requested item in the storage
         """
-        CACHE_KEY = 'storage:'+address
+        assert len(address) == 20
+        CACHE_KEY = 'storage:' + address
         if CACHE_KEY in self.caches:
             if index in self.caches[CACHE_KEY]:
                 return self.caches[CACHE_KEY][index]
@@ -641,6 +642,7 @@ class Block(TransientBlock):
         :param index: the index of the item in the storage
         :param value: the new value of the item
         """
+        assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY not in self.caches:
             self.caches[CACHE_KEY] = {}
