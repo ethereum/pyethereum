@@ -50,7 +50,7 @@ def decode_int_from_hex(x):
     return r
 
 def encode_hex_from_int(x):
-    return utils.zpad(utils.int_to_big_endian(x), 64).encode('hex')
+    return utils.zpad(utils.int_to_big_endian(x), 256).encode('hex')
 
 
 def do_test_bloom(test_logs):
