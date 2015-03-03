@@ -8,20 +8,21 @@ class SecureTrie(object):
         self.db = t.db
 
     def update(self, k, v):
-        self.trie.update(utils.sha3(k), rlp.encode([k, v]))
+        h = utils.sha3(k)
+        self.db.put(h, k)
+        self.trie.update(h, v)
 
     def get(self, k):
-        x = self.trie.get(utils.sha3(k))
-        return rlp.decode(x)[1] if x else ''
+        return self.trie.get(utils.sha3(k))
 
     def delete(self, k):
         self.trie.delete(utils.sha3(k))
 
     def to_dict(self):
         o = {}
-        for k, v in self.trie.to_dict().items():
-            key, value = rlp.decode(v)
-            o[key] = value
+        for h, v in self.trie.to_dict().items():
+            k = self.db.get(h)
+            o[k] = v
         return o
 
     def root_hash_valid(self):

@@ -22,9 +22,17 @@ def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
 if __name__ == '__main__':
     assert len(sys.argv) >= 2, "Please specify file or dir name"
     fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items():
-            testutils.check_state_test(testdata)
+    if len(sys.argv) >= 3:
+        for filename, tests in fixtures.items():
+            for testname, testdata in tests.items():
+                if testname == sys.argv[2]:
+                    print "Testing: %s %s" % (filename, testname)
+                    testutils.check_state_test(testdata)
+    else:
+        for filename, tests in fixtures.items():
+            for testname, testdata in tests.items():
+                print "Testing: %s %s" % (filename, testname)
+                testutils.check_state_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'StateTests'))

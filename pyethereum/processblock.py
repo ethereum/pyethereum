@@ -147,6 +147,7 @@ def apply_transaction(block, tx):
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
+        block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
         output = ''
         success = 0
     else:

@@ -269,8 +269,9 @@ def run_state_test(params, mode):
     params2 = copy.deepcopy(params)
     if success:
         params2['out'] = '0x' + output.encode('hex')
-        params2['post'] = blk.to_dict(True)['state']
+        params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
         params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
+        params2['postStateRoot'] = blk.state.root_hash.encode('hex')
 
     if mode == FILL:
         return params2
@@ -285,9 +286,14 @@ def run_state_test(params, mode):
                 if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
-                  'out', 'gas', 'logs', 'post']:
-            assert params1.get(k, None) == params2.get(k, None), \
-                k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+                  'out', 'gas', 'logs', 'post', 'postStateRoot']:
+            if params1.get(k, None) != params2.get(k, None):
+                if k == 'postStateRoot':
+                    print 'shouldbe', params1.get('post', None)
+                    print 'reallyis', params2.get('post', None)
+                shouldbe = params1.get(k, None)
+                reallyis = params2.get(k, None)
+                raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
     elif mode == TIME:
         return time_post - time_pre
 

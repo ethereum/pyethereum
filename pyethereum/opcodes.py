@@ -56,11 +56,11 @@ opcodes = {
     0x59: ['MSIZE', 0, 1, 2],
     0x5a: ['GAS', 0, 1, 2],
     0x5b: ['JUMPDEST', 0, 0, 1],
-    0xa0: ['LOG0', 2, 0, 2000],
-    0xa1: ['LOG1', 3, 0, 4000],
-    0xa2: ['LOG2', 4, 0, 6000],
-    0xa3: ['LOG3', 5, 0, 8000],
-    0xa4: ['LOG4', 6, 0, 10000],
+    0xa0: ['LOG0', 2, 0, 375],
+    0xa1: ['LOG1', 3, 0, 750],
+    0xa2: ['LOG2', 4, 0, 1125],
+    0xa3: ['LOG3', 5, 0, 1500],
+    0xa4: ['LOG4', 6, 0, 1875],
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40],
     0xf2: ['CALLCODE', 7, 1, 40],
@@ -91,20 +91,22 @@ GSTORAGEADD = 20000
 GEXPONENTBYTE = 10    # cost of EXP exponent per byte
 GCOPY = 3             # cost to copy one 32 byte word
 GCONTRACTBYTE = 200   # one byte of code in contract creation
-GCALLVALUETRANSFER = 6700   # non-zero-valued call
+GCALLVALUETRANSFER = 9000   # non-zero-valued call
 GLOGBYTE = 8          # cost of a byte of logdata
 
 GTXCOST = 21000       # TX BASE GAS COST
-GTXDATAZERO = 2       # TX DATA ZERO BYTE GAS COST
-GTXDATANONZERO = 37   # TX DATA NON ZERO BYTE GAS COST
+GTXDATAZERO = 4       # TX DATA ZERO BYTE GAS COST
+GTXDATANONZERO = 68   # TX DATA NON ZERO BYTE GAS COST
 GSHA3WORD = 6         # Cost of SHA3 per word
 GSHA256BASE = 60      # Base c of SHA256
 GSHA256WORD = 12      # Cost of SHA256 per word
-GRPIEMD160BASE = 600  # Base cost of RIPEMD160
+GRIPEMD160BASE = 600  # Base cost of RIPEMD160
 GRIPEMD160WORD = 120  # Cost of RIPEMD160 per word
 GIDENTITYBASE = 15    # Base cost of indentity
 GIDENTITYWORD = 3     # Cost of identity per word
 GECRECOVER = 3000     # Cost of ecrecover op
+
+GSTIPEND = 2300
 
 GCALLNEWACCOUNT = 25000
 GSUICIDEREFUND = 24000

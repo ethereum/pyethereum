@@ -221,8 +221,8 @@ class Block(object):
         }
         self.journal = []
 
-        self.transactions = securetrie.SecureTrie(trie.Trie(self.db, tx_list_root))
-        self.receipts = securetrie.SecureTrie(trie.Trie(self.db, receipts_root))
+        self.transactions = trie.Trie(self.db, tx_list_root)
+        self.receipts = trie.Trie(self.db, receipts_root)
         self.transaction_count = 0
 
         self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root))

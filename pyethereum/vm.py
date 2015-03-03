@@ -461,6 +461,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
                 create_msg = Message(msg.to, '', value, compustate.gas, cd, msg.depth + 1)
+                print 'with_gas', compustate.gas
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
@@ -486,11 +487,14 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, to, value, gas, cd, msg.depth + 1)
+                submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
+                call_msg = Message(msg.to, to, value, submsg_gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
                 if result == 0:
+                    print 'call failed'
                     stk.append(0)
                 else:
+                    print 'call passed'
                     stk.append(1)
                     compustate.gas += gas
                     for i in range(min(len(data), memoutsz)):
@@ -511,7 +515,8 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, msg.to, value, gas, cd, msg.depth + 1)
+                submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
+                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, msg.depth + 1)
                 result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
                 if result == 0:
                     stk.append(0)
@@ -534,7 +539,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
-            ext.add_refund(opcodes.GSUICIDEREFUND)
+            # ext.add_refund(opcodes.GSUICIDEREFUND)
             print 'suiciding %s %s %d' % (msg.to, to, xfer)
             return 1, compustate.gas, []
         for a in stk:
