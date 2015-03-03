@@ -81,7 +81,7 @@ class state():
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
 
-    def contract(self, code, sender=k0, endowment=0, language='serpent'):
+    def contract(self, code, sender=k0, endowment=0, language='serpent', gas=None):
         if language not in languages:
             languages[language] = __import__(language)
         language = languages[language]
@@ -90,7 +90,7 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(me, code, sender=k0, endowment=0, language='serpent'):
+    def abi_contract(me, code, sender=k0, endowment=0, language='serpent', gas=None):
 
         class _abi_contract():
 
@@ -100,7 +100,7 @@ class state():
                     languages[language] = __import__(language)
                 language = languages[language]
                 evm = language.compile(code)
-                self.address = me.evm(evm, sender, endowment)
+                self.address = me.evm(evm, sender, endowment, gas)
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
                 sig = language.mk_full_signature(code)
@@ -136,11 +136,13 @@ class state():
 
         return _abi_contract(me, code, sender, endowment, language)
 
-    def evm(self, evm, sender=k0, endowment=0):
+    def evm(self, evm, sender=k0, endowment=0, gas=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
-        print 'starring', tx.startgas, gas_limit
+        if gas is not None:
+            tx.startgas = gas
+        print 'starting', tx.startgas, gas_limit
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Contract creation failed")
