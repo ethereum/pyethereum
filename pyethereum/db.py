@@ -23,7 +23,7 @@ class DB(object):
     def get(self, key):
         if key in self.uncommitted:
             if self.uncommitted[key] is None:
-                raise Exception("key not in db")
+                raise KeyError("key not in db")
             return self.uncommitted[key]
         o = compress.decompress(self.db.Get(key))
         self.uncommitted[key] = o
