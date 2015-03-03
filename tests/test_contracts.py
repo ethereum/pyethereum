@@ -1,3 +1,4 @@
+import bitcoin
 import os
 import pytest
 from pyethereum import tester, utils, abi
@@ -1135,6 +1136,31 @@ def test_types():
     s = tester.state()
     c = s.contract(type_code)
     assert utils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
+
+
+ecrecover_code = """
+def test_ecrecover(h, v, r, s):
+    return(ecrecover(h, v, r, s))
+"""
+
+
+def test_ecrecover():
+    s = tester.state()
+    c = s.abi_contract(ecrecover_code)
+
+    priv = utils.sha3('some big long brainwallet password').encode('hex')
+    pub = bitcoin.privtopub(priv)
+
+    msghash = utils.sha3('the quick brown fox jumps over the lazy dog').encode('hex')
+    V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
+    assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
+
+    addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
+    assert int(utils.privtoaddr(priv), 16) == addr
+
+    result = c.test_ecrecover(utils.big_endian_to_int(msghash.decode('hex')), V, R, S)
+    assert result == addr
+
 
 sha256_code = """
 def main():
