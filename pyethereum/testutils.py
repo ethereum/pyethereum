@@ -64,16 +64,19 @@ def run_vm_test(params, mode):
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
     # setup env
-    blk = blocks.Block(db,
+    header = blocks.BlockHeader(
                        prevhash=env['previousHash'].decode('hex'),
                        number=int(env['currentNumber']),
-                       coinbase=env['currentCoinbase'],
+                       coinbase=env['currentCoinbase'].decode('hex'),
                        difficulty=int(env['currentDifficulty']),
                        gas_limit=int(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
+    blk = blocks.Block(header, db=db)
 
     # setup state
     for address, h in pre.items():
+        assert len(address) == 40
+        address = address.decode('hex')
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
@@ -84,10 +87,10 @@ def run_vm_test(params, mode):
                                  utils.big_endian_to_int(v[2:].decode('hex')))
 
     # execute transactions
-    sender = exek['caller']  # a party that originates a call
-    recvaddr = exek['address']
+    sender = exek['caller'].decode('hex')  # a party that originates a call
+    recvaddr = exek['address'].decode('hex')
     tx = transactions.Transaction(
-        nonce=blk._get_acct_item(exek['caller'], 'nonce'),
+        nonce=blk._get_acct_item(exek['caller'].decode('hex'), 'nonce'),
         gasprice=int(exek['gasPrice']),
         startgas=int(exek['gas']),
         to=recvaddr,
@@ -106,7 +109,8 @@ def run_vm_test(params, mode):
         hexdata = msg.data.extract_all().encode('hex')
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
-                                        destination=msg.to, data='0x'+hexdata))
+                                        destination=msg.to.encode('hex'),
+                                        data='0x'+hexdata))
         return 1, msg.gas, ''
 
     def sendmsg_wrapper(msg, code):
@@ -114,7 +118,8 @@ def run_vm_test(params, mode):
         hexdata = msg.data.extract_all().encode('hex')
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
-                                        destination=msg.to, data='0x'+hexdata))
+                                        destination=msg.to.encode('hex'),
+                                        data='0x'+hexdata))
         return 1, msg.gas, ''
 
     def create_wrapper(msg):
@@ -193,17 +198,23 @@ def run_state_test(params, mode):
     assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
+    assert len(env['currentCoinbase']) == 40
+    env['currentCoinbase'] = env['currentCoinbase'].decode('hex')
+
     # setup env
-    blk = blocks.Block(db,
+    header = blocks.BlockHeader(
                        prevhash=env['previousHash'].decode('hex'),
                        number=int(env['currentNumber']),
                        coinbase=env['currentCoinbase'],
                        difficulty=int(env['currentDifficulty']),
                        gas_limit=int(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
+    blk = blocks.Block(header, db=db)
 
     # setup state
     for address, h in pre.items():
+        assert len(address) == 40
+        address = address.decode('hex')
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
@@ -218,7 +229,7 @@ def run_state_test(params, mode):
         nonce=int(exek['nonce'] or "0"),
         gasprice=int(exek['gasPrice'] or "0"),
         startgas=int(exek['gasLimit'] or "0"),
-        to=exek['to'][2:] if exek['to'][:2] == '0x' else exek['to'],
+        to=(exek['to'][2:] if exek['to'][:2] == '0x' else exek['to']).decode('hex'),
         value=int(exek['value'] or "0"),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
 

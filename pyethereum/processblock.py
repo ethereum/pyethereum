@@ -60,7 +60,8 @@ class Log(rlp.Serializable):
             "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
             "address": self.address.encode('hex'),
             "data": '0x' + self.data.encode('hex'),
-            "topics": [utils.int32.serialize(t).encode('hex') for t in topics]
+            "topics": [utils.int32.serialize(t).encode('hex')
+                       for t in self.topics]
         }
 
     def __repr__(self):

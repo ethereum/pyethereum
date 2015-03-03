@@ -103,7 +103,7 @@ def coerce_to_int(x):
     if isinstance(x, (int, long)):
         return x
     elif len(x) == 40:
-        return big_endian_to_int.deserialize(x.decode('hex'))
+        return big_endian_to_int(x.decode('hex'))
     else:
         return big_endian_to_int(x)
 
@@ -360,6 +360,7 @@ denoms = Denoms()
 
 
 address = Binary.fixed_length(20, allow_empty=True)
+int20 = BigEndianInt(20)
 int32 = BigEndianInt(32)
 int64 = BigEndianInt(64)
 hash32 = Binary.fixed_length(32)

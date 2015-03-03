@@ -80,7 +80,7 @@ class Receipt(rlp.Serializable):
     fields = [
         ('state_root', trie_root),
         ('gas_used', big_endian_int),
-        ('bloom', utils.int64),
+        ('bloom', int64),
         ('logs', CountableList(processblock.Log))
     ]
 
@@ -120,9 +120,31 @@ class BlockHeader(rlp.Serializable):
         ('nonce', Binary(32, allow_empty=True))
     ]
 
+    def __init__(self,
+                 prevhash=GENESIS_PREVHASH,
+                 uncles_hash=utils.sha3rlp([]),
+                 coinbase=GENESIS_COINBASE,
+                 state_root=trie.BLANK_ROOT,
+                 tx_list_root=trie.BLANK_ROOT,
+                 receipts_root=trie.BLANK_ROOT,
+                 bloom=0,
+                 difficulty=GENESIS_DIFFICULTY,
+                 number=0,
+                 gas_limit=GENESIS_GAS_LIMIT,
+                 gas_used=0,
+                 timestamp=0,
+                 extra_data='',
+                 nonce=''):
+        # at the beginning of a method, locals() is a dict of all arguments
+        fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        super(BlockHeader, self).__init__(**fields)
+
     @property
     def hash(self):
         return utils.sha3(rlp.encode(self))
+
+    def hex_hash(self):
+        return self.hash.encode('hex')
 
     def check_pow(self, nonce=None):
         """Check if the proof-of-work of the block is valid.
@@ -154,6 +176,9 @@ class TransientBlock(rlp.Serializable):
     @property
     def hash(self):
         return utils.sha3(rlp.encode(self.header))
+
+    def hex_hash(self):
+        return self.hash.encode('hex')
 
     @property
     def header(self):
@@ -419,7 +444,9 @@ class Block(TransientBlock):
 
     def get_acct(self, address):
         """Get the account with the given address."""
-        assert len(address) == 20
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20 or len(address) == 0
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
             acct = rlp.decode(rlpdata, Account, db=self.db)
@@ -434,7 +461,6 @@ class Block(TransientBlock):
         :param param: the requested parameter (`'nonce'`, `'balance'`,
                       `'storage'` or `'code'`)
         """
-        assert len(address) == 20
         if param != 'storage':
             if address in self.caches[param]:
                 return self.caches[param][address]
@@ -623,6 +649,8 @@ class Block(TransientBlock):
         :param address: the address of the account (binary or hex string)
         :param index: the index of the requested item in the storage
         """
+        if len(address) == 40:
+            address = address.decode('hex')
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY in self.caches:
@@ -642,6 +670,8 @@ class Block(TransientBlock):
         :param index: the index of the item in the storage
         :param value: the new value of the item
         """
+        if len(address) == 40:
+            address = address.decode('hex')
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY not in self.caches:
@@ -685,6 +715,8 @@ class Block(TransientBlock):
         
         :param address: the address of the account (binary or hex string)
         """
+        if len(address) == 40:
+            address = address.decode('hex')
         assert len(address) == 20
         self.commit_state()
         self.state.delete(address)
@@ -699,9 +731,11 @@ class Block(TransientBlock):
         med_dict = {}
 
         account = self.get_acct(address)
-        for field in ('balance', 'nonce', 'code'):
-            value = getattr(account, field)
-            med_dict[field] = self.caches[field].get(address, value)
+        for field in ('balance', 'nonce'):
+            value = self.caches[field].get(address, getattr(account, field))
+            med_dict[field] = str(value)
+        code = self.caches['code'].get(address, account.code)
+        med_dict['code'] = '0x' + code.encode('hex')
 
         storage_trie = trie.Trie(self.db, account.storage)
         if with_storage_root:
@@ -806,9 +840,17 @@ class Block(TransientBlock):
         with_uncles:            include uncle hashes
         """
         b = {}
-        for field, _ in Block.fields:
-            # TODO: original version used printers
-            b[field] = getattr(self, field)
+        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce'):
+            b[field] = '0x' + getattr(self, field).encode('hex')
+        for field in ('state_root', 'tx_list_root', 'receipts_root',
+                      'coinbase'):
+            b[field] = getattr(self, field).encode('hex')
+        for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
+                      'timestamp'):
+            b[field] = str(getattr(self, field))
+        b['bloom'] = int64.serialize(self.bloom).encode('hex')
+        assert len(b) == len(BlockHeader.fields)
+
         txlist = []
         for i, tx in enumerate(self.get_transactions()):
             receipt_rlp = self.receipts.get(rlp.encode(i))
