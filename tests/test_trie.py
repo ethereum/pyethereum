@@ -26,7 +26,7 @@ def load_tests():
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
             "Make sure you did 'git submodule init'")
-    expected_keys = set([u'jeff', u'emptyValues'])
+    expected_keys = set([u'jeff', u'emptyValues', u'branchingTests'])
     assert set(fixture.keys()) == expected_keys, ("test data changed!", fixture.keys())
     return fixture
 

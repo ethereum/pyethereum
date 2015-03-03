@@ -85,7 +85,9 @@ class Receipt(rlp.Serializable):
     ]
 
     def __init__(self, state_root, gas_used, logs, bloom=None):
-        super(Receipt, self).__init__(state_root, gas_used, bloom, logs)
+        self.state_root = state_root
+        self.gas_used = gas_used
+        self.logs = logs
         if bloom is not None and bloom != self.bloom:
             raise ValueError("Invalid bloom filter")
 
@@ -93,12 +95,6 @@ class Receipt(rlp.Serializable):
     def bloom(self):
         bloomables = [x.bloomables() for x in self.logs]
         return bloom.bloom_from_list(bloomables)
-
-    @bloom.setter
-    def bloom(self, value):
-        # bloom information will always be calculated from logs, but we need
-        # to provide this setter to allow initialization via rlp.decode
-        pass
 
 
 class BlockHeader(rlp.Serializable):
