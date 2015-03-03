@@ -461,7 +461,6 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
                 create_msg = Message(msg.to, '', value, compustate.gas, cd, msg.depth + 1)
-                print 'with_gas', compustate.gas
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
@@ -481,7 +480,6 @@ def vm_execute(ext, msg, code):
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER
-            print 'calling', extra_gas, to, msg.to, ext.account_exists(to)
             if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
@@ -491,10 +489,8 @@ def vm_execute(ext, msg, code):
                 call_msg = Message(msg.to, to, value, submsg_gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
                 if result == 0:
-                    print 'call failed'
                     stk.append(0)
                 else:
-                    print 'call passed'
                     stk.append(1)
                     compustate.gas += gas
                     for i in range(min(len(data), memoutsz)):

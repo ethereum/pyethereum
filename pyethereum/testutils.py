@@ -258,9 +258,7 @@ def run_state_test(params, mode):
         blk.commit_state()
     except pb.InvalidTransaction:
         success, output = False, ''
-        print 'h1', blk.state.root_hash.encode('hex')
         blk.commit_state()
-        print 'h2', blk.state.root_hash.encode('hex')
         pass
     time_post = time.time()
 
@@ -291,12 +289,10 @@ def run_state_test(params, mode):
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
             if params1.get(k, None) != params2.get(k, None):
-                if k == 'postStateRoot':
-                    print 'shouldbe', params1.get('post', None)
-                    print 'reallyis', params2.get('post', None)
                 shouldbe = params1.get(k, None)
                 reallyis = params2.get(k, None)
                 raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
+
     elif mode == TIME:
         return time_post - time_pre
 

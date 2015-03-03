@@ -551,7 +551,7 @@ class Block(object):
 
     def get_storage(self, address):
         storage_root = self._get_acct_item(address, 'storage')
-        return trie.Trie(self.db, storage_root)
+        return securetrie.SecureTrie(trie.Trie(self.db, storage_root))
 
     def get_storage_data(self, address, index):
         CACHE_KEY = 'storage:'+address
@@ -582,7 +582,7 @@ class Block(object):
                 or self.mk_blank_acct()
             for i, (key, typ, default) in enumerate(acct_structure):
                 if key == 'storage':
-                    t = trie.Trie(self.db, acct[i])
+                    t = securetrie.SecureTrie(trie.Trie(self.db, acct[i]))
                     for k, v in self.caches.get('storage:' + address, {}).iteritems():
                         enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                         val = rlp.encode(utils.int_to_big_endian(v))
@@ -616,7 +616,7 @@ class Block(object):
             name, typ, default = acct_structure[i]
             key = acct_structure[i][0]
             if name == 'storage':
-                strie = trie.Trie(self.db, val)
+                strie = securetrie.SecureTrie(trie.Trie(self.db, val))
                 if with_storage_root:
                     med_dict['storage_root'] = strie.get_root_hash().encode('hex')
             else:
@@ -707,7 +707,7 @@ class Block(object):
         return self.state.root_hash
 
     def set_state_root(self, state_root_hash):
-        self.state = trie.Trie(self.db, state_root_hash)
+        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root_hash))
         self.reset_cache()
 
     state_root = property(get_state_root, set_state_root)
