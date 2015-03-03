@@ -258,6 +258,9 @@ def run_state_test(params, mode):
         blk.commit_state()
     except pb.InvalidTransaction:
         success, output = False, ''
+        print 'h1', blk.state.root_hash.encode('hex')
+        blk.commit_state()
+        print 'h2', blk.state.root_hash.encode('hex')
         pass
     time_post = time.time()
 

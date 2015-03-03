@@ -293,7 +293,7 @@ class Block(object):
     def validate_uncles(self):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
             return False
-        if len(self.uncles) > 4:
+        if len(self.uncles) > 2:
             return False
         # Check uncle validity
         ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
