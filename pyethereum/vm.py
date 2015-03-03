@@ -287,7 +287,7 @@ def vm_execute(ext, msg, code):
         elif opcode < 0x40:
             if op == 'SHA3':
                 s0, s1 = stk.pop(), stk.pop()
-                compustate.gas -= 10 * (utils.ceil32(s1) / 32)
+                compustate.gas -= opcodes.GSHA3WORD * (utils.ceil32(s1) / 32)
                 if compustate.gas < 0:
                     return vm_exception('OOG PAYING FOR SHA3')
                 if not mem_extend(mem, compustate, op, s0, s1):
@@ -446,7 +446,7 @@ def vm_execute(ext, msg, code):
             depth = int(op[3:])
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
-            compustate.gas -= msz
+            compustate.gas -= msz * opcodes.GLOGBYTE
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
@@ -478,13 +478,13 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
-            new_acct_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
+            extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER
-            print 'calling', new_acct_gas, to, msg.to, ext.account_exists(to)
-            if compustate.gas < gas + new_acct_gas:
+            print 'calling', extra_gas, to, msg.to, ext.account_exists(to)
+            if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                compustate.gas -= (gas + new_acct_gas)
+                compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
@@ -503,10 +503,11 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            if compustate.gas < gas:
+            extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER
+            if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                compustate.gas -= gas
+                compustate.gas -= gas + extra_gas
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)

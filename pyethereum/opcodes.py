@@ -37,7 +37,7 @@ opcodes = {
     0x39: ['CODECOPY', 3, 0, 3],
     0x3a: ['GASPRICE', 0, 1, 2],
     0x3b: ['EXTCODESIZE', 1, 1, 20],
-    0x3c: ['EXTCODECOPY', 4, 0, 3],
+    0x3c: ['EXTCODECOPY', 4, 0, 20],
     0x40: ['BLOCKHASH', 1, 1, 20],
     0x41: ['COINBASE', 0, 1, 2],
     0x42: ['TIMESTAMP', 0, 1, 2],
@@ -69,11 +69,11 @@ opcodes = {
 }
 
 for i in range(1, 33):
-    opcodes[0x5f + i] = ['PUSH' + str(i), 0, 1, 8]
+    opcodes[0x5f + i] = ['PUSH' + str(i), 0, 1, 3]
 
 for i in range(1, 17):
-    opcodes[0x7f + i] = ['DUP' + str(i), i, i + 1, 1]
-    opcodes[0x8f + i] = ['SWAP' + str(i), i + 1, i + 1, 1]
+    opcodes[0x7f + i] = ['DUP' + str(i), i, i + 1, 3]
+    opcodes[0x8f + i] = ['SWAP' + str(i), i + 1, i + 1, 3]
 
 reverse_opcodes = {}
 for o in opcodes:
@@ -83,7 +83,7 @@ for o in opcodes:
 # Non-opcode gas prices
 GDEFAULT = 1
 GMEMORY = 3
-GQUADRATICMEMDENOM = 420  # 1 gas per 420 quadwords
+GQUADRATICMEMDENOM = 512  # 1 gas per 512 quadwords
 GSTORAGEREFUND = 15000
 GSTORAGEKILL = 5000
 GSTORAGEMOD = 5000
@@ -92,6 +92,7 @@ GEXPONENTBYTE = 10    # cost of EXP exponent per byte
 GCOPY = 3             # cost to copy one 32 byte word
 GCONTRACTBYTE = 200   # one byte of code in contract creation
 GCALLVALUETRANSFER = 6700   # non-zero-valued call
+GLOGBYTE = 8          # cost of a byte of logdata
 
 GTXCOST = 21000       # TX BASE GAS COST
 GTXDATAZERO = 2       # TX DATA ZERO BYTE GAS COST
