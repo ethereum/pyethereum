@@ -24,9 +24,9 @@ configure_logging(':trace')
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
-    v = utils.privtoaddr(k)
+    v = utils.privtoaddr(k).decode('hex')
     k2 = utils.sha3('horse')
-    v2 = utils.privtoaddr(k2)
+    v2 = utils.privtoaddr(k2).decode('hex')
     return k, v, k2, v2
 
 
@@ -119,7 +119,7 @@ def test_deserialize_cpp_block_42():
     header_args, transaction_list, uncles = rlp.decode(
         hex_rlp_data.decode('hex'))
     for tx_data, _state_root, _gas_used_encoded in transaction_list:
-        tx = transactions.Transaction.create(tx_data)
+        tx = transactions.Transaction.deserialize(tx_data)
         logger.debug('Block #48 failing tx %r' % tx.to_dict())
         processblock.apply_transaction(genesis, tx)
 

@@ -479,6 +479,8 @@ class Block(TransientBlock):
                       `'storage'` or `'code'`)
         :param value: the new value
         """
+        if len(address) == 40:
+            address = address.decode('hex')
         assert len(address) == 20
         self.set_and_journal(param, address, value)
         self.set_and_journal('all', address, True)
