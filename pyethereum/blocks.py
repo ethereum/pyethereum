@@ -17,13 +17,15 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 # Genesis block difficulty
-GENESIS_DIFFICULTY = 2 ** 10
+GENESIS_DIFFICULTY = 2 ** 11
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = "0" * 40
-GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
+GENESIS_SEEDHASH = '\x00' * 32
+GENESIS_MIXHASH = '\x00' * 32
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
 # Gas limit adjustment algo:
@@ -41,23 +43,27 @@ MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 # Difficulty adjustment constants
 DIFF_ADJUSTMENT_CUTOFF = 5
 BLOCK_DIFF_FACTOR = 2048
+# PoW info
+POW_EPOCH_LENGTH = 30000
 
 # Block header parameters
 block_structure = [
-    ["prevhash", "bin", "\00" * 32],
+    ["prevhash", "bin", GENESIS_PREVHASH],
     ["uncles_hash", "bin", utils.sha3rlp([])],
     ["coinbase", "addr", GENESIS_COINBASE],
     ["state_root", "trie_root", trie.BLANK_ROOT],
     ["tx_list_root", "trie_root", trie.BLANK_ROOT],
     ["receipts_root", "trie_root", trie.BLANK_ROOT],
-    ["bloom", "int64", 0],
+    ["bloom", "int256b", 0],
     ["difficulty", "int", GENESIS_DIFFICULTY],
     ["number", "int", 0],
     ["gas_limit", "int", GENESIS_GAS_LIMIT],
     ["gas_used", "int", 0],
     ["timestamp", "int", 0],
     ["extra_data", "bin", ""],
-    ["nonce", "bin", ""],
+    ["seedhash", "bin", GENESIS_SEEDHASH],
+    ["mixhash", "bin", GENESIS_MIXHASH],
+    ["nonce", "bin", GENESIS_NONCE],
 ]
 
 block_structure_rev = {}
@@ -83,6 +89,14 @@ def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
     return parent.difficulty + offset * sign
+
+
+# Seedhash incrementing algo
+def get_next_seedhash(parent):
+    if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
+        return utils.sha3(parent.prevhash + parent.seedhash)
+    else:
+        return parent.seedhash
 
 
 # Gas limit adjustment algo
@@ -193,6 +207,8 @@ class Block(object):
                  number=0,
                  gas_limit=block_structure_rev['gas_limit'][2],
                  gas_used=0, timestamp=0, extra_data='', nonce='',
+                 seedhash=block_structure_rev['seedhash'][2],
+                 mixhash=block_structure_rev['mixhash'][2],
                  transaction_list=[],
                  uncles=[],
                  header=None):
@@ -207,6 +223,8 @@ class Block(object):
         self.gas_used = gas_used
         self.timestamp = timestamp
         self.extra_data = extra_data
+        self.seedhash = seedhash
+        self.mixhash = mixhash
         self.nonce = nonce
         self.uncles = uncles
         self.suicides = []
@@ -866,6 +884,7 @@ class Block(object):
             gas_used=0,
             timestamp=timestamp,
             extra_data=extra_data,
+            seed_hash=get_next_seedhash(parent),
             nonce='',
             transaction_list=[],
             uncles=uncles)

@@ -12,7 +12,7 @@ filename = "mul2_qwertyuioplkjhgfdsa.se"
 
 returnten_code = \
     '''
-extern mul2: [double]
+extern mul2: [double:i]
 
 x = create("%s")
 return(x.double(5))

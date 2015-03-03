@@ -185,7 +185,7 @@ def decode_root(root):
     return root
 
 
-def decode_int64(v):
+def decode_int256(v):
     return big_endian_to_int(v)
 
 
@@ -213,8 +213,8 @@ def encode_int(v):
     return int_to_big_endian(v)
 
 
-def encode_int64(v):
-    return zpad(int_to_big_endian(v), 64)
+def encode_int256(v):
+    return zpad(int_to_big_endian(v), 256)
 
 
 decoders = {
@@ -222,7 +222,7 @@ decoders = {
     "addr": decode_addr,
     "int": decode_int,
     "trie_root": decode_root,
-    "int64": decode_int64,
+    "int256b": decode_int256,
 }
 
 encoders = {
@@ -230,7 +230,7 @@ encoders = {
     "addr": encode_addr,
     "int": encode_int,
     "trie_root": encode_root,
-    "int64": encode_int64,
+    "int256b": encode_int256,
 }
 
 printers = {
@@ -239,7 +239,7 @@ printers = {
     "addr": lambda v: v,
     "int": lambda v: str(v),
     "trie_root": lambda v: v.encode('hex'),
-    "int64": lambda x: zpad(encode_int64(x), 64).encode('hex')
+    "int256b": lambda x: zpad(encode_int256(x), 64).encode('hex')
 }
 
 
