@@ -269,10 +269,12 @@ class Block(TransientBlock):
                receipts are stored (required)
     :param parent: optional parent which otherwise may have to be loaded from
                    the database for replay
+    :param force_replay: if true transactions are replayed even if state is
+                         already known
     """
 
-    def __init__(self, header, transaction_list=None, uncles=[], db=None,
-                 parent=None):
+    def __init__(self, header, transaction_list=[], uncles=[], db=None,
+                 parent=None, force_replay=False):
         if not db:
             raise TypeError("No database object given")
         self.db = db
@@ -316,13 +318,30 @@ class Block(TransientBlock):
                 raise ValueError("Block's difficulty is inconsistent with its "
                                  "parent's difficulty")
 
+        # replay if state is known or it is forced
+        state_unknown = header.prevhash != GENESIS_PREVHASH and  \
+                 (len(header.state_root) != 32 or header.state_root not in db)
+
         self.transactions = trie.Trie(db, trie.BLANK_ROOT)
         self.receipts = trie.Trie(self.db, trie.BLANK_ROOT)
-        # if transactions are given and we don't know the state, we replay
-        # transactions; otherwise we trust the header
-        if ((len(header.state_root) == 32 and header.state_root in db) or
-            header.prevhash == GENESIS_PREVHASH or
-            transaction_list is None):
+        if state_unknown or force_replay:
+            if not parent:
+                parent = self.get_parent()
+            self.state = trie.Trie(db, parent.state_root)
+            self.transaction_count = 0
+            self.gas_used = 0
+            # replay
+            for tx in transaction_list or []:
+                success, output = processblock.apply_transaction(self, tx)
+            if transaction_list is not None:
+                self.finalize()
+            if self.gas_used != header.gas_used:
+                raise ValueError("Gas used does not match")
+            if self.state_root != header.state_root:
+                raise ValueError("State root hash does not match")
+            if self.receipts_root != header.receipts_root:
+                raise ValueError("Receipts root hash does not match")
+        else:
             self.state = trie.Trie(self.db, header.state_root)
             self.transaction_count = 0
             self.gas_used = header.gas_used
@@ -332,23 +351,6 @@ class Block(TransientBlock):
             # receipts trie populated by add_transaction_to_list is incorrect
             # as it doesn't know intermediate states, so reset it
             self.receipts = trie.Trie(self.db, header.receipts_root)
-        else:
-            assert transaction_list is not None
-            if not parent:
-                parent = self.get_parent()
-            self.state = trie.Trie(db, parent.state_root)
-            self.transaction_count = 0
-            self.gas_used = 0
-            # replay
-            for tx in transaction_list:
-                success, output = processblock.apply_transaction(self, tx)
-            self.finalize()
-            if self.gas_used != header.gas_used:
-                raise ValueError("Gas used does not match")
-            if self.state_root != header.state_root:
-                raise ValueError("State root hash does not match")
-            if self.receipts_root != header.receipts_root:
-                raise ValueError("Receipts root hash does not match")
         if self.transactions.root_hash != header.tx_list_root:
             raise ValueError("Transaction list root hash does not match")
 
