@@ -50,6 +50,54 @@ def test_sixten():
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
 
+
+with_code = \
+    """
+def f1():
+    o = array(4)
+    with x = 5:
+        o[0] = x
+        with y = 7:
+            o[1] = y
+            with x = 8:
+                o[2] = x
+        o[3] = x
+    return(o:arr)
+
+
+def f2():
+    with x = 5:
+        with y = 7:
+            x = 2
+        return(x)
+
+def f3():
+    with x = 5:
+        with y = seq(x = 7, 2):
+            return(x)
+
+def f4():
+    o = array(4)
+    with x = 5:
+        o[0] = x
+        with y = 7:
+            o[1] = y
+            with x = x:
+                o[2] = x
+                with y = x:
+                    o[3] = y
+    return(o:arr)
+"""
+
+
+def test_with():
+    s = tester.state()
+    c = s.abi_contract(with_code)
+    assert c.f1() == [5, 7, 8, 5]
+    assert c.f2() == 2
+    assert c.f3() == 7
+    assert c.f4() == [5, 7, 5, 5]
+
 # Test Serpent's import mechanism
 
 mul2_code = \
@@ -1400,6 +1448,7 @@ def test_double_array():
 
 # test_evm = None
 # test_sixten = None
+# test_with = None
 # test_returnten = None
 # test_namecoin = None
 # test_inset = None
