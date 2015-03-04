@@ -884,7 +884,7 @@ class Block(object):
             gas_used=0,
             timestamp=timestamp,
             extra_data=extra_data,
-            seed_hash=get_next_seedhash(parent),
+            seedhash=get_next_seedhash(parent),
             nonce='',
             transaction_list=[],
             uncles=uncles)
