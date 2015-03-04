@@ -46,7 +46,15 @@ BLOCK_DIFF_FACTOR = 1024
 
 
 class Account(rlp.Serializable):
-    """The state of an account."""
+    """An Ethereum account.
+
+    :ivar nonce: the account's nonce (the number of transactions sent by the
+                 account)
+    :ivar balance: the account's balance in wei
+    :ivar storage: the root of the account's storage trie
+    :ivar code_hash: the SHA3 hash of the code associated with the account
+    :ivar db: the database in which the account's code is stored
+    """
 
     fields = [
         ('nonce', big_endian_int),
@@ -61,6 +69,11 @@ class Account(rlp.Serializable):
 
     @property
     def code(self):
+        """The EVM code of the account.
+
+        This property will be read from or written to the db at each access,
+        with :ivar:`code_hash` used as key.
+        """
         return self.db.get(self.code_hash)
 
     @code.setter
@@ -70,6 +83,13 @@ class Account(rlp.Serializable):
 
     @classmethod
     def blank_account(cls, db):
+        """Create a blank account
+
+        The returned account will have zero nonce and balance, a blank storage
+        trie and empty code.
+
+        :param db: the db in which the account will store its code.
+        """
         code_hash = utils.sha3('')
         db.put(code_hash, '')
         return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
@@ -98,6 +118,27 @@ class Receipt(rlp.Serializable):
 
 
 class BlockHeader(rlp.Serializable):
+    """A block header.
+
+    :ivar prevhash: the 32 byte hash of the previous block
+    :ivar uncles_hash: the 32 byte hash of the RLP encoded list of uncle
+                       headers
+    :ivar coinbase: the 20 byte coinbase address
+    :ivar state_root: the root of the block's state trie
+    :ivar tx_list_root: the root of the block's transaction trie
+    :ivar receipts_root: the root of the block's receipts trie
+    :ivar bloom: TODO
+    :ivar difficulty: the block's difficulty
+    :ivar number: the number of ancestors of this block (0 for the genesis
+                  block)
+    :ivar gas_limit: the block's gas limit
+    :ivar gas_used: the total amount of gas used by all transactions in this
+                    block
+    :ivar timestamp: a UNIX timestamp
+    :ivar extra_data: up to 1024 bytes of additional data
+    :ivar nonce: a 32 byte nonce constituting a proof-of-work, or the empty
+                 string as a placeholder
+    """
 
     fields = [
         ('prevhash', hash32),
@@ -137,9 +178,11 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def hash(self):
+        """The binary block hash"""
         return utils.sha3(rlp.encode(self))
 
     def hex_hash(self):
+        """The hex encoded block hash"""
         return self.hash.encode('hex')
 
     def check_pow(self, nonce=None):
@@ -158,7 +201,16 @@ class BlockHeader(rlp.Serializable):
 
 
 class TransientBlock(rlp.Serializable):
-    """A read only, non persistent, not validated representation of a block."""
+    """A read only, non persistent, not validated representation of a block.
+
+    At initialization all instance variables are copied from the block header
+    (e.g. ``transient_block.prevhash`` can be used instead of
+    ``transient.block.prevhash``).
+
+    :ivar header: the block's header
+    :ivar transaction_list: a list of transactions in the block
+    :ivar uncles: a list of uncle headers
+    """
 
     fields = [
         ('header', BlockHeader),
@@ -171,9 +223,17 @@ class TransientBlock(rlp.Serializable):
 
     @property
     def hash(self):
+        """The binary block hash
+
+        This is equivalent to ``header.hash``.
+        """
         return utils.sha3(rlp.encode(self.header))
 
     def hex_hash(self):
+        """The hex encoded block hash.
+
+        This is equivalent to ``header.hex_hash().
+        """
         return self.hash.encode('hex')
 
     @property
@@ -196,7 +256,20 @@ class TransientBlock(rlp.Serializable):
 
 
 class Block(TransientBlock):
-    """The primary block class."""
+    """A block.
+
+    :param header: the block header (whose instance variables are copied to
+                   the block)
+    :param transaction_list: a list of transactions (which are replayed if the
+                             state given by the header is not known) or `None`
+                             to create a non finalized block without any
+                             transactions.
+    :param uncles: a list of the headers of the uncles of this block
+    :param db: the database in which the block's  state, transactions and
+               receipts are stored (required)
+    :param parent: optional parent which otherwise may have to be loaded from
+                   the database for replay
+    """
 
     def __init__(self, header, transaction_list=None, uncles=[], db=None,
                  parent=None):
@@ -205,7 +278,8 @@ class Block(TransientBlock):
         self.db = db
 
         # initialize attributes from header (excluding trie roots and gas used
-        # which may be determined by replaying transactions later)
+        # which will be determined by replaying transactions later if
+        # necessary)
         self.prevhash = header.prevhash
         self.uncles_hash = header.uncles_hash
         self.coinbase = header.coinbase
@@ -223,7 +297,6 @@ class Block(TransientBlock):
         self.refunds = 0
         self.reset_cache()
         self.journal = []
-        self.finalized = False
 
         # do some consistency checks on parent if given
         if parent:
@@ -284,8 +357,6 @@ class Block(TransientBlock):
         else:
             self.ancestors = [self] + [None] * 256
 
-        # TODO: handle SPV case (probably in BlockHeader class)
-
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
@@ -303,8 +374,12 @@ class Block(TransientBlock):
         assert self.state.db.db == self.transactions.db.db  == self.db.db
 
     @classmethod
-    def init_from_header(cls, rlpdata, db):
-        """Create a block without specifying transactions or uncles."""
+    def init_from_header(cls, header_rlp, db):
+        """Create a block without specifying transactions or uncles.
+
+        :param header_rlp: the RLP encoded block header
+        :param db: the database for the block
+        """
         header = rlp.decode(rlpdata, BlockHeader, db=db)
         return cls(header, None, [], db=db)
 
@@ -312,9 +387,15 @@ class Block(TransientBlock):
     def init_from_parent(cls, parent, coinbase, extra_data='',
                          timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
-        
+
         The block will not include any transactions, will not be finalized and
         will not have a valid nonce.
+
+        :param parent: the parent block
+        :param coinbase: the 20 bytes coinbase address
+        :param extra_data: up to 1024 bytes of additional data
+        :param timestamp: a UNIX timestamp
+        :param uncles: a list of the headers of the uncles of this block
         """
         header = BlockHeader(prevhash=parent.hash,
                              uncles_hash=utils.sha3(rlp.encode(uncles)),
@@ -336,7 +417,11 @@ class Block(TransientBlock):
 
     @classmethod
     def init_from_transient(cls, transient_block, db):
-        """Create a new block based on a :class:`TransientBlock`."""
+        """Create a new block based on a :class:`TransientBlock`.
+
+        :param transient_block: a :class:`TransientBlock`
+        :param db: the database for the block
+        """
         return Block(transient_block.header, transient_block.transaction_list,
                      transient_block.uncles, db=db)
 
@@ -381,9 +466,9 @@ class Block(TransientBlock):
 
     def validate_uncles(self):
         """Validate the uncles of this block.
-        
+
         Valid uncles
-        
+
             * have a valid PoW,
             * are neither a sibling nor the parent of this block,
             * are a child of one of the previous 6 ancestors of this block and
@@ -416,8 +501,8 @@ class Block(TransientBlock):
     def get_ancestor_list(self, n):
         """Return `n` ancestors of this block.
 
-        The result will also be cached in :attr:`ancestor_list`.
-        
+        The result will also be memoized in :attr:`ancestor_list`.
+
         :returns: a list [self, p(self), p(p(self)), ..., p^n(self)]
         """
         # TODO: why 256 Nones?
@@ -512,7 +597,7 @@ class Block(TransientBlock):
 
     def add_transaction_to_list(self, tx):
         """Add a transaction to the transaction trie.
-        
+
         Note that this does not execute anything, i.e. the state is not
         updated.
         """
@@ -538,7 +623,7 @@ class Block(TransientBlock):
 
     def get_receipt(self, num):
         """Get the receipt of the `num`th transaction.
-        
+
         :returns: an instance of :class:`Receipt`
         """
         index = rlp.encode(num)
@@ -546,14 +631,14 @@ class Block(TransientBlock):
 
     def get_nonce(self, address):
         """Get the nonce of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         """
         return self._get_acct_item(address, 'nonce')
 
     def set_nonce(self, address, value):
         """Set the nonce of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :param value: the new nonce
         :returns: `True` if successful, otherwise `False`
@@ -562,7 +647,7 @@ class Block(TransientBlock):
 
     def increment_nonce(self, address):
         """Increment the nonce of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :returns: `True` if successful, otherwise `False`
         """
@@ -570,7 +655,7 @@ class Block(TransientBlock):
 
     def decrement_nonce(self, address):
         """Decrement the nonce of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :returns: `True` if successful, otherwise `False`
         """
@@ -578,14 +663,14 @@ class Block(TransientBlock):
 
     def get_balance(self, address):
         """Get the balance of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         """
         return self._get_acct_item(address, 'balance')
 
     def set_balance(self, address, value):
         """Set the balance of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :param value: the new balance
         :returns: `True` if successful, otherwise `False`
@@ -594,7 +679,7 @@ class Block(TransientBlock):
 
     def delta_balance(self, address, value):
         """Increase the balance of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :param value: can be positive or negative
         :returns: `True` if successful, otherwise `False`
@@ -618,7 +703,7 @@ class Block(TransientBlock):
 
     def get_code(self, address):
         """Get the code of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         """
         return self._get_acct_item(address, 'code')
@@ -643,7 +728,7 @@ class Block(TransientBlock):
 
     def get_storage_data(self, address, index):
         """Get a specific item in the storage of an account.
-        
+
         :param address: the address of the account (binary or hex string)
         :param index: the index of the requested item in the storage
         """
@@ -710,7 +795,7 @@ class Block(TransientBlock):
 
     def del_account(self, address):
         """Delete an account.
-        
+
         :param address: the address of the account (binary or hex string)
         """
         if len(address) == 40:
@@ -720,8 +805,17 @@ class Block(TransientBlock):
         self.state.delete(address)
 
     def account_to_dict(self, address, with_storage_root=False,
-                        with_storage=True, for_vmtest=False):
-        # TODO: previous version used printers
+                        with_storage=True):
+        """Serialize an account to a readable dictionary.
+
+        :param address: the 20 bytes account address
+        :param with_storage_root: include the account's storage root
+        :param with_storage: include the whole account's storage
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+
         if with_storage_root:
             # if there are uncommited account changes the current storage root
             # is meaningless
@@ -768,7 +862,6 @@ class Block(TransientBlock):
         }
         self.journal = []
 
-    # Revert computation
     def snapshot(self):
         """Make a snapshot of the current state to enable later reverting."""
         return {
@@ -814,15 +907,7 @@ class Block(TransientBlock):
         self.transaction_count = mysnapshot['txcount']
 
     def finalize(self):
-        """Apply rewards and commit.
-
-        TODO: update comment
-        We raise the block's coinbase account by Rb, the block reward, and the
-        coinbase of each uncle by 7 of 8 that. Rb = 1500 finney
-        """
-        assert not self.finalized, "Cannot finalize more than once"
-        self.finalized = True
-
+        """Apply rewards and commit."""
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
         for uncle in self.uncles:
@@ -831,11 +916,14 @@ class Block(TransientBlock):
 
     def to_dict(self, with_state=False, full_transactions=False,
                 with_storage_roots=False, with_uncles=False):
-        """
-        serializes the block
-        with_state:             include state for all accounts
-        full_transactions:      include serialized tx (hashes otherwise)
-        with_uncles:            include uncle hashes
+        """Serialize the block to a readable dictionary.
+
+        :param with_state: include state for all accounts
+        :param full_transactions: include serialized transactions (hashes
+                                  otherwise)
+        :param with_storage_roots: if account states are included also include
+                                   their storage roots
+        :param with_uncles: include uncle hashes
         """
         b = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce'):
@@ -897,7 +985,7 @@ class Block(TransientBlock):
 
     def chain_difficulty(self):
         """Get the summarized difficulty.
-        
+
         If the summarized difficulty is not stored in the database, it will be
         calculated recursively and put in the database.
         """
@@ -1030,7 +1118,6 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization
     # necessary)
-    #block.finalized = True  # TODO: tests fail if this is set
     return block
 
 
