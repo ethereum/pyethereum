@@ -219,7 +219,7 @@ def check_header_pow(db, header):
     future_cache_size = ethash.get_next_cache_size(header_data['number'])
     peck_cache(db, future_hash, future_cache_size)
     current_cache_size = ethash.get_cache_size(header_data['number'])
-    cache = get_cache_memoized(db, block.seedhash, current_cache_size)
+    cache = get_cache_memoized(db, header_data['seedhash'], current_cache_size)
     current_full_size = ethash.get_full_size(header_data['number'])
     # exclude mixhash and nonce
     header_hash = utils.sha3(rlp.encode(header[:-2]))
