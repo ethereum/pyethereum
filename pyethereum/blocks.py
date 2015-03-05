@@ -217,7 +217,7 @@ def check_header_pow(db, header):
     # TODO: separate thread
     future_hash = get_future_seedhash(header_data['seedhash'])
     future_cache_size = ethash.get_next_cache_size(header_data['number'])
-    peck(db, future_hash, future_cache_size)
+    peck_cache(db, future_hash, future_cache_size)
     current_cache_size = ethash.get_cache_size(header_data['number'])
     cache = get_cache_memoized(db, block.seedhash, current_cache_size)
     current_full_size = ethash.get_full_size(header_data['number'])
