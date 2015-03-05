@@ -37,7 +37,7 @@ BLKLIM_FACTOR_DEN = 5
 # Block reward
 BLOCK_REWARD = 1500 * utils.denoms.finney
 # GHOST constants
-UNCLE_REWARD = 15 * BLOCK_REWARD / 16
+UNCLE_DEPTH_PENALTY_FACTOR = 8
 NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 # Difficulty adjustment constants
@@ -94,7 +94,7 @@ def calc_difficulty(parent, timestamp):
 # Seedhash incrementing algo
 def get_next_seedhash(parent):
     if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
-        return utils.sha3(parent.prevhash + parent.seedhash)
+        return utils.sha3(parent.seedhash)
     else:
         return parent.seedhash
 
@@ -416,10 +416,10 @@ class Block(object):
         must_equal('gas_used', block.gas_used, kargs['gas_used'])
         must_ge('gas_limit',
                 kargs['gas_limit'],
-                self.gas_limit - int(self.gas_limit / GASLIMIT_ADJMAX_FACTOR))
+                self.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) / GASLIMIT_ADJMAX_FACTOR)
         must_le('gas_limit',
                 kargs['gas_limit'],
-                self.gas_limit + int(self.gas_limit / GASLIMIT_ADJMAX_FACTOR))
+                self.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) / GASLIMIT_ADJMAX_FACTOR)
         must_equal('timestamp', block.timestamp, kargs['timestamp'])
         must_equal('difficulty', block.difficulty, kargs['difficulty'])
         must_equal('number', block.number, kargs['number'])
@@ -714,7 +714,10 @@ class Block(object):
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
-            self.delta_balance(uncle_data['coinbase'], UNCLE_REWARD)
+            r = BLOCK_REWARD * \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - block.number) \
+                / UNCLE_DEPTH_PENALTY_FACTOR
+            self.delta_balance(uncle_data['coinbase'], r)
         self.commit_state()
 
     def serialize_header_without_nonce(self):
