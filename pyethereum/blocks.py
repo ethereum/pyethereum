@@ -759,7 +759,7 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             r = BLOCK_REWARD * \
-                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - block.number) \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
             self.delta_balance(uncle_data['coinbase'], r)
         self.commit_state()
