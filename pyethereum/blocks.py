@@ -211,15 +211,15 @@ class TransientBlock(object):
 
 
 # Block header PoW verification
-def check_header_pow(header):
+def check_header_pow(db, header):
     header_data = Block.deserialize_header(header)
     # Prefetch future data now (so that we don't get interrupted later)
     # TODO: separate thread
     future_hash = get_future_seedhash(header_data['seedhash'])
     future_cache_size = ethash.get_future_cache_size(header_data['number'])
-    peck(self.db, future_hash, future_cache_size)
+    peck(db, future_hash, future_cache_size)
     current_cache_size = ethash.get_cache_size(header_data['number'])
-    cache = get_cache_memoized(self.db, block.seedhash, current_cache_size)
+    cache = get_cache_memoized(db, block.seedhash, current_cache_size)
     current_full_size = ethash.get_full_size(header_data['number'])
     # exclude mixhash and nonce
     header_hash = utils.sha3(rlp.encode(header[:-2]))
@@ -314,7 +314,7 @@ class Block(object):
             if tx_list_root != self.transactions.root_hash:
                 raise Exception("Transaction list root hash does not match!")
             if not self.is_genesis() and self.nonce and\
-                    not check_header_pow(header or self.list_header()):
+                    not check_header_pow(self.db, header or self.list_header()):
                 raise Exception("PoW check failed")
 
         # make sure we are all on the same db
@@ -366,7 +366,7 @@ class Block(object):
         ineligible.extend([b.list_header() for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            if not check_header_pow(uncle):
+            if not check_header_pow(self.db, uncle):
                 return False
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
@@ -386,7 +386,7 @@ class Block(object):
     def check_proof_of_work(self, nonce):
         H = self.list_header()
         H[-1] = nonce
-        return check_header_pow(H)
+        return check_header_pow(self.db, H)
 
     @classmethod
     def deserialize_header(cls, header_data):
