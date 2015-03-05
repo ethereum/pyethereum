@@ -216,7 +216,7 @@ def check_header_pow(db, header):
     # Prefetch future data now (so that we don't get interrupted later)
     # TODO: separate thread
     future_hash = get_future_seedhash(header_data['seedhash'])
-    future_cache_size = ethash.get_future_cache_size(header_data['number'])
+    future_cache_size = ethash.get_next_cache_size(header_data['number'])
     peck(db, future_hash, future_cache_size)
     current_cache_size = ethash.get_cache_size(header_data['number'])
     cache = get_cache_memoized(db, block.seedhash, current_cache_size)
