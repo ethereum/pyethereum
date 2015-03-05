@@ -8,6 +8,7 @@ import transactions
 import bloom
 import copy
 import sys
+import ethash
 from repoze.lru import lru_cache
 from exceptions import *
 from pyethereum.slogging import get_logger
