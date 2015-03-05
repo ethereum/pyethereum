@@ -109,8 +109,9 @@ cache_cache = {}
 
 def peck_cache(db, seedhash, size):
     key = 'cache:'+seedhash+','+str(size)
+    cache = ethash.mkcache(size, seedhash)
+
     if key not in db:
-        cache = ethash.mkcache(size, seedhash)
         cache_cache[key] = cache
         cache_serialized = ethash.serialize_cache(cache)
         cache_hash = utils.sha3(cache_serialized)
