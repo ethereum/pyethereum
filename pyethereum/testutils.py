@@ -8,6 +8,7 @@ from db import DB
 import json
 import os
 import time
+import ethash
 db = DB(utils.db_path(tempfile.mktemp()))
 
 env = {
@@ -30,6 +31,9 @@ time_vm_test = lambda params: run_vm_test(params, TIME)
 fill_state_test = lambda params: run_state_test(params, FILL)
 check_state_test = lambda params: run_state_test(params, VERIFY)
 time_state_test = lambda params: run_state_test(params, TIME)
+fill_ethash_test = lambda params: run_ethash_test(params, FILL)
+check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
+time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
 
 def parse_int_or_hex(s):
@@ -295,6 +299,51 @@ def run_state_test(params, mode):
 
     elif mode == TIME:
         return time_post - time_pre
+
+
+def run_ethash_test(params, mode):
+    header = params['header'].decode('hex')
+    block = blocks.Block.init_from_header(db, header, transient=True)
+    header_hash = utils.sha3(block.serialize_header_without_nonce())
+    cache_size = ethash.get_cache_size(block.number)
+    full_size = ethash.get_full_size(block.number)
+    seed = block.seedhash
+    nonce = block.nonce
+    assert len(nonce) == 8
+    assert len(seed) == 32
+    t1 = time.time()
+    cache = ethash.mkcache(cache_size, seed)
+    t2 = time.time()
+    cache_hash = utils.sha3(ethash.serialize_cache(cache)).encode('hex')
+    t6 = time.time()
+    light_verify = ethash.hashimoto_light(full_size, cache, header_hash, nonce)
+    t7 = time.time()
+    # assert full_mine == light_mine
+    out = {
+        "seed": seed.encode('hex'),
+        "header_hash": header_hash.encode('hex'),
+        "nonce": nonce.encode('hex'),
+        "cache_size": cache_size,
+        "full_size": full_size,
+        "cache_hash": cache_hash,
+        "result": light_verify["result"].encode('hex'),
+    }
+    if mode == FILL:
+        block.mixhash = light_verify["mixhash"]
+        params["header"] = block.serialize_header().encode('hex')
+        for k, v in out.items():
+            params[k] = v
+        return params
+    elif mode == VERIFY:
+        should, actual = block.mixhash, light_verify['mixhash']
+        assert should == actual, "Mismatch: mixhash %r %r" % (should, actual)
+        for k, v in out.items():
+            assert params[k] == v, "Mismatch: " + k + ' %r %r' % (params[k], v)
+    elif mode == TIME:
+        return {
+            "cache_gen": t2 - t1,
+            "verification_time": t7 - t6
+        }
 
 
 def get_tests_from_file_or_dir(dname, json_only=False):

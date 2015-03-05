@@ -1,5 +1,6 @@
 import copy
 from ethash_utils import *
+import sys
 
 
 def mkcache(cache_size, seed):
@@ -9,37 +10,41 @@ def mkcache(cache_size, seed):
     o = [sha3_512(seed)]
     for i in range(1, n):
         o.append(sha3_512(o[-1]))
-    print o[0], o[30]
 
     for _ in range(CACHE_ROUNDS):
         for i in range(n):
             v = o[i][0] % n
             o[i] = sha3_512(map(xor, o[(i-1+n) % n], o[v]))
-        print o[0]
 
     return o
 
 
-def calc_dag_item(cache, i):
+def calc_dataset_item(cache, i):
     n = len(cache)
     r = HASH_BYTES // WORD_BYTES
     mix = copy.copy(cache[i % n])
     mix[0] ^= i
     mix = sha3_512(mix)
-    for j in range(DAG_PARENTS):
+    for j in range(DATASET_PARENTS):
         cache_index = fnv(i ^ j, mix[j % r])
         mix = map(fnv, mix, cache[cache_index % n])
     return sha3_512(mix)
 
 
-def calc_dag(dag_size, cache):
-    return [calc_dag_item(cache, i) for i in range(dag_size // MIX_BYTES)]
+def calc_dataset(full_size, cache):
+    o = []
+    percent = (full_size // HASH_BYTES) // 100
+    for i in range(full_size // HASH_BYTES):
+        if i % percent == 0:
+            sys.stderr.write("Completed %d items, %d percent\n" % (i, i // percent))
+        o.append(calc_dataset_item(cache, i))
+    return o
 
 
-def hashimoto(header, nonce, dagsize, dag_lookup):
-    n = dagsize / HASH_BYTES
-    w = MIX_BYTES / WORD_BYTES
-    mixhashes = MIX_BYTES / HASH_BYTES
+def hashimoto(header, nonce, full_size, dataset_lookup):
+    n = full_size // HASH_BYTES
+    w = MIX_BYTES // WORD_BYTES
+    mixhashes = MIX_BYTES // HASH_BYTES
     s = sha3_512(header + nonce)
     mix = []
     for _ in range(MIX_BYTES / HASH_BYTES):
@@ -47,8 +52,8 @@ def hashimoto(header, nonce, dagsize, dag_lookup):
     for i in range(ACCESSES):
         p = fnv(i ^ s[0], mix[i % w]) % (n // mixhashes) * mixhashes
         newdata = []
-        for j in range(MIX_BYTES / HASH_BYTES):
-            newdata.extend(dag_lookup(p + j))
+        for j in range(mixhashes):
+            newdata.extend(dataset_lookup(p + j))
         mix = map(fnv, mix, newdata)
     cmix = []
     for i in range(0, len(mix), 4):
@@ -60,25 +65,33 @@ def hashimoto(header, nonce, dagsize, dag_lookup):
 
 
 def hashimoto_light(full_size, cache, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: calc_dag_item(cache, x))
+    return hashimoto(header, nonce, full_size, lambda x: calc_dataset_item(cache, x))
 
 
-def hashimoto_full(full_size, dag, header, nonce):
-    return hashimoto(header, nonce, len(dag), lambda x: dag[x])
+def hashimoto_full(full_size, dataset, header, nonce):
+    return hashimoto(header, nonce, full_size, lambda x: dataset[x])
 
 
-def get_datasize(block_number):
-    return DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
+def get_full_size(block_number):
+    return 1073739904
 
 
-def get_cachesize(block_number):
-    return (DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)) / CACHE_MULTIPLIER
+def get_cache_size(block_number):
+    return 1048384
 
 
-def mine(full_size, dag, header, difficulty):
+def get_next_cache_size(block_number):
+    return get_cache_size(block_number + EPOCH_LENGTH)
+
+
+def get_next_full_size(block_number):
+    return get_full_size(block_number + EPOCH_LENGTH)
+
+
+def mine(full_size, dataset, header, difficulty):
     from random import randint
     nonce = randint(0, 2**64)
-    while decode_int(hashimoto_full(full_size, dag, header, nonce)) < difficulty:
+    while decode_int(hashimoto_full(full_size, dataset, header, nonce)) < difficulty:
         nonce += 1
         nonce %= 2**64
     return nonce

@@ -3,11 +3,11 @@ import sha3
 WORD_BYTES = 4                    # bytes in word
 DATASET_BYTES_INIT = 2**30        # bytes in dataset at genesis
 DATASET_BYTES_GROWTH = 113000000  # growth per epoch (~7 GB per year)
-CACHE_MULTIPLIER = 1024           # Size of the DAG relative to the cache
+CACHE_MULTIPLIER = 1024           # Size of the dataset relative to the cache
 EPOCH_LENGTH = 30000              # blocks per epoch
 MIX_BYTES = 128                   # width of mix
 HASH_BYTES = 64                   # hash length in bytes
-DAG_PARENTS = 256                 # number of parents of each dag element
+DATASET_PARENTS = 256             # number of parents of each dataset element
 CACHE_ROUNDS = 3                  # number of rounds in cache production
 ACCESSES = 64                     # number of accesses in hashimoto loop
 
@@ -66,3 +66,10 @@ def serialize_cache(ds):
     return ''.join([serialize_hash(h) for h in ds])
 
 serialize_dataset = serialize_cache
+
+
+def deserialize_cache(ds):
+    return [deserialize_hash(ds[i:i+HASH_BYTES])
+            for i in range(0, len(ds), HASH_BYTES)]
+
+deserialize_dataset = deserialize_cache

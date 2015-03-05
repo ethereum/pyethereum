@@ -185,15 +185,22 @@ BLANK_NODE = ''
 BLANK_ROOT = utils.sha3rlp('')
 
 
+def transient_trie_exception(*args):
+    raise Exception("Transient trie")
+
+
 class Trie(object):
 
-    def __init__(self, db, root_hash=BLANK_ROOT):
+    def __init__(self, db, root_hash=BLANK_ROOT, transient=False):
         '''it also present a dictionary like interface
 
         :param db key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
         self.db = db  # Pass in a database object directly
+        self.transient = transient
+        if self.transient:
+            self.update = self.get = self.delete = transient_trie_exception
         self.set_root_hash(root_hash)
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
@@ -238,6 +245,8 @@ class Trie(object):
         return self.get_root_hash()
 
     def get_root_hash(self):
+        if self.transient:
+            return self.transient_root_hash
         if self.root_node == BLANK_NODE:
             return BLANK_ROOT
         assert isinstance(self.root_node, list)
@@ -252,11 +261,14 @@ class Trie(object):
         self.set_root_hash(value)
 
     def set_root_hash(self, root_hash):
+        assert isinstance(root_hash, (str, unicode))
+        assert len(root_hash) in [0, 32]
+        if self.transient:
+            self.transient_root_hash = root_hash
+            return
         if root_hash == BLANK_ROOT:
             self.root_node = BLANK_NODE
             return
-        assert isinstance(root_hash, (str, unicode))
-        assert len(root_hash) in [0, 32]
         self.root_node = self._decode_to_node(root_hash)
 
     def clear(self):

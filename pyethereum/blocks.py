@@ -92,11 +92,39 @@ def calc_difficulty(parent, timestamp):
 
 
 # Seedhash incrementing algo
-def get_next_seedhash(parent):
+def calc_seedhash(parent):
     if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
         return utils.sha3(parent.seedhash)
     else:
         return parent.seedhash
+
+
+def get_future_seedhash(h):
+    return utils.sha3(h)
+
+
+cache_cache = {}
+
+
+def peck_cache(db, seedhash, size):
+    key = 'cache:'+seedhash+','+str(size)
+    if key not in db:
+        cache = ethash.mkcache(size, seedhash)
+        cache_cache[key] = cache
+        cache_serialized = ethash.serialize_cache(cache)
+        cache_hash = utils.sha3(cache_serialized)
+        db.put(cache_hash, cache_serialized)
+        db.put(key, cache_hash)
+    elif key not in cache:
+        o = db.get(db.get(key))
+        cache_cache[key] = o
+        return ethash.deserialize_cache(o)
+
+
+def get_cache_memoized(db, seedhash, size):
+    key = 'cache:'+seedhash+','+str(size)
+    peck_cache(db, seedhash, size)
+    return cache_cache[key]
 
 
 # Gas limit adjustment algo
@@ -183,12 +211,21 @@ class TransientBlock(object):
 
 # Block header PoW verification
 def check_header_pow(header):
-    rlp_Hn = rlp.encode(header[:-1])
-    nonce = header[-1]
-    assert len(nonce) == 32
-    diff = utils.decoders['int'](header[block_structure_rev['difficulty'][0]])
-    h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
-    return utils.big_endian_to_int(h) < 2 ** 256 / diff
+    header_data = Block.deserialize_header(header)
+    # Prefetch future data now (so that we don't get interrupted later)
+    # TODO: separate thread
+    future_hash = get_future_seedhash(header_data['seedhash'])
+    future_cache_size = ethash.get_future_cache_size(header_data['number'])
+    peck(self.db, future_hash, future_cache_size)
+    current_cache_size = ethash.get_cache_size(header_data['number'])
+    cache = get_cache_memoized(self.db, block.seedhash, current_cache_size)
+    current_full_size = ethash.get_full_size(header_data['number'])
+    # exclude mixhash and nonce
+    header_hash = utils.sha3(rlp.encode(header[:-2]))
+    mining_output = ethash.hashimoto_light(current_full_size, cache,
+                                           header_hash, header_data['nonce'])
+    diff = header_data['difficulty']
+    return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
 
 # Primary block class
@@ -211,7 +248,8 @@ class Block(object):
                  mixhash=block_structure_rev['mixhash'][2],
                  transaction_list=[],
                  uncles=[],
-                 header=None):
+                 header=None,
+                 transient=False):
 
         self.db = db
         self.prevhash = prevhash
@@ -230,6 +268,7 @@ class Block(object):
         self.suicides = []
         self.logs = []
         self.refunds = 0
+        self.transient = transient
         # Journaling cache for state tree updates
         self.caches = {
             'balance': {},
@@ -239,11 +278,14 @@ class Block(object):
         }
         self.journal = []
 
-        self.transactions = trie.Trie(self.db, tx_list_root)
-        self.receipts = trie.Trie(self.db, receipts_root)
+        self.transactions = trie.Trie(self.db, tx_list_root,
+                                      transient=transient)
+        self.receipts = trie.Trie(self.db, receipts_root,
+                                  transient=transient)
         self.transaction_count = 0
 
-        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root))
+        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root,
+                                                     transient=transient))
         self.bloom = bloom  # int
 
         # setup de/encoders
@@ -283,10 +325,10 @@ class Block(object):
             assert self.decoders[typ](self.encoders[typ](v)) == v
 
         # Basic consistency verifications
-        if not self.state.root_hash_valid():
+        if not self.state.root_hash_valid() and not self.transient:
             raise Exception(
                 "State Merkle root not found in database! %r" % self)
-        if not self.transactions.root_hash_valid():
+        if not self.transactions.root_hash_valid() and not self.transient:
             raise Exception(
                 "Transactions root not found in database! %r" % self)
         if len(self.extra_data) > 1024:
@@ -377,11 +419,11 @@ class Block(object):
             return parent.deserialize_child(rlpdata)
 
     @classmethod
-    def init_from_header(cls, db, rlpdata):
+    def init_from_header(cls, db, rlpdata, transient=False):
         kargs = cls.deserialize_header(rlpdata)
         kargs['transaction_list'] = None
         kargs['uncles'] = None
-        return Block(db=db, **kargs)
+        return Block(db=db, transient=transient, **kargs)
 
     def deserialize_child(self, rlpdata):
         """
@@ -721,7 +763,7 @@ class Block(object):
         self.commit_state()
 
     def serialize_header_without_nonce(self):
-        return rlp.encode(self.list_header(exclude=['nonce']))
+        return rlp.encode(self.list_header(exclude=['nonce', 'mixhash']))
 
     def get_state_root(self):
         self.commit_state()
@@ -887,7 +929,7 @@ class Block(object):
             gas_used=0,
             timestamp=timestamp,
             extra_data=extra_data,
-            seedhash=get_next_seedhash(parent),
+            seedhash=calc_seedhash(parent),
             nonce='',
             transaction_list=[],
             uncles=uncles)
