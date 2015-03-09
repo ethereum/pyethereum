@@ -68,8 +68,8 @@ def hashimoto_light(full_size, cache, header, nonce):
     return hashimoto(header, nonce, full_size, lambda x: calc_dataset_item(cache, x))
 
 
-def hashimoto_full(full_size, dataset, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: dataset[x])
+def hashimoto_full(dataset, header, nonce):
+    return hashimoto(header, nonce, len(dataset), lambda x: dataset[x])
 
 
 def get_full_size(block_number):
@@ -88,10 +88,10 @@ def get_next_full_size(block_number):
     return get_full_size(block_number + EPOCH_LENGTH)
 
 
-def mine(full_size, dataset, header, difficulty):
+def mine(dataset, header, difficulty):
     from random import randint
     nonce = randint(0, 2**64)
-    while decode_int(hashimoto_full(full_size, dataset, header, nonce)) < difficulty:
+    while decode_int(hashimoto_full(dataset, header, nonce)) < difficulty:
         nonce += 1
         nonce %= 2**64
     return nonce
