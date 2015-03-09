@@ -45,7 +45,7 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
     n = full_size // HASH_BYTES
     w = MIX_BYTES // WORD_BYTES
     mixhashes = MIX_BYTES // HASH_BYTES
-    s = sha3_512(header + nonce)
+    s = sha3_512(header + nonce[::-1])
     mix = []
     for _ in range(MIX_BYTES / HASH_BYTES):
         mix.extend(s)
@@ -65,27 +65,13 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
 
 
 def hashimoto_light(full_size, cache, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: calc_dataset_item(cache, x))
+    return hashimoto(header, nonce, full_size,
+                     lambda x: calc_dataset_item(cache, x))
 
 
-def hashimoto_full(full_size, dataset, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: dataset[x])
-
-
-def get_full_size(block_number):
-    return 1073739904
-
-
-def get_cache_size(block_number):
-    return 1048384
-
-
-def get_next_cache_size(block_number):
-    return get_cache_size(block_number + EPOCH_LENGTH)
-
-
-def get_next_full_size(block_number):
-    return get_full_size(block_number + EPOCH_LENGTH)
+def hashimoto_full(dataset, header, nonce):
+    return hashimoto(header, nonce, len(datset) * HASH_BYTES,
+                     lambda x: dataset[x])
 
 
 def mine(full_size, dataset, header, difficulty):

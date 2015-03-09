@@ -302,6 +302,12 @@ def run_state_test(params, mode):
 
 
 def run_ethash_test(params, mode):
+    if 'header' not in params:
+        b = blocks.genesis(db)
+        b.seedhash = params['seed'].decode('hex')
+        b.nonce = params['nonce'].decode('hex')
+        b.number = params.get('number', 0)
+        params['header'] = b.serialize_header().encode('hex')
     header = params['header'].decode('hex')
     block = blocks.Block.init_from_header(db, header, transient=True)
     header_hash = utils.sha3(block.serialize_header_without_nonce())
@@ -326,6 +332,7 @@ def run_ethash_test(params, mode):
         "cache_size": cache_size,
         "full_size": full_size,
         "cache_hash": cache_hash,
+        "mixhash": light_verify["mixhash"].encode('hex'),
         "result": light_verify["result"].encode('hex'),
     }
     if mode == FILL:

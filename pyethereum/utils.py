@@ -217,6 +217,21 @@ def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
 
 
+def scan_bin(v):
+    if v[:2] == '0x':
+        return v[2:].decode('hex')
+    else:
+        return v.decode('hex')
+
+
+def scan_int(v):
+    if v[:2] == '0x':
+        return big_endian_to_int(v[2:].decode('hex'))
+    else:
+        return int(v)
+
+
+# Decoding from RLP serialization
 decoders = {
     "bin": decode_bin,
     "addr": decode_addr,
@@ -225,6 +240,7 @@ decoders = {
     "int256b": decode_int256,
 }
 
+# Encoding to RLP serialization
 encoders = {
     "bin": encode_bin,
     "addr": encode_addr,
@@ -233,13 +249,22 @@ encoders = {
     "int256b": encode_int256,
 }
 
+# Encoding to printable format
 printers = {
-    "hash": lambda v: '0x' + v.encode('hex'),
     "bin": lambda v: '0x' + v.encode('hex'),
     "addr": lambda v: v,
     "int": lambda v: str(v),
     "trie_root": lambda v: v.encode('hex'),
-    "int256b": lambda x: zpad(encode_int256(x), 64).encode('hex')
+    "int256b": lambda x: zpad(encode_int256(x), 256).encode('hex')
+}
+
+# Decoding from printable format
+scanners = {
+    "bin": scan_bin,
+    "addr": lambda x: x[2:] if x[:2] == '0x' else x,
+    "int": scan_int,
+    "trie_root": lambda x: scan_bin,
+    "int256b": lambda x: big_endian_to_int(x.decode('hex'))
 }
 
 

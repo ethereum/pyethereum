@@ -73,3 +73,40 @@ def deserialize_cache(ds):
             for i in range(0, len(ds), HASH_BYTES)]
 
 deserialize_dataset = deserialize_cache
+
+
+class ListWrapper(list):
+    def __init__(self, data):
+        self.data = data
+        self.len = len(data) / HASH_BYTES
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, i):
+        if i >= self.len:
+            raise Exception("listwrap access out of range")
+        return deserialize_hash(self.data[i*HASH_BYTES:(i+1)*HASH_BYTES])
+
+    def __iter__(self):
+        for i in range(self.len):
+            yield self[i]
+
+    def __repr__(self):
+        return repr([x for x in self])
+
+
+def get_full_size(block_number):
+    return 1073739904
+
+
+def get_cache_size(block_number):
+    return 1048384
+
+
+def get_next_cache_size(block_number):
+    return get_cache_size(block_number + EPOCH_LENGTH)
+
+
+def get_next_full_size(block_number):
+    return get_full_size(block_number + EPOCH_LENGTH)

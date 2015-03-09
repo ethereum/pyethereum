@@ -535,7 +535,6 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
-            # ext.add_refund(opcodes.GSUICIDEREFUND)
             print 'suiciding %s %s %d' % (msg.to, to, xfer)
             return 1, compustate.gas, []
         for a in stk:

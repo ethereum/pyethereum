@@ -8,6 +8,7 @@ import transactions
 import bloom
 import copy
 import sys
+import ethash, ethash_utils
 from repoze.lru import lru_cache
 from exceptions import *
 from pyethereum.slogging import get_logger
@@ -17,7 +18,7 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 # Genesis block difficulty
-GENESIS_DIFFICULTY = 2 ** 11
+GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
@@ -32,6 +33,7 @@ MIN_GAS_LIMIT = 125000
 # block.gas_limit = block.parent.gas_limit * 1023/1024 +
 #                   (block.gas_used * 6 / 5) / 1024
 GASLIMIT_EMA_FACTOR = 1024
+GASLIMIT_ADJMAX_FACTOR = 1024
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 # Block reward
@@ -41,8 +43,9 @@ UNCLE_DEPTH_PENALTY_FACTOR = 8
 NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 # Difficulty adjustment constants
-DIFF_ADJUSTMENT_CUTOFF = 5
+DIFF_ADJUSTMENT_CUTOFF = 8
 BLOCK_DIFF_FACTOR = 2048
+MIN_DIFF = 131072
 # PoW info
 POW_EPOCH_LENGTH = 30000
 
@@ -88,7 +91,7 @@ for i, (name, typ, default) in enumerate(acct_structure):
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
-    return parent.difficulty + offset * sign
+    return max(parent.difficulty + offset * sign, MIN_DIFF)
 
 
 # Seedhash incrementing algo
@@ -99,7 +102,7 @@ def calc_seedhash(parent):
         return parent.seedhash
 
 
-def get_future_seedhash(h):
+def get_next_seedhash(h):
     return utils.sha3(h)
 
 
@@ -111,14 +114,14 @@ def peck_cache(db, seedhash, size):
     if key not in db:
         cache = ethash.mkcache(size, seedhash)
         cache_cache[key] = cache
-        cache_serialized = ethash.serialize_cache(cache)
+        cache_serialized = ethash_utils.serialize_cache(cache)
         cache_hash = utils.sha3(cache_serialized)
         db.put(cache_hash, cache_serialized)
         db.put(key, cache_hash)
-    elif key not in cache:
+    elif key not in cache_cache:
         o = db.get(db.get(key))
         cache_cache[key] = o
-        return ethash.deserialize_cache(o)
+        return ethash_utils.deserialize_cache(o)
 
 
 def get_cache_memoized(db, seedhash, size):
@@ -210,21 +213,27 @@ class TransientBlock(object):
 
 
 # Block header PoW verification
-def check_header_pow(header):
+def check_header_pow(header, db):
+    if isinstance(header, str):
+        header = rlp.decode(header)
     header_data = Block.deserialize_header(header)
-    # Prefetch future data now (so that we don't get interrupted later)
-    # TODO: separate thread
-    future_hash = get_future_seedhash(header_data['seedhash'])
-    future_cache_size = ethash.get_future_cache_size(header_data['number'])
-    peck(self.db, future_hash, future_cache_size)
-    current_cache_size = ethash.get_cache_size(header_data['number'])
-    cache = get_cache_memoized(self.db, block.seedhash, current_cache_size)
-    current_full_size = ethash.get_full_size(header_data['number'])
     # exclude mixhash and nonce
     header_hash = utils.sha3(rlp.encode(header[:-2]))
+    # Prefetch future data now (so that we don't get interrupted later)
+    # TODO: separate thread
+    future_hash = get_next_seedhash(header_data['seedhash'])
+    future_cache_size = ethash_utils.get_next_cache_size(header_data['number'])
+    peck_cache(db, future_hash, future_cache_size)
+    # Grab current cache
+    current_cache_size = ethash_utils.get_cache_size(header_data['number'])
+    cache = get_cache_memoized(db, header_data['seedhash'], current_cache_size)
+    current_full_size = ethash_utils.get_full_size(header_data['number'])
     mining_output = ethash.hashimoto_light(current_full_size, cache,
                                            header_hash, header_data['nonce'])
     diff = header_data['difficulty']
+    if mining_output['mixhash'] != header_data['mixhash']:
+        print 'phooey', mining_output['mixhash'], header_data['mixhash']
+        return False
     return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
 
@@ -291,19 +300,25 @@ class Block(object):
         # setup de/encoders
         self.encoders = dict(utils.encoders)
         self.decoders = dict(utils.decoders)
+        self.printers = dict(utils.printers)
+        self.scanners = dict(utils.scanners)
 
         def encode_hash(v):
             '''encodes a bytearray into hash'''
-            k = utils.sha3(v)
+            assert isinstance(v, (str, unicode))
+            k = utils.sha3(str(v))
             self.db.put(k, v)
             return k
         self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
+        self.printers['hash'] = lambda v: '0x'+v.encode('hex')
+        self.scanners['hash'] = \
+            lambda k: (v[2:] if v[:2] == '0x' else v).decode('hex')
         self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
 
-        # If transaction_list is None, then it's a block header imported for
+        # If transient is False, then it's a block header imported for
         # SPV purposes
-        if transaction_list is not None:
+        if not self.transient:
             # support init with transactions only if state is known
             assert self.state.root_hash_valid()
             for i, obj in enumerate(transaction_list):
@@ -313,7 +328,7 @@ class Block(object):
             if tx_list_root != self.transactions.root_hash:
                 raise Exception("Transaction list root hash does not match!")
             if not self.is_genesis() and self.nonce and\
-                    not check_header_pow(header or self.list_header()):
+                    not check_header_pow(header or self.list_header(), self.db):
                 raise Exception("PoW check failed")
 
         # make sure we are all on the same db
@@ -365,7 +380,7 @@ class Block(object):
         ineligible.extend([b.list_header() for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            if not check_header_pow(uncle):
+            if not check_header_pow(uncle, self.db):
                 return False
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
@@ -385,7 +400,7 @@ class Block(object):
     def check_proof_of_work(self, nonce):
         H = self.list_header()
         H[-1] = nonce
-        return check_header_pow(H)
+        return check_header_pow(H, self.db)
 
     @classmethod
     def deserialize_header(cls, header_data):
@@ -439,6 +454,8 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'],
+                                       mixhash=kargs['mixhash'],
+                                       nonce=kargs['nonce'],
                                        uncles=uncles)
 
         # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
@@ -478,7 +495,7 @@ class Block(object):
         must_equal('bloom', block.bloom, kargs['bloom'])
         must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
         set_aux(None)
-        if not check_header_pow(block.list_header()):
+        if not check_header_pow(block.list_header(), self.db):
             raise VerificationFailed('invalid nonce')
 
         return block
@@ -680,7 +697,7 @@ class Block(object):
                 if with_storage_root:
                     med_dict['storage_root'] = strie.get_root_hash().encode('hex')
             else:
-                med_dict[key] = utils.printers[typ](self.caches[key].get(address, val))
+                med_dict[key] = self.printers[typ](self.caches[key].get(address, val))
         if with_storage:
             med_dict['storage'] = {}
             d = strie.to_dict()
@@ -757,7 +774,7 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             r = BLOCK_REWARD * \
-                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - block.number) \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
             self.delta_balance(uncle_data['coinbase'], r)
         self.commit_state()
@@ -788,7 +805,6 @@ class Block(object):
     def list_header(self, exclude=[]):
         header = []
         for name, typ, default in block_structure:
-            # print name, typ, default , getattr(self, name)
             if name not in exclude:
                 header.append(self.encoders[typ](getattr(self, name)))
         return header
@@ -817,9 +833,11 @@ class Block(object):
         full_transactions:      include serialized tx (hashes otherwise)
         with_uncles:            include uncle hashes
         """
-        b = {}
+        header = {}
         for name, typ, default in block_structure:
-            b[name] = utils.printers[typ](getattr(self, name))
+            header[name] = self.printers[typ](getattr(self, name))
+        header["hash"] = self.hash.encode('hex')
+        b = {"header": header}
         txlist = []
         for i in range(self.transaction_count):
             tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
@@ -846,7 +864,7 @@ class Block(object):
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         if with_uncles:
-            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex')
+            b['uncles'] = [self.__class__.deserialize_header(u)
                            for u in self.uncles]
 
         return b
@@ -912,7 +930,7 @@ class Block(object):
 
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, extra_data='',
+    def init_from_parent(cls, parent, coinbase, mixhash, nonce, extra_data='',
                          timestamp=int(time.time()), uncles=[]):
         b = Block(
             db=parent.db,
@@ -924,6 +942,7 @@ class Block(object):
             receipts_root=trie.BLANK_ROOT,
             bloom=0,
             difficulty=calc_difficulty(parent, timestamp),
+            mixhash=mixhash,
             number=parent.number + 1,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
@@ -984,8 +1003,21 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
                   tx_list_root=trie.BLANK_ROOT,
                   difficulty=difficulty, nonce=GENESIS_NONCE,
                   gas_limit=GENESIS_GAS_LIMIT)
-    for addr, balance in start_alloc.iteritems():
-        block.set_balance(addr, balance)
+    for addr, data in start_alloc.iteritems():
+        if 'wei' in data:
+            block.set_balance(addr, int(data['wei']))
+        if 'balance' in data:
+            block.set_balance(addr, int(data['balance']))
+        if 'code' in data:
+            block.set_code(addr, utils.scanners['bin'](data['code']))
+        if 'nonce' in data:
+            block.set_nonce(addr, int(data['nonce']))
+        if 'storage' in data:
+            for k, v in data['storage'].iteritems():
+                blk.set_storage_data(address,
+                                     utils.big_endian_to_int(k[2:].decode('hex')),
+                                     utils.big_endian_to_int(v[2:].decode('hex')))
+    block.commit_state()
     block.state.db.commit()
     return block
 
