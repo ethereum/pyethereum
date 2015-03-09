@@ -1,4 +1,7 @@
-import pytest, os, sys
+import json
+import os
+import sys
+import pytest
 import pyethereum.testutils as testutils
 
 from pyethereum.slogging import get_logger, configure_logging
@@ -7,6 +10,8 @@ logger = get_logger()
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 if '--notrace' not in sys.argv:
     configure_logging(':trace')
+else:
+    sys.argv.remove('--notrace')
 
 
 # SETUP TESTS IN GLOBAL NAME SPACE
@@ -20,8 +25,12 @@ def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
 
 
 if __name__ == '__main__':
-    assert len(sys.argv) >= 2, "Please specify file or dir name"
-    fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
+    if len(sys.argv) == 1:
+        # read fixture from stdin
+        fixtures = {'stdin': json.load(sys.stdin)}
+    else:
+        # load fixtures from specified file or dir
+        fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
     if len(sys.argv) >= 3:
         for filename, tests in fixtures.items():
             for testname, testdata in tests.items():
