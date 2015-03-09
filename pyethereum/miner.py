@@ -35,7 +35,6 @@ class Miner():
         old_state_root = self.block.state_root
         # revert finalization
         self.block.state_root = self.pre_finalize_state_root
-        self.block.finalized = False
         try:
             success, output = processblock.apply_transaction(self.block, transaction)
         except processblock.InvalidTransaction as e:

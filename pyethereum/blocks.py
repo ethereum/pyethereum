@@ -318,23 +318,26 @@ class Block(TransientBlock):
                 raise ValueError("Block's difficulty is inconsistent with its "
                                  "parent's difficulty")
 
-        # replay if state is known or it is forced
-        state_unknown = header.prevhash != GENESIS_PREVHASH and  \
-                 (len(header.state_root) != 32 or header.state_root not in db)
+        if force_replay and transaction_list is None:
+            raise ValueError("Cannot replay if no transactions are given")
 
         self.transactions = trie.Trie(db, trie.BLANK_ROOT)
         self.receipts = trie.Trie(self.db, trie.BLANK_ROOT)
+        # replay if state is unknown or it is is explicitly requested
+        state_unknown = header.prevhash != GENESIS_PREVHASH and  \
+                 (len(header.state_root) != 32 or header.state_root not in db)
         if state_unknown or force_replay:
+            if transaction_list is None:
+                raise ValueError("Cannot replay if no transactions are given")
             if not parent:
                 parent = self.get_parent()
             self.state = trie.Trie(db, parent.state_root)
             self.transaction_count = 0
             self.gas_used = 0
             # replay
-            for tx in transaction_list or []:
+            for tx in transaction_list:
                 success, output = processblock.apply_transaction(self, tx)
-            if transaction_list is not None:
-                self.finalize()
+            self.finalize()
             if self.gas_used != header.gas_used:
                 raise ValueError("Gas used does not match")
             if self.state_root != header.state_root:
@@ -342,6 +345,7 @@ class Block(TransientBlock):
             if self.receipts_root != header.receipts_root:
                 raise ValueError("Receipts root hash does not match")
         else:
+            # trust the state root in the header
             self.state = trie.Trie(self.db, header.state_root)
             self.transaction_count = 0
             self.gas_used = header.gas_used
