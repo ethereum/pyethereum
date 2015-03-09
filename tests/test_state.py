@@ -10,6 +10,8 @@ logger = get_logger()
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 if '--notrace' not in sys.argv:
     configure_logging(':trace')
+else:
+    sys.argv.remove('--notrace')
 
 
 # SETUP TESTS IN GLOBAL NAME SPACE
