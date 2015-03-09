@@ -243,7 +243,7 @@ class ChainManager(StoppableLoopThread):
 
             for t_block in transient_blocks:  # oldest to newest
                 log.debug('Checking PoW', block_hash=t_block)
-                if not blocks.check_header_pow(t_block.header_args):
+                if not blocks.check_header_pow(self.blockchain, t_block.header_args):
                     log.debug('Invalid PoW', block_hash=t_block)
                     continue
                 log.debug('Deserializing', block_hash=t_block)

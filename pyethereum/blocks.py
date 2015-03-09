@@ -8,6 +8,7 @@ import transactions
 import bloom
 import copy
 import sys
+import ethash
 from repoze.lru import lru_cache
 from exceptions import *
 from pyethereum.slogging import get_logger
@@ -108,8 +109,9 @@ cache_cache = {}
 
 def peck_cache(db, seedhash, size):
     key = 'cache:'+seedhash+','+str(size)
+    cache = ethash.mkcache(size, seedhash)
+
     if key not in db:
-        cache = ethash.mkcache(size, seedhash)
         cache_cache[key] = cache
         cache_serialized = ethash.serialize_cache(cache)
         cache_hash = utils.sha3(cache_serialized)
@@ -210,15 +212,15 @@ class TransientBlock(object):
 
 
 # Block header PoW verification
-def check_header_pow(header):
+def check_header_pow(db, header):
     header_data = Block.deserialize_header(header)
     # Prefetch future data now (so that we don't get interrupted later)
     # TODO: separate thread
     future_hash = get_future_seedhash(header_data['seedhash'])
-    future_cache_size = ethash.get_future_cache_size(header_data['number'])
-    peck(self.db, future_hash, future_cache_size)
+    future_cache_size = ethash.get_next_cache_size(header_data['number'])
+    peck_cache(db, future_hash, future_cache_size)
     current_cache_size = ethash.get_cache_size(header_data['number'])
-    cache = get_cache_memoized(self.db, block.seedhash, current_cache_size)
+    cache = get_cache_memoized(db, header_data['seedhash'], current_cache_size)
     current_full_size = ethash.get_full_size(header_data['number'])
     # exclude mixhash and nonce
     header_hash = utils.sha3(rlp.encode(header[:-2]))
@@ -313,7 +315,7 @@ class Block(object):
             if tx_list_root != self.transactions.root_hash:
                 raise Exception("Transaction list root hash does not match!")
             if not self.is_genesis() and self.nonce and\
-                    not check_header_pow(header or self.list_header()):
+                    not check_header_pow(self.db, header or self.list_header()):
                 raise Exception("PoW check failed")
 
         # make sure we are all on the same db
@@ -365,7 +367,7 @@ class Block(object):
         ineligible.extend([b.list_header() for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            if not check_header_pow(uncle):
+            if not check_header_pow(self.db, uncle):
                 return False
             prevhash = uncle[block_structure_rev['prevhash'][0]]
             if prevhash not in eligible_ancestor_hashes:
@@ -385,7 +387,7 @@ class Block(object):
     def check_proof_of_work(self, nonce):
         H = self.list_header()
         H[-1] = nonce
-        return check_header_pow(H)
+        return check_header_pow(self.db, H)
 
     @classmethod
     def deserialize_header(cls, header_data):
@@ -757,7 +759,7 @@ class Block(object):
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             r = BLOCK_REWARD * \
-                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - block.number) \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
             self.delta_balance(uncle_data['coinbase'], r)
         self.commit_state()
