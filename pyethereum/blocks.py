@@ -123,9 +123,10 @@ class BlockHeader(rlp.Serializable):
     If the block with this header exists as an instance of :class:`Block`, the
     connection can be made explicit by setting :attr:`BlockHeader.block`. Then,
     :attr:`BlockHeader.state_root`, :attr:`BlockHeader.tx_list_root` and
-    :attr:`BlockHeader.receipts_root` always refer to the up-to-date value.
+    :attr:`BlockHeader.receipts_root` always refer to the up-to-date value in
+    the block instance.
 
-    :ivar block: the corresponding block or `None`
+    :ivar block: an instance of :class:`Block` or `None`
     :ivar prevhash: the 32 byte hash of the previous block
     :ivar uncles_hash: the 32 byte hash of the RLP encoded list of uncle
                        headers
@@ -278,9 +279,9 @@ def mirror_from(source, attributes, only_getters=True):
 class TransientBlock(rlp.Serializable):
     """A read only, non persistent, not validated representation of a block.
 
-    At initialization all instance variables are copied from the block header
-    (e.g. ``transient_block.prevhash`` can be used instead of
-    ``transient.block.prevhash``).
+    All attributes from the block header are accessible via read-only
+    properties (i.e. ``transient_block.prevhash`` is equivalent to
+    ``transient_block.header.prevhash``.
 
     :ivar header: the block's header
     :ivar transaction_list: a list of transactions in the block
@@ -326,8 +327,12 @@ class TransientBlock(rlp.Serializable):
 class Block(rlp.Serializable):
     """A block.
 
-    :param header: the block header (whose instance variables are copied to
-                   the block)
+    All attributes from the block header are accessible via properties
+    (i.e. ``transient_block.prevhash`` is equivalent to
+    ``transient_block.header.prevhash``). It is ensured that no discrepancies
+    between header and block occur.
+
+    :param header: the block header
     :param transaction_list: a list of transactions (which are replayed if the
                              state given by the header is not known) or `None`
                              to create a non finalized block without any
