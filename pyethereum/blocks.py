@@ -324,8 +324,9 @@ class Block(TransientBlock):
         self.transactions = trie.Trie(db, trie.BLANK_ROOT)
         self.receipts = trie.Trie(self.db, trie.BLANK_ROOT)
         # replay if state is unknown or it is is explicitly requested
-        state_unknown = header.prevhash != GENESIS_PREVHASH and  \
-                 (len(header.state_root) != 32 or header.state_root not in db)
+        state_unknown = (header.prevhash != GENESIS_PREVHASH and
+                 header.state_root != trie.BLANK_ROOT and  # TODO: correct?
+                 (len(header.state_root) != 32 or header.state_root not in db))
         if state_unknown or force_replay:
             if transaction_list is None:
                 raise ValueError("Cannot replay if no transactions are given")
@@ -1121,6 +1122,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
     block = Block(header, [], [], db=db)
     for addr, balance in start_alloc.iteritems():
         block.set_balance(addr, balance)
+    block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization
     # necessary)
