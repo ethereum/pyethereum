@@ -120,6 +120,12 @@ class Receipt(rlp.Serializable):
 class BlockHeader(rlp.Serializable):
     """A block header.
 
+    If the block with this header exists as an instance of :class:`Block`, the
+    connection can be made explicit by setting :attr:`BlockHeader.block`. Then,
+    :attr:`BlockHeader.state_root`, :attr:`BlockHeader.tx_list_root` and
+    :attr:`BlockHeader.receipts_root` always refer to the up-to-date value.
+
+    :ivar block: the corresponding block or `None`
     :ivar prevhash: the 32 byte hash of the previous block
     :ivar uncles_hash: the 32 byte hash of the RLP encoded list of uncle
                        headers
@@ -174,7 +180,50 @@ class BlockHeader(rlp.Serializable):
                  nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        self.block = None
         super(BlockHeader, self).__init__(**fields)
+
+    @property
+    def state_root(self):
+        if self.block:
+            return self.block.state_root
+        else:
+            return self._state_root
+
+    @state_root.setter
+    def state_root(self, value):
+        if self.block:
+            self.block.state_root = value
+        else:
+            self._state_root = value
+
+    @property
+    def tx_list_root(self):
+        if self.block:
+            return self.block.tx_list_root
+        else:
+            return self._tx_list_root
+
+    @tx_list_root.setter
+    def tx_list_root(self, value):
+        if self.block:
+            self.block.tx_list_root = value
+        else:
+            self._tx_list_root = value
+
+    @property
+    def receipts_root(self):
+        if self.block:
+            return self.block.receipts_root
+        else:
+            return self._receipts_root
+
+    @receipts_root.setter
+    def receipts_root(self, value):
+        if self.block:
+            self.block.receipts_root = value
+        else:
+            self._receipts_root = value
 
     @property
     def hash(self):
@@ -200,6 +249,32 @@ class BlockHeader(rlp.Serializable):
         return utils.big_endian_to_int(h) < 2 ** 256 / self.difficulty
 
 
+def mirror_from(source, attributes, only_getters=True):
+    """Decorator (factory) for classes that mirror some attributes from an
+    instance variable.
+    
+    :param source: the name of the instance variable to mirror from
+    :param attributes: list of attribute names to mirror
+    :param setters: if true getters but not setters are created
+    """
+    def decorator(cls):
+        for attribute in attributes:
+            def make_gs_etter(source, attribute):
+                def getter(self):
+                    return getattr(getattr(self, source), attribute)
+                def setter(self, value):
+                    setattr(getattr(self, source), attribute, value)
+                return getter, setter
+            getter, setter = make_gs_etter(source, attribute)
+            if only_getters:
+                setattr(cls, attribute, property(getter)) 
+            else:
+                setattr(cls, attribute, property(getter, setter)) 
+        return cls
+    return decorator
+
+
+@mirror_from('header', [field for field, _ in BlockHeader.fields])
 class TransientBlock(rlp.Serializable):
     """A read only, non persistent, not validated representation of a block.
 
@@ -221,6 +296,7 @@ class TransientBlock(rlp.Serializable):
     def __init__(self, header, transaction_list, uncles):
         super(TransientBlock, self).__init__(header, transaction_list, uncles)
 
+
     @property
     def hash(self):
         """The binary block hash
@@ -236,17 +312,6 @@ class TransientBlock(rlp.Serializable):
         """
         return self.hash.encode('hex')
 
-    @property
-    def header(self):
-        return BlockHeader(**{field: getattr(self, field)
-                              for field, _ in BlockHeader.fields})
-
-    @header.setter
-    def header(self, value):
-        # copy all fields from header to block
-        for field, _ in BlockHeader.fields:
-            setattr(self, field, getattr(value, field))
-
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.number,
                                              self.hash.encode('hex')[:8])
@@ -255,7 +320,10 @@ class TransientBlock(rlp.Serializable):
         return self.hash.encode('hex')
 
 
-class Block(TransientBlock):
+@mirror_from('header', set(field for field, _ in BlockHeader.fields) -
+                       set(['state_root', 'receipts_root', 'tx_list_root']),
+             only_getters=False)
+class Block(rlp.Serializable):
     """A block.
 
     :param header: the block header (whose instance variables are copied to
@@ -273,25 +341,19 @@ class Block(TransientBlock):
                          already known
     """
 
+    fields = [
+        ('header', BlockHeader),
+        ('transaction_list', CountableList(Transaction)),
+        ('uncles', CountableList(BlockHeader))
+    ]
+
     def __init__(self, header, transaction_list=[], uncles=[], db=None,
                  parent=None, force_replay=False):
         if not db:
             raise TypeError("No database object given")
         self.db = db
-
-        # initialize attributes from header (excluding trie roots and gas used
-        # which will be determined by replaying transactions later if
-        # necessary)
-        self.prevhash = header.prevhash
-        self.uncles_hash = header.uncles_hash
-        self.coinbase = header.coinbase
-        self.bloom = header.bloom
-        self.difficulty = header.difficulty
-        self.number = header.number
-        self.gas_limit = header.gas_limit
-        self.timestamp = header.timestamp
-        self.extra_data = header.extra_data
-        self.nonce = header.nonce
+        self.header = header
+        self.uncles = uncles
 
         self.uncles = uncles
         self.suicides = []
@@ -347,7 +409,7 @@ class Block(TransientBlock):
                 raise ValueError("Receipts root hash does not match")
         else:
             # trust the state root in the header
-            self.state = trie.Trie(self.db, header.state_root)
+            self.state = trie.Trie(self.db, header._state_root)
             self.transaction_count = 0
             self.gas_used = header.gas_used
             if transaction_list:
@@ -358,6 +420,9 @@ class Block(TransientBlock):
             self.receipts = trie.Trie(self.db, header.receipts_root)
         if self.transactions.root_hash != header.tx_list_root:
             raise ValueError("Transaction list root hash does not match")
+
+        # from now on, trie roots are stored in block instead of header
+        header.block = self
 
         if self.number > 0:
             self.ancestors = [self]
@@ -437,6 +502,21 @@ class Block(TransientBlock):
         # serialize and deserialize and check that the values didn't change
         l = Block.serialize(self)
         return rlp.decode(rlp.encode(l)) == l
+
+    @property
+    def hash(self):
+        """The binary block hash
+
+        This is equivalent to ``header.hash``.
+        """
+        return utils.sha3(rlp.encode(self.header))
+
+    def hex_hash(self):
+        """The hex encoded block hash.
+
+        This is equivalent to ``header.hex_hash().
+        """
+        return self.hash.encode('hex')
 
     @property
     def tx_list_root(self):
@@ -1007,6 +1087,8 @@ class Block(TransientBlock):
             self.state.db.put('difficulty:' + self.hash.encode('hex'),
                               utils.encode_int(o))
             return o
+
+            return rlp.decode(rlp.encode(l)) == l
 
     def __eq__(self, other):
         return isinstance(other, (Block, CachedBlock)) and  \
