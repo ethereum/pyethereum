@@ -75,9 +75,7 @@ class Index(object):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i in range(blk.transaction_count):
             i_enc = utils.encode_int(i)
-            # work on rlp data to avoid unnecessary de/serialization
-            td = blk.transactions.get(rlp.encode(i_enc))
-            tx = rlp.descend(td, 0)
+            tx = blk.transactions.get(rlp.encode(i_enc))
             key = utils.sha3(tx)
             value = rlp.encode([blk.hash, i_enc])
             self.db.put(key, value)
@@ -85,9 +83,9 @@ class Index(object):
     def get_transaction(self, txhash):
         "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
-        blk = blocks.Block.deserialize(self.db.get(blockhash))
+        blk = blocks.Block.deserialize(self.db, self.db.get(blockhash))
         num = utils.decode_int(tx_num_enc)
-        tx_data, msr, gas = blk.get_transaction(num)
+        tx_data = blk.get_transaction(num)
         return Transaction.create(tx_data), blk, num
 
     # children ##############
@@ -380,7 +378,7 @@ class ChainManager(StoppableLoopThread):
         blocks = []
         block = self.head
         if start:
-            if start in self.index.db:
+            if start not in self.index.db:
                 return []
             block = self.get(start)
             if not self.in_main_branch(block):
@@ -401,7 +399,8 @@ class ChainManager(StoppableLoopThread):
     def get_descendants(self, block, count=1):
         log.debug("get_descendants", block_hash=block)
         assert block.hash in self
-        block_numbers = range(block.number + 1, min(self.head.number, block.number + count))
+        block_numbers = range(block.number + 1, min(self.head.number + 1,
+                                                    block.number + count + 1))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
 
 
