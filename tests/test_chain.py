@@ -161,6 +161,7 @@ def test_genesis_db():
     assert blk == blk2
     assert blk != blk3
 
+
 def test_mine_block():
     k, v, k2, v2 = accounts()
     db = new_db()
@@ -335,6 +336,66 @@ def test_prevhash():
     cm = new_chainmanager()
     L1 = mine_next_block(cm.head)
     L1.get_ancestor_list(2)
+
+def test_genesis_chain():
+    k, v, k2, v2 = accounts()
+    db = new_db()
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
+    chain = get_chainmanager(db=blk.db, genesis=blk)
+
+    assert chain.has_block(blk.hash)
+    assert blk.hash in chain
+    assert chain.get(blk.hash) == blk
+    assert chain.head == blk
+    assert chain.get_children(blk) == []
+    assert chain.get_uncles(blk) == []
+    assert chain.get_chain() == [blk]
+    assert chain.get_chain(blk.hash) == [blk]
+    assert chain.get_descendants(blk, count=10) == []
+    assert chain.index.has_block_by_number(0)
+    assert not chain.index.has_block_by_number(1)
+    assert chain.index.get_block_by_number(0) == blk.hash
+    with pytest.raises(KeyError):
+        chain.index.get_block_by_number(1)
+
+def test_simple_chain():
+    k, v, k2, v2 = accounts()
+    blk = mkquickgenesis({v: utils.denoms.ether * 1})
+    store_block(blk)
+    chain = get_chainmanager(db=blk.db, genesis=blk)
+    tx = get_transaction()
+    blk2 = mine_next_block(blk, transactions=[tx])
+    store_block(blk2)
+    chain.add_block(blk2)
+
+    assert blk.hash in chain
+    assert blk2.hash in chain
+    assert chain.has_block(blk2.hash)
+    assert chain.get(blk2.hash) == blk2
+    assert chain.head == blk2
+    assert chain.get_children(blk) == [blk2]
+    assert chain.get_uncles(blk2) == []
+
+    assert chain.get_chain() == [blk2, blk]
+    assert chain.get_chain(count=0) == []
+    assert chain.get_chain(count=1) == [blk2]
+    assert chain.get_chain(count=2) == [blk2, blk]
+    assert chain.get_chain(count=100) == [blk2, blk]
+    assert chain.get_chain(blk.hash) == [blk]
+    assert chain.get_chain(blk.hash, 0) == []
+    assert chain.get_chain(blk2.hash) == [blk2, blk]
+    assert chain.get_chain(blk2.hash, 1) == [blk2]
+    assert chain.get_descendants(blk, count=10) == [blk2]
+    assert chain.get_descendants(blk, count=1) == [blk2]
+    assert chain.get_descendants(blk, count=0) == []
+
+    assert chain.index.has_block_by_number(1)
+    assert not chain.index.has_block_by_number(2)
+    assert chain.index.get_block_by_number(1) == blk2.hash
+    with pytest.raises(KeyError):
+        chain.index.get_block_by_number(2)
+    assert chain.index.get_transaction(tx.hash) == (tx, blk2, 0)
+
 
 def test_add_side_chain():
     """"
