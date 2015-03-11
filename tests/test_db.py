@@ -1,8 +1,9 @@
 import itertools
 import random
+import tempfile
 import pytest
-from pyethereum.db import EphemDB, DB
-from tests.utils import new_db
+from pyethereum.db import _EphemDB, _CodernityDB, _LevelDB
+from pyethereum.utils import db_path
 
 
 random.seed(0)
@@ -18,7 +19,7 @@ alt_content = {key: random_string(32) for key in content}
 
 
 def test_ephem():
-    db = EphemDB()
+    db = _EphemDB()
     for key in content:
         assert key not in db
         with pytest.raises(KeyError):
@@ -38,9 +39,13 @@ def test_ephem():
             db.get(key)
 
 
-def test_db():
-    db1 = new_db()
-    f = db1.dbfile
+@pytest.mark.parametrize('DB', [_CodernityDB, _LevelDB])
+def test_db(DB):
+    if DB is None:
+        pytest.xfail('DB not installed')
+    tempdir = tempfile.mktemp()
+    f = db_path(tempfile.mktemp())
+    db1 = DB(f)
     for key in content:
         assert key not in db1
         with pytest.raises(KeyError):
