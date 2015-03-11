@@ -480,12 +480,12 @@ def vm_execute(ext, msg, code):
             to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER
+            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
-                submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
                 call_msg = Message(msg.to, to, value, submsg_gas, cd, msg.depth + 1)
                 result, gas, data = ext.call(call_msg)
                 if result == 0:
@@ -496,6 +496,7 @@ def vm_execute(ext, msg, code):
                     for i in range(min(len(data), memoutsz)):
                         mem[memoutstart + i] = data[i]
             else:
+                compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
         elif op == 'CALLCODE':
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
@@ -504,14 +505,14 @@ def vm_execute(ext, msg, code):
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER
+            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                compustate.gas -= gas + extra_gas
+                compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)
-                submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, msg.depth + 1)
                 result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
                 if result == 0:
@@ -522,6 +523,7 @@ def vm_execute(ext, msg, code):
                     for i in range(min(len(data), memoutsz)):
                         mem[memoutstart + i] = data[i]
             else:
+                compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()

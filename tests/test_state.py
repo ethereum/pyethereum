@@ -46,6 +46,9 @@ else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'StateTests'))
     for filename, tests in fixtures.items():
+        if 'stQuadraticComplexityTest.json' in filename or \
+                'stMemoryStressTest.json' in filename:
+            continue
         for testname, testdata in tests.items():
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = gen_func(filename, testname, testdata)
