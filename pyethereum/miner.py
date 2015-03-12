@@ -24,7 +24,7 @@ class Miner():
         self.nonce = 0
         ts = max(int(time.time()), parent.timestamp + 1)
         self.block = blocks.Block.init_from_parent(parent, coinbase, timestamp=ts,
-                                                   uncles=[u.header for u in uncles])
+                                                   uncles=[u.header for u in uncles[:2]])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         log.debug('mining', block_number=self.block.number,

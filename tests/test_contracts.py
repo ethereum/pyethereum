@@ -1,3 +1,4 @@
+import bitcoin
 import os
 import pytest
 from pyethereum import tester, utils, abi
@@ -6,9 +7,6 @@ import serpent
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 tester.set_logging_level(2)
-
-gasprice = 0
-startgas = 10000
 
 
 # Test EVM contracts
@@ -52,6 +50,54 @@ def test_sixten():
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
+
+
+with_code = \
+    """
+def f1():
+    o = array(4)
+    with x = 5:
+        o[0] = x
+        with y = 7:
+            o[1] = y
+            with x = 8:
+                o[2] = x
+        o[3] = x
+    return(o:arr)
+
+
+def f2():
+    with x = 5:
+        with y = 7:
+            x = 2
+        return(x)
+
+def f3():
+    with x = 5:
+        with y = seq(x = 7, 2):
+            return(x)
+
+def f4():
+    o = array(4)
+    with x = 5:
+        o[0] = x
+        with y = 7:
+            o[1] = y
+            with x = x:
+                o[2] = x
+                with y = x:
+                    o[3] = y
+    return(o:arr)
+"""
+
+
+def test_with():
+    s = tester.state()
+    c = s.abi_contract(with_code)
+    assert c.f1() == [5, 7, 8, 5]
+    assert c.f2() == 2
+    assert c.f3() == 7
+    assert c.f4() == [5, 7, 5, 5]
 
 # Test Serpent's import mechanism
 
@@ -351,10 +397,11 @@ def mainloop(rounds):
     i = 0
     while i < rounds:
         i += 1
+        self.storage[i] = i
 
 def entry(rounds):
     self.storage[15] = 20
-    self.mainloop(rounds, gas=msg.gas - 100)
+    self.mainloop(rounds, gas=msg.gas - 600)
 
 def ping_ten():
     return(10)
@@ -371,10 +418,10 @@ def test_suicider():
     s = tester.state()
     c = s.abi_contract(suicider_code)
     prev_gas_limit = tester.gas_limit
-    tester.gas_limit = 8000
+    tester.gas_limit = 200000
     # Run normally: suicide processes, so the attempt to ping the
     # contract fails
-    c.entry(10)
+    c.entry(5)
     o2 = c.ping_ten()
     assert o2 is None
     c = s.abi_contract(suicider_code)
@@ -395,8 +442,8 @@ def test_suicider():
 
 reverter_code = '''
 def entry():
-    self.non_recurse(gas=7000)
-    self.recurse(gas=7000)
+    self.non_recurse(gas=100000)
+    self.recurse(gas=100000)
 
 def non_recurse():
     send(7, 9)
@@ -408,7 +455,8 @@ def recurse():
     self.storage[8081] = 4039
     self.storage[160161] = 2019
     self.recurse()
-    self.storage["waste_some_gas"] = 0
+    while msg.gas > 0:
+        self.storage["waste_some_gas"] = 0
 '''
 
 
@@ -926,10 +974,16 @@ def test_sdiv():
 
 basic_argcall_code = """
 def argcall(args:arr):
-    return(args[0] + args[1] * 10 + args[2] * 100)
+    log(1)
+    o = (args[0] + args[1] * 10 + args[2] * 100)
+    log(4)
+    return o
 
 def argkall(args:arr):
-    return self.argcall(args)
+    log(2)
+    o = self.argcall(args)
+    log(3)
+    return o
 """
 
 
@@ -974,7 +1028,8 @@ def sort(args:arr):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    h = self.sort(slice(h, items=0, items=hpos), outsz=hpos)
+    x = slice(h, items=0, items=hpos)
+    h = self.sort(x, outsz=hpos)
     l = self.sort(slice(l, items=0, items=lpos), outsz=lpos)
     o = array(len(args))
     i = 0
@@ -1129,6 +1184,31 @@ def test_types():
     s = tester.state()
     c = s.contract(type_code)
     assert utils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
+
+
+ecrecover_code = """
+def test_ecrecover(h, v, r, s):
+    return(ecrecover(h, v, r, s))
+"""
+
+
+def test_ecrecover():
+    s = tester.state()
+    c = s.abi_contract(ecrecover_code)
+
+    priv = utils.sha3('some big long brainwallet password').encode('hex')
+    pub = bitcoin.privtopub(priv)
+
+    msghash = utils.sha3('the quick brown fox jumps over the lazy dog').encode('hex')
+    V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
+    assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
+
+    addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
+    assert int(utils.privtoaddr(priv), 16) == addr
+
+    result = c.test_ecrecover(utils.big_endian_to_int(msghash.decode('hex')), V, R, S)
+    assert result == addr
+
 
 sha256_code = """
 def main():
@@ -1366,8 +1446,35 @@ def test_more_infinite_storage():
     assert c.test2() == [2, 2]
 
 
+double_array_code = """
+def foo(a:arr, b:arr):
+    i = 0
+    tot = 0
+    while i < len(a):
+        tot = tot * 10 + a[i]
+        i += 1
+    j = 0
+    tot2 = 0
+    while j < len(b):
+        tot2 = tot2 * 10 + b[j]
+        j += 1
+    return ([tot, tot2]:arr)
+
+def bar(a:arr, m:str, b:arr):
+    return(self.foo(a, b, outitems=2):arr)
+"""
+
+
+def test_double_array():
+    s = tester.state()
+    c = s.abi_contract(double_array_code)
+    assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
+    assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
+
+
 # test_evm = None
 # test_sixten = None
+# test_with = None
 # test_returnten = None
 # test_namecoin = None
 # test_inset = None
@@ -1408,3 +1515,4 @@ def test_more_infinite_storage():
 # test_saveload3 = None
 # test_string_manipulation = None
 # test_more_infinite_storage = None
+# test_double_array = None

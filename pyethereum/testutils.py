@@ -7,6 +7,8 @@ import copy
 from db import DB
 import json
 import os
+import time
+import ethash
 db = DB(utils.db_path(tempfile.mktemp()))
 
 env = {
@@ -20,12 +22,25 @@ env = {
 
 FILL = 1
 VERIFY = 2
-VM = 3
-STATE = 4
+TIME = 3
+VM = 4
+STATE = 5
 fill_vm_test = lambda params: run_vm_test(params, FILL)
 check_vm_test = lambda params: run_vm_test(params, VERIFY)
+time_vm_test = lambda params: run_vm_test(params, TIME)
 fill_state_test = lambda params: run_state_test(params, FILL)
 check_state_test = lambda params: run_state_test(params, VERIFY)
+time_state_test = lambda params: run_state_test(params, TIME)
+fill_ethash_test = lambda params: run_ethash_test(params, FILL)
+check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
+time_ethash_test = lambda params: run_ethash_test(params, TIME)
+
+
+def parse_int_or_hex(s):
+    if s[:2] == '0x':
+        return utils.big_endian_to_int(s[2:].decode('hex'))
+    else:
+        return int(s)
 
 
 def mktest(code, language, data=None, fun=None, args=None,
@@ -37,7 +52,7 @@ def mktest(code, language, data=None, fun=None, args=None,
         d = data or ''
     else:
         c = s.abi_contract(code, language=language)
-        d = c._translator.encode(fun, args) if fun else data
+        d = c._translator.encode(fun, args) if fun else (data or '')
         ca = c.address
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
@@ -48,7 +63,7 @@ def mktest(code, language, data=None, fun=None, args=None,
                 "value": str(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": '0x'+d.encode('hex'), "gasLimit": str(gas),
+        tx = {"data": '0x'+d.encode('hex'), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": str(1), "nonce": str(s.block.get_nonce(t.a0)),
               "secretKey": t.k0.encode('hex'), "to": ca, "value": str(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -69,7 +84,7 @@ def run_vm_test(params, mode):
                        number=int(env['currentNumber']),
                        coinbase=env['currentCoinbase'].decode('hex'),
                        difficulty=int(env['currentDifficulty']),
-                       gas_limit=int(env['currentGasLimit']),
+                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
@@ -148,12 +163,14 @@ def run_vm_test(params, mode):
 
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
                      vm.CallData([ord(x) for x in tx.data]))
+    time_pre = time.time()
     success, gas_remained, output = \
         vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
     pb.apply_msg = orig_apply_msg
     blk.commit_state()
     for s in blk.suicides:
         blk.del_account(s)
+    time_post = time.time()
 
     """
      generally expected that the test implementer will read env, exec and pre
@@ -173,7 +190,7 @@ def run_vm_test(params, mode):
 
     if mode == FILL:
         return params2
-    if mode == VERIFY:
+    elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in params1['post'].items():
@@ -187,6 +204,8 @@ def run_vm_test(params, mode):
                   'out', 'gas', 'logs', 'post']:
             assert params1.get(k, None) == params2.get(k, None), \
                 k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+    elif mode == TIME:
+        return time_post - time_pre
 
 
 # Fills up a vm test without post data, or runs the test
@@ -207,7 +226,7 @@ def run_state_test(params, mode):
                        number=int(env['currentNumber']),
                        coinbase=env['currentCoinbase'],
                        difficulty=int(env['currentDifficulty']),
-                       gas_limit=int(env['currentGasLimit']),
+                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
@@ -228,7 +247,7 @@ def run_state_test(params, mode):
     tx = transactions.Transaction(
         nonce=int(exek['nonce'] or "0"),
         gasprice=int(exek['gasPrice'] or "0"),
-        startgas=int(exek['gasLimit'] or "0"),
+        startgas=parse_int_or_hex(exek['gasLimit'] or "0"),
         to=(exek['to'][2:] if exek['to'][:2] == '0x' else exek['to']).decode('hex'),
         value=int(exek['value'] or "0"),
         data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
@@ -248,12 +267,15 @@ def run_state_test(params, mode):
 
     pb.apply_msg = apply_msg_wrapper
 
+    time_pre = time.time()
     try:
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
         success, output = False, ''
+        blk.commit_state()
         pass
+    time_post = time.time()
 
     if tx.to == '':
         output = blk.get_code(output)
@@ -263,12 +285,13 @@ def run_state_test(params, mode):
     params2 = copy.deepcopy(params)
     if success:
         params2['out'] = '0x' + output.encode('hex')
-        params2['post'] = blk.to_dict(True)['state']
+        params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
         params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
+        params2['postStateRoot'] = blk.state.root_hash.encode('hex')
 
     if mode == FILL:
         return params2
-    if mode == VERIFY:
+    elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in params1['post'].items():
@@ -279,9 +302,66 @@ def run_state_test(params, mode):
                 if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
-                  'out', 'gas', 'logs', 'post']:
-            assert params1.get(k, None) == params2.get(k, None), \
-                k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+                  'out', 'gas', 'logs', 'post', 'postStateRoot']:
+            if params1.get(k, None) != params2.get(k, None):
+                shouldbe = params1.get(k, None)
+                reallyis = params2.get(k, None)
+                raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
+
+    elif mode == TIME:
+        return time_post - time_pre
+
+
+def run_ethash_test(params, mode):
+    if 'header' not in params:
+        b = blocks.genesis(db)
+        b.seedhash = params['seed'].decode('hex')
+        b.nonce = params['nonce'].decode('hex')
+        b.number = params.get('number', 0)
+        params['header'] = b.serialize_header().encode('hex')
+    header = params['header'].decode('hex')
+    block = blocks.Block.init_from_header(db, header, transient=True)
+    header_hash = utils.sha3(block.serialize_header_without_nonce())
+    cache_size = ethash.get_cache_size(block.number)
+    full_size = ethash.get_full_size(block.number)
+    seed = block.seedhash
+    nonce = block.nonce
+    assert len(nonce) == 8
+    assert len(seed) == 32
+    t1 = time.time()
+    cache = ethash.mkcache(cache_size, seed)
+    t2 = time.time()
+    cache_hash = utils.sha3(ethash.serialize_cache(cache)).encode('hex')
+    t6 = time.time()
+    light_verify = ethash.hashimoto_light(full_size, cache, header_hash, nonce)
+    t7 = time.time()
+    # assert full_mine == light_mine
+    out = {
+        "seed": seed.encode('hex'),
+        "header_hash": header_hash.encode('hex'),
+        "nonce": nonce.encode('hex'),
+        "cache_size": cache_size,
+        "full_size": full_size,
+        "cache_hash": cache_hash,
+        "mixhash": light_verify["mixhash"].encode('hex'),
+        "result": light_verify["result"].encode('hex'),
+    }
+    if mode == FILL:
+        block.mixhash = light_verify["mixhash"]
+        params["header"] = block.serialize_header().encode('hex')
+        for k, v in out.items():
+            params[k] = v
+        return params
+    elif mode == VERIFY:
+        should, actual = block.mixhash, light_verify['mixhash']
+        assert should == actual, "Mismatch: mixhash %r %r" % (should, actual)
+        for k, v in out.items():
+            assert params[k] == v, "Mismatch: " + k + ' %r %r' % (params[k], v)
+    elif mode == TIME:
+        return {
+            "cache_gen": t2 - t1,
+            "verification_time": t7 - t6
+        }
 
 
 def get_tests_from_file_or_dir(dname, json_only=False):

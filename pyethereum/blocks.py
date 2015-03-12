@@ -2,13 +2,16 @@ import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
 import trie
+from trie import Trie
+from securetrie import SecureTrie
 import utils
-from utils import address, int64, trie_root, hash32
+from utils import address, int256, trie_root, hash32
 import processblock
 from transactions import Transaction
 import bloom
 import copy
 import sys
+import ethash, ethash_utils
 from repoze.lru import lru_cache
 from exceptions import *
 from pyethereum.slogging import get_logger
@@ -19,30 +22,36 @@ Log = processblock.Log
 
 
 # Genesis block difficulty
-GENESIS_DIFFICULTY = 2 ** 17
+GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = ("0" * 40).decode('hex')
-GENESIS_NONCE = utils.sha3(chr(42))
+GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
+GENESIS_SEEDHASH = '\x00' * 32
+GENESIS_MIXHASH = '\x00' * 32
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
 # Gas limit adjustment algo:
 # block.gas_limit = block.parent.gas_limit * 1023/1024 +
 #                   (block.gas_used * 6 / 5) / 1024
 GASLIMIT_EMA_FACTOR = 1024
+GASLIMIT_ADJMAX_FACTOR = 1024
 BLKLIM_FACTOR_NOM = 6
 BLKLIM_FACTOR_DEN = 5
 # Block reward
 BLOCK_REWARD = 1500 * utils.denoms.finney
 # GHOST constants
-UNCLE_REWARD = 15 * BLOCK_REWARD / 16
+UNCLE_DEPTH_PENALTY_FACTOR = 8
 NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 # Difficulty adjustment constants
-DIFF_ADJUSTMENT_CUTOFF = 5
-BLOCK_DIFF_FACTOR = 1024
+DIFF_ADJUSTMENT_CUTOFF = 8
+BLOCK_DIFF_FACTOR = 2048
+MIN_DIFF = 131072
+# PoW info
+POW_EPOCH_LENGTH = 30000
 
 
 class Account(rlp.Serializable):
@@ -100,7 +109,7 @@ class Receipt(rlp.Serializable):
     fields = [
         ('state_root', trie_root),
         ('gas_used', big_endian_int),
-        ('bloom', int64),
+        ('bloom', int256),
         ('logs', CountableList(processblock.Log))
     ]
 
@@ -154,14 +163,17 @@ class BlockHeader(rlp.Serializable):
         ('state_root', trie_root),
         ('tx_list_root', trie_root),
         ('receipts_root', trie_root),
-        ('bloom', int64),
+        ('bloom', int256),
         ('difficulty', big_endian_int),
         ('number', big_endian_int),
         ('gas_limit', big_endian_int),
         ('gas_used', big_endian_int),
         ('timestamp', big_endian_int),
         ('extra_data', binary),
-        ('nonce', Binary(32, allow_empty=True))
+        ('seedhash', binary),
+        ('mixhash', binary),
+        ('nonce', binary)
+        #('nonce', Binary(32, allow_empty=True))
     ]
 
     def __init__(self,
@@ -178,7 +190,9 @@ class BlockHeader(rlp.Serializable):
                  gas_used=0,
                  timestamp=0,
                  extra_data='',
-                 nonce=''):
+                 seedhash=GENESIS_SEEDHASH,
+                 mixhash=GENESIS_MIXHASH,
+                 nonce=GENESIS_NONCE):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().iteritems() if k != 'self'}
         self.block = None
@@ -235,7 +249,7 @@ class BlockHeader(rlp.Serializable):
         """The hex encoded block hash"""
         return self.hash.encode('hex')
 
-    def check_pow(self, nonce=None):
+    def check_pow(self, db, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
         :param nonce: if given the proof of work function will be evaluated
@@ -244,10 +258,26 @@ class BlockHeader(rlp.Serializable):
         :returns: `True` or `False`
         """
         nonce = nonce or self.nonce
-        rlp_Hn = rlp.encode(self, BlockHeader.exclude(['nonce']))
-        assert len(nonce) == 32
-        h = utils.sha3(utils.sha3(rlp_Hn) + nonce)
-        return utils.big_endian_to_int(h) < 2 ** 256 / self.difficulty
+        header_hash = utils.sha3(rlp.encode(self,
+                BlockHeader.exclude(['mixhash', 'nonce'])))
+        #assert len(nonce) == 32
+
+        # Prefetch future data now (so that we don't get interrupted later)
+        # TODO: separate thread
+        future_hash = get_next_seedhash(self.seedhash)
+        future_cache_size = ethash_utils.get_next_cache_size(self.number)
+        peck_cache(db, future_hash, future_cache_size)
+        # Grab current cache
+        current_cache_size = ethash_utils.get_cache_size(self.number)
+        cache = get_cache_memoized(db, self.seedhash, current_cache_size)
+        current_full_size = ethash_utils.get_full_size(self.number)
+        mining_output = ethash.hashimoto_light(current_full_size, cache,
+                                               header_hash, nonce)
+        diff = self.difficulty
+        if mining_output['mixhash'] != self.mixhash:
+            print 'phooey', mining_output['mixhash'], self.mixhash
+            return False
+        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
 
 def mirror_from(source, attributes, only_getters=True):
@@ -388,8 +418,8 @@ class Block(rlp.Serializable):
         if force_replay and transaction_list is None:
             raise ValueError("Cannot replay if no transactions are given")
 
-        self.transactions = trie.Trie(db, trie.BLANK_ROOT)
-        self.receipts = trie.Trie(self.db, trie.BLANK_ROOT)
+        self.transactions = Trie(db, trie.BLANK_ROOT)
+        self.receipts = Trie(self.db, trie.BLANK_ROOT)
         # replay if state is unknown or it is is explicitly requested
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
                  header.state_root != trie.BLANK_ROOT and  # TODO: correct?
@@ -399,7 +429,7 @@ class Block(rlp.Serializable):
                 raise ValueError("Cannot replay if no transactions are given")
             if not parent:
                 parent = self.get_parent()
-            self.state = trie.Trie(db, parent.state_root)
+            self.state = SecureTrie(Trie(db, parent.state_root))
             self.transaction_count = 0
             self.gas_used = 0
             # replay
@@ -414,7 +444,7 @@ class Block(rlp.Serializable):
                 raise ValueError("Receipts root hash does not match")
         else:
             # trust the state root in the header
-            self.state = trie.Trie(self.db, header._state_root)
+            self.state = SecureTrie(Trie(self.db, header._state_root))
             self.transaction_count = 0
             self.gas_used = header.gas_used
             if transaction_list:
@@ -422,7 +452,7 @@ class Block(rlp.Serializable):
                     self.add_transaction_to_list(tx)
             # receipts trie populated by add_transaction_to_list is incorrect
             # as it doesn't know intermediate states, so reset it
-            self.receipts = trie.Trie(self.db, header.receipts_root)
+            self.receipts = Trie(self.db, header.receipts_root)
         if self.transactions.root_hash != header.tx_list_root:
             raise ValueError("Transaction list root hash does not match")
 
@@ -444,8 +474,24 @@ class Block(rlp.Serializable):
         if not self.state.root_hash_valid():
             raise ValueError("State Merkle root of block %r not found in "
                              "database" % self)
-        if not self.is_genesis() and self.nonce and not self.header.check_pow():
+        if (not self.is_genesis() and self.nonce and
+                                  not self.header.check_pow(self.db)):
             raise ValueError("PoW check failed")
+
+        # Journaling cache for state tree updates
+        self.caches = {
+            'balance': {},
+            'nonce': {},
+            'code': {},
+            'all': {}
+        }
+        self.journal = []
+
+        self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
+
+
+        
+
 
         # make sure we are all on the same db
         assert self.state.db.db == self.transactions.db.db  == self.db.db
@@ -529,7 +575,7 @@ class Block(rlp.Serializable):
 
     @tx_list_root.setter
     def tx_list_root(self, value):
-        self.transactions = trie.Trie(self.db, value)
+        self.transactions = Trie(self.db, value)
 
     @property
     def receipts_root(self):
@@ -537,7 +583,7 @@ class Block(rlp.Serializable):
 
     @receipts_root.setter
     def receipts_root(self, value):
-        self.receipts = trie.Trie(self.db, value)
+        self.receipts = Trie(self.db, value)
 
     @property
     def state_root(self):
@@ -546,7 +592,7 @@ class Block(rlp.Serializable):
 
     @state_root.setter
     def state_root(self, value):
-        self.state = trie.Trie(self.db, value)
+        self.state = SecureTrie(Trie(self.db, value))
         self.reset_cache()
 
     @property
@@ -567,6 +613,8 @@ class Block(rlp.Serializable):
             * are not already included as uncles in the previous 6 blocks.
         """
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+            return False
+        if len(self.uncles) > 2:
             return False
         # Check uncle validity
         ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
@@ -816,7 +864,7 @@ class Block(rlp.Serializable):
         :param value: the new code
         """
         storage_root = self._get_acct_item(address, 'storage')
-        return trie.Trie(self.db, storage_root)
+        return SecureTrie(Trie(self.db, storage_root))
 
     def get_storage_data(self, address, index):
         """Get a specific item in the storage of an account.
@@ -854,6 +902,9 @@ class Block(rlp.Serializable):
             self.set_and_journal('all', address, True)
         self.set_and_journal(CACHE_KEY, index, value)
 
+    def account_exists(self, address):
+        return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
+
     def commit_state(self):
         """Put journaled account updates on the corresponding tries and clear
         the cache.
@@ -866,7 +917,7 @@ class Block(rlp.Serializable):
             acct = self.get_acct(address)
 
             # storage
-            t = trie.Trie(self.db, acct.storage)
+            t = SecureTrie(Trie(self.db, acct.storage))
             for k, v in self.caches.get('storage:' + address, {}).iteritems():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
@@ -921,7 +972,7 @@ class Block(rlp.Serializable):
         code = self.caches['code'].get(address, account.code)
         med_dict['code'] = '0x' + code.encode('hex')
 
-        storage_trie = trie.Trie(self.db, account.storage)
+        storage_trie = SecureTrie(Trie(self.db, account.storage))
         if with_storage_root:
             med_dict['storage_root'] = storage_trie.get_root_hash()  \
                                                    .encode('hex')
@@ -988,7 +1039,6 @@ class Block(rlp.Serializable):
         self.suicides = mysnapshot['suicides']
         while len(self.suicides) > mysnapshot['suicides_size']:
             self.suicides.pop()
-        print 'Popping logs: ', len(self.logs), ' to ', mysnapshot['logs_size']
         self.logs = mysnapshot['logs']
         while len(self.logs) > mysnapshot['logs_size']:
             self.logs.pop()
@@ -1003,7 +1053,10 @@ class Block(rlp.Serializable):
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
         for uncle in self.uncles:
-            self.delta_balance(uncle.coinbase, UNCLE_REWARD)
+            r = BLOCK_REWARD * \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle.number - self.number) \
+                / UNCLE_DEPTH_PENALTY_FACTOR
+            self.delta_balance(uncle.coinbase, r)
         self.commit_state()
 
     def to_dict(self, with_state=False, full_transactions=False,
@@ -1017,17 +1070,20 @@ class Block(rlp.Serializable):
                                    their storage roots
         :param with_uncles: include uncle hashes
         """
-        b = {}
-        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce'):
-            b[field] = '0x' + getattr(self, field).encode('hex')
+        # TODO: do this in header class
+        header = {}
+        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
+                      'seedhash', 'mixhash'):
+            header[field] = '0x' + getattr(self, field).encode('hex')
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
-            b[field] = getattr(self, field).encode('hex')
+            header[field] = getattr(self, field).encode('hex')
         for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
                       'timestamp'):
-            b[field] = str(getattr(self, field))
-        b['bloom'] = int64.serialize(self.bloom).encode('hex')
-        assert len(b) == len(BlockHeader.fields)
+            header[field] = str(getattr(self, field))
+        header['bloom'] = int256.serialize(self.bloom).encode('hex')
+        assert len(header) == len(BlockHeader.fields)
+        b = {"header": header}
 
         txlist = []
         for i, tx in enumerate(self.get_transactions()):
@@ -1042,7 +1098,7 @@ class Block(rlp.Serializable):
                 "medstate": receipt.state_root.encode('hex'),
                 "gas": str(receipt.gas_used),
                 "logs": [Log.serialize(log) for log in receipt.logs],
-                "bloom": utils.int64.serialize(receipt.bloom)
+                "bloom": utils.int256.serialize(receipt.bloom)
             })
         b["transactions"] = txlist
         if with_state:
@@ -1052,7 +1108,7 @@ class Block(rlp.Serializable):
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         if with_uncles:
-            b['uncles'] = [utils.sha3(rlp.encode(u)).encode('hex')
+            b['uncles'] = [self.__class__.deserialize_header(u)
                            for u in self.uncles]
         return b
 
@@ -1115,11 +1171,47 @@ class Block(rlp.Serializable):
         return self.hash.encode('hex')
 
 
-# Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
+    """Difficulry adjustment algo"""
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
-    return parent.difficulty + offset * sign
+    return max(parent.difficulty + offset * sign, MIN_DIFF)
+
+
+def calc_seedhash(parent):
+    """Seedhash incrementing algo"""
+    if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
+        return utils.sha3(parent.seedhash)
+    else:
+        return parent.seedhash
+
+
+def get_next_seedhash(h):
+    return utils.sha3(h)
+
+
+cache_cache = {}
+
+
+def peck_cache(db, seedhash, size):
+    key = 'cache:'+seedhash+','+str(size)
+    if key not in db:
+        cache = ethash.mkcache(size, seedhash)
+        cache_cache[key] = cache
+        cache_serialized = ethash_utils.serialize_cache(cache)
+        cache_hash = utils.sha3(cache_serialized)
+        db.put(cache_hash, cache_serialized)
+        db.put(key, cache_hash)
+    elif key not in cache_cache:
+        o = db.get(db.get(key))
+        cache_cache[key] = o
+        return ethash_utils.deserialize_cache(o)
+
+
+def get_cache_memoized(db, seedhash, size):
+    key = 'cache:'+seedhash+','+str(size)
+    peck_cache(db, seedhash, size)
+    return cache_cache[key]
 
 
 # Gas limit adjustment algo
@@ -1128,20 +1220,6 @@ def calc_gaslimit(parent):
     new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
-
-# Auxiliary value for must_equal error message
-aux = [None]
-
-
-def set_aux(auxval):
-    aux[0] = auxval
-
-
-def must_equal(what, a, b):
-    if a != b:
-        if aux[0]:
-            sys.stderr.write('%r' % aux[0])
-        raise VerificationFailed(what, a, '==', b)
 
 
 class CachedBlock(Block):
@@ -1189,7 +1267,6 @@ def get_block(db, blockhash):
 def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY):
     """Build the genesis block."""
     # https://ethereum.etherpad.mozilla.org/11
-    # TODO: check values
     header = BlockHeader(
         prevhash=GENESIS_PREVHASH,
         uncles_hash=utils.sha3(rlp.encode([])),
@@ -1204,11 +1281,28 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         gas_used=0,
         timestamp=0,
         extra_data='',
+        seedhash=GENESIS_SEEDHASH,
+        mixhash=GENESIS_MIXHASH,
         nonce=GENESIS_NONCE,
     )
     block = Block(header, [], [], db=db)
-    for addr, balance in start_alloc.iteritems():
-        block.set_balance(addr, balance)
+    for addr, data in start_alloc.iteritems():
+        if len(addr) == 40:
+            addr = addr.decode('hex')
+        assert len(addr) == 20
+        if 'wei' in data:
+            block.set_balance(addr, int(data['wei']))
+        if 'balance' in data:
+            block.set_balance(addr, int(data['balance']))
+        if 'code' in data:
+            block.set_code(addr, utils.scanners['bin'](data['code']))
+        if 'nonce' in data:
+            block.set_nonce(addr, int(data['nonce']))
+        if 'storage' in data:
+            for k, v in data['storage'].iteritems():
+                blk.set_storage_data(addr,
+                                     utils.big_endian_to_int(k[2:].decode('hex')),
+                                     utils.big_endian_to_int(v[2:].decode('hex')))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization
