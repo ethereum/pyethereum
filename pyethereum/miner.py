@@ -86,7 +86,7 @@ class Miner():
             l256 = utils.big_endian_to_int(h)
             if l256 < target:
                 self.block.nonce = nonce_bin
-                assert self.block.header.check_pow() is True
+                assert self.block.header.check_pow(self.block.db) is True
                 assert self.block.get_parent()
                 log.debug('nonce found', block_nonce=nonce,
                           block_hash=self.block.hash.encode('hex'))

@@ -70,13 +70,13 @@ def run_block_test(params):
         rlpdata = blk["rlp"][2:].decode('hex')
         if 'blockHeader' not in blk:
             try:
-                b2 = rlp.decode(rlpdata, db=e, parent=b)
+                b2 = rlp.decode(rlpdata, blocks.TransientBlock).solidify(e, b)
                 success = True
             except:
                 success = False
             assert not success
         else:
-            b2 = rlp.decode(rlpdata, db=e, parent=b)
+            b2 = rlp.decode(rlpdata, blocks.TransientBlock).solidify(e, b)
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
