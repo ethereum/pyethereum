@@ -5,6 +5,7 @@ import processblock
 import utils
 from pyethereum.slogging import get_logger
 log = get_logger('eth.miner')
+pyethash = None
 
 
 class Miner():
@@ -22,13 +23,17 @@ class Miner():
 
     def __init__(self, parent, uncles, coinbase):
         self.nonce = 0
+        self.db = parent.db
         ts = max(int(time.time()), parent.timestamp + 1)
-        self.block = blocks.Block.init_from_parent(parent, coinbase, timestamp=ts,
+        self.block = blocks.Block.init_from_parent(parent, coinbase, extra_data='', timestamp=ts,
                                                    uncles=[u.list_header() for u in uncles][:2])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         log.debug('mining', block_number=self.block.number, block_hash=self.block.hex_hash(),
                   block_difficulty=self.block.difficulty)
+        global pyethash
+        if not pyethash:
+            pyethash = __import__('pyethash')
 
     def add_transaction(self, transaction):
         old_state_root = self.block.state_root
@@ -74,12 +79,11 @@ class Miner():
             big-endian-encoded integer.
         """
 
-        nonce_bin_prefix = '\x00' * (32 - len(struct.pack('>q', 0)))
         target = 2 ** 256 / self.block.difficulty
         rlp_Hn = self.block.serialize_header_without_nonce()
 
         for nonce in range(self.nonce, self.nonce + steps):
-            nonce_bin = nonce_bin_prefix + struct.pack('>q', nonce)
+            nonce_bin = struct.pack('>q', nonce)
             # BE(SHA3(SHA3(RLP(Hn)) o n))
             h = utils.sha3(utils.sha3(rlp_Hn) + nonce_bin)
             l256 = utils.big_endian_to_int(h)

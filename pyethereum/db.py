@@ -187,3 +187,4 @@ class _EphemDB(object):
 
 DB = _LevelDB or _CodernityDB
 assert DB is not None
+EphemDB = _EphemDB

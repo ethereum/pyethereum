@@ -18,8 +18,8 @@ __TESTDATADIR = "../tests"
 
 tempdir = tempfile.mktemp()
 
-def new_chainmanager(genesis=None):
-    return get_chainmanager(db=new_db(), genesis=None)
+def new_chainmanager(db=None, genesis=None):
+    return get_chainmanager(db=db or new_db(), genesis=genesis)
 
 def get_chainmanager(db, genesis=None):
     # creates cm with db or new

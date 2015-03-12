@@ -91,7 +91,10 @@ for i, (name, typ, default) in enumerate(acct_structure):
 def calc_difficulty(parent, timestamp):
     offset = parent.difficulty / BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
-    return max(parent.difficulty + offset * sign, MIN_DIFF)
+    # If we enter a special mode where the genesis difficulty starts off below
+    # the minimal difficulty, we allow low-difficulty blocks (this will never
+    # happen in the official protocol)
+    return max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF))
 
 
 # Seedhash incrementing algo
@@ -217,6 +220,8 @@ def check_header_pow(header, db):
     if isinstance(header, str):
         header = rlp.decode(header)
     header_data = Block.deserialize_header(header)
+    if len(header_data['mixhash']) != 32 or len(header_data['nonce']) != 8:
+        raise Exception("Bad mixhash or nonce length")
     # exclude mixhash and nonce
     header_hash = utils.sha3(rlp.encode(header[:-2]))
     # Prefetch future data now (so that we don't get interrupted later)
@@ -232,7 +237,6 @@ def check_header_pow(header, db):
                                            header_hash, header_data['nonce'])
     diff = header_data['difficulty']
     if mining_output['mixhash'] != header_data['mixhash']:
-        print 'phooey', mining_output['mixhash'], header_data['mixhash']
         return False
     return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
@@ -454,8 +458,6 @@ class Block(object):
         block = Block.init_from_parent(self, kargs['coinbase'],
                                        extra_data=kargs['extra_data'],
                                        timestamp=kargs['timestamp'],
-                                       mixhash=kargs['mixhash'],
-                                       nonce=kargs['nonce'],
                                        uncles=uncles)
 
         # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
@@ -467,6 +469,7 @@ class Block(object):
         block.finalize()
 
         block.uncles_hash = kargs['uncles_hash']
+        block.mixhash = kargs['mixhash']
         block.nonce = kargs['nonce']
 
         # checks
@@ -579,11 +582,14 @@ class Block(object):
     def _list_transactions(self):
         txlist = []
         for i in range(self.transaction_count):
-            txlist.append(self.get_transaction(i))
+            txlist.append(self._get_transaction(i))
         return txlist
 
-    def get_transaction(self, num):
+    def _get_transaction(self, num):
         return rlp.decode(self.transactions.get(rlp.encode(utils.encode_int(num))))
+
+    def get_transaction(self, num):
+        return transactions.Transaction.create(self._get_transaction(num))
 
     def get_transactions(self):
         return [transactions.Transaction.create(tx) for
@@ -876,6 +882,10 @@ class Block(object):
     def hash(self):
         return self._hash()
 
+    @property
+    def mining_hash(self):
+        return utils.sha3(rlp.encode(self.list_header()[:-2]))
+
     def hex_hash(self):
         return self.hash.encode('hex')
 
@@ -930,7 +940,7 @@ class Block(object):
 
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, mixhash, nonce, extra_data='',
+    def init_from_parent(cls, parent, coinbase, extra_data='',
                          timestamp=int(time.time()), uncles=[]):
         b = Block(
             db=parent.db,
@@ -942,7 +952,7 @@ class Block(object):
             receipts_root=trie.BLANK_ROOT,
             bloom=0,
             difficulty=calc_difficulty(parent, timestamp),
-            mixhash=mixhash,
+            mixhash='',
             number=parent.number + 1,
             gas_limit=calc_gaslimit(parent),
             gas_used=0,
