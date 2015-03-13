@@ -281,6 +281,7 @@ class Block(object):
         self.suicides = []
         self.logs = []
         self.refunds = 0
+        self.ether_delta = 0
         self.transient = transient
         # Journaling cache for state tree updates
         self.caches = {
@@ -743,7 +744,8 @@ class Block(object):
             'suicides_size': len(self.suicides),
             'logs_size': len(self.logs),
             'journal': self.journal,  # pointer to reference, so is not static
-            'journal_size': len(self.journal)
+            'journal_size': len(self.journal),
+            'ether_delta': self.ether_delta
         }
 
     def revert(self, mysnapshot):
@@ -767,6 +769,7 @@ class Block(object):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self.ether_delta = mysnapshot['ether_delta']
 
     def finalize(self):
         """
@@ -777,12 +780,14 @@ class Block(object):
         """
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
+        self.ether_delta += BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles)
         for uncle_rlp in self.uncles:
             uncle_data = Block.deserialize_header(uncle_rlp)
             r = BLOCK_REWARD * \
                 (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
             self.delta_balance(uncle_data['coinbase'], r)
+            self.ether_delta += r
         self.commit_state()
 
     def serialize_header_without_nonce(self):
