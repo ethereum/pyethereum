@@ -12,14 +12,15 @@ import json
 import os
 import tempfile
 import pyethereum.utils as utils
+import pyethereum.testutils as testutils
 from pyethereum.db import DB as DB
 from pyethereum.config import get_default_config as _get_default_config
 __TESTDATADIR = "../tests"
 
 tempdir = tempfile.mktemp()
 
-def new_chainmanager(genesis=None):
-    return get_chainmanager(db=new_db(), genesis=None)
+def new_chainmanager(db=None, genesis=None):
+    return get_chainmanager(db=db or new_db(), genesis=genesis)
 
 def get_chainmanager(db, genesis=None):
     # creates cm with db or new

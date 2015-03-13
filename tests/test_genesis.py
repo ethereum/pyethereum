@@ -20,7 +20,7 @@ def genesis_fixture():
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
     # FIXME: assert that link is uptodate
-    for k in ('genesis_rlp_hex', 'genesis_state_root', 'genesis_hash', 'initial_alloc'):
+    for k in ('genesis_rlp_hex', 'genesis_state_root', 'genesis_hash'):
         assert k in genesis_fixture
     return genesis_fixture
 
@@ -33,7 +33,7 @@ def test_genesis_state_root(genesis_fixture):
 def test_genesis_initial_alloc(genesis_fixture):
     genesis = blocks.genesis(new_db())
     for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
-        assert genesis.get_balance(k) == v
+        assert genesis.get_balance(k) == v.get("balance", 0) or v.get("wei", 0)
 
 
 def test_genesis_hash(genesis_fixture):

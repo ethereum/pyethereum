@@ -4,7 +4,7 @@ from operator import attrgetter
 from dispatch import receiver
 from stoppable import StoppableLoopThread
 import signals
-from db import DB
+from db import DB, EphemDB
 import utils
 import rlp
 import blocks
@@ -82,7 +82,7 @@ class Index(object):
         blk = blocks.Block.deserialize(self.db, self.db.get(blockhash))
         num = utils.decode_int(tx_num_enc)
         tx_data = blk.get_transaction(num)
-        return Transaction.create(tx_data), blk, num
+        return tx_data, blk, num
 
     # children ##############
 
@@ -91,7 +91,7 @@ class Index(object):
 
     def add_child(self, parent_hash, child_hash):
         # only efficient for few children per block
-        children = self.get_children(parent_hash) + [child_hash]
+        children = list(set(self.get_children(parent_hash) + [child_hash]))
         assert children.count(child_hash) == 1
         self.db.put(self._child_db_key(parent_hash), rlp.encode(children))
 
@@ -228,6 +228,7 @@ class ChainManager(StoppableLoopThread):
 
     def receive_chain(self, transient_blocks, peer=None):
         with self.lock:
+            _db = EphemDB()
             old_head = self.head
             # assuming to receive chain order w/ oldest block first
             transient_blocks.sort(key=attrgetter('number'))
@@ -238,7 +239,7 @@ class ChainManager(StoppableLoopThread):
 
             for t_block in transient_blocks:  # oldest to newest
                 log.debug('Checking PoW', block_hash=t_block.hash)
-                if not t_block.header.check_pow():
+                if not t_block.header.check_pow(_db):
                     log.debug('Invalid PoW', block_hash=t_block.hash)
                     continue
                 log.debug('Deserializing', block_hash=t_block.hash)
@@ -299,8 +300,9 @@ class ChainManager(StoppableLoopThread):
             return False
 
         # check PoW and forward asap in order to avoid stale blocks
-        if not len(block.nonce) == 32:
+        if not len(block.nonce) == 8:
             _log.debug('nonce not set')
+            raise Exception("qwrqwr")
             return False
         elif not block.header.check_pow(block.nonce) and\
                 not block.is_genesis():
@@ -329,6 +331,7 @@ class ChainManager(StoppableLoopThread):
         self._store_block(block)
 
         # set to head if this makes the longest chain w/ most work for that number
+        print 'new block', block.chain_difficulty(), self.head.chain_difficulty()
         if block.chain_difficulty() > self.head.chain_difficulty():
             _log.debug('new head')
             self._update_head(block)

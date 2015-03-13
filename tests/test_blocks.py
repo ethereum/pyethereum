@@ -1,4 +1,5 @@
 from pyethereum import blocks, utils, db
+from pyethereum.exceptions import VerificationFailed
 import rlp
 
 import pytest, os, sys
@@ -70,13 +71,13 @@ def run_block_test(params):
         rlpdata = blk["rlp"][2:].decode('hex')
         if 'blockHeader' not in blk:
             try:
-                b2 = rlp.decode(rlpdata, blocks.TransientBlock).solidify(e, b)
+                b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except:
+            except ValueError, VerificationFailed:
                 success = False
             assert not success
         else:
-            b2 = rlp.decode(rlpdata, blocks.TransientBlock).solidify(e, b)
+            b2 = rlp.decode(rlpdata, block.Block, parent=b, db=e)
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
@@ -86,10 +87,6 @@ def run_block_test(params):
         # assert blk["uncleHeader"] == \
         #     [translate_keys(u, translator_list, lambda x: x, [])
         #      for u in blkdict["uncles"]]
-
-
-def gen_func(filename, testname, testdata):
-    return lambda: do_test_block(filename, testname, testdata)
 
 
 def do_test_block(filename, testname=None, testdata=None, limit=99999999):
@@ -116,4 +113,4 @@ else:
     for filename, tests in fixtures.items():
         for testname, testdata in tests.items()[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = gen_func(filename, testname, testdata)
+            globals()[func_name] = lambda: do_test_block(filename, testname, testdata)

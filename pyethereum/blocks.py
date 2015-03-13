@@ -53,24 +53,37 @@ MIN_DIFF = 131072
 # PoW info
 POW_EPOCH_LENGTH = 30000
 
+
+# Difficulty adjustment algo
+def calc_difficulty(parent, timestamp):
+    offset = parent.difficulty / BLOCK_DIFF_FACTOR
+    sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
+    # If we enter a special mode where the genesis difficulty starts off below
+    # the minimal difficulty, we allow low-difficulty blocks (this will never
+    # happen in the official protocol)
+    return max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF))
+
+
 # Auxiliary value for must_* error messages
 aux = [None]
 
 def set_aux(auxval):
     aux[0] = auxval
 
-def must(what, f, symb, a, b, obj):
+def must(what, f, symb, a, b):
     if not f(a, b):
-        raise VerificationError(obj, what, a, symb, b)
+        if aux[0]:
+            sys.stderr.write('%r' % aux[0])
+        raise VerificationFailed(what, a, symb, b)
 
-def must_equal(what, a, b, obj):
-    return must(what, lambda x, y: x == y, "==", a, b, obj)
+def must_equal(what, a, b):
+    return must(what, lambda x, y: x == y, "==", a, b)
 
 def must_ge(what, a, b):
-    return must(what, lambda x, y: x >= y, ">=", a, b, obj)
+    return must(what, lambda x, y: x >= y, ">=", a, b)
 
-def must_le(what, a, b, obj):
-    return must(what, lambda x, y: x <= y, "<=", a, b, obj)
+def must_le(what, a, b):
+    return must(what, lambda x, y: x <= y, "<=", a, b)
 
 
 class Account(rlp.Serializable):
@@ -280,9 +293,11 @@ class BlockHeader(rlp.Serializable):
         if not db:
             assert self.block is not None
             db = self.block.db
+        if len(self.mixhash) != 32 or len(self.nonce) != 8:
+            raise ValueError("Bad mixhash or nonce length")
+        # exclude mixhash and nonce
         header_hash = utils.sha3(rlp.encode(self,
                 BlockHeader.exclude(['mixhash', 'nonce'])))
-        #assert len(nonce) == 32
 
         # Prefetch future data now (so that we don't get interrupted later)
         # TODO: separate thread
@@ -297,7 +312,6 @@ class BlockHeader(rlp.Serializable):
                                                header_hash, nonce)
         diff = self.difficulty
         if mining_output['mixhash'] != self.mixhash:
-            print 'phooey', mining_output['mixhash'], self.mixhash
             return False
         return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
@@ -416,6 +430,9 @@ class Block(rlp.Serializable):
         self.suicides = []
         self.logs = []
         self.refunds = 0
+
+        self.ether_delta = 0
+
         # Journaling cache for state tree updates
         self.caches = {
             'balance': {},
@@ -537,8 +554,8 @@ class Block(rlp.Serializable):
         return cls(header, None, [], db=db)
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, mixhash, nonce='',
-                         extra_data='', timestamp=int(time.time()), uncles=[]):
+    def init_from_parent(cls, parent, coinbase, nonce='', extra_data='',
+                         timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
 
         The block will not include any transactions, will not be finalized and
@@ -552,6 +569,7 @@ class Block(rlp.Serializable):
                              receipts_root=trie.BLANK_ROOT,
                              bloom=0,
                              difficulty=calc_difficulty(parent, timestamp),
+                             mixhash='',
                              number=parent.number + 1,
                              gas_limit=calc_gaslimit(parent),
                              gas_used=0,
@@ -766,7 +784,6 @@ class Block(rlp.Serializable):
         """Get the `num`th transaction in this block."""
         index = rlp.encode(num)
         return rlp.decode(self.transactions.get(index), Transaction)
-
 
     def get_transactions(self):
         """Build a list of all transactions in this block."""
@@ -1032,7 +1049,8 @@ class Block(rlp.Serializable):
             'suicides_size': len(self.suicides),
             'logs_size': len(self.logs),
             'journal': self.journal,  # pointer to reference, so is not static
-            'journal_size': len(self.journal)
+            'journal_size': len(self.journal),
+            'ether_delta': self.ether_delta
         }
 
     def revert(self, mysnapshot):
@@ -1061,16 +1079,20 @@ class Block(rlp.Serializable):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self.ether_delta = mysnapshot['ether_delta']
 
     def finalize(self):
         """Apply rewards and commit."""
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
+        self.ether_delta += BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles)
+
         for uncle in self.uncles:
             r = BLOCK_REWARD * \
                 (UNCLE_DEPTH_PENALTY_FACTOR + uncle.number - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
             self.delta_balance(uncle.coinbase, r)
+            self.ether_delta += r
         self.commit_state()
 
     def to_dict(self, with_state=False, full_transactions=False,
@@ -1125,6 +1147,14 @@ class Block(rlp.Serializable):
             b['uncles'] = [self.__class__.deserialize_header(u)
                            for u in self.uncles]
         return b
+
+    @property
+    def mining_hash(self):
+        return utils.sha3(rlp.encode(self.header,
+                                     BlockHeader(['nonce', 'mixhash'])))
+
+    def hex_hash(self):
+        return self.hash.encode('hex')
 
     def get_parent(self):
         """Get the parent of this block."""
@@ -1183,13 +1213,6 @@ class Block(rlp.Serializable):
 
     def __structlog__(self):
         return self.hash.encode('hex')
-
-
-def calc_difficulty(parent, timestamp):
-    """Difficulry adjustment algo"""
-    offset = parent.difficulty / BLOCK_DIFF_FACTOR
-    sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
-    return max(parent.difficulty + offset * sign, MIN_DIFF)
 
 
 def calc_seedhash(parent):

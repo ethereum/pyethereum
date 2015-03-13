@@ -218,13 +218,12 @@ def run_state_test(params, mode):
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
-    env['currentCoinbase'] = env['currentCoinbase'].decode('hex')
 
     # setup env
     header = blocks.BlockHeader(
                        prevhash=env['previousHash'].decode('hex'),
                        number=int(env['currentNumber']),
-                       coinbase=env['currentCoinbase'],
+                       coinbase=env['currentCoinbase'].decode('hex'),
                        difficulty=int(env['currentDifficulty']),
                        gas_limit=parse_int_or_hex(env['currentGasLimit']),
                        timestamp=int(env['currentTimestamp']))

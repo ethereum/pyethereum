@@ -8,12 +8,19 @@ import rlp
 import pyethereum.trie as trie
 import pyethereum.miner as miner
 import pyethereum.utils as utils
-from pyethereum.db import DB as DB
+import pyethereum.ethash as ethash
+import pyethereum.ethash_utils as ethash_utils
+from pyethereum.db import DB, EphemDB
 from tests.utils import new_db, new_config, get_chainmanager, new_chainmanager
 
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging('eth.vm:trace,eth.vm.memory:info')
+
+db = EphemDB()
+
+blocks.peck_cache(db, '\x00' * 32, ethash_utils.get_cache_size(0))
+blocks.peck_cache(db, utils.sha3('\x00' * 32), ethash_utils.get_next_cache_size(0))
 
 
 @pytest.fixture(scope="module")
@@ -27,28 +34,45 @@ def accounts():
 
 @pytest.fixture(scope="module")
 def mkgenesis(initial_alloc={}):
-    return blocks.genesis(new_db(), initial_alloc)
+    return blocks.genesis(db, initial_alloc, difficulty=1)
 
-def mkquickgenesis(initial_alloc={}):
+
+def mkquickgenesis(initial_alloc={}, db=db):
     "set INITIAL_DIFFICULTY to a value that is quickly minable"
-    return blocks.genesis(new_db(), initial_alloc, difficulty=2 ** 16)
+    return blocks.genesis(db, initial_alloc, difficulty=1)
+
 
 def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
     # advance one block
     coinbase = coinbase or parent.coinbase
-    m = miner.Miner(parent, uncles=uncles, coinbase=coinbase)
-    for tx in transactions:
-        m.add_transaction(tx)
-    blk = m.mine(steps=1000 ** 2)
-    assert blk is not False, "Mining failed. Use mkquickgenesis!"
-    return blk
+    b = blocks.Block.init_from_parent(parent, coinbase=coinbase, uncles=uncles)
+    for t in transactions:
+        try:
+            processblock.apply_transaction(b, t)
+        except:
+            pass
+    b.finalize()
+    sz = ethash_utils.get_cache_size(b.number)
+    cache = blocks.get_cache_memoized(db, b.seedhash, sz)
+    fsz = ethash_utils.get_full_size(b.number)
+    while 1:
+        n = (utils.big_endian_to_int(b.nonce) + 1) % 2**64
+        b.nonce = utils.zpad(utils.int_to_big_endian(n), 8)
+        o = ethash.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
+        b.mixhash = o["mixhash"]
+        if utils.big_endian_to_int(o["result"]) <= 2**256 / b.difficulty:
+            break
+        else:
+            raise Exception("lol: "+str(b.difficulty))
+    assert b.header.check_pow()
+    return b
 
 
 @pytest.fixture(scope="module")
 def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
-        nonce, gasprice, startgas=10000,
+        nonce, gasprice, startgas=100000,
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
@@ -76,7 +100,7 @@ def test_db():
 def test_transfer():
     db = new_db()
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
     value = 42
@@ -89,15 +113,16 @@ def test_transfer():
 def test_failing_transfer():
     db = new_db()
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
-    value =  utils.denoms.ether * 2
+    value = utils.denoms.ether * 2
     # should fail
     success = blk.transfer_value(v, v2, value)
     assert not success
     assert blk.get_balance(v) == b_v
     assert blk.get_balance(v2) == b_v2
+
 
 def test_transient_block():
     db = new_db()
@@ -107,11 +132,10 @@ def test_transient_block():
     assert blk.number == tb_blk.number
 
 
-
 def test_genesis():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     sr = blk.state_root
     assert blk.state.db.db == db.db
     db.put(blk.hash, rlp.encode(blk))
@@ -119,15 +143,16 @@ def test_genesis():
     assert sr in db
     db.commit()
     assert sr in db
-    blk2 = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
     db = new_db()
-    blk2 = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
+
 
 def test_deserialize():
     k, v, k2, v2 = accounts()
@@ -149,14 +174,14 @@ def test_deserialize_commit():
 def test_genesis_db():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
-    blk2 = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
     db = new_db()
-    blk2 = blocks.genesis(db, {v: {'wei': utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     blk3 = blocks.genesis(db)
     assert blk == blk2
     assert blk != blk3
@@ -164,8 +189,7 @@ def test_genesis_db():
 
 def test_mine_block():
     k, v, k2, v2 = accounts()
-    db = new_db()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     blk2 = mine_next_block(blk, coinbase=v)
     store_block(blk2)
@@ -177,8 +201,7 @@ def test_mine_block():
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     # mine two blocks
-    db = new_db()
-    a_blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    a_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(a_blk)
     tx = get_transaction()
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
@@ -187,7 +210,6 @@ def test_mine_block_with_transaction():
 
 def test_block_serialization_with_transaction_empty_genesis():
     k, v, k2, v2 = accounts()
-    db = new_db()
     a_blk = mkquickgenesis({})
     store_block(a_blk)
     tx = get_transaction(gasprice=10)  # must fail, as there is no balance
@@ -197,8 +219,7 @@ def test_block_serialization_with_transaction_empty_genesis():
 
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
-    db = new_db()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
@@ -217,7 +238,7 @@ def test_mine_block_with_transaction():
 
 def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     db = blk.db
     assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, db=db).hash
     store_block(blk)
@@ -250,7 +271,7 @@ def test_block_serialization_with_transaction_other_db():
 
     k, v, k2, v2 = accounts()
     # mine two blocks
-    a_blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    a_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(a_blk)
     tx = get_transaction()
     logger.debug('a: state_root before tx %r' % hx(a_blk.state_root))
@@ -263,7 +284,7 @@ def test_block_serialization_with_transaction_other_db():
     assert tx in a_blk2.get_transactions()
     logger.debug('preparing receiving chain ---------------------')
     # receive in other db
-    b_blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    b_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(b_blk)
 
     assert b_blk.number == 0
@@ -284,7 +305,7 @@ def test_block_serialization_with_transaction_other_db():
 def test_transaction():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     blk = mine_next_block(blk)
     tx = get_transaction()
@@ -306,7 +327,7 @@ def test_transaction_serialization():
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
@@ -318,7 +339,7 @@ def test_mine_block_with_transaction():
 def test_invalid_transaction():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = mkquickgenesis({v2: utils.denoms.ether * 1})
+    blk = mkquickgenesis({v2: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
@@ -326,15 +347,17 @@ def test_invalid_transaction():
     assert blk.get_balance(v2) == utils.denoms.ether * 1
     assert tx not in blk.get_transactions()
 
+
 def test_prevhash():
-    cm = new_chainmanager()
+    cm = new_chainmanager(db, mkquickgenesis({}))
     L1 = mine_next_block(cm.head)
     L1.get_ancestor_list(2)
+
 
 def test_genesis_chain():
     k, v, k2, v2 = accounts()
     db = new_db()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     chain = get_chainmanager(db=blk.db, genesis=blk)
 
     assert chain.has_block(blk.hash)
@@ -352,9 +375,10 @@ def test_genesis_chain():
     with pytest.raises(KeyError):
         chain.index.get_block_by_number(1)
 
+
 def test_simple_chain():
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     chain = get_chainmanager(db=blk.db, genesis=blk)
     tx = get_transaction()
@@ -399,15 +423,15 @@ def test_add_side_chain():
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
-    R0 = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    R0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(R0)
     tx0 = get_transaction(nonce=0)
     R1 = mine_next_block(R0, transactions=[tx0])
     store_block(R1)
-    assert tx0 in R1.get_transactions()
+    assert tx0.hash in [x.hash for x in R1.get_transactions()]
 
     # Local: mine two blocks
-    L0 = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    L0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     cm = get_chainmanager(db=L0.db, genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])
@@ -430,7 +454,7 @@ def test_add_longer_side_chain():
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
-    blk = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     remote_blocks = [blk]
     for i in range(3):
@@ -439,7 +463,8 @@ def test_add_longer_side_chain():
         store_block(blk)
         remote_blocks.append(blk)
     # Local: mine two blocks
-    L0 = mkquickgenesis({v: {'wei': utils.denoms.ether * 1}})
+    e = EphemDB()
+    L0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=e)
     cm = get_chainmanager(db=L0.db, genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])
@@ -478,13 +503,13 @@ def test_reward_uncles():
     assert cm.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     assert cm.head.get_balance(uncle_coinbase) == 0
     # next block should reward uncles
-    blk2 = mine_next_block(blk1, uncles=[uncle], coinbase=local_coinbase)
+    blk2 = mine_next_block(blk1, uncles=[uncle.list_header()], coinbase=local_coinbase)
     cm.add_block(blk2)
     assert blk2.get_parent().prevhash == uncle.prevhash
     assert blk2 == cm.head
     assert cm.head.get_balance(local_coinbase) == \
         2 * blocks.BLOCK_REWARD + blocks.NEPHEW_REWARD
-    assert cm.head.get_balance(uncle_coinbase) == blocks.UNCLE_REWARD
+    assert cm.head.get_balance(uncle_coinbase) == blocks.BLOCK_REWARD * 7 / 8
 
 
 # TODO ##########################################
@@ -492,3 +517,30 @@ def test_reward_uncles():
 # test for remote block with invalid transaction
 # test for multiple transactions from same address received
 #    in arbitrary order mined in the same block
+
+
+# test_db = None
+# test_transfer = None
+# test_failing_transfer = None
+# test_transient_block = None
+# test_genesis = None
+# test_deserialize = None
+# test_deserialize_commit = None
+# test_genesis_db = None
+# test_mine_block = None
+# test_mine_block_with_transaction = None
+# test_block_serialization_with_transaction_empty_genesis = None
+# test_mine_block_with_transaction = None
+# test_block_serialization_same_db = None
+# test_block_serialization_other_db = None
+# test_block_serialization_with_transaction_other_db = None
+# test_transaction = None
+# test_transaction_serialization = None
+# test_mine_block_with_transaction = None
+# test_invalid_transaction = None
+# test_prevhash = None
+# test_genesis_chain = None
+# test_simple_chain = None
+# test_add_side_chain = None
+# test_add_longer_side_chain = None
+# test_reward_uncles = None
