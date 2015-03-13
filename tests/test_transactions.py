@@ -1,9 +1,3 @@
-"""
-also use json tx tests
-https://github.com/ethereum/tests/wiki/Transaction-Tests
-
-"""
-
 import pytest
 import pyethereum.processblock as processblock
 import pyethereum.opcodes as opcodes
@@ -11,8 +5,12 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import rlp
+import pyethereum.testutils as testutils
 from tests.utils import new_db
 import serpent
+import sys
+import json
+import os
 
 from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -21,62 +19,48 @@ logger = get_logger()
 configure_logging(':trace')
 
 
-@pytest.fixture(scope="module")
-def accounts():
-    k = utils.sha3('cow')
-    v = utils.privtoaddr(k)
-    k2 = utils.sha3('horse')
-    v2 = utils.privtoaddr(k2)
-    return k, v, k2, v2
+def run_test(filename, testname, testdata):
+    rlpdata = testdata["rlp"][2:].decode('hex')
+    o = {}
+    try:
+        tx = transactions.Transaction.deserialize(rlpdata)
+        o["sender"] = tx.sender
+        o["transaction"] = {
+            "data": '0x' * (len(tx.data) > 0) + tx.data.encode('hex'),
+            "gasLimit": str(tx.startgas),
+            "gasPrice": str(tx.gasprice),
+            "nonce": str(tx.nonce),
+            "r": '0x'+utils.zpad(utils.int_to_big_endian(tx.r), 32).encode('hex'),
+            "s": '0x'+utils.zpad(utils.int_to_big_endian(tx.s), 32).encode('hex'),
+            "v": str(tx.v),
+            "value": str(tx.value),
+            "to": str(tx.to),
+        }
+    except:
+        pass
+    assert o.get("transaction", None) == testdata.get("transaction", None)
+    assert o.get("sender", None) == testdata.get("sender", None)
 
 
-@pytest.fixture(scope="module")
-def mkgenesis(initial_alloc={}):
-    return blocks.genesis(new_db(), initial_alloc)
-
-
-@pytest.fixture(scope="module")
-def get_transaction(gasprice=0, nonce=0):
-    k, v, k2, v2 = accounts()
-    tx = transactions.Transaction(
-        nonce, gasprice, startgas=55000,
-        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
-    return tx
-
-
-namecoin_code =\
-    '''
-def register(k, v):
-    if !self.storage[k]:
-        self.storage[k] = v
-        return(1)
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        # read fixture from stdin
+        fixtures = {'stdin': json.load(sys.stdin)}
     else:
-        return(0)
-'''
-
-
-def test_gas_deduction():
-    k, v, k2, v2 = accounts()
-    blk = blocks.genesis(new_db(), {v: {"balance": utils.denoms.ether * 1}})
-    v_old_balance = blk.get_balance(v)
-    assert blk.get_balance(blk.coinbase) == 0
-    gasprice = 1
-    startgas = 55000
-    code1 = serpent.compile(namecoin_code)
-    tx1 = transactions.contract(0, gasprice, startgas, 0, code1).sign(k)
-    success, addr = processblock.apply_transaction(blk, tx1)
-    assert success
-    assert blk.coinbase != v
-    assert v_old_balance > blk.get_balance(v)
-    assert v_old_balance == blk.get_balance(v) + blk.get_balance(blk.coinbase)
-    intrinsic_gas_used = opcodes.GTXCOST
-    intrinsic_gas_used += opcodes.GTXDATAZERO * tx1.data.count(chr(0))
-    intrinsic_gas_used += opcodes.GTXDATANONZERO * (len(tx1.data) - tx1.data.count(chr(0)))
-    assert v_old_balance - blk.get_balance(v) >= intrinsic_gas_used * gasprice
-
-
-# TODO ##########################################
-#
-# test for remote block with invalid transaction
-# test for multiple transactions from same address received
-#    in arbitrary order mined in the same block
+        # load fixtures from specified file or dir
+        fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
+    for filename, tests in fixtures.items():
+        for testname, testdata in tests.items():
+            if len(sys.argv) < 3 or testname == sys.argv[2]:
+                print "Testing: %s %s" % (filename, testname)
+                testutils.check_state_test(testdata)
+else:
+    fixtures = testutils.get_tests_from_file_or_dir(
+        os.path.join('fixtures', 'TransactionTests'))
+    for filename, tests in fixtures.items():
+        if 'stQuadraticComplexityTest.json' in filename or \
+                'stMemoryStressTest.json' in filename:
+            continue
+        for testname, testdata in tests.items():
+            func_name = 'test_%s_%s' % (filename, testname)
+            globals()[func_name] = lambda: run_test(filename, testname, testdata)

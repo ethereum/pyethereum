@@ -88,10 +88,6 @@ def run_block_test(params):
         #      for u in blkdict["uncles"]]
 
 
-def gen_func(filename, testname, testdata):
-    return lambda: do_test_block(filename, testname, testdata)
-
-
 def do_test_block(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
     run_block_test(testdata)
@@ -116,4 +112,4 @@ else:
     for filename, tests in fixtures.items():
         for testname, testdata in tests.items()[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = gen_func(filename, testname, testdata)
+            globals()[func_name] = lambda: do_test_block(filename, testname, testdata)

@@ -14,12 +14,7 @@ else:
     sys.argv.remove('--notrace')
 
 
-# SETUP TESTS IN GLOBAL NAME SPACE
-def gen_func(filename, testname, testdata):
-    return lambda: do_test_vm(filename, testname, testdata)
-
-
-def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
+def do_test_state(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
     testutils.check_state_test(testdata)
 
@@ -31,15 +26,9 @@ if __name__ == '__main__':
     else:
         # load fixtures from specified file or dir
         fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
-    if len(sys.argv) >= 3:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
-                if testname == sys.argv[2]:
-                    print "Testing: %s %s" % (filename, testname)
-                    testutils.check_state_test(testdata)
-    else:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
+    for filename, tests in fixtures.items():
+        for testname, testdata in tests.items():
+            if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print "Testing: %s %s" % (filename, testname)
                 testutils.check_state_test(testdata)
 else:
@@ -51,4 +40,4 @@ else:
             continue
         for testname, testdata in tests.items():
             func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = gen_func(filename, testname, testdata)
+            globals()[func_name] = lambda: do_test_state(filename, testname, testdata)
