@@ -3,7 +3,7 @@ import json
 import sys
 import time
 import rlp
-from rlp.sedes import CountableList, Binary
+from rlp.sedes import CountableList, binary
 import opcodes
 import utils
 import blocks
@@ -49,7 +49,7 @@ class Log(rlp.Serializable):
     fields = [
         ('address', utils.address),
         ('topics', CountableList(utils.int32)),
-        ('data', Binary)
+        ('data', binary)
     ]
 
     def bloomables(self):

@@ -155,7 +155,7 @@ class Receipt(rlp.Serializable):
     @property
     def bloom(self):
         bloomables = [x.bloomables() for x in self.logs]
-        return bloom.bloom_from_list(bloomables)
+        return bloom.bloom_from_list(utils.flatten(bloomables))
 
 
 class BlockHeader(rlp.Serializable):
@@ -464,8 +464,16 @@ class Block(rlp.Serializable):
                 raise ValueError("Block's difficulty is inconsistent with its "
                                  "parent's difficulty")
 
+        header_values = {
+            'gas_used': header.gas_used,
+            'timestamp': header.timestamp,
+            'difficulty': header.difficulty,
+            'uncles_hash': header.uncles_hash,
+            'bloom': header.bloom,
+        }
+
         self.transactions = Trie(db, trie.BLANK_ROOT)
-        self.receipts = Trie(self.db, trie.BLANK_ROOT)
+        self.receipts = Trie(db, trie.BLANK_ROOT)
         # replay transactions if state is unknown
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
                  header.state_root != trie.BLANK_ROOT and  # TODO: correct?
@@ -476,8 +484,6 @@ class Block(rlp.Serializable):
                 parent = self.get_parent()
             self.state = SecureTrie(Trie(db, parent.state_root))
             self.transaction_count = 0
-            header_values = {
-                'gas_used': header.gas_used}
             gas_used_header = header.gas_used
             self.gas_used = 0
             # replay
@@ -485,34 +491,6 @@ class Block(rlp.Serializable):
                 success, output = processblock.apply_transaction(self, tx)
             self.finalize()
 
-            # checks
-            set_aux(self.to_dict())
-            must_equal('prev_hash', self.prevhash, parent.hash)
-            must_equal('gas_used', header_values['gas_used'], self.gas_used)
-            must_ge('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
-                            GASLIMIT_ADJMAX_FACTOR)
-            must_le('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
-                            GASLIMIT_ADJMAX_FACTOR)
-            must_equal('timestamp', self.timestamp, header_values['timestamp'])
-            must_equal('difficulty', self.difficulty, header_values['difficulty'])
-            must_equal('uncles', )
-            assert header.block is None
-            must_equal('state_root', self.state.root_hash, header.state_root)
-            must_equal('tx_list_root', self.transactions.root_hash,
-                       header.tx_list_root)
-            must_equal('receipts_root', self.receipts.root_hash,
-                       header.receipts_root)
-            must_equal('bloom', self.bloom, original_values['bloom'])
-            set_aux(None)
-
-            if self.gas_used != header.gas_used:
-                raise ValueError("Gas used does not match")
-            if self.state_root != header.state_root:
-                raise ValueError("State root hash does not match")
-            if self.receipts_root != header.receipts_root:
-                raise ValueError("Receipts root hash does not match")
         else:
             # trust the state root in the header
             self.state = SecureTrie(Trie(self.db, header._state_root))
@@ -525,6 +503,30 @@ class Block(rlp.Serializable):
             # receipts trie populated by add_transaction_to_list is incorrect
             # (it doesn't know intermediate states), so reset it
             self.receipts = Trie(self.db, header.receipts_root)
+
+        # checks
+        set_aux(self.to_dict())
+        if parent:
+            must_equal('prev_hash', self.prevhash, parent.hash)
+            must_ge('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+            must_le('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+        must_equal('gas_used', header_values['gas_used'], self.gas_used)
+        must_equal('timestamp', self.timestamp, header_values['timestamp'])
+        must_equal('difficulty', self.difficulty, header_values['difficulty'])
+        must_equal('uncles_hash', utils.sha3(rlp.encode(uncles)),
+                    header_values['uncles_hash'])
+        assert header.block is None
+        must_equal('state_root', self.state.root_hash, header.state_root)
+        must_equal('tx_list_root', self.transactions.root_hash,
+                    header.tx_list_root)
+        must_equal('receipts_root', self.receipts.root_hash,
+                    header.receipts_root)
+        must_equal('bloom', self.bloom, header_values['bloom'])
+        set_aux(None)
 
         # from now on, trie roots refer to block instead of header
         header.block = self
@@ -626,6 +628,10 @@ class Block(rlp.Serializable):
     def state_root(self, value):
         self.state = SecureTrie(Trie(self.db, value))
         self.reset_cache()
+
+    @property
+    def uncles_hash(self):
+        return utils.sha3(rlp.encode(self.uncles))
 
     @property
     def transaction_list(self):
@@ -764,8 +770,7 @@ class Block(rlp.Serializable):
 
     def mk_transaction_receipt(self, tx):
         """Create a receipt for a transaction."""
-        return Receipt(self.state_root, self.gas_used, tx.logs,
-                       tx.log_bloom())
+        return Receipt(self.state_root, self.gas_used, self.logs)
 
     def add_transaction_to_list(self, tx):
         """Add a transaction to the transaction trie.

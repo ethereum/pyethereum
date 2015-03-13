@@ -40,6 +40,7 @@ class Transaction(rlp.Serializable):
 
     def __init__(self, nonce, gasprice, startgas, to, value, data,
                  v=0, r=0, s=0):
+        assert len(to) == 20
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)
         self.logs = []

@@ -73,7 +73,7 @@ def run_block_test(params):
             try:
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except ValueError, VerificationFailed:
+            except (ValueError, VerificationFailed):
                 success = False
             assert not success
         else:
