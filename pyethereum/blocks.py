@@ -268,7 +268,7 @@ class BlockHeader(rlp.Serializable):
         """The hex encoded block hash"""
         return self.hash.encode('hex')
 
-    def check_pow(self, db, nonce=None):
+    def check_pow(self, db=None, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
         :param nonce: if given the proof of work function will be evaluated
@@ -277,6 +277,9 @@ class BlockHeader(rlp.Serializable):
         :returns: `True` or `False`
         """
         nonce = nonce or self.nonce
+        if not db:
+            assert self.block is not None
+            db = self.block.db
         header_hash = utils.sha3(rlp.encode(self,
                 BlockHeader.exclude(['mixhash', 'nonce'])))
         #assert len(nonce) == 32
@@ -346,52 +349,6 @@ class TransientBlock(rlp.Serializable):
     def __init__(self, header, transaction_list, uncles):
         super(TransientBlock, self).__init__(header, transaction_list, uncles)
 
-    def solidify(self, db, parent=None):
-        # TODO: rename
-        block = Block(self.header, self.transaction_list, self.uncles, db)
-        assert len(block.state_root) == 32
-        if tb.state_root in db:
-            return Block(self.header, self.transaction_list, self.uncles, db)
-        elif tb.prevhash == GENESIS_PREVHASH:
-            assert parent is None
-            return Block(self.header, self.transaction_list, self.uncles, db)
-        else:
-            # we don't know the state and its not the genesis block, so we need
-            # to replay transactions
-            if not parent:
-                parent = block.get_parent()
-            block = Block.init_from_parent(parent, tb.coinbase, tb.extra_data,
-                                           tb.timestamp, tb.mixhash, tb.nonce,
-                                           tb.uncles)
-            for tx in tb.transaction_list:
-                success, output = processblock.apply_transaction(block, tx)
-            block.finalize()
-
-            set_aux(block.to_dict())
-            must_equal('prev_hash', block.prevhash, parent.hash)
-            must_equal('gas_used', block.gas_used, self.gas_used)
-            must_ge('gas_limit', self.gas_limit,
-                    (parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
-                     (GASLIMIT_ADJMAX_FACTOR)))
-            must_le('gas_limit', self.gas_limit,
-                    (parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) /
-                     GASLIMIT_ADJMAX_FACTOR))
-            must_equal('timestamp', block.timestamp, self.timestamp)
-            must_equal('difficulty', block.difficulty, self.difficulty)
-            must_equal('number', block.number, self.number)
-            must_equal('extra_data', block.extra_data, self.extra_data)
-            must_equal('uncles', block.uncles_hash, self.uncles_hash)
-            must_equal('state_root', block.state.root_hash, self.state_root)
-            must_equal('tx_list_root', block.tx_list_root, self.tx_list_root)
-            must_equal('bloom', block.bloom, self.bloom)
-            must_equal('receipts_root', block.receipts.root_hash,
-                       self.receipts_root)
-            set_aux(None)
-            if not block.header.check_pow(db):
-                raise VerificationFailed('invalid nonce')
-
-            return block
-
     @property
     def hash(self):
         """The binary block hash
@@ -446,8 +403,9 @@ class Block(rlp.Serializable):
         ('uncles', CountableList(BlockHeader))
     ]
 
+
     def __init__(self, header, transaction_list=[], uncles=[], db=None,
-                 parent=None, force_replay=False):
+                 parent=None):
         if not db:
             raise TypeError("No database object given")
         self.db = db
@@ -458,28 +416,6 @@ class Block(rlp.Serializable):
         self.suicides = []
         self.logs = []
         self.refunds = 0
-        self.reset_cache()
-        self.journal = []
-
-        self.transactions = Trie(db, header.tx_list_root)
-        self.receipts = Trie(self.db, header.receipts_root)
-        self.state = SecureTrie(Trie(self.db, header.state_root))
-
-        # add transactions to the database
-        self.transaction_count = 0
-        self.gas_used = header.gas_used
-        if transaction_list:
-            for tx in transaction_list:
-                self.add_transaction_to_list(tx)
-
-        # from now on, trie roots are stored in block instead of header
-        header.block = self
-
-        if self.number > 0:
-            self.ancestors = [self]
-        else:
-            self.ancestors = [self] + [None] * 256
-
         # Journaling cache for state tree updates
         self.caches = {
             'balance': {},
@@ -488,11 +424,107 @@ class Block(rlp.Serializable):
             'all': {}
         }
         self.journal = []
+        if self.number > 0:
+            self.ancestors = [self]
+        else:
+            self.ancestors = [self] + [None] * 256
 
-        self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
+        # do some consistency checks on parent if given
+        if parent:
+            if self.db != parent.db:
+                raise ValueError("Parent lives in different database")
+            if self.prevhash != parent.header.hash:
+                raise ValueError("Block's prevhash and parent's hash do not "
+                                 "match")
+            if self.number != parent.header.number + 1:
+                raise ValueError("Block's number is not the successor of its "
+                                 "parent number")
+            if self.gas_limit != calc_gaslimit(parent):
+                # TODO: do we need to raise an error?
+                raise ValueError("Block's gaslimit is inconsistent with its "
+                                 "parent's gaslimit")
+            if self.difficulty != calc_difficulty(parent, self.timestamp):
+                raise ValueError("Block's difficulty is inconsistent with its "
+                                 "parent's difficulty")
 
-        # make sure we are all on the same db
-        assert self.state.db.db == self.transactions.db.db  == self.db.db
+        self.transactions = Trie(db, trie.BLANK_ROOT)
+        self.receipts = Trie(self.db, trie.BLANK_ROOT)
+        # replay transactions if state is unknown
+        state_unknown = (header.prevhash != GENESIS_PREVHASH and
+                 header.state_root != trie.BLANK_ROOT and  # TODO: correct?
+                 (len(header.state_root) != 32 or header.state_root not in db))
+        if state_unknown:
+            assert transaction_list is not None
+            if not parent:
+                parent = self.get_parent()
+            self.state = SecureTrie(Trie(db, parent.state_root))
+            self.transaction_count = 0
+            header_values = {
+                'gas_used': header.gas_used}
+            gas_used_header = header.gas_used
+            self.gas_used = 0
+            # replay
+            for tx in transaction_list:
+                success, output = processblock.apply_transaction(self, tx)
+            self.finalize()
+
+            # checks
+            set_aux(self.to_dict())
+            must_equal('prev_hash', self.prevhash, parent.hash)
+            must_equal('gas_used', header_values['gas_used'], self.gas_used)
+            must_ge('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+            must_le('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+            must_equal('timestamp', self.timestamp, header_values['timestamp'])
+            must_equal('difficulty', self.difficulty, header_values['difficulty'])
+            must_equal('uncles', )
+            assert header.block is None
+            must_equal('state_root', self.state.root_hash, header.state_root)
+            must_equal('tx_list_root', self.transactions.root_hash,
+                       header.tx_list_root)
+            must_equal('receipts_root', self.receipts.root_hash,
+                       header.receipts_root)
+            must_equal('bloom', self.bloom, original_values['bloom'])
+            set_aux(None)
+
+            if self.gas_used != header.gas_used:
+                raise ValueError("Gas used does not match")
+            if self.state_root != header.state_root:
+                raise ValueError("State root hash does not match")
+            if self.receipts_root != header.receipts_root:
+                raise ValueError("Receipts root hash does not match")
+        else:
+            # trust the state root in the header
+            self.state = SecureTrie(Trie(self.db, header._state_root))
+            self.transaction_count = 0
+            if transaction_list:
+                for tx in transaction_list:
+                    self.add_transaction_to_list(tx)
+            if self.transactions.root_hash != header.tx_list_root:
+                raise ValueError("Transaction list root hash does not match")
+            # receipts trie populated by add_transaction_to_list is incorrect
+            # (it doesn't know intermediate states), so reset it
+            self.receipts = Trie(self.db, header.receipts_root)
+
+        # from now on, trie roots refer to block instead of header
+        header.block = self
+
+        # Basic consistency verifications
+        if not self.check_fields():
+            raise ValueError("Block is invalid")
+        if len(self.header.extra_data) > 1024:
+            raise ValueError("Extra data cannot exceed 1024 bytes")
+        if self.header.coinbase == '':
+            raise ValueError("Coinbase cannot be empty address")
+        if not self.state.root_hash_valid():
+            raise ValueError("State Merkle root of block %r not found in "
+                             "database" % self)
+        if (not self.is_genesis() and self.nonce and
+                                  not self.header.check_pow(self.db)):
+            raise ValueError("PoW check failed")
 
     @classmethod
     def init_from_header(cls, header_rlp, db):
@@ -505,18 +537,12 @@ class Block(rlp.Serializable):
         return cls(header, None, [], db=db)
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, extra_data='',
-                         timestamp=int(time.time()), nonce='', uncles=[]):
+    def init_from_parent(cls, parent, coinbase, mixhash, nonce='',
+                         extra_data='', timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
 
         The block will not include any transactions, will not be finalized and
         will not have a valid nonce.
-
-        :param parent: the parent block
-        :param coinbase: the 20 bytes coinbase address
-        :param extra_data: up to 1024 bytes of additional data
-        :param timestamp: a UNIX timestamp
-        :param uncles: a list of the headers of the uncles of this block
         """
         header = BlockHeader(prevhash=parent.hash,
                              uncles_hash=utils.sha3(rlp.encode(uncles)),
