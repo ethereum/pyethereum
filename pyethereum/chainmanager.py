@@ -1,5 +1,4 @@
 import time
-import os
 from operator import attrgetter
 from dispatch import receiver
 from stoppable import StoppableLoopThread
@@ -10,97 +9,19 @@ import rlp
 import blocks
 import processblock
 import peermanager
-import config
 from transactions import Transaction
 from miner import Miner
 from synchronizer import Synchronizer
 from peer import MAX_GET_CHAIN_SEND_HASHES
 from peer import MAX_GET_CHAIN_REQUEST_BLOCKS
 from pyethereum.slogging import get_logger
-log = get_logger('eth.chain')
+from chain import Chain
+log = get_logger('eth.chainmgr')
 
 
 rlp_hash_hex = lambda data: utils.sha3(rlp.encode(data)).encode('hex')
 
 NUM_BLOCKS_PER_REQUEST = 256  # MAX_GET_CHAIN_REQUEST_BLOCKS
-
-
-class Index(object):
-
-    """"
-    Collection of indexes
-
-    children:
-        - needed to get the uncles of a block
-    blocknumbers:
-        - needed to mark the longest chain (path to top)
-    transactions:
-        - optional to resolve txhash to block:tx
-
-    """
-
-    def __init__(self, db, index_transactions=True):
-        self.db = db
-        self._index_transactions = index_transactions
-
-    def add_block(self, blk):
-        self.add_child(blk.prevhash, blk.hash)
-        if self._index_transactions:
-            self._add_transactions(blk)
-
-    # block by number #########
-    def _block_by_number_key(self, number):
-        return 'blocknumber:%d' % number
-
-    def update_blocknumbers(self, blk):
-        "start from head and update until the existing indices match the block"
-        while True:
-            self.db.put(self._block_by_number_key(blk.number), blk.hash)
-            if blk.number == 0:
-                break
-            blk = blk.get_parent()
-            if self.has_block_by_number(blk.number) and \
-                    self.get_block_by_number(blk.number) == blk.hash:
-                break
-
-    def has_block_by_number(self, number):
-        return self._block_by_number_key(number) in self.db
-
-    def get_block_by_number(self, number):
-        "returns block hash"
-        return self.db.get(self._block_by_number_key(number))
-
-    # transactions #############
-    def _add_transactions(self, blk):
-        "'tx_hash' -> 'rlp([blockhash,tx_number])"
-        for i, tx in enumerate(blk.get_transactions()):
-            self.db.put(tx.hash, rlp.encode([blk.hash, i]))
-
-    def get_transaction(self, txhash):
-        "return (tx, block, index)"
-        blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
-        blk = blocks.Block.deserialize(self.db, self.db.get(blockhash))
-        num = utils.decode_int(tx_num_enc)
-        tx_data = blk.get_transaction(num)
-        return tx_data, blk, num
-
-    # children ##############
-
-    def _child_db_key(self, blk_hash):
-        return 'ci:' + blk_hash
-
-    def add_child(self, parent_hash, child_hash):
-        # only efficient for few children per block
-        children = list(set(self.get_children(parent_hash) + [child_hash]))
-        assert children.count(child_hash) == 1
-        self.db.put(self._child_db_key(parent_hash), rlp.encode(children))
-
-    def get_children(self, blk_hash):
-        "returns block hashes"
-        key = self._child_db_key(blk_hash)
-        if key in self.db:
-            return rlp.decode(self.db.get(key))
-        return []
 
 
 class ChainManager(StoppableLoopThread):
@@ -110,10 +31,9 @@ class ChainManager(StoppableLoopThread):
     """
 
     # initialized after configure:
+    chain = None
     genesis = None
-    index = None
     miner = None
-    blockchain = None
     synchronizer = None
     config = None
 
@@ -121,69 +41,21 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
 
     def configure(self, config, genesis=None, db=None):
-        self.config = config
+        config = config
         if not db:
             db_path = utils.db_path(config.get('misc', 'data_dir'))
             log.info('opening chain', db_path=db_path)
-            db = self.blockchain = DB(db_path)
-        self.blockchain = db
-        self.index = Index(db)
-        if genesis:
-            self._initialize_blockchain(genesis)
-        log.debug('chain @', head_hash=self.head)
-        self.genesis = blocks.genesis(db=db)
-        log.debug('got genesis', genesis_hash=self.genesis)
+            db = DB(db_path)
+        self.chain = Chain(db, genesis, new_head_cb=self._on_new_head)
         self.new_miner()
         self.synchronizer = Synchronizer(self)
 
-    def _initialize_blockchain(self, genesis=None):
-        log.info('Initializing new chain')
-        if not genesis:
-            genesis = blocks.genesis(self.blockchain)
-            log.info('new genesis', genesis_hash=genesis)
-            self.index.add_block(genesis)
-        self._store_block(genesis)
-        assert genesis == blocks.get_block(self.blockchain, genesis.hash)
-        self._update_head(genesis)
-        assert genesis.hash in self
-
-    @property
-    def head(self):
-        if not self.config:
-            self.configure(config.read_config())
-        if not self.blockchain or 'HEAD' not in self.blockchain:
-            self._initialize_blockchain()
-        ptr = self.blockchain.get('HEAD')
-        return blocks.get_block(self.blockchain, ptr)
-
-    def _update_head(self, block):
-        if not block.is_genesis():
-            assert self.head.chain_difficulty() < block.chain_difficulty()
-            if block.get_parent() != self.head:
-                log.debug('New Head is on a different branch', head_hash=block, old_head_hash=self.head)
-        self.blockchain.put('HEAD', block.hash)
-        self.index.update_blocknumbers(self.head)
+    def _on_new_head(self, block):
         self.new_miner()  # reset mining
-
-    def get(self, blockhash):
-        assert isinstance(blockhash, str)
-        assert len(blockhash) == 32
-        return blocks.get_block(self.blockchain, blockhash)
-
-    def has_block(self, blockhash):
-        assert isinstance(blockhash, str)
-        assert len(blockhash) == 32
-        return blockhash in self.blockchain
-
-    def __contains__(self, blockhash):
-        return self.has_block(blockhash)
-
-    def _store_block(self, block):
-        self.blockchain.put(block.hash, rlp.encode(block))
-
-    def commit(self):
-        self.blockchain.commit()
-
+        # if we are not syncing, forward all blocks
+        if not self.synchronizer.synchronization_tasks:
+            log.debug("broadcasting new head", block=block)
+            signals.broadcast_new_block.send(sender=None, block=block)
 
     def loop_body(self):
         ts = time.time()
@@ -198,20 +70,22 @@ class ChainManager(StoppableLoopThread):
 
     def new_miner(self):
         "new miner is initialized if HEAD is updated"
+        if not self.config:
+            return # not configured yet
+
         # prepare uncles
-        uncles = set(self.get_uncles(self.head))
-        ineligible = set()  # hashes
-        blk = self.head
+        uncles = set(self.chain.get_uncles(self.chain.head))
+        blk = self.chain.head
         for i in range(8):
             for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
                 if u in self:
-                    uncles.discard(self.get(u))
+                    uncles.discard(self.chain.get(u))
             if blk.has_parent():
                 blk = blk.get_parent()
 
         coinbase = self.config.get('wallet', 'coinbase').decode('hex')
-        miner = Miner(self.head, uncles, coinbase)
+        miner = Miner(self.chain.head, uncles, coinbase)
         if self.miner:
             for tx in self.miner.get_transactions():
                 miner.add_transaction(tx)
@@ -222,14 +96,13 @@ class ChainManager(StoppableLoopThread):
             block = self.miner.mine()
             if block:
                 # create new block
-                if not self.add_block(block, forward=True):
+                if not self.chain.add_block(block):
                     log.debug("newly mined block is invalid!?", block_hash=block)
                     self.new_miner()
 
     def receive_chain(self, transient_blocks, peer=None):
         with self.lock:
             _db = EphemDB()
-            old_head = self.head
             # assuming to receive chain order w/ oldest block first
             transient_blocks.sort(key=attrgetter('number'))
             assert transient_blocks[0].number <= transient_blocks[-1].number
@@ -245,7 +118,7 @@ class ChainManager(StoppableLoopThread):
                 log.debug('Deserializing', block_hash=t_block.hash)
                 try:
                     block = blocks.Block.init_from_transient(t_block,
-                                                             self.blockchain)
+                                                             self.chain.db)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
@@ -261,7 +134,7 @@ class ChainManager(StoppableLoopThread):
                             peer.send_Disconnect(reason='Wrong genesis block')
                     else:  # should be a single newly mined block
                         assert t_block.prevhash not in self
-                        assert t_block.prevhash != self.genesis.hash
+                        assert t_block.prevhash != self.chain.genesis.hash
                         log.debug('unknown parent', block_hash=t_block,
                                   parent_hash=t_block.prevhash.encode('hex'), remote_id=peer)
                         if len(transient_blocks) != 1:
@@ -277,86 +150,14 @@ class ChainManager(StoppableLoopThread):
                             self.synchronizer.synchronize_unknown_block(
                                 peer, transient_blocks[-1].hash)
                     break
-                if block.hash in self:
+                if block.hash in self.chain:
                     log.debug('known', block_hash=block)
                 else:
                     assert block.has_parent()
                     # assume single block is newly mined block
-                    forward = len(transient_blocks) == 1
-                    success = self.add_block(block, forward=forward)
+                    success = self.chain.add_block(block)
                     if success:
                         log.debug('added', block_hash=block)
-
-    def add_block(self, block, forward=False):
-        "returns True if block was added sucessfully"
-        _log = log.bind(block_hash=block)
-        # make sure we know the parent
-        if not block.has_parent() and not block.is_genesis():
-            _log.debug('missing parent')
-            return False
-
-        if not block.validate_uncles():
-            _log.debug('invalid uncles')
-            return False
-
-        # check PoW and forward asap in order to avoid stale blocks
-        if not len(block.nonce) == 8:
-            _log.debug('nonce not set')
-            raise Exception("qwrqwr")
-            return False
-        elif not block.header.check_pow(block.nonce) and\
-                not block.is_genesis():
-            _log.debug('invalid nonce')
-            return False
-        # Forward block w/ valid PoW asap (if not syncing)
-        # FIXME: filter peer by wich block was received
-        if forward:
-            _log.debug("broadcasting new")
-            signals.broadcast_new_block.send(sender=None, block=block)
-
-        if block.has_parent():
-            try:
-                processblock.verify(block, block.get_parent())
-            except processblock.VerificationFailed as e:
-                _log.critical('VERIFICATION FAILED', error=e)
-                f = os.path.join(utils.data_dir, 'badblock.log')
-                open(f, 'w').write(str(block.hex_serialize()))
-                return False
-
-        if block.number < self.head.number:
-            _log.debug("older than head", head_hash=self.head)
-            # Q: Should we have any limitations on adding blocks?
-
-        self.index.add_block(block)
-        self._store_block(block)
-
-        # set to head if this makes the longest chain w/ most work for that number
-        print 'new block', block.chain_difficulty(), self.head.chain_difficulty()
-        if block.chain_difficulty() > self.head.chain_difficulty():
-            _log.debug('new head')
-            self._update_head(block)
-        elif block.number > self.head.number:
-            _log.warn('has higher blk number than head but lower chain_difficulty',
-                      head_hash=self.head, block_difficulty=block.chain_difficulty(),
-                      head_difficulty=self.head.chain_difficulty())
-        self.commit()  # batch commits all changes that came with the new block
-        return True
-
-    def get_children(self, block):
-        return [self.get(c) for c in self.index.get_children(block.hash)]
-
-    def get_uncles(self, block):
-        if not block.has_parent():
-            return []
-        parent = block.get_parent()
-        o = []
-        i = 0
-        while parent.has_parent() and i < 6:
-            grandparent = parent.get_parent()
-            o.extend([u for u in self.get_children(grandparent) if u != parent])
-            parent = grandparent
-            i += 1
-        return o
 
     def add_transaction(self, transaction):
         _log = log.bind(tx_hash=transaction)
@@ -373,37 +174,6 @@ class ChainManager(StoppableLoopThread):
         log.debug("get_transactions called")
         return self.miner.get_transactions()
 
-    def get_chain(self, start='', count=NUM_BLOCKS_PER_REQUEST):
-        "return 'count' blocks starting from head or start"
-        log.debug("get_chain", start=start.encode('hex'), count=count)
-        blocks = []
-        block = self.head
-        if start:
-            if start not in self.index.db:
-                return []
-            block = self.get(start)
-            if not self.in_main_branch(block):
-                return []
-        for i in range(count):
-            blocks.append(block)
-            if block.is_genesis():
-                break
-            block = block.get_parent()
-        return blocks
-
-    def in_main_branch(self, block):
-        try:
-            return block.hash == self.index.get_block_by_number(block.number)
-        except KeyError:
-            return False
-
-    def get_descendants(self, block, count=1):
-        log.debug("get_descendants", block_hash=block)
-        assert block.hash in self
-        block_numbers = range(block.number + 1, min(self.head.number + 1,
-                                                    block.number + count + 1))
-        return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
-
 
 chain_manager = ChainManager()
 
@@ -418,10 +188,10 @@ def handle_get_block_hashes(sender, block_hash, count, peer, **kwargs):
     _log_api.debug("handle_get_block_hashes", count=count)
     max_hashes = min(count, MAX_GET_CHAIN_SEND_HASHES)
     found = []
-    if not block_hash in chain_manager:
+    if not block_hash in chain_manager.chain:
         log_api.debug("unknown block")
         peer.send_BlockHashes([])
-    last = chain_manager.get(block_hash)
+    last = chain_manager.chain.get(block_hash)
     while len(found) < max_hashes:
         if last.has_parent():
             last = last.get_parent()
@@ -438,8 +208,8 @@ def handle_get_blocks(sender, block_hashes, peer, **kwargs):
     log_api.debug("handle_get_blocks", count=len(block_hashes))
     found = []
     for bh in block_hashes[:MAX_GET_CHAIN_REQUEST_BLOCKS]:
-        if bh in chain_manager:
-            found.append(chain_manager.get(bh))
+        if bh in chain_manager.chain:
+            found.append(chain_manager.chain.get(bh))
         else:
             log.debug("unknown block requested", block_hash=bh.encode('hex'))
     log_api.debug("found", count=len(found))
@@ -456,7 +226,7 @@ def config_chainmanager(sender, config, **kwargs):
 def peer_status_received(sender, genesis_hash, peer, **kwargs):
     log_api.debug("received status", remote_id=peer, genesis_hash=genesis_hash.encode('hex'))
     # check genesis
-    if genesis_hash != chain_manager.genesis.hash:
+    if genesis_hash != chain_manager.chain.genesis.hash:
         return peer.send_Disconnect(reason='wrong genesis block')
 
     # request chain
@@ -476,8 +246,8 @@ def peer_handshake(sender, peer, **kwargs):
     # reply with status if not yet sent
     if peer.has_ethereum_capabilities() and not peer.status_sent:
         log_api.debug("handshake, sending status", remote_id=peer)
-        peer.send_Status(chain_manager.head.hash, chain_manager.head.chain_difficulty(),
-                            chain_manager.genesis.hash)
+        peer.send_Status(chain_manager.chainhead.hash, chain_manager.chain.head.chain_difficulty(),
+                         chain_manager.chain.genesis.hash)
     else:
         log_api.debug("handshake, but peer has no 'eth' capablities", remote_id=peer)
 

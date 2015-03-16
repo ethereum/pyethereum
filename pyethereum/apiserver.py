@@ -1,4 +1,3 @@
-import logging
 import threading
 import json
 
@@ -7,7 +6,7 @@ import bottle
 from pyethereum.chainmanager import chain_manager
 from pyethereum.peermanager import peer_manager
 import pyethereum.dispatch as dispatch
-from pyethereum.blocks import block_structure, Block
+from pyethereum.blocks import Block
 import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
@@ -15,6 +14,8 @@ import pyethereum.utils as utils
 import rlp
 from pyethereum.slogging import get_logger, LogRecorder
 from ._version import get_versions
+
+chain = chain_manager.chain
 
 log = get_logger('api')
 
@@ -114,7 +115,7 @@ def make_blocks_response(blocks):
 @app.get('/blocks/')
 def blocks():
     log.debug('blocks/')
-    return make_blocks_response(chain_manager.get_chain(start='', count=20))
+    return make_blocks_response(chain.get_chain(start='', count=20))
 
 
 @app.get('/blocks/<arg>')
@@ -130,15 +131,15 @@ def block(arg=None):
         if arg is None:
             return blocks()
         elif arg == 'head':
-            blk = chain_manager.head
+            blk = chain.head
         elif arg.isdigit():
-            blk = chain_manager.get(chain_manager.index.get_block_by_number(int(arg)))
+            blk = chain.get(chain_manager.index.get_block_by_number(int(arg)))
         else:
             try:
                 h = arg.decode('hex')
             except TypeError:
                 raise KeyError
-            blk = chain_manager.get(h)
+            blk = chain.get(h)
     except KeyError:
         return bottle.abort(404, 'Unknown Block  %s' % arg)
     return make_blocks_response([blk])
@@ -152,7 +153,7 @@ def block_children(arg=None):
     log.debug('blocks/%s/children' % arg)
     try:
         h = arg.decode('hex')
-        children = chain_manager.index.get_children(h)
+        children = chain.index.get_children(h)
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Block  %s' % arg)
     return dict(children=[c.encode('hex') for c in children])
@@ -206,7 +207,7 @@ def get_txdetails(arg=None):
     if not chain_manager.in_main_branch(blk):
         tx['confirmations'] = 0
     else:
-        tx['confirmations'] = chain_manager.head.number - blk.number
+        tx['confirmations'] = chain.head.number - blk.number
     return dict(transactions=[tx])
 
 
@@ -311,13 +312,13 @@ def spvtrace(txhash):
 
 @app.get('/spv/acct/<addr>')
 def spvaddr(addr):
-    return chain_manager.head.state.produce_spv_proof(addr.decode('hex'))
+    return chain.head.state.produce_spv_proof(addr.decode('hex'))
 
 
 @app.get('/spv/storage/<addr>/<index>')
 def spvstorage(addr, index):
-    prf1 = chain_manager.head.state.produce_spv_proof(addr.decode('hex'))
-    storetree = chain_manager.head.get_storage(addr)
+    prf1 = chain.head.state.produce_spv_proof(addr.decode('hex'))
+    storetree = chain.head.get_storage(addr)
     prf2 = storetree.produce_spv_proof(utils.zpad(utils.encode_int(index), 32))
     return rlp.encode(prf1 + prf2).encode('hex')
 
@@ -329,7 +330,7 @@ def getacct(addr):
     """
     /acct/<addr>        return account details
     """
-    return chain_manager.head.account_to_dict(addr)
+    return chain.head.account_to_dict(addr)
 
 
 @app.get('/storage/<addr>/<index>')
@@ -337,7 +338,7 @@ def getacctdata(addr, index):
     """
     /storage/<addr>/<index>        return storage item
     """
-    return str(chain_manager.head.get_storage_data(addr, int(index)))
+    return str(chain.head.get_storage_data(addr, int(index)))
 
 
 @app.get('/dump/<txblkhash>')
@@ -346,7 +347,7 @@ def dump(txblkhash):
     /dump/<hash>        return state dump after transaction or block
     """
     try:
-        blk = chain_manager.get(txblkhash.decode('hex'))
+        blk = chain.get(txblkhash.decode('hex'))
     except:
         try:  # index
             test_blk, tx, i = _get_block_before_tx(txblkhash)
@@ -362,7 +363,7 @@ def dump(txblkhash):
 @app.get('/accounts/<address>')
 def account(address=None):
     log.debug('accounts/%s' % address)
-    data = chain_manager.head.account_to_dict(address)
+    data = chain.head.account_to_dict(address)
     return data
 
 
