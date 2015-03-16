@@ -64,7 +64,7 @@ def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
             break
         else:
             raise Exception("lol: " + str(b.difficulty))
-    #assert b.header.check_pow()
+    assert b.header.check_pow()
     return b
 
 
