@@ -4,12 +4,15 @@ import rlp
 from pyethereum import processblock as pb
 import tempfile
 import copy
-from db import DB
+#from db import DB
+from db import _EphemDB
 import json
 import os
 import time
 import ethash
-db = DB(utils.db_path(tempfile.mktemp()))
+
+#db = DB(utils.db_path(tempfile.mktemp()))
+db = _EphemDB()
 
 env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -242,6 +245,19 @@ def run_state_test(params, mode):
                                  utils.big_endian_to_int(k[2:].decode('hex')),
                                  utils.big_endian_to_int(v[2:].decode('hex')))
 
+    for address, h in pre.items():
+        address = address.decode('hex')
+        assert blk.get_nonce(address) == int(h['nonce'])
+        assert blk.get_balance(address) == int(h['balance'])
+        assert blk.get_code(address) == h['code'][2:].decode('hex')
+        for k, v in h['storage'].iteritems():
+            assert blk.get_storage_data(address, utils.big_endian_to_int(k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
+
+    # correct caches, correct state_root
+    #for address in blk.caches['all'].keys():
+    #    blk.get_acct(address)
+    #blk.commit_state()
+
     # execute transactions
     tx = transactions.Transaction(
         nonce=int(exek['nonce'] or "0"),
@@ -268,6 +284,7 @@ def run_state_test(params, mode):
 
     time_pre = time.time()
     try:
+        ### with a blk.commit_state() the tests pass
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
@@ -302,9 +319,9 @@ def run_state_test(params, mode):
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
-            if params1.get(k, None) != params2.get(k, None):
-                shouldbe = params1.get(k, None)
-                reallyis = params2.get(k, None)
+            shouldbe = params1.get(k, None)
+            reallyis = params2.get(k, None)
+            if shouldbe != reallyis:
                 raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
 
     elif mode == TIME:

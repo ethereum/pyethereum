@@ -224,7 +224,7 @@ class BlockHeader(rlp.Serializable):
                  extra_data='',
                  seedhash=GENESIS_SEEDHASH,
                  mixhash=GENESIS_MIXHASH,
-                 nonce=GENESIS_NONCE):
+                 nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().iteritems() if k != 'self'}
         self.block = None
@@ -490,7 +490,6 @@ class Block(rlp.Serializable):
             for tx in transaction_list:
                 success, output = processblock.apply_transaction(self, tx)
             self.finalize()
-
         else:
             # trust the state root in the header
             self.state = SecureTrie(Trie(self.db, header._state_root))
@@ -720,6 +719,9 @@ class Block(rlp.Serializable):
         :param param: the requested parameter (`'nonce'`, `'balance'`,
                       `'storage'` or `'code'`)
         """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
         if param != 'storage':
             if address in self.caches[param]:
                 return self.caches[param][address]
@@ -949,6 +951,7 @@ class Block(rlp.Serializable):
         if len(self.journal) == 0:
             # log_state.trace('delta', changes=[])
             return
+        #for address in sorted(self.caches['all'], lambda x, y: cmp(y.encode('hex'), y.encode('hex'))):
         for address in self.caches['all']:
             acct = self.get_acct(address)
 
@@ -963,6 +966,7 @@ class Block(rlp.Serializable):
                 else:
                     t.delete(enckey)
             acct.storage = t.root_hash
+
             for field in ('balance', 'nonce', 'code'):
                 if address in self.caches[field]:
                     v = self.caches[field][address]
