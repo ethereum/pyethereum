@@ -52,6 +52,12 @@ class Log(rlp.Serializable):
         ('data', binary)
     ]
 
+    def __init__(self, address, topics, data):
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        super(Log, self).__init__(address, topics, data)
+
     def bloomables(self):
         return [self.address] + [utils.int32.serialize(x) for x in self.topics]
 
@@ -207,7 +213,7 @@ def apply_msg(ext, msg):
 
 def _apply_msg(ext, msg, code):
     if log_msg.is_active:
-        log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
+        log_msg.debug("MSG APPLY", sender=msg.sender.encode('hex'), to=msg.to.encode('hex'),
                       gas=msg.gas, value=msg.value,
                       data=msg.data.extract_all().encode('hex'))
     if log_state.is_active:
