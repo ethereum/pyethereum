@@ -243,7 +243,7 @@ def run_state_test(params, mode):
 
     orig_apply_msg = pb.apply_msg
 
-    def apply_msg_wrapper(ext, msg, code):
+    def apply_msg_wrapper(ext, msg):
 
         def blkhash(n):
             if n >= blk.number or n < blk.number - 256:
@@ -252,7 +252,7 @@ def run_state_test(params, mode):
                 return utils.sha3(str(n))
 
         ext.block_hash = blkhash
-        return orig_apply_msg(ext, msg, code)
+        return orig_apply_msg(ext, msg)
 
     pb.apply_msg = apply_msg_wrapper
 
