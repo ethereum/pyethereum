@@ -49,6 +49,7 @@ coverage:
 release: clean
 	python setup.py sdist upload
 	python setup.py bdist_wheel upload
+	echo 'failed? create a clean version first, e.g.: git tag 0.6.31'
 
 dist: clean
 	python setup.py sdist
