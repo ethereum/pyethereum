@@ -4,12 +4,12 @@ import rlp
 from pyethereum import processblock as pb
 import tempfile
 import copy
-from db import DB
+from db import DB, EphemDB
 import json
 import os
 import time
 import ethash
-db = DB(utils.db_path(tempfile.mktemp()))
+db = EphemDB()
 
 env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
