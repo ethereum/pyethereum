@@ -116,12 +116,13 @@ def apply_transaction(block, tx):
 
     message_gas = tx.startgas - intrinsic_gas_used
     message_data = vm.CallData([ord(x) for x in tx.data], 0, len(tx.data))
-    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data)
+    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data,
+                         code_address=tx.to)
 
     # MESSAGE
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        result, gas_remained, data = apply_msg_send(ext, message)
+        result, gas_remained, data = apply_msg(ext, message)
         log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
@@ -196,12 +197,15 @@ class VMExt():
         self.tx_origin = tx.sender
         self.tx_gasprice = tx.gasprice
         self.create = lambda msg: create_contract(self, msg)
-        self.call = lambda msg: apply_msg_send(self, msg)
-        self.sendmsg = lambda msg, code: apply_msg(self, msg, code)
+        self.msg = lambda msg: apply_msg(self, msg)
         self.account_exists = block.account_exists
 
 
-def apply_msg(ext, msg, code):
+def apply_msg(ext, msg):
+    return _apply_msg(ext, msg, ext.get_code(msg.code_address))
+
+
+def _apply_msg(ext, msg, code):
     if log_msg.is_active:
         log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
                       gas=msg.gas, value=msg.value,
@@ -214,6 +218,8 @@ def apply_msg(ext, msg, code):
         log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                       want=msg.value)
         return 1, msg.gas, []
+    if msg.code_address in specials.specials:
+        return specials.specials[msg.code_address](ext, msg)
     snapshot = ext._block.snapshot()
 
     # Main loop
@@ -230,17 +236,6 @@ def apply_msg(ext, msg, code):
     return res, gas, dat
 
 
-def apply_msg_send(ext, msg):
-    # special pseudo-contracts for ecrecover, sha256, ripemd160
-    if msg.to in specials.specials:
-        o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
-        if not o:
-            return 1, msg.gas, []
-        return specials.specials[msg.to](ext, msg)
-    else:
-        return apply_msg(ext, msg, ext.get_code(msg.to))
-
-
 def create_contract(ext, msg):
     print 'CREATING WITH GAS', msg.gas
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
@@ -250,7 +245,7 @@ def create_contract(ext, msg):
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
     msg.is_create = True
     # assert not ext.get_code(msg.to)
-    res, gas, dat = apply_msg(ext, msg, msg.data.extract_all())
+    res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())
     if res:
         if not len(dat):
             return 1, gas, msg.to

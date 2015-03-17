@@ -8,13 +8,31 @@ from rlp.sedes import big_endian_int, BigEndianInt, Binary
 import db
 import random
 
-
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 
+def int_to_big_endian(integer):
+    '''convert a integer to big endian binary string'''
+    # 0 is a special case, treated same as ''
+    if integer == 0:
+        return ''
+    s = '%x' % integer
+    if len(s) & 1:
+        s = '0' + s
+    return s.decode('hex')
+
+
+def big_endian_to_int(string):
+    '''convert a big endian binary string to integer'''
+    # '' is a special case, treated same as 0
+    s = string.encode('hex') or '0'
+    return long(s, 16)
+
 # decorator
+
+
 def debug(label):
     def deb(f):
         def inner(*args, **kwargs):
@@ -154,6 +172,7 @@ def rlp_encode(item):
     return rlp.encode(recursive_int_to_big_endian(item))
 
 # Format encoders/decoders for bin, addr, int
+
 
 def decode_bin(v):
     '''decodes a bytearray from serialization'''
@@ -356,9 +375,10 @@ class DataDir(object):
 
 default_data_dir = DataDir().path
 
+
 def db_path(data_dir):
     if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
+        os.makedirs(data_dir)
     return os.path.join(data_dir, 'statedb')
 
 
