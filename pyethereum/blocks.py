@@ -1166,7 +1166,7 @@ class Block(rlp.Serializable):
     @property
     def mining_hash(self):
         return utils.sha3(rlp.encode(self.header,
-                                     BlockHeader(['nonce', 'mixhash'])))
+                                     BlockHeader.exclude(['nonce', 'mixhash'])))
 
     def hex_hash(self):
         return self.hash.encode('hex')
