@@ -721,7 +721,7 @@ class Block(rlp.Serializable):
         """
         if len(address) == 40:
             address = address.decode('hex')
-        assert len(address) == 20
+        assert len(address) == 20 or len(address) == 0
         if param != 'storage':
             if address in self.caches[param]:
                 return self.caches[param][address]
