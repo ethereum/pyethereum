@@ -280,6 +280,7 @@ class Block(object):
         self.uncles = uncles
         self.suicides = []
         self.logs = []
+        self.log_listeners = []
         self.refunds = 0
         self.ether_delta = 0
         self.transient = transient
@@ -655,6 +656,11 @@ class Block(object):
 
     def account_exists(self, address):
         return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
+
+    def add_log(self, log):
+        self.logs.append(log)
+        for L in self.log_listeners:
+            L(log)
 
     def commit_state(self):
         changes = []

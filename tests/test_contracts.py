@@ -1472,6 +1472,38 @@ def test_double_array():
     assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
 
 
+abi_logging_code = """
+event rabbit(x)
+event frog(y:indexed)
+event moose(a, b:str, c:indexed, d:arr)
+
+def test_rabbit(eks):
+    log(type=rabbit, eks)
+
+def test_frog(why):
+    log(type=frog, why)
+
+def test_moose(eh, bee:str, see, dee:arr):
+    log(type=moose, eh, bee, see, dee)
+"""
+
+
+def test_abi_logging():
+    s = tester.state()
+    c = s.abi_contract(abi_logging_code)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    c.test_rabbit(3)
+    assert o == [{"_event_type": "rabbit", "x": 3}]
+    o.pop()
+    c.test_frog(5)
+    assert o == [{"_event_type": "frog", "y": 5}]
+    o.pop()
+    c.test_moose(7, "nine", 11, [13, 15, 17])
+    assert o == [{"_event_type": "moose", "a": 7, "b": "nine",
+                 "c": 11, "d": [13, 15, 17]}]
+
+
 # test_evm = None
 # test_sixten = None
 # test_with = None
@@ -1516,3 +1548,4 @@ def test_double_array():
 # test_string_manipulation = None
 # test_more_infinite_storage = None
 # test_double_array = None
+# test_abi_logging = None

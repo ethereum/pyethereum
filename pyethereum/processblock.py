@@ -182,7 +182,7 @@ def apply_transaction(block, tx):
 
 # External calls that can be made from inside the VM. To use the EVM with a
 # different blockchain system, database, set parameters for testing, just
-# swap out the functions here 
+# swap out the functions here
 class VMExt():
 
     def __init__(self, block, tx):
@@ -204,7 +204,7 @@ class VMExt():
         self.block_difficulty = block.difficulty
         self.block_gas_limit = block.gas_limit
         self.log = lambda addr, topics, data: \
-            block.logs.append(Log(addr, topics, data))
+            block.add_log(Log(addr, topics, data))
         self.tx_origin = tx.sender
         self.tx_gasprice = tx.gasprice
         self.create = lambda msg: create_contract(self, msg)
