@@ -503,7 +503,7 @@ def test_reward_uncles():
     assert cm.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     assert cm.head.get_balance(uncle_coinbase) == 0
     # next block should reward uncles
-    blk2 = mine_next_block(blk1, uncles=[uncle.list_header()], coinbase=local_coinbase)
+    blk2 = mine_next_block(blk1, uncles=[uncle.header], coinbase=local_coinbase)
     cm.add_block(blk2)
     assert blk2.get_parent().prevhash == uncle.prevhash
     assert blk2 == cm.head

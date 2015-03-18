@@ -79,7 +79,7 @@ class Index(object):
     def get_transaction(self, txhash):
         "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
-        blk = blocks.Block.deserialize(self.db, self.db.get(blockhash))
+        blk = rlp.decode(self.db.get(blockhash), blocks.Block, db=self.db)
         num = utils.decode_int(tx_num_enc)
         tx_data = blk.get_transaction(num)
         return tx_data, blk, num
@@ -244,8 +244,8 @@ class ChainManager(StoppableLoopThread):
                     continue
                 log.debug('Deserializing', block_hash=t_block.hash)
                 try:
-                    block = blocks.Block.init_from_transient(t_block,
-                                                             self.blockchain)
+                    block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles,
+                                         db=self.blockchain)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
@@ -304,7 +304,7 @@ class ChainManager(StoppableLoopThread):
             _log.debug('nonce not set')
             raise Exception("qwrqwr")
             return False
-        elif not block.header.check_pow(block.nonce) and\
+        elif not block.header.check_pow(nonce=block.nonce) and\
                 not block.is_genesis():
             _log.debug('invalid nonce')
             return False
