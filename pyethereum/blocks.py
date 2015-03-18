@@ -205,8 +205,6 @@ class BlockHeader(rlp.Serializable):
         ('seedhash', binary),
         ('mixhash', binary),
         ('nonce', Binary(8, allow_empty=True))
-        #('nonce', binary)
-        #('nonce', Binary(32, allow_empty=True))
     ]
 
     def __init__(self,
@@ -1155,9 +1153,6 @@ class Block(rlp.Serializable):
         return utils.sha3(rlp.encode(self.header,
                                      BlockHeader.exclude(['nonce', 'mixhash'])))
 
-    def hex_hash(self):
-        return self.hash.encode('hex')
-
     def get_parent(self):
         """Get the parent of this block."""
         if self.number == 0:
@@ -1198,6 +1193,7 @@ class Block(rlp.Serializable):
             return rlp.decode(rlp.encode(l)) == l
 
     def __eq__(self, other):
+        """Two blocks are equal iff they have the same hash."""
         return isinstance(other, (Block, CachedBlock)) and  \
                self.hash == other.hash
 
