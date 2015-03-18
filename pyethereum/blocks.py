@@ -942,7 +942,10 @@ class Block(rlp.Serializable):
         self.set_and_journal(CACHE_KEY, index, value)
 
     def account_exists(self, address):
-        return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        return len(self.state.get(address)) > 0 or address in self.caches['all']
 
     def add_log(self, log):
         self.logs.append(log)

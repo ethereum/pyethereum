@@ -4,15 +4,13 @@ import rlp
 from pyethereum import processblock as pb
 import tempfile
 import copy
-#from db import DB
-from db import _EphemDB
+from db import DB
 import json
 import os
 import time
 import ethash
 
-#db = DB(utils.db_path(tempfile.mktemp()))
-db = _EphemDB()
+db = DB(utils.db_path(tempfile.mktemp()))
 
 env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -252,11 +250,6 @@ def run_state_test(params, mode):
         assert blk.get_code(address) == h['code'][2:].decode('hex')
         for k, v in h['storage'].iteritems():
             assert blk.get_storage_data(address, utils.big_endian_to_int(k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
-
-    # correct caches, correct state_root
-    #for address in blk.caches['all'].keys():
-    #    blk.get_acct(address)
-    #blk.commit_state()
 
     # execute transactions
     tx = transactions.Transaction(

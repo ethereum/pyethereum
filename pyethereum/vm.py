@@ -353,7 +353,7 @@ def vm_execute(ext, msg, code):
             if op == 'BLOCKHASH':
                 stk.append(utils.big_endian_to_int(ext.block_hash(stk.pop())))
             elif op == 'COINBASE':
-                stk.append(utils.big_endian_to_int(ext.block_coinbase.decode('hex')))
+                stk.append(utils.big_endian_to_int(ext.block_coinbase))
             elif op == 'TIMESTAMP':
                 stk.append(ext.block_timestamp)
             elif op == 'NUMBER':
