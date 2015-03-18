@@ -6,7 +6,6 @@ def test_blockhashes_10():
     s = tester.state()
     s.mine(10)
     o = s.block.get_ancestor_list(256)
-    print o
     assert o[0] == s.block == s.blocks[10]
     for i in range(1, 10):
         assert o[i] == s.blocks[10-i]

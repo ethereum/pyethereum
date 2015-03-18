@@ -104,7 +104,7 @@ class Packeter(object):
     @classmethod
     def packet_cmd(cls, packet):
         try:
-            v = idec(rlp.descend(packet[8:200], 0))
+            v = idec(rlp.decode_lazy(packet[8:200])[0])
         except rlp.DecodingError:
             v = -1
         return Packeter.cmd_map.get(v, 'invalid')

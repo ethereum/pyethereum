@@ -1,14 +1,15 @@
+import copy
+import json
+import sys
+import time
 import rlp
+from rlp.sedes import CountableList, binary
 import opcodes
 import utils
-import time
 import blocks
 import transactions
 import trie
-import sys
-import json
 import fastvm
-import copy
 import specials
 import bloom
 import vm
@@ -33,51 +34,45 @@ CREATE_CONTRACT_ADDRESS = ''
 
 def verify(block, parent):
     try:
-        parent.deserialize_child(block.serialize())
+        block2 = rlp.decode(rlp.encode(block), blocks.Block,
+                            db=parent.db, parent=parent)
+        assert block == block2
         return True
     except blocks.VerificationFailed:
         return False
 
 
-class Log(object):
+class Log(rlp.Serializable):
+
+    # TODO: original version used zpad (here replaced by int32.serialize); had
+    # comment "why zpad"?
+    fields = [
+        ('address', utils.address),
+        ('topics', CountableList(utils.int32)),
+        ('data', binary)
+    ]
 
     def __init__(self, address, topics, data):
-        self.address = address
-        self.topics = topics
-        self.data = data
-
-    def serialize(self):
-        return [
-            self.address.decode('hex'),
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics],  # why zpad?
-            self.data
-        ]
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        super(Log, self).__init__(address, topics, data)
 
     def bloomables(self):
-        return [self.address.decode('hex')] + \
-            [utils.zpad(utils.encode_int(x), 32) for x in self.topics]  # why zpad?
-
-    def __repr__(self):
-        return '<Log(address=%r, topics=%r, data=%r)>' % \
-            (self.address, self.topics, self.data)
+        return [self.address] + [utils.int32.serialize(x) for x in self.topics]
 
     def to_dict(self):
         return {
             "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
-            "address": self.address,
+            "address": self.address.encode('hex'),
             "data": '0x' + self.data.encode('hex'),
-            "topics": [utils.zpad(utils.int_to_big_endian(t), 32).encode('hex')
+            "topics": [utils.int32.serialize(t).encode('hex')
                        for t in self.topics]
         }
 
-    @classmethod
-    def deserialize(cls, obj):
-        if isinstance(obj, str):
-            obj = rlp.decode(obj)
-        addr, topics, data = obj
-        return cls(addr.encode('hex'),
-                   [utils.big_endian_to_int(x) for x in topics],
-                   data)
+    def __repr__(self):
+        return '<Log(address=%r, topics=%r, data=%r)>' %  \
+            (self.address.encode('hex'), self.topics, self.data)
 
 
 def apply_transaction(block, tx):
@@ -116,7 +111,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    log_tx.debug('TX NEW', tx=tx.hex_hash(), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx=tx.hash.encode('hex'), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
@@ -218,7 +213,7 @@ def apply_msg(ext, msg):
 
 def _apply_msg(ext, msg, code):
     if log_msg.is_active:
-        log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
+        log_msg.debug("MSG APPLY", sender=msg.sender.encode('hex'), to=msg.to.encode('hex'),
                       gas=msg.gas, value=msg.value,
                       data=msg.data.extract_all().encode('hex'))
     if log_state.is_active:
@@ -253,7 +248,7 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
-    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
+    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())

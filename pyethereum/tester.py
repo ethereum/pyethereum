@@ -9,6 +9,7 @@ import pyethereum.db as db
 import pyethereum.opcodes as opcodes
 import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
+import rlp
 
 serpent = None
 
@@ -23,7 +24,7 @@ keys = []
 
 for i in range(10):
     keys.append(u.sha3(str(i)))
-    accounts.append(u.privtoaddr(keys[-1]))
+    accounts.append(u.privtoaddr(keys[-1]).decode('hex'))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
@@ -140,7 +141,7 @@ class state():
         return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         if gas is not None:
@@ -163,7 +164,7 @@ class state():
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -229,14 +230,15 @@ class state():
         for i in range(n):
             self.block.finalize()
             t = self.block.timestamp + 6 + rand() % 12
-            self.block = b.Block.init_from_parent(self.block, coinbase, '', t)
+            self.block = b.Block.init_from_parent(self.block, coinbase,
+                                                  timestamp=t)
             self.blocks.append(self.block)
 
     def snapshot(self):
-        return self.block.serialize()
+        return rlp.encode(self.block)
 
     def revert(self, data):
-        self.block = b.Block.deserialize(self.db, data)
+        self.block = rlp.decode(data, b.Block, db=self.db)
 
 # logging
 

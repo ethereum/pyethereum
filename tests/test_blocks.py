@@ -1,4 +1,5 @@
 from pyethereum import blocks, utils, db
+from pyethereum.exceptions import VerificationFailed
 import rlp
 
 import pytest, os, sys
@@ -16,7 +17,7 @@ def translate_keys(olddict, keymap, valueconv, deletes):
     return o
 
 
-e = db.EphemDB()
+e = db._EphemDB()
 
 translator_list = {
     "extra_data": "extraData",
@@ -50,7 +51,7 @@ def run_block_test(params):
     b.extra_data = utils.scanners['bin'](gbh["extraData"])
     b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
     b.gas_used = utils.scanners['int'](gbh["gasUsed"])
-    b.coinbase = utils.scanners['addr'](gbh["coinbase"])
+    b.coinbase = utils.scanners['addr'](gbh["coinbase"].decode('hex'))
     b.difficulty = int(gbh["difficulty"])
     b.prevhash = utils.scanners['bin'](gbh["parentHash"])
     b.mixhash = utils.scanners['bin'](gbh["mixHash"])
@@ -65,18 +66,18 @@ def run_block_test(params):
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
         raise Exception("header hash mismatch")
-    assert blocks.check_header_pow(b.serialize_header(), e)
+    assert b.header.check_pow(e)
     for blk in params["blocks"]:
         rlpdata = blk["rlp"][2:].decode('hex')
         if 'blockHeader' not in blk:
             try:
-                b = b.deserialize_child(rlpdata)
+                b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except:
+            except (ValueError, VerificationFailed):
                 success = False
             assert not success
         else:
-            b = b.deserialize_child(rlpdata)
+            b2 = rlp.decode(rlpdata, block.Block, parent=b, db=e)
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

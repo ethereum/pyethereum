@@ -26,9 +26,9 @@ blocks.peck_cache(db, utils.sha3('\x00' * 32), ethash_utils.get_next_cache_size(
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
-    v = utils.privtoaddr(k)
+    v = utils.privtoaddr(k).decode('hex')
     k2 = utils.sha3('horse')
-    v2 = utils.privtoaddr(k2)
+    v2 = utils.privtoaddr(k2).decode('hex')
     return k, v, k2, v2
 
 
@@ -64,7 +64,7 @@ def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
             break
         else:
             raise Exception("lol: "+str(b.difficulty))
-    assert blocks.check_header_pow(b.list_header(), b.db)
+    assert b.header.check_pow()
     return b
 
 
@@ -78,7 +78,7 @@ def get_transaction(gasprice=0, nonce=0):
 
 
 def store_block(blk):
-    blk.db.put(blk.hash, blk.serialize())
+    blk.db.put(blk.hash, rlp.encode(blk))
     assert blocks.get_block(blk.db, blk.hash) == blk
 
 
@@ -127,7 +127,7 @@ def test_failing_transfer():
 def test_transient_block():
     db = new_db()
     blk = blocks.genesis(db)
-    tb_blk = blocks.TransientBlock(blk.serialize())
+    tb_blk = rlp.decode(rlp.encode(blk), blocks.TransientBlock)
     assert blk.hash == tb_blk.hash
     assert blk.number == tb_blk.number
 
@@ -138,7 +138,7 @@ def test_genesis():
     blk = blocks.genesis(db, {v: {"balance": utils.denoms.ether * 1}})
     sr = blk.state_root
     assert blk.state.db.db == db.db
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     blk.state.db.commit()
     assert sr in db
     db.commit()
@@ -158,7 +158,7 @@ def test_deserialize():
     k, v, k2, v2 = accounts()
     db = new_db()
     blk = blocks.genesis(db)
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     assert blk == blocks.get_block(db, blk.hash)
 
 
@@ -166,7 +166,7 @@ def test_deserialize_commit():
     k, v, k2, v2 = accounts()
     db = new_db()
     blk = blocks.genesis(db)
-    db.put(blk.hash, blk.serialize())
+    db.put(blk.hash, rlp.encode(blk))
     db.commit()
     assert blk == blocks.get_block(db, blk.hash)
 
@@ -240,14 +240,11 @@ def test_block_serialization_same_db():
     k, v, k2, v2 = accounts()
     blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     db = blk.db
-    assert blk.hex_hash() == \
-        blocks.Block.deserialize(db, blk.serialize()).hex_hash()
+    assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, db=db).hash
     store_block(blk)
     blk2 = mine_next_block(blk)
-    assert blk.hex_hash() == \
-        blocks.Block.deserialize(db, blk.serialize()).hex_hash()
-    assert blk2.hex_hash() == \
-        blocks.Block.deserialize(db, blk2.serialize()).hex_hash()
+    assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, db=db).hash
+    assert blk2.hash == rlp.decode(rlp.encode(blk2), blocks.Block, db=db).hash
 
 
 def test_block_serialization_other_db():
@@ -262,10 +259,10 @@ def test_block_serialization_other_db():
     b_blk = mkquickgenesis()
     assert b_blk == a_blk
     store_block(b_blk)
-    b_blk2 = blocks.Block.deserialize(b_blk.db, a_blk2.serialize())
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    b_blk2 = rlp.decode(rlp.encode(a_blk2), blocks.Block, db=b_blk.db)
+    assert a_blk2.hash == b_blk2.hash
     store_block(b_blk2)
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
 
 
 def test_block_serialization_with_transaction_other_db():
@@ -294,14 +291,14 @@ def test_block_serialization_with_transaction_other_db():
     assert b_blk == a_blk
     logger.debug('b: state_root before tx %r' % hx(b_blk.state_root))
     logger.debug('starting deserialization of remote block w/ tx')
-    b_blk2 = b_blk.deserialize(b_blk.db, a_blk2.serialize()) # BOOM
+    b_blk2 = rlp.decode(rlp.encode(a_blk2), blocks.Block, db=b_blk.db)
     logger.debug('b: state_root after %r' % hx(b_blk2.state_root))
 
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
 
     assert tx in b_blk2.get_transactions()
     store_block(b_blk2)
-    assert a_blk2.hex_hash() == b_blk2.hex_hash()
+    assert a_blk2.hash == b_blk2.hash
     assert tx in b_blk2.get_transactions()
 
 
@@ -323,10 +320,7 @@ def test_transaction_serialization():
     k, v, k2, v2 = accounts()
     tx = get_transaction()
     assert tx in set([tx])
-    assert tx.hex_hash() == \
-        transactions.Transaction.deserialize(tx.serialize()).hex_hash()
-    assert tx.hex_hash() == \
-        transactions.Transaction.hex_deserialize(tx.hex_serialize()).hex_hash()
+    assert tx.hash == rlp.decode(rlp.encode(tx), transactions.Transaction).hash
     assert tx in set([tx])
 
 
@@ -447,8 +441,8 @@ def test_add_side_chain():
     cm.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [blocks.TransientBlock(R0.serialize()),
-                        blocks.TransientBlock(R1.serialize())]
+    transient_blocks = [rlp.decode(rlp.encode(R0), blocks.TransientBlock),
+                        rlp.decode(rlp.encode(R1), blocks.TransientBlock)]
     cm.receive_chain(transient_blocks=transient_blocks)
     assert L2.hash in cm
 
@@ -480,7 +474,8 @@ def test_add_longer_side_chain():
     cm.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [blocks.TransientBlock(b.serialize()) for b in remote_blocks]
+    transient_blocks = [rlp.decode(rlp.encode(b), blocks.TransientBlock)
+                        for b in remote_blocks]
     cm.receive_chain(transient_blocks=transient_blocks)
     assert cm.head == remote_blocks[-1]
 
@@ -496,8 +491,8 @@ def test_reward_uncles():
     """
     k, v, k2, v2 = accounts()
     blk0 = mkquickgenesis()
-    local_coinbase = '1' * 40
-    uncle_coinbase = '2' * 40
+    local_coinbase = ('1' * 40).decode('hex')
+    uncle_coinbase = ('2' * 40).decode('hex')
     cm = get_chainmanager(db=blk0.db, genesis=blk0)
     blk1 = mine_next_block(blk0, coinbase=local_coinbase)
     cm.add_block(blk1)
@@ -508,7 +503,7 @@ def test_reward_uncles():
     assert cm.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     assert cm.head.get_balance(uncle_coinbase) == 0
     # next block should reward uncles
-    blk2 = mine_next_block(blk1, uncles=[uncle.list_header()], coinbase=local_coinbase)
+    blk2 = mine_next_block(blk1, uncles=[uncle.header], coinbase=local_coinbase)
     cm.add_block(blk2)
     assert blk2.get_parent().prevhash == uncle.prevhash
     assert blk2 == cm.head

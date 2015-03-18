@@ -1,10 +1,13 @@
 import time
 import rlp
+from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
 import trie
-import securetrie
+from trie import Trie
+from securetrie import SecureTrie
 import utils
+from utils import address, int256, trie_root, hash32
 import processblock
-import transactions
+from transactions import Transaction
 import bloom
 import copy
 import sys
@@ -17,13 +20,14 @@ log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
+
 # Genesis block difficulty
 GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = '\00' * 32
-GENESIS_COINBASE = "0" * 40
+GENESIS_COINBASE = ("0" * 40).decode('hex')
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
 GENESIS_SEEDHASH = '\x00' * 32
 GENESIS_MIXHASH = '\x00' * 32
@@ -49,43 +53,6 @@ MIN_DIFF = 131072
 # PoW info
 POW_EPOCH_LENGTH = 30000
 
-# Block header parameters
-block_structure = [
-    ["prevhash", "bin", GENESIS_PREVHASH],
-    ["uncles_hash", "bin", utils.sha3rlp([])],
-    ["coinbase", "addr", GENESIS_COINBASE],
-    ["state_root", "trie_root", trie.BLANK_ROOT],
-    ["tx_list_root", "trie_root", trie.BLANK_ROOT],
-    ["receipts_root", "trie_root", trie.BLANK_ROOT],
-    ["bloom", "int256b", 0],
-    ["difficulty", "int", GENESIS_DIFFICULTY],
-    ["number", "int", 0],
-    ["gas_limit", "int", GENESIS_GAS_LIMIT],
-    ["gas_used", "int", 0],
-    ["timestamp", "int", 0],
-    ["extra_data", "bin", ""],
-    ["seedhash", "bin", GENESIS_SEEDHASH],
-    ["mixhash", "bin", GENESIS_MIXHASH],
-    ["nonce", "bin", GENESIS_NONCE],
-]
-
-block_structure_rev = {}
-for i, (name, typ, default) in enumerate(block_structure):
-    block_structure_rev[name] = [i, typ, default]
-
-# Account field parameters
-acct_structure = [
-    ["nonce", "int", 0],
-    ["balance", "int", 0],
-    ["storage", "trie_root", trie.BLANK_ROOT],
-    ["code", "hash", ""],
-]
-
-
-acct_structure_rev = {}
-for i, (name, typ, default) in enumerate(acct_structure):
-    acct_structure_rev[name] = [i, typ, default]
-
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
@@ -97,8 +64,1160 @@ def calc_difficulty(parent, timestamp):
     return max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF))
 
 
-# Seedhash incrementing algo
+# Auxiliary value for must_* error messages
+aux = [None]
+
+def set_aux(auxval):
+    aux[0] = auxval
+
+def must(what, f, symb, a, b):
+    if not f(a, b):
+        if aux[0]:
+            sys.stderr.write('%r' % aux[0])
+        raise VerificationFailed(what, a, symb, b)
+
+def must_equal(what, a, b):
+    return must(what, lambda x, y: x == y, "==", a, b)
+
+def must_ge(what, a, b):
+    return must(what, lambda x, y: x >= y, ">=", a, b)
+
+def must_le(what, a, b):
+    return must(what, lambda x, y: x <= y, "<=", a, b)
+
+
+class Account(rlp.Serializable):
+    """An Ethereum account.
+
+    :ivar nonce: the account's nonce (the number of transactions sent by the
+                 account)
+    :ivar balance: the account's balance in wei
+    :ivar storage: the root of the account's storage trie
+    :ivar code_hash: the SHA3 hash of the code associated with the account
+    :ivar db: the database in which the account's code is stored
+    """
+
+    fields = [
+        ('nonce', big_endian_int),
+        ('balance', big_endian_int),
+        ('storage', trie_root),
+        ('code_hash', hash32)
+    ]
+
+    def __init__(self, nonce, balance, storage, code_hash, db):
+        self.db = db
+        super(Account, self).__init__(nonce, balance, storage, code_hash)
+
+    @property
+    def code(self):
+        """The EVM code of the account.
+
+        This property will be read from or written to the db at each access,
+        with :ivar:`code_hash` used as key.
+        """
+        return self.db.get(self.code_hash)
+
+    @code.setter
+    def code(self, value):
+        self.code_hash = utils.sha3(value)
+        self.db.put(self.code_hash, value)
+
+    @classmethod
+    def blank_account(cls, db):
+        """Create a blank account
+
+        The returned account will have zero nonce and balance, a blank storage
+        trie and empty code.
+
+        :param db: the db in which the account will store its code.
+        """
+        code_hash = utils.sha3('')
+        db.put(code_hash, '')
+        return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
+
+
+class Receipt(rlp.Serializable):
+
+    fields = [
+        ('state_root', trie_root),
+        ('gas_used', big_endian_int),
+        ('bloom', int256),
+        ('logs', CountableList(processblock.Log))
+    ]
+
+    def __init__(self, state_root, gas_used, logs, bloom=None):
+        self.state_root = state_root
+        self.gas_used = gas_used
+        self.logs = logs
+        if bloom is not None and bloom != self.bloom:
+            raise ValueError("Invalid bloom filter")
+
+    @property
+    def bloom(self):
+        bloomables = [x.bloomables() for x in self.logs]
+        return bloom.bloom_from_list(utils.flatten(bloomables))
+
+
+class BlockHeader(rlp.Serializable):
+    """A block header.
+
+    If the block with this header exists as an instance of :class:`Block`, the
+    connection can be made explicit by setting :attr:`BlockHeader.block`. Then,
+    :attr:`BlockHeader.state_root`, :attr:`BlockHeader.tx_list_root` and
+    :attr:`BlockHeader.receipts_root` always refer to the up-to-date value in
+    the block instance.
+
+    :ivar block: an instance of :class:`Block` or `None`
+    :ivar prevhash: the 32 byte hash of the previous block
+    :ivar uncles_hash: the 32 byte hash of the RLP encoded list of uncle
+                       headers
+    :ivar coinbase: the 20 byte coinbase address
+    :ivar state_root: the root of the block's state trie
+    :ivar tx_list_root: the root of the block's transaction trie
+    :ivar receipts_root: the root of the block's receipts trie
+    :ivar bloom: TODO
+    :ivar difficulty: the block's difficulty
+    :ivar number: the number of ancestors of this block (0 for the genesis
+                  block)
+    :ivar gas_limit: the block's gas limit
+    :ivar gas_used: the total amount of gas used by all transactions in this
+                    block
+    :ivar timestamp: a UNIX timestamp
+    :ivar extra_data: up to 1024 bytes of additional data
+    :ivar nonce: a 32 byte nonce constituting a proof-of-work, or the empty
+                 string as a placeholder
+    """
+
+    fields = [
+        ('prevhash', hash32),
+        ('uncles_hash', hash32),
+        ('coinbase', address),
+        ('state_root', trie_root),
+        ('tx_list_root', trie_root),
+        ('receipts_root', trie_root),
+        ('bloom', int256),
+        ('difficulty', big_endian_int),
+        ('number', big_endian_int),
+        ('gas_limit', big_endian_int),
+        ('gas_used', big_endian_int),
+        ('timestamp', big_endian_int),
+        ('extra_data', binary),
+        ('seedhash', binary),
+        ('mixhash', binary),
+        ('nonce', Binary(8, allow_empty=True))
+    ]
+
+    def __init__(self,
+                 prevhash=GENESIS_PREVHASH,
+                 uncles_hash=utils.sha3rlp([]),
+                 coinbase=GENESIS_COINBASE,
+                 state_root=trie.BLANK_ROOT,
+                 tx_list_root=trie.BLANK_ROOT,
+                 receipts_root=trie.BLANK_ROOT,
+                 bloom=0,
+                 difficulty=GENESIS_DIFFICULTY,
+                 number=0,
+                 gas_limit=GENESIS_GAS_LIMIT,
+                 gas_used=0,
+                 timestamp=0,
+                 extra_data='',
+                 seedhash=GENESIS_SEEDHASH,
+                 mixhash=GENESIS_MIXHASH,
+                 nonce=''):
+        # at the beginning of a method, locals() is a dict of all arguments
+        fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        self.block = None
+        super(BlockHeader, self).__init__(**fields)
+
+    @property
+    def state_root(self):
+        if self.block:
+            return self.block.state_root
+        else:
+            return self._state_root
+
+    @state_root.setter
+    def state_root(self, value):
+        if self.block:
+            self.block.state_root = value
+        else:
+            self._state_root = value
+
+    @property
+    def tx_list_root(self):
+        if self.block:
+            return self.block.tx_list_root
+        else:
+            return self._tx_list_root
+
+    @tx_list_root.setter
+    def tx_list_root(self, value):
+        if self.block:
+            self.block.tx_list_root = value
+        else:
+            self._tx_list_root = value
+
+    @property
+    def receipts_root(self):
+        if self.block:
+            return self.block.receipts_root
+        else:
+            return self._receipts_root
+
+    @receipts_root.setter
+    def receipts_root(self, value):
+        if self.block:
+            self.block.receipts_root = value
+        else:
+            self._receipts_root = value
+
+    @property
+    def hash(self):
+        """The binary block hash"""
+        return utils.sha3(rlp.encode(self))
+
+    def hex_hash(self):
+        """The hex encoded block hash"""
+        return self.hash.encode('hex')
+
+    def check_pow(self, db=None, nonce=None):
+        """Check if the proof-of-work of the block is valid.
+
+        :param nonce: if given the proof of work function will be evaluated
+                      with this nonce instead of the one already present in
+                      the header
+        :returns: `True` or `False`
+        """
+        nonce = nonce or self.nonce
+        if not db:
+            assert self.block is not None
+            db = self.block.db
+        if len(self.mixhash) != 32 or len(self.nonce) != 8:
+            raise ValueError("Bad mixhash or nonce length")
+        # exclude mixhash and nonce
+        header_hash = utils.sha3(rlp.encode(self,
+                BlockHeader.exclude(['mixhash', 'nonce'])))
+
+        # Prefetch future data now (so that we don't get interrupted later)
+        # TODO: separate thread
+        future_hash = get_next_seedhash(self.seedhash)
+        future_cache_size = ethash_utils.get_next_cache_size(self.number)
+        peck_cache(db, future_hash, future_cache_size)
+        # Grab current cache
+        current_cache_size = ethash_utils.get_cache_size(self.number)
+        cache = get_cache_memoized(db, self.seedhash, current_cache_size)
+        current_full_size = ethash_utils.get_full_size(self.number)
+        mining_output = ethash.hashimoto_light(current_full_size, cache,
+                                               header_hash, nonce)
+        diff = self.difficulty
+        if mining_output['mixhash'] != self.mixhash:
+            return False
+        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
+
+    def to_dict(self):
+        """Serialize the header to a readable dictionary."""
+        d = {}
+        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
+                      'seedhash', 'mixhash'):
+            d[field] = '0x' + getattr(self, field).encode('hex')
+        for field in ('state_root', 'tx_list_root', 'receipts_root',
+                      'coinbase'):
+            d[field] = getattr(self, field).encode('hex')
+        for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
+                      'timestamp'):
+            d[field] = str(getattr(self, field))
+        d['bloom'] = int256.serialize(self.bloom).encode('hex')
+        assert len(d) == len(BlockHeader.fields)
+        return d
+
+
+def mirror_from(source, attributes, only_getters=True):
+    """Decorator (factory) for classes that mirror some attributes from an
+    instance variable.
+    
+    :param source: the name of the instance variable to mirror from
+    :param attributes: list of attribute names to mirror
+    :param only_getters: if true only getters but not setters are created
+    """
+    def decorator(cls):
+        for attribute in attributes:
+            def make_gs_etter(source, attribute):
+                def getter(self):
+                    return getattr(getattr(self, source), attribute)
+                def setter(self, value):
+                    setattr(getattr(self, source), attribute, value)
+                return getter, setter
+            getter, setter = make_gs_etter(source, attribute)
+            if only_getters:
+                setattr(cls, attribute, property(getter)) 
+            else:
+                setattr(cls, attribute, property(getter, setter)) 
+        return cls
+    return decorator
+
+
+@mirror_from('header', [field for field, _ in BlockHeader.fields])
+class TransientBlock(rlp.Serializable):
+    """A read only, non persistent, not validated representation of a block.
+
+    All attributes from the block header are accessible via read-only
+    properties (i.e. ``transient_block.prevhash`` is equivalent to
+    ``transient_block.header.prevhash``.
+
+    :ivar header: the block's header
+    :ivar transaction_list: a list of transactions in the block
+    :ivar uncles: a list of uncle headers
+    """
+
+    fields = [
+        ('header', BlockHeader),
+        ('transaction_list', CountableList(Transaction)),
+        ('uncles', CountableList(BlockHeader))
+    ]
+
+    def __init__(self, header, transaction_list, uncles):
+        super(TransientBlock, self).__init__(header, transaction_list, uncles)
+
+    @property
+    def hash(self):
+        """The binary block hash
+
+        This is equivalent to ``header.hash``.
+        """
+        return utils.sha3(rlp.encode(self.header))
+
+    def hex_hash(self):
+        """The hex encoded block hash.
+
+        This is equivalent to ``header.hex_hash().
+        """
+        return self.hash.encode('hex')
+
+    def __repr__(self):
+        return '<TransientBlock(#%d %s)>' % (self.number,
+                                             self.hash.encode('hex')[:8])
+
+    def __structlog__(self):
+        return self.hash.encode('hex')
+
+
+@mirror_from('header', set(field for field, _ in BlockHeader.fields) -
+                       set(['state_root', 'receipts_root', 'tx_list_root']),
+             only_getters=False)
+class Block(rlp.Serializable):
+    """A block.
+
+    All attributes from the block header are accessible via properties
+    (i.e. ``block.prevhash`` is equivalent to ``block.header.prevhash``). It
+    is ensured that no discrepancies between header and block occur.
+
+    :param header: the block header
+    :param transaction_list: a list of transactions which are replayed if the
+                             state given by the header is not known. If the
+                             state is known, `None` can be used instead of the
+                             empty list.
+    :param uncles: a list of the headers of the uncles of this block
+    :param db: the database in which the block's  state, transactions and
+               receipts are stored (required)
+    :param parent: optional parent which if not given may have to be loaded from
+                   the database for replay
+    """
+
+    fields = [
+        ('header', BlockHeader),
+        ('transaction_list', CountableList(Transaction)),
+        ('uncles', CountableList(BlockHeader))
+    ]
+
+
+    def __init__(self, header, transaction_list=[], uncles=[], db=None, parent=None):
+        if not db:
+            raise TypeError("No database object given")
+        self.db = db
+        self.header = header
+        self.uncles = uncles
+
+        self.uncles = uncles
+        self.suicides = []
+        self.logs = []
+        self.log_listeners = []
+        self.refunds = 0
+
+        self.ether_delta = 0
+
+        # Journaling cache for state tree updates
+        self.caches = {
+            'balance': {},
+            'nonce': {},
+            'code': {},
+            'all': {}
+        }
+        self.journal = []
+        if self.number > 0:
+            self.ancestors = [self]
+        else:
+            self.ancestors = [self] + [None] * 256
+
+        # do some consistency checks on parent if given
+        if parent:
+            if self.db != parent.db:
+                raise ValueError("Parent lives in different database")
+            if self.prevhash != parent.header.hash:
+                raise ValueError("Block's prevhash and parent's hash do not match")
+            if self.number != parent.header.number + 1:
+                raise ValueError("Block's number is not the successor of its parent number")
+            if self.gas_limit != calc_gaslimit(parent):
+                raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
+            if self.difficulty != calc_difficulty(parent, self.timestamp):
+                raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
+
+        for uncle in uncles:
+            assert isinstance(uncle, BlockHeader)
+
+        original_values = {
+            'gas_used': header.gas_used,
+            'timestamp': header.timestamp,
+            'difficulty': header.difficulty,
+            'uncles_hash': header.uncles_hash,
+            'bloom': header.bloom,
+        }
+
+        self.transactions = Trie(db, trie.BLANK_ROOT)
+        self.receipts = Trie(db, trie.BLANK_ROOT)
+        # replay transactions if state is unknown
+        state_unknown = (header.prevhash != GENESIS_PREVHASH and
+                 header.state_root != trie.BLANK_ROOT and
+                 (len(header.state_root) != 32 or header.state_root not in db))
+        if state_unknown:
+            assert transaction_list is not None
+            if not parent:
+                parent = self.get_parent()
+            self.state = SecureTrie(Trie(db, parent.state_root))
+            self.transaction_count = 0
+            gas_used_header = header.gas_used
+            self.gas_used = 0
+            # replay
+            for tx in transaction_list:
+                success, output = processblock.apply_transaction(self, tx)
+            self.finalize()
+        else:
+            # trust the state root in the header
+            self.state = SecureTrie(Trie(self.db, header._state_root))
+            self.transaction_count = 0
+            if transaction_list:
+                for tx in transaction_list:
+                    self.add_transaction_to_list(tx)
+            if self.transactions.root_hash != header.tx_list_root:
+                raise ValueError("Transaction list root hash does not match")
+            # receipts trie populated by add_transaction_to_list is incorrect
+            # (it doesn't know intermediate states), so reset it
+            self.receipts = Trie(self.db, header.receipts_root)
+
+        # checks
+        set_aux(self.to_dict())
+        if parent:
+            must_equal('prev_hash', self.prevhash, parent.hash)
+            must_ge('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+            must_le('gas_limit', self.gas_limit,
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) /
+                            GASLIMIT_ADJMAX_FACTOR)
+        must_equal('gas_used', original_values['gas_used'], self.gas_used)
+        must_equal('timestamp', self.timestamp, original_values['timestamp'])
+        must_equal('difficulty', self.difficulty, original_values['difficulty'])
+        must_equal('uncles_hash', utils.sha3(rlp.encode(uncles)), original_values['uncles_hash'])
+        assert header.block is None
+        must_equal('state_root', self.state.root_hash, header.state_root)
+        must_equal('tx_list_root', self.transactions.root_hash,
+                    header.tx_list_root)
+        must_equal('receipts_root', self.receipts.root_hash,
+                    header.receipts_root)
+        must_equal('bloom', self.bloom, original_values['bloom'])
+        set_aux(None)
+
+        # from now on, trie roots refer to block instead of header
+        header.block = self
+
+        # Basic consistency verifications
+        if not self.check_fields():
+            raise ValueError("Block is invalid")
+        if len(self.header.extra_data) > 1024:
+            raise ValueError("Extra data cannot exceed 1024 bytes")
+        if self.header.coinbase == '':
+            raise ValueError("Coinbase cannot be empty address")
+        if not self.state.root_hash_valid():
+            raise ValueError("State Merkle root of block %r not found in "
+                             "database" % self)
+        if (not self.is_genesis() and self.nonce and
+                                  not self.header.check_pow(self.db)):
+            raise ValueError("PoW check failed")
+
+    @classmethod
+    def init_from_header(cls, header_rlp, db):
+        """Create a block without specifying transactions or uncles.
+
+        :param header_rlp: the RLP encoded block header
+        :param db: the database for the block
+        """
+        header = rlp.decode(rlpdata, BlockHeader, db=db)
+        return cls(header, None, [], db=db)
+
+    @classmethod
+    def init_from_parent(cls, parent, coinbase, nonce='', extra_data='',
+                         timestamp=int(time.time()), uncles=[]):
+        """Create a new block based on a parent block.
+
+        The block will not include any transactions and will not be finalized.
+        """
+        header = BlockHeader(prevhash=parent.hash,
+                             uncles_hash=utils.sha3(rlp.encode(uncles)),
+                             coinbase=coinbase,
+                             state_root=parent.state_root,
+                             tx_list_root=trie.BLANK_ROOT,
+                             receipts_root=trie.BLANK_ROOT,
+                             bloom=0,
+                             difficulty=calc_difficulty(parent, timestamp),
+                             mixhash='',
+                             number=parent.number + 1,
+                             gas_limit=calc_gaslimit(parent),
+                             gas_used=0,
+                             timestamp=timestamp,
+                             extra_data=extra_data,
+                             nonce=nonce)
+        block = Block(header, [], uncles, db=parent.db, parent=parent)
+        block.ancestors += parent.ancestors
+        return block
+
+    def check_fields(self):
+        """Check that the values of all fields are well formed."""
+        # serialize and deserialize and check that the values didn't change
+        l = Block.serialize(self)
+        return rlp.decode(rlp.encode(l)) == l
+
+    @property
+    def hash(self):
+        """The binary block hash
+
+        This is equivalent to ``header.hash``.
+        """
+        return utils.sha3(rlp.encode(self.header))
+
+    def hex_hash(self):
+        """The hex encoded block hash.
+
+        This is equivalent to ``header.hex_hash().
+        """
+        return self.hash.encode('hex')
+
+    @property
+    def tx_list_root(self):
+        return self.transactions.root_hash
+
+    @tx_list_root.setter
+    def tx_list_root(self, value):
+        self.transactions = Trie(self.db, value)
+
+    @property
+    def receipts_root(self):
+        return self.receipts.root_hash
+
+    @receipts_root.setter
+    def receipts_root(self, value):
+        self.receipts = Trie(self.db, value)
+
+    @property
+    def state_root(self):
+        self.commit_state()
+        return self.state.root_hash
+
+    @state_root.setter
+    def state_root(self, value):
+        self.state = SecureTrie(Trie(self.db, value))
+        self.reset_cache()
+
+    @property
+    def uncles_hash(self):
+        return utils.sha3(rlp.encode(self.uncles))
+
+    @property
+    def transaction_list(self):
+        txs = []
+        for i in range(self.transaction_count):
+            txs.append(self.get_transaction(i))
+        return txs
+
+    def validate_uncles(self):
+        """Validate the uncles of this block."""
+        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+            return False
+        if len(self.uncles) > 2:
+            return False
+        # Check uncle validity
+        ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
+        ineligible = []
+        # Uncles of this block cannot be direct ancestors and cannot also
+        # be uncles included 1-6 blocks ago
+        for ancestor in ancestor_chain[1:]:
+            ineligible.extend(ancestor.uncles)
+        ineligible.extend([b.header for b in ancestor_chain])
+        eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
+        for uncle in self.uncles:
+            if not uncle.check_pow():
+                return False
+            if uncle.prevhash not in eligible_ancestor_hashes:
+                log.error("Uncle does not have a valid ancestor", block=self)
+                return False
+            if uncle in ineligible:
+                log.error("Duplicate uncle", block=self,
+                          uncle=utils.sha3(rlp.encode(uncle)).encode('hex'))
+                return False
+            ineligible.append(uncle)
+        return True
+
+    def get_ancestor_list(self, n):
+        """Return `n` ancestors of this block.
+
+        The result will also be memoized in :attr:`ancestor_list`.
+
+        :returns: a list [self, p(self), p(p(self)), ..., p^n(self)]
+        """
+        if self.number == 0:
+            self.ancestors = [self] + [None] * 256
+        elif len(self.ancestors) <= n:
+            first_unknown = self.ancestors[-1].get_parent()
+            missing = first_unknown.get_ancestor_list(n - len(self.ancestors))
+            self.ancestors += missing
+        return self.ancestors[:n + 1]
+
+    def get_ancestor(self, n):
+        """Get the `n`th ancestor of this block."""
+        return self.get_ancestor_list(n)[-1]
+
+    def is_genesis(self):
+        """`True` if this block is the genesis block, otherwise `False`."""
+        return all((self.prevhash == GENESIS_PREVHASH,
+                    self.nonce == GENESIS_NONCE))
+
+    def _get_acct(self, address):
+        """Get the account with the given address.
+        
+        Note that this method ignores cached account items.
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20 or len(address) == 0
+        rlpdata = self.state.get(address)
+        if rlpdata != trie.BLANK_NODE:
+            acct = rlp.decode(rlpdata, Account, db=self.db)
+        else:
+            acct = Account.blank_account(self.db)
+        return acct
+
+    def _get_acct_item(self, address, param):
+        """Get a specific parameter of a specific account.
+
+        :param address: the address of the account (binary or hex string)
+        :param param: the requested parameter (`'nonce'`, `'balance'`,
+                      `'storage'` or `'code'`)
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20 or len(address) == 0
+        if param != 'storage':
+            if address in self.caches[param]:
+                return self.caches[param][address]
+            else:
+                account = self._get_acct(address)
+                o = getattr(account, param)
+                self.caches[param][address] = o
+                return o
+        return getattr(self._get_acct(address), param)
+
+    def _set_acct_item(self, address, param, value):
+        """Set a specific parameter of a specific account.
+
+        :param address: the address of the account (binary or hex string)
+        :param param: the requested parameter (`'nonce'`, `'balance'`,
+                      `'storage'` or `'code'`)
+        :param value: the new value
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        self.set_and_journal(param, address, value)
+        self.set_and_journal('all', address, True)
+
+    def set_and_journal(self, cache, index, value):
+        prev = self.caches[cache].get(index, None)
+        if prev != value:
+            self.journal.append([cache, index, prev, value])
+            self.caches[cache][index] = value
+
+    def _delta_item(self, address, param, value):
+        """Add a value to an account item.
+
+        If the resulting value would be negative, it is left unchanged and
+        `False` is returned.
+
+        :param address: the address of the account (binary or hex string)
+        :param param: the parameter to increase or decrease (`'nonce'`,
+                      `'balance'`, `'storage'` or `'code'`)
+        :param value: can be positive or negative
+        :returns: `True` if the operation was successful, `False` if not
+        """
+        new_value = self._get_acct_item(address, param) + value
+        if new_value < 0:
+            return False
+        self._set_acct_item(address, param, new_value % 2**256)
+        return True
+
+    def mk_transaction_receipt(self, tx):
+        """Create a receipt for a transaction."""
+        return Receipt(self.state_root, self.gas_used, self.logs)
+
+    def add_transaction_to_list(self, tx):
+        """Add a transaction to the transaction trie.
+
+        Note that this does not execute anything, i.e. the state is not
+        updated.
+        """
+        k = rlp.encode(self.transaction_count)
+        self.transactions.update(k, rlp.encode(tx))
+        r = self.mk_transaction_receipt(tx)
+        self.receipts.update(k, rlp.encode(r))
+        self.bloom |= r.bloom  # int
+        self.transaction_count += 1
+
+    def get_transaction(self, num):
+        """Get the `num`th transaction in this block."""
+        index = rlp.encode(num)
+        return rlp.decode(self.transactions.get(index), Transaction)
+
+    def get_transactions(self):
+        """Build a list of all transactions in this block."""
+        txs = []
+        for i in range(self.transaction_count):
+            txs.append(self.get_transaction(i))
+        return txs
+
+    def get_receipt(self, num):
+        """Get the receipt of the `num`th transaction.
+
+        :returns: an instance of :class:`Receipt`
+        """
+        index = rlp.encode(num)
+        return rlp.decode(self.receipts.get(index), Receipt)
+
+    def get_nonce(self, address):
+        """Get the nonce of an account.
+
+        :param address: the address of the account (binary or hex string)
+        """
+        return self._get_acct_item(address, 'nonce')
+
+    def set_nonce(self, address, value):
+        """Set the nonce of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param value: the new nonce
+        :returns: `True` if successful, otherwise `False`
+        """
+        return self._set_acct_item(address, 'nonce', value)
+
+    def increment_nonce(self, address):
+        """Increment the nonce of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :returns: `True` if successful, otherwise `False`
+        """
+        return self._delta_item(address, 'nonce', 1)
+
+    def decrement_nonce(self, address):
+        """Decrement the nonce of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :returns: `True` if successful, otherwise `False`
+        """
+        return self._delta_item(address, 'nonce', -1)
+
+    def get_balance(self, address):
+        """Get the balance of an account.
+
+        :param address: the address of the account (binary or hex string)
+        """
+        return self._get_acct_item(address, 'balance')
+
+    def set_balance(self, address, value):
+        """Set the balance of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param value: the new balance
+        :returns: `True` if successful, otherwise `False`
+        """
+        self._set_acct_item(address, 'balance', value)
+
+    def delta_balance(self, address, value):
+        """Increase the balance of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param value: can be positive or negative
+        :returns: `True` if successful, otherwise `False`
+        """
+        return self._delta_item(address, 'balance', value)
+
+    def transfer_value(self, from_addr, to_addr, value):
+        """Transfer a value between two account balances.
+
+        :param from_addr: the address of the sending account (binary or hex
+                          string)
+        :param to_addr: the address of the receiving account (binary or hex
+                        string)
+        :param value: the (positive) value to send
+        :returns: `True` if successful, otherwise `False`
+        """
+        assert value >= 0
+        if self.delta_balance(from_addr, -value):
+            return self.delta_balance(to_addr, value)
+        return False
+
+    def get_code(self, address):
+        """Get the code of an account.
+
+        :param address: the address of the account (binary or hex string)
+        """
+        return self._get_acct_item(address, 'code')
+
+    def set_code(self, address, value):
+        """Set the code of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param value: the new code
+        :returns: `True` if successful, otherwise `False`
+        """
+        self._set_acct_item(address, 'code', value)
+
+    def get_storage(self, address):
+        """Get the trie holding an account's storage.
+
+        :param address: the address of the account (binary or hex string)
+        :param value: the new code
+        """
+        storage_root = self._get_acct_item(address, 'storage')
+        return SecureTrie(Trie(self.db, storage_root))
+
+    def get_storage_data(self, address, index):
+        """Get a specific item in the storage of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param index: the index of the requested item in the storage
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        CACHE_KEY = 'storage:' + address
+        if CACHE_KEY in self.caches:
+            if index in self.caches[CACHE_KEY]:
+                return self.caches[CACHE_KEY][index]
+        key = utils.zpad(utils.coerce_to_bytes(index), 32)
+        storage = self.get_storage(address).get(key)
+        if storage:
+            return rlp.decode(storage, big_endian_int)
+        else:
+            return 0
+
+    def set_storage_data(self, address, index, value):
+        """Set a specific item in the storage of an account.
+
+        :param address: the address of the account (binary or hex string)
+        :param index: the index of the item in the storage
+        :param value: the new value of the item
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        CACHE_KEY = 'storage:' + address
+        if CACHE_KEY not in self.caches:
+            self.caches[CACHE_KEY] = {}
+            self.set_and_journal('all', address, True)
+        self.set_and_journal(CACHE_KEY, index, value)
+
+    def account_exists(self, address):
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        return len(self.state.get(address)) > 0 or address in self.caches['all']
+
+    def add_log(self, log):
+        self.logs.append(log)
+        for L in self.log_listeners:
+            L(log)
+
+    def commit_state(self):
+        """Commit account caches"""
+        """Write the acount caches on the corresponding tries."""
+        changes = []
+        if len(self.journal) == 0:
+            # log_state.trace('delta', changes=[])
+            return
+        for address in self.caches['all']:
+            acct = self._get_acct(address)
+
+            # storage
+            t = SecureTrie(Trie(self.db, acct.storage))
+            for k, v in self.caches.get('storage:' + address, {}).iteritems():
+                enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
+                val = rlp.encode(v)
+                changes.append(['storage', address, k, v])
+                if v:
+                    t.update(enckey, val)
+                else:
+                    t.delete(enckey)
+            acct.storage = t.root_hash
+
+            for field in ('balance', 'nonce', 'code'):
+                if address in self.caches[field]:
+                    v = self.caches[field][address]
+                    changes.append([field, address, v])
+                    setattr(acct, field, v)
+            self.state.update(address, rlp.encode(acct))
+        log_state.trace('delta', changes=changes)
+        self.reset_cache()
+
+    def del_account(self, address):
+        """Delete an account.
+
+        :param address: the address of the account (binary or hex string)
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        self.commit_state()
+        self.state.delete(address)
+
+    def account_to_dict(self, address, with_storage_root=False,
+                        with_storage=True):
+        """Serialize an account to a dictionary with human readable entries.
+
+        :param address: the 20 bytes account address
+        :param with_storage_root: include the account's storage root
+        :param with_storage: include the whole account's storage
+        """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+
+        if with_storage_root:
+            # if there are uncommited account changes the current storage root
+            # is meaningless
+            assert len(self.journal) == 0
+        med_dict = {}
+
+        account = self._get_acct(address)
+        for field in ('balance', 'nonce'):
+            value = self.caches[field].get(address, getattr(account, field))
+            med_dict[field] = str(value)
+        code = self.caches['code'].get(address, account.code)
+        med_dict['code'] = '0x' + code.encode('hex')
+
+        storage_trie = SecureTrie(Trie(self.db, account.storage))
+        if with_storage_root:
+            med_dict['storage_root'] = storage_trie.get_root_hash()  \
+                                                   .encode('hex')
+        if with_storage:
+            med_dict['storage'] = {}
+            d = storage_trie.to_dict()
+            subcache = self.caches.get('storage:' + address, {})
+            subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32)
+                       for kk in subcache.keys()]
+            for k in d.keys() + subkeys:
+                v = d.get(k, None)
+                v2 = subcache.get(utils.big_endian_to_int(k), None)
+                hexkey = '0x' + utils.zunpad(k).encode('hex')
+                if v2 is not None:
+                    if v2 != 0:
+                        med_dict['storage'][hexkey] = \
+                            '0x' + utils.int_to_big_endian(v2).encode('hex')
+                elif v is not None:
+                    med_dict['storage'][hexkey] = '0x' + rlp.decode(v).encode('hex')
+
+        return med_dict
+
+    def reset_cache(self):
+        """Reset cache and journal without commiting any changes."""
+        self.caches = {
+            'all': {},
+            'balance': {},
+            'nonce': {},
+            'code': {},
+        }
+        self.journal = []
+
+    def snapshot(self):
+        """Make a snapshot of the current state to enable later reverting."""
+        return {
+            'state': self.state.root_hash,
+            'gas': self.gas_used,
+            'txs': self.transactions,
+            'txcount': self.transaction_count,
+            'suicides': self.suicides,
+            'logs': self.logs,
+            'refunds': self.refunds,
+            'suicides_size': len(self.suicides),
+            'logs_size': len(self.logs),
+            'journal': self.journal,  # pointer to reference, so is not static
+            'journal_size': len(self.journal),
+            'ether_delta': self.ether_delta
+        }
+
+    def revert(self, mysnapshot):
+        """Revert to a previously made snapshot.
+
+        Reverting is for example necessary when a contract runs out of gas
+        during execution.
+        """
+        self.journal = mysnapshot['journal']
+        log_state.trace('reverting')
+        while len(self.journal) > mysnapshot['journal_size']:
+            cache, index, prev, post = self.journal.pop()
+            log_state.trace('%r %r %r %r' % (cache, index, prev, post))
+            if prev is not None:
+                self.caches[cache][index] = prev
+            else:
+                del self.caches[cache][index]
+        self.suicides = mysnapshot['suicides']
+        while len(self.suicides) > mysnapshot['suicides_size']:
+            self.suicides.pop()
+        self.logs = mysnapshot['logs']
+        while len(self.logs) > mysnapshot['logs_size']:
+            self.logs.pop()
+        self.refunds = mysnapshot['refunds']
+        self.state.root_hash = mysnapshot['state']
+        self.gas_used = mysnapshot['gas']
+        self.transactions = mysnapshot['txs']
+        self.transaction_count = mysnapshot['txcount']
+        self.ether_delta = mysnapshot['ether_delta']
+
+    def finalize(self):
+        """Apply rewards and commit."""
+        self.delta_balance(self.coinbase,
+                           BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
+        self.ether_delta += BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles)
+
+        for uncle in self.uncles:
+            r = BLOCK_REWARD * \
+                (UNCLE_DEPTH_PENALTY_FACTOR + uncle.number - self.number) \
+                / UNCLE_DEPTH_PENALTY_FACTOR
+            self.delta_balance(uncle.coinbase, r)
+            self.ether_delta += r
+        self.commit_state()
+
+    def to_dict(self, with_state=False, full_transactions=False,
+                with_storage_roots=False, with_uncles=False):
+        """Serialize the block to a readable dictionary.
+
+        :param with_state: include state for all accounts
+        :param full_transactions: include serialized transactions (hashes
+                                  otherwise)
+        :param with_storage_roots: if account states are included also include
+                                   their storage roots
+        :param with_uncles: include uncle hashes
+        """
+        b = {"header": self.header.to_dict()}
+        txlist = []
+        for i, tx in enumerate(self.get_transactions()):
+            receipt_rlp = self.receipts.get(rlp.encode(i))
+            receipt = rlp.decode(receipt_rlp, Receipt)
+            if full_transactions:
+                txjson = tx.to_dict()
+            else:
+                txjson = tx.hash
+            txlist.append({
+                "tx": txjson,
+                "medstate": receipt.state_root.encode('hex'),
+                "gas": str(receipt.gas_used),
+                "logs": [Log.serialize(log) for log in receipt.logs],
+                "bloom": utils.int256.serialize(receipt.bloom)
+            })
+        b["transactions"] = txlist
+        if with_state:
+            state_dump = {}
+            for address, v in self.state.to_dict().iteritems():
+                state_dump[address.encode('hex')] = \
+                    self.account_to_dict(address, with_storage_roots)
+            b['state'] = state_dump
+        if with_uncles:
+            b['uncles'] = [self.__class__.deserialize_header(u)
+                           for u in self.uncles]
+        return b
+
+    @property
+    def mining_hash(self):
+        return utils.sha3(rlp.encode(self.header,
+                                     BlockHeader.exclude(['nonce', 'mixhash'])))
+
+    def get_parent(self):
+        """Get the parent of this block."""
+        if self.number == 0:
+            raise UnknownParentException('Genesis block has no parent')
+        try:
+            parent = get_block(self.db, self.prevhash)
+        except KeyError:
+            raise UnknownParentException(self.prevhash.encode('hex'))
+        # assert parent.state.db.db == self.state.db.db
+        return parent
+
+    def has_parent(self):
+        """`True` if this block has a known parent, otherwise `False`."""
+        try:
+            self.get_parent()
+            return True
+        except UnknownParentException:
+            return False
+
+    def chain_difficulty(self):
+        """Get the summarized difficulty.
+
+        If the summarized difficulty is not stored in the database, it will be
+        calculated recursively and put in the database.
+        """
+        if self.is_genesis():
+            return self.difficulty
+        elif 'difficulty:' + self.hash.encode('hex') in self.db:
+            encoded = self.db.get('difficulty:' + self.hash.encode('hex'))
+            return utils.decode_int(encoded)
+        else:
+            o = self.difficulty + self.get_parent().chain_difficulty()
+            o += sum([uncle.difficulty for uncle in self.uncles])
+            self.state.db.put('difficulty:' + self.hash.encode('hex'),
+                              utils.encode_int(o))
+            return o
+
+            return rlp.decode(rlp.encode(l)) == l
+
+    def __eq__(self, other):
+        """Two blocks are equal iff they have the same hash."""
+        return isinstance(other, (Block, CachedBlock)) and  \
+               self.hash == other.hash
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __gt__(self, other):
+        return self.number > other.number
+
+    def __lt__(self, other):
+        return self.number < other.number
+
+    def __repr__(self):
+        return '<Block(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
+
+    def __structlog__(self):
+        return self.hash.encode('hex')
+
+
 def calc_seedhash(parent):
+    """Seedhash incrementing algo"""
     if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
         return utils.sha3(parent.seedhash)
     else:
@@ -140,842 +1259,6 @@ def calc_gaslimit(parent):
     gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
 
-# Auxiliary value for must_equal error message
-aux = [None]
-
-
-def set_aux(auxval):
-    aux[0] = auxval
-
-
-def must(what, f, symb, a, b):
-    if not f(a, b):
-        if aux[0]:
-            sys.stderr.write('%r' % aux[0])
-        raise VerificationFailed(what, a, '==', b)
-
-
-def must_equal(what, a, b):
-    return must(what, lambda x, y: x == y, "==", a, b)
-
-
-def must_ge(what, a, b):
-    return must(what, lambda x, y: x >= y, ">=", a, b)
-
-
-def must_le(what, a, b):
-    return must(what, lambda x, y: x <= y, "<=", a, b)
-
-
-class Receipt(object):
-    def __init__(self, state_root, gas_used, logs):
-        self.state_root = state_root
-        self.gas_used = gas_used
-        self.logs = logs
-
-    def log_bloom(self):
-        bloomables = [x.bloomables() for x in self.logs]
-        return bloom.bloom_from_list(utils.flatten(bloomables))
-
-    def serialize(self):
-        return rlp.encode([
-            self.state_root,
-            utils.encode_int(self.gas_used),
-            bloom.b64(self.log_bloom()),
-            [x.serialize() for x in self.logs]
-        ])
-
-    @classmethod
-    def deserialize(cls, obj):
-        state_root, gas_used, bloom64, logs = rlp.decode(obj)
-        return cls(state_root,
-                   utils.big_endian_to_int(gas_used),
-                   [Log.deserialize(x) for x in logs])
-
-
-class TransientBlock(object):
-
-    """
-    Read only, non persisted, not validated representation of a block
-    """
-
-    def __init__(self, rlpdata):
-        self.rlpdata = rlpdata
-        self.header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        self.hash = utils.sha3(rlp.encode(self.header_args))
-        self.transaction_list = transaction_list  # rlp encoded transactions
-        self.uncles = uncles
-        for i, (name, typ, default) in enumerate(block_structure):
-            setattr(self, name, utils.decoders[typ](self.header_args[i]))
-
-    def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
-
-    def __structlog__(self):
-        return self.hash.encode('hex')
-
-
-# Block header PoW verification
-def check_header_pow(header, db):
-    if isinstance(header, str):
-        header = rlp.decode(header)
-    header_data = Block.deserialize_header(header)
-    if len(header_data['mixhash']) != 32 or len(header_data['nonce']) != 8:
-        raise Exception("Bad mixhash or nonce length")
-    # exclude mixhash and nonce
-    header_hash = utils.sha3(rlp.encode(header[:-2]))
-    # Prefetch future data now (so that we don't get interrupted later)
-    # TODO: separate thread
-    future_hash = get_next_seedhash(header_data['seedhash'])
-    future_cache_size = ethash_utils.get_next_cache_size(header_data['number'])
-    peck_cache(db, future_hash, future_cache_size)
-    # Grab current cache
-    current_cache_size = ethash_utils.get_cache_size(header_data['number'])
-    cache = get_cache_memoized(db, header_data['seedhash'], current_cache_size)
-    current_full_size = ethash_utils.get_full_size(header_data['number'])
-    mining_output = ethash.hashimoto_light(current_full_size, cache,
-                                           header_hash, header_data['nonce'])
-    diff = header_data['difficulty']
-    if mining_output['mixhash'] != header_data['mixhash']:
-        return False
-    return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
-
-
-# Primary block class
-class Block(object):
-
-    def __init__(self,
-                 db,
-                 prevhash='\00' * 32,
-                 uncles_hash=block_structure_rev['uncles_hash'][2],
-                 coinbase=block_structure_rev['coinbase'][2],
-                 state_root=trie.BLANK_ROOT,
-                 tx_list_root=trie.BLANK_ROOT,
-                 receipts_root=trie.BLANK_ROOT,
-                 bloom=0,
-                 difficulty=block_structure_rev['difficulty'][2],
-                 number=0,
-                 gas_limit=block_structure_rev['gas_limit'][2],
-                 gas_used=0, timestamp=0, extra_data='', nonce='',
-                 seedhash=block_structure_rev['seedhash'][2],
-                 mixhash=block_structure_rev['mixhash'][2],
-                 transaction_list=[],
-                 uncles=[],
-                 header=None,
-                 transient=False):
-
-        self.db = db
-        self.prevhash = prevhash
-        self.uncles_hash = uncles_hash
-        self.coinbase = coinbase
-        self.difficulty = difficulty
-        self.number = number
-        self.gas_limit = gas_limit
-        self.gas_used = gas_used
-        self.timestamp = timestamp
-        self.extra_data = extra_data
-        self.seedhash = seedhash
-        self.mixhash = mixhash
-        self.nonce = nonce
-        self.uncles = uncles
-        self.suicides = []
-        self.logs = []
-        self.log_listeners = []
-        self.refunds = 0
-        self.ether_delta = 0
-        self.transient = transient
-        # Journaling cache for state tree updates
-        self.caches = {
-            'balance': {},
-            'nonce': {},
-            'code': {},
-            'all': {}
-        }
-        self.journal = []
-
-        self.transactions = trie.Trie(self.db, tx_list_root,
-                                      transient=transient)
-        self.receipts = trie.Trie(self.db, receipts_root,
-                                  transient=transient)
-        self.transaction_count = 0
-
-        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root,
-                                                     transient=transient))
-        self.bloom = bloom  # int
-
-        # setup de/encoders
-        self.encoders = dict(utils.encoders)
-        self.decoders = dict(utils.decoders)
-        self.printers = dict(utils.printers)
-        self.scanners = dict(utils.scanners)
-
-        def encode_hash(v):
-            '''encodes a bytearray into hash'''
-            assert isinstance(v, (str, unicode))
-            k = utils.sha3(str(v))
-            self.db.put(k, v)
-            return k
-        self.encoders['hash'] = lambda v: encode_hash(v)
-        self.decoders['hash'] = lambda k: self.db.get(k)
-        self.printers['hash'] = lambda v: '0x'+v.encode('hex')
-        self.scanners['hash'] = \
-            lambda k: (v[2:] if v[:2] == '0x' else v).decode('hex')
-        self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
-
-        # If transient is False, then it's a block header imported for
-        # SPV purposes
-        if not self.transient:
-            # support init with transactions only if state is known
-            assert self.state.root_hash_valid()
-            for i, obj in enumerate(transaction_list):
-                self.transactions.update(rlp.encode(utils.encode_int(i)),
-                                         rlp.encode(obj))
-                self.transaction_count = len(transaction_list)
-            if tx_list_root != self.transactions.root_hash:
-                raise Exception("Transaction list root hash does not match!")
-            if not self.is_genesis() and self.nonce and\
-                    not check_header_pow(header or self.list_header(), self.db):
-                raise Exception("PoW check failed")
-
-        # make sure we are all on the same db
-        assert self.state.db.db == self.transactions.db.db == self.db.db
-
-        # use de/encoders to check type and validity
-        for name, typ, d in block_structure:
-            v = getattr(self, name)
-            assert self.decoders[typ](self.encoders[typ](v)) == v
-
-        # Basic consistency verifications
-        if not self.state.root_hash_valid() and not self.transient:
-            raise Exception(
-                "State Merkle root not found in database! %r" % self)
-        if not self.transactions.root_hash_valid() and not self.transient:
-            raise Exception(
-                "Transactions root not found in database! %r" % self)
-        if len(self.extra_data) > 1024:
-            raise Exception("Extra data cannot exceed 1024 bytes")
-        if self.coinbase == '':
-            raise Exception("Coinbase cannot be empty address")
-
-    # Returns [self, p(self), p(p(self)) ... p^n(self)] (n+1 length list)
-    def get_ancestor_list(self, n):
-        if self.number == 0:
-            self.ancestors = [self] + [None] * 256
-        elif len(self.ancestors) <= n:
-            p = self.ancestors[-1] \
-                .get_parent() \
-                .get_ancestor_list(n - len(self.ancestors))
-            self.ancestors += p
-        return self.ancestors[:n+1]
-
-    def get_ancestor(self, n):
-        return self.get_ancestor_list(n)[-1]
-
-    def validate_uncles(self):
-        if utils.sha3rlp(self.uncles) != self.uncles_hash:
-            return False
-        if len(self.uncles) > 2:
-            return False
-        # Check uncle validity
-        ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
-        ineligible = []
-        # Uncles of this block cannot be direct ancestors and cannot also
-        # be uncles included 1-6 blocks ago
-        for ancestor in ancestor_chain[1:]:
-            ineligible.extend(ancestor.uncles)
-        ineligible.extend([b.list_header() for b in ancestor_chain])
-        eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
-        for uncle in self.uncles:
-            if not check_header_pow(uncle, self.db):
-                return False
-            prevhash = uncle[block_structure_rev['prevhash'][0]]
-            if prevhash not in eligible_ancestor_hashes:
-                log.error("Uncle does not have a valid ancestor", block=self)
-                return False
-            if uncle in ineligible:
-                log.error("Duplicate uncle", block=self, uncle=utils.sha3(
-                    rlp.encode(uncle)).encode('hex'))
-                return False
-            ineligible.append(uncle)
-        return True
-
-    def is_genesis(self):
-        return self.prevhash == GENESIS_PREVHASH and \
-            self.nonce == GENESIS_NONCE
-
-    def check_proof_of_work(self, nonce):
-        H = self.list_header()
-        H[-1] = nonce
-        return check_header_pow(H, self.db)
-
-    @classmethod
-    def deserialize_header(cls, header_data):
-        if isinstance(header_data, (str, unicode)):
-            header_data = rlp.decode(header_data)
-        assert len(header_data) == len(block_structure)
-        kargs = {}
-        # Deserialize all properties
-        for i, (name, typ, default) in enumerate(block_structure):
-            kargs[name] = utils.decoders[typ](header_data[i])
-        return kargs
-
-    @classmethod
-    def deserialize(cls, db, rlpdata):
-        header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        kargs = cls.deserialize_header(header_args)
-        kargs['header'] = header_args
-        kargs['transaction_list'] = transaction_list
-        kargs['uncles'] = uncles
-
-        # if we don't have the state we need to replay transactions
-        if len(kargs['state_root']) == 32 and kargs['state_root'] in db:
-            return Block(db=db, **kargs)
-        elif kargs['prevhash'] == GENESIS_PREVHASH:
-            return Block(db=db, **kargs)
-        else:  # no state, need to replay
-            try:
-                parent = get_block(db, kargs['prevhash'])
-            except KeyError:
-                raise UnknownParentException(kargs['prevhash'].encode('hex'))
-            return parent.deserialize_child(rlpdata)
-
-    @classmethod
-    def init_from_header(cls, db, rlpdata, transient=False):
-        kargs = cls.deserialize_header(rlpdata)
-        kargs['transaction_list'] = None
-        kargs['uncles'] = None
-        return Block(db=db, transient=transient, **kargs)
-
-    def deserialize_child(self, rlpdata):
-        """
-        deserialization w/ replaying transactions
-        """
-        header_args, transaction_list, uncles = rlp.decode(rlpdata)
-        assert len(header_args) == len(block_structure)
-        kargs = dict(transaction_list=transaction_list, uncles=uncles)
-        # Deserialize all properties
-        for i, (name, typ, default) in enumerate(block_structure):
-            kargs[name] = self.decoders[typ](header_args[i])
-
-        block = Block.init_from_parent(self, kargs['coinbase'],
-                                       extra_data=kargs['extra_data'],
-                                       timestamp=kargs['timestamp'],
-                                       uncles=uncles)
-
-        # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
-        # replay transactions
-        for tx_lst_serialized in transaction_list:
-            tx = transactions.Transaction.create(tx_lst_serialized)
-            success, output = processblock.apply_transaction(block, tx)
-
-        block.finalize()
-
-        block.uncles_hash = kargs['uncles_hash']
-        block.mixhash = kargs['mixhash']
-        block.nonce = kargs['nonce']
-
-        # checks
-        set_aux(block.to_dict())
-        must_equal('prev_hash', block.prevhash, self.hash)
-        must_equal('gas_used', block.gas_used, kargs['gas_used'])
-        must_ge('gas_limit',
-                kargs['gas_limit'],
-                self.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) / GASLIMIT_ADJMAX_FACTOR)
-        must_le('gas_limit',
-                kargs['gas_limit'],
-                self.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) / GASLIMIT_ADJMAX_FACTOR)
-        must_equal('timestamp', block.timestamp, kargs['timestamp'])
-        must_equal('difficulty', block.difficulty, kargs['difficulty'])
-        must_equal('number', block.number, kargs['number'])
-        must_equal('extra_data', block.extra_data, kargs['extra_data'])
-        must_equal('uncles', utils.sha3rlp(block.uncles), kargs['uncles_hash'])
-        must_equal('state_root', block.state.root_hash, kargs['state_root'])
-        must_equal('tx_list_root', block.tx_list_root, kargs['tx_list_root'])
-        # bloom_bits = bloom.bits_in_number(block.bloom)
-        # bloom_bits_expected = bloom.bits_in_number(kargs['bloom'])
-        # print 'computed', bloom_bits
-        # print 'expected', bloom_bits_expected
-        # print 'missing', sorted(set(bloom_bits_expected) - set(bloom_bits))
-        # print 'wrong', sorted(set(bloom_bits) - set(bloom_bits_expected))
-        must_equal('bloom', block.bloom, kargs['bloom'])
-        must_equal('receipts_root', block.receipts.root_hash, kargs['receipts_root'])
-        set_aux(None)
-        if not check_header_pow(block.list_header(), self.db):
-            raise VerificationFailed('invalid nonce')
-
-        return block
-
-    @classmethod
-    def hex_deserialize(cls, db,  hexrlpdata):
-        return cls.deserialize(db, hexrlpdata.decode('hex'))
-
-    def mk_blank_acct(self):
-        if not hasattr(self, '_blank_acct'):
-            codehash = utils.sha3('')
-            self.state.db.put(utils.sha3(''), '')
-            self._blank_acct = [utils.encode_int(0),
-                                utils.encode_int(0),
-                                trie.BLANK_ROOT,
-                                codehash]
-        return self._blank_acct[:]
-
-    def get_acct(self, address):
-        if len(address) == 40:
-            address = address.decode('hex')
-        acct = rlp.decode(self.state.get(address)) or self.mk_blank_acct()
-        return tuple(self.decoders[t](acct[i])
-                     for i, (n, t, d) in enumerate(acct_structure))
-
-    # _get_acct_item(bin or hex, int) -> bin
-    def _get_acct_item(self, address, param):
-        ''' get account item
-        :param address: account address, can be binary or hex string
-        :param param: parameter to get
-        '''
-        if param != 'storage':
-            if address in self.caches[param]:
-                return self.caches[param][address]
-            else:
-                o = self.get_acct(address)[acct_structure_rev[param][0]]
-                self.caches[param][address] = o
-                return o
-        return self.get_acct(address)[acct_structure_rev[param][0]]
-
-    # _set_acct_item(bin or hex, int, bin)
-    def _set_acct_item(self, address, param, value):
-        ''' set account item
-        :param address: account address, can be binary or hex string
-        :param param: parameter to set
-        :param value: new value
-        '''
-        self.set_and_journal(param, address, value)
-        self.set_and_journal('all', address, True)
-
-    def set_and_journal(self, cache, index, value):
-        prev = self.caches[cache].get(index, None)
-        if prev != value:
-            self.journal.append([cache, index, prev, value])
-            self.caches[cache][index] = value
-
-    # _delta_item(bin or hex, int, int) -> success/fail
-    def _delta_item(self, address, param, value):
-        ''' add value to account item
-        :param address: account address, can be binary or hex string
-        :param param: parameter to increase/decrease
-        :param value: can be positive or negative
-        '''
-        value = self._get_acct_item(address, param) + value
-        if value < 0:
-            return False
-        self._set_acct_item(address, param, value % 2**256)
-        return True
-
-    def mk_transaction_receipt(self, tx):
-        return Receipt(self.state_root, self.gas_used, self.logs)
-
-    def add_transaction_to_list(self, tx):
-        k = rlp.encode(utils.encode_int(self.transaction_count))
-        self.transactions.update(k, tx.serialize())
-        r = self.mk_transaction_receipt(tx)
-        self.receipts.update(k, r.serialize())
-        self.bloom |= r.log_bloom()  # int
-        self.transaction_count += 1
-
-    def _list_transactions(self):
-        txlist = []
-        for i in range(self.transaction_count):
-            txlist.append(self._get_transaction(i))
-        return txlist
-
-    def _get_transaction(self, num):
-        return rlp.decode(self.transactions.get(rlp.encode(utils.encode_int(num))))
-
-    def get_transaction(self, num):
-        return transactions.Transaction.create(self._get_transaction(num))
-
-    def get_transactions(self):
-        return [transactions.Transaction.create(tx) for
-                tx in self._list_transactions()]
-
-    def get_receipt(self, num):
-        # returns [tx_lst_serialized, state_root, gas_used_encoded]
-        return Receipt.deserialize(self.receipts.get(rlp.encode(utils.encode_int(num))))
-
-    def get_nonce(self, address):
-        return self._get_acct_item(address, 'nonce')
-
-    def set_nonce(self, address, value):
-        return self._set_acct_item(address, 'nonce', value)
-
-    def increment_nonce(self, address):
-        return self._delta_item(address, 'nonce', 1)
-
-    def decrement_nonce(self, address):
-        return self._delta_item(address, 'nonce', -1)
-
-    def get_balance(self, address):
-        return self._get_acct_item(address, 'balance')
-
-    def set_balance(self, address, value):
-        self._set_acct_item(address, 'balance', value)
-
-    def delta_balance(self, address, value):
-        return self._delta_item(address, 'balance', value)
-
-    def transfer_value(self, from_addr, to_addr, value):
-        assert value >= 0
-        if self.delta_balance(from_addr, -value):
-            return self.delta_balance(to_addr, value)
-        return False
-
-    def get_code(self, address):
-        return self._get_acct_item(address, 'code')
-
-    def set_code(self, address, value):
-        self._set_acct_item(address, 'code', value)
-
-    def get_storage(self, address):
-        storage_root = self._get_acct_item(address, 'storage')
-        return securetrie.SecureTrie(trie.Trie(self.db, storage_root))
-
-    def get_storage_data(self, address, index):
-        CACHE_KEY = 'storage:'+address
-        if CACHE_KEY in self.caches:
-            if index in self.caches[CACHE_KEY]:
-                return self.caches[CACHE_KEY][index]
-        key = utils.zpad(utils.coerce_to_bytes(index), 32)
-        val = rlp.decode(self.get_storage(address).get(key))
-        return utils.big_endian_to_int(val) if val else 0
-
-    def set_storage_data(self, address, index, val):
-        CACHE_KEY = 'storage:'+address
-        if CACHE_KEY not in self.caches:
-            self.caches[CACHE_KEY] = {}
-            self.set_and_journal('all', address, True)
-        self.set_and_journal(CACHE_KEY, index, val)
-
-    def account_exists(self, address):
-        return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
-
-    def add_log(self, log):
-        self.logs.append(log)
-        for L in self.log_listeners:
-            L(log)
-
-    def commit_state(self):
-        changes = []
-        if not len(self.journal):
-            # log_state.trace('delta', changes=[])
-            return
-        for address in self.caches['all']:
-            acct = rlp.decode(self.state.get(address.decode('hex'))) \
-                or self.mk_blank_acct()
-            for i, (key, typ, default) in enumerate(acct_structure):
-                if key == 'storage':
-                    t = securetrie.SecureTrie(trie.Trie(self.db, acct[i]))
-                    for k, v in self.caches.get('storage:' + address, {}).iteritems():
-                        enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
-                        val = rlp.encode(utils.int_to_big_endian(v))
-                        changes.append(['storage', address, k, v])
-                        if v:
-                            t.update(enckey, val)
-                        else:
-                            t.delete(enckey)
-                    acct[i] = t.root_hash
-                else:
-                    if address in self.caches[key]:
-                        v = self.caches[key].get(address, default)
-                        changes.append([key, address, v])
-                        acct[i] = self.encoders[acct_structure[i][1]](v)
-            self.state.update(address.decode('hex'), rlp.encode(acct))
-        log_state.trace('delta', changes=changes)
-        self.reset_cache()
-
-    def del_account(self, address):
-        self.commit_state()
-        if len(address) == 40:
-            address = address.decode('hex')
-        self.state.delete(address)
-
-    def account_to_dict(self, address, with_storage_root=False,
-                        with_storage=True, for_vmtest=False):
-        if with_storage_root:
-            assert len(self.journal) == 0
-        med_dict = {}
-        for i, val in enumerate(self.get_acct(address)):
-            name, typ, default = acct_structure[i]
-            key = acct_structure[i][0]
-            if name == 'storage':
-                strie = securetrie.SecureTrie(trie.Trie(self.db, val))
-                if with_storage_root:
-                    med_dict['storage_root'] = strie.get_root_hash().encode('hex')
-            else:
-                med_dict[key] = self.printers[typ](self.caches[key].get(address, val))
-        if with_storage:
-            med_dict['storage'] = {}
-            d = strie.to_dict()
-            subcache = self.caches.get('storage:' + address, {})
-            subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32) for kk in subcache.keys()]
-            for k in d.keys() + subkeys:
-                v = d.get(k, None)
-                v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x' + utils.zunpad(k).encode('hex')
-                if v2 is not None:
-                    if v2 != 0:
-                        med_dict['storage'][hexkey] = \
-                            '0x' + utils.int_to_big_endian(v2).encode('hex')
-                elif v is not None:
-                    med_dict['storage'][hexkey] = '0x' + rlp.decode(v).encode('hex')
-        return med_dict
-
-    def reset_cache(self):
-        self.caches = {
-            'all': {},
-            'balance': {},
-            'nonce': {},
-            'code': {},
-        }
-        self.journal = []
-
-    # Revert computation
-    def snapshot(self):
-        return {
-            'state': self.state.root_hash,
-            'gas': self.gas_used,
-            'txs': self.transactions,
-            'txcount': self.transaction_count,
-            'suicides': self.suicides,
-            'logs': self.logs,
-            'refunds': self.refunds,
-            'suicides_size': len(self.suicides),
-            'logs_size': len(self.logs),
-            'journal': self.journal,  # pointer to reference, so is not static
-            'journal_size': len(self.journal),
-            'ether_delta': self.ether_delta
-        }
-
-    def revert(self, mysnapshot):
-        self.journal = mysnapshot['journal']
-        log_state.trace('reverting')
-        while len(self.journal) > mysnapshot['journal_size']:
-            cache, index, prev, post = self.journal.pop()
-            log_state.trace('%r %r %r %r' % (cache, index, prev, post))
-            if prev is not None:
-                self.caches[cache][index] = prev
-            else:
-                del self.caches[cache][index]
-        self.suicides = mysnapshot['suicides']
-        while len(self.suicides) > mysnapshot['suicides_size']:
-            self.suicides.pop()
-        self.logs = mysnapshot['logs']
-        while len(self.logs) > mysnapshot['logs_size']:
-            self.logs.pop()
-        self.refunds = mysnapshot['refunds']
-        self.state.root_hash = mysnapshot['state']
-        self.gas_used = mysnapshot['gas']
-        self.transactions = mysnapshot['txs']
-        self.transaction_count = mysnapshot['txcount']
-        self.ether_delta = mysnapshot['ether_delta']
-
-    def finalize(self):
-        """
-        Apply rewards
-        We raise the block's coinbase account by Rb, the block reward,
-        and the coinbase of each uncle by 7 of 8 that.
-        Rb = 1500 finney
-        """
-        self.delta_balance(self.coinbase,
-                           BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
-        self.ether_delta += BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles)
-        for uncle_rlp in self.uncles:
-            uncle_data = Block.deserialize_header(uncle_rlp)
-            r = BLOCK_REWARD * \
-                (UNCLE_DEPTH_PENALTY_FACTOR + uncle_data['number'] - self.number) \
-                / UNCLE_DEPTH_PENALTY_FACTOR
-            self.delta_balance(uncle_data['coinbase'], r)
-            self.ether_delta += r
-        self.commit_state()
-
-    def serialize_header_without_nonce(self):
-        return rlp.encode(self.list_header(exclude=['nonce', 'mixhash']))
-
-    def get_state_root(self):
-        self.commit_state()
-        return self.state.root_hash
-
-    def set_state_root(self, state_root_hash):
-        self.state = securetrie.SecureTrie(trie.Trie(self.db, state_root_hash))
-        self.reset_cache()
-
-    state_root = property(get_state_root, set_state_root)
-
-    def get_tx_list_root(self):
-        return self.transactions.root_hash
-
-    tx_list_root = property(get_tx_list_root)
-
-    def get_receipts_root(self):
-        return self.receipts.root_hash
-
-    receipts_root = property(get_receipts_root)
-
-    def list_header(self, exclude=[]):
-        header = []
-        for name, typ, default in block_structure:
-            if name not in exclude:
-                header.append(self.encoders[typ](getattr(self, name)))
-        return header
-
-    def serialize(self):
-        # Serialization method; should act as perfect inverse function of the
-        # constructor assuming no verification failures
-        return rlp.encode([self.list_header(),
-                           self._list_transactions(),
-                           self.uncles])
-
-    def hex_serialize(self):
-        return self.serialize().encode('hex')
-
-    def serialize_header(self):
-        return rlp.encode(self.list_header())
-
-    def hex_serialize_header(self):
-        return rlp.encode(self.list_header()).encode('hex')
-
-    def to_dict(self, with_state=False, full_transactions=False,
-                with_storage_roots=False, with_uncles=False):
-        """
-        serializes the block
-        with_state:             include state for all accounts
-        full_transactions:      include serialized tx (hashes otherwise)
-        with_uncles:            include uncle hashes
-        """
-        header = {}
-        for name, typ, default in block_structure:
-            header[name] = self.printers[typ](getattr(self, name))
-        header["hash"] = self.hash.encode('hex')
-        b = {"header": header}
-        txlist = []
-        for i in range(self.transaction_count):
-            tx_rlp = self.transactions.get(rlp.encode(utils.encode_int(i)))
-            tx = rlp.decode(tx_rlp)
-            receipt_rlp = self.receipts.get(rlp.encode(utils.encode_int(i)))
-            msr, gas, mybloom, mylogs = rlp.decode(receipt_rlp)
-            if full_transactions:
-                txjson = transactions.Transaction.create(tx).to_dict()
-            else:
-                # tx hash
-                txjson = utils.sha3(rlp.descend(tx_rlp, 0)).encode('hex')
-            txlist.append({
-                "tx": txjson,
-                "medstate": msr.encode('hex'),
-                "gas": str(utils.decode_int(gas)),
-                "logs": mylogs,
-                "bloom": mybloom.encode('hex')
-            })
-        b["transactions"] = txlist
-        if with_state:
-            state_dump = {}
-            for address, v in self.state.to_dict().iteritems():
-                state_dump[address.encode('hex')] = \
-                    self.account_to_dict(address, with_storage_roots)
-            b['state'] = state_dump
-        if with_uncles:
-            b['uncles'] = [self.__class__.deserialize_header(u)
-                           for u in self.uncles]
-
-        return b
-
-    def _hash(self):
-        return utils.sha3(self.serialize_header())
-
-    @property
-    def hash(self):
-        return self._hash()
-
-    @property
-    def mining_hash(self):
-        return utils.sha3(rlp.encode(self.list_header()[:-2]))
-
-    def hex_hash(self):
-        return self.hash.encode('hex')
-
-    def get_parent(self):
-        if self.number == 0:
-            raise UnknownParentException('Genesis block has no parent')
-        try:
-            parent = get_block(self.db, self.prevhash)
-        except KeyError:
-            raise UnknownParentException(self.prevhash.encode('hex'))
-        # assert parent.state.db.db == self.state.db.db
-        return parent
-
-    def has_parent(self):
-        try:
-            self.get_parent()
-            return True
-        except UnknownParentException:
-            return False
-
-    def chain_difficulty(self):
-        # calculate the summarized_difficulty
-        if self.is_genesis():
-            return self.difficulty
-        elif 'difficulty:' + self.hex_hash() in self.state.db:
-            return utils.decode_int(
-                self.state.db.get('difficulty:' + self.hex_hash()))
-        else:
-            _idx, _typ, _ = block_structure_rev['difficulty']
-            o = self.difficulty + self.get_parent().chain_difficulty()
-            o += sum([self.decoders[_typ](u[_idx]) for u in self.uncles])
-            self.state.db.put('difficulty:' + self.hex_hash(), utils.encode_int(o))
-            return o
-
-    def __eq__(self, other):
-        return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __gt__(self, other):
-        return self.number > other.number
-
-    def __lt__(self, other):
-        return self.number < other.number
-
-    def __repr__(self):
-        return '<Block(#%d %s)>' % (self.number, self.hex_hash()[:8])
-
-    def __structlog__(self):
-        return self.hash.encode('hex')
-
-
-    @classmethod
-    def init_from_parent(cls, parent, coinbase, extra_data='',
-                         timestamp=int(time.time()), uncles=[]):
-        b = Block(
-            db=parent.db,
-            prevhash=parent.hash,
-            uncles_hash=utils.sha3rlp(uncles),
-            coinbase=coinbase,
-            state_root=parent.state.root_hash,
-            tx_list_root=trie.BLANK_ROOT,
-            receipts_root=trie.BLANK_ROOT,
-            bloom=0,
-            difficulty=calc_difficulty(parent, timestamp),
-            mixhash='',
-            number=parent.number + 1,
-            gas_limit=calc_gaslimit(parent),
-            gas_used=0,
-            timestamp=timestamp,
-            extra_data=extra_data,
-            seedhash=calc_seedhash(parent),
-            nonce='',
-            transaction_list=[],
-            uncles=uncles)
-        b.ancestors += parent.ancestors
-        return b
-
 
 class CachedBlock(Block):
     # note: immutable refers to: do not manipulate!
@@ -993,9 +1276,10 @@ class CachedBlock(Block):
     def commit_state(self):
         pass
 
-    def _hash(self):
+    @property
+    def hash(self):
         if not self._hash_cached:
-            self._hash_cached = Block._hash(self)
+            self._hash_cached = super(CachedBlock, self).hash
         return self._hash_cached
 
     @classmethod
@@ -1010,7 +1294,7 @@ def get_block(db, blockhash):
     Assumption: blocks loaded from the db are not manipulated
                 -> can be cached including hash
     """
-    blk = Block.deserialize(db, db.get(blockhash))
+    blk = rlp.decode(db.get(blockhash), Block, db=db)
     return CachedBlock.create_cached(blk)
 
 
@@ -1019,12 +1303,31 @@ def get_block(db, blockhash):
 
 
 def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY):
+    """Build the genesis block."""
     # https://ethereum.etherpad.mozilla.org/11
-    block = Block(db=db, prevhash=GENESIS_PREVHASH, coinbase=GENESIS_COINBASE,
-                  tx_list_root=trie.BLANK_ROOT,
-                  difficulty=difficulty, nonce=GENESIS_NONCE,
-                  gas_limit=GENESIS_GAS_LIMIT)
+    header = BlockHeader(
+        prevhash=GENESIS_PREVHASH,
+        uncles_hash=utils.sha3(rlp.encode([])),
+        coinbase=GENESIS_COINBASE,
+        state_root=trie.BLANK_ROOT,
+        tx_list_root=trie.BLANK_ROOT,
+        receipts_root=trie.BLANK_ROOT,
+        bloom=0,
+        difficulty=difficulty,
+        number=0,
+        gas_limit=GENESIS_GAS_LIMIT,
+        gas_used=0,
+        timestamp=0,
+        extra_data='',
+        seedhash=GENESIS_SEEDHASH,
+        mixhash=GENESIS_MIXHASH,
+        nonce=GENESIS_NONCE,
+    )
+    block = Block(header, [], [], db=db)
     for addr, data in start_alloc.iteritems():
+        if len(addr) == 40:
+            addr = addr.decode('hex')
+        assert len(addr) == 20
         if 'wei' in data:
             block.set_balance(addr, int(data['wei']))
         if 'balance' in data:
@@ -1035,11 +1338,13 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
             block.set_nonce(addr, int(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].iteritems():
-                blk.set_storage_data(address,
+                blk.set_storage_data(addr,
                                      utils.big_endian_to_int(k[2:].decode('hex')),
                                      utils.big_endian_to_int(v[2:].decode('hex')))
     block.commit_state()
     block.state.db.commit()
+    # genesis block has predefined state root (so no additional finalization
+    # necessary)
     return block
 
 

@@ -73,17 +73,13 @@ class Index(object):
     # transactions #############
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
-        for i in range(blk.transaction_count):
-            i_enc = utils.encode_int(i)
-            tx = blk.transactions.get(rlp.encode(i_enc))
-            key = utils.sha3(tx)
-            value = rlp.encode([blk.hash, i_enc])
-            self.db.put(key, value)
+        for i, tx in enumerate(blk.get_transactions()):
+            self.db.put(tx.hash, rlp.encode([blk.hash, i]))
 
     def get_transaction(self, txhash):
         "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
-        blk = blocks.Block.deserialize(self.db, self.db.get(blockhash))
+        blk = rlp.decode(self.db.get(blockhash), blocks.Block, db=self.db)
         num = utils.decode_int(tx_num_enc)
         tx_data = blk.get_transaction(num)
         return tx_data, blk, num
@@ -183,7 +179,7 @@ class ChainManager(StoppableLoopThread):
         return self.has_block(blockhash)
 
     def _store_block(self, block):
-        self.blockchain.put(block.hash, block.serialize())
+        self.blockchain.put(block.hash, rlp.encode(block))
 
     def commit(self):
         self.blockchain.commit()
@@ -214,7 +210,8 @@ class ChainManager(StoppableLoopThread):
             if blk.has_parent():
                 blk = blk.get_parent()
 
-        miner = Miner(self.head, uncles, self.config.get('wallet', 'coinbase'))
+        coinbase = self.config.get('wallet', 'coinbase').decode('hex')
+        miner = Miner(self.head, uncles, coinbase)
         if self.miner:
             for tx in self.miner.get_transactions():
                 miner.add_transaction(tx)
@@ -241,13 +238,14 @@ class ChainManager(StoppableLoopThread):
             self.synchronizer.received_blocks(peer, transient_blocks)
 
             for t_block in transient_blocks:  # oldest to newest
-                log.debug('Checking PoW', block_hash=t_block)
-                if not blocks.check_header_pow(t_block.header_args, _db):
-                    log.debug('Invalid PoW', block_hash=t_block)
+                log.debug('Checking PoW', block_hash=t_block.hash)
+                if not t_block.header.check_pow(_db):
+                    log.debug('Invalid PoW', block_hash=t_block.hash)
                     continue
-                log.debug('Deserializing', block_hash=t_block)
+                log.debug('Deserializing', block_hash=t_block.hash)
                 try:
-                    block = blocks.Block.deserialize(self.blockchain, t_block.rlpdata)
+                    block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles,
+                                         db=self.blockchain)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions
@@ -306,7 +304,7 @@ class ChainManager(StoppableLoopThread):
             _log.debug('nonce not set')
             raise Exception("qwrqwr")
             return False
-        elif not block.check_proof_of_work(block.nonce) and\
+        elif not block.header.check_pow(nonce=block.nonce) and\
                 not block.is_genesis():
             _log.debug('invalid nonce')
             return False

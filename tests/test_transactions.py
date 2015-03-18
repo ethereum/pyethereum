@@ -23,7 +23,7 @@ def run_test(filename, testname, testdata):
     rlpdata = testdata["rlp"][2:].decode('hex')
     o = {}
     try:
-        tx = transactions.Transaction.deserialize(rlpdata)
+        tx = rlp.decode(rlpdata, transactions.Transaction)
         o["sender"] = tx.sender
         o["transaction"] = {
             "data": '0x' * (len(tx.data) > 0) + tx.data.encode('hex'),
@@ -34,12 +34,12 @@ def run_test(filename, testname, testdata):
             "s": '0x'+utils.zpad(utils.int_to_big_endian(tx.s), 32).encode('hex'),
             "v": str(tx.v),
             "value": str(tx.value),
-            "to": str(tx.to),
+            "to": str(tx.to).encode('hex'),
         }
     except:
         pass
     assert o.get("transaction", None) == testdata.get("transaction", None)
-    assert o.get("sender", None) == testdata.get("sender", None)
+    assert o.get("sender", None).encode('hex') == testdata.get("sender", None)
 
 
 if __name__ == '__main__':

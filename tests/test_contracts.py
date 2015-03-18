@@ -46,7 +46,7 @@ sixten_code =\
 
 def test_sixten():
     s = tester.state()
-    c = '1231231231231234564564564564561231231231'
+    c = '1231231231231234564564564564561231231231'.decode('hex')
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
@@ -465,9 +465,9 @@ def test_reverter():
     c = s.abi_contract(reverter_code, endowment=10**15)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance('0'*39+'7') == 9
+    assert s.block.get_balance(('0'*39+'7').decode('hex')) == 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance('0'*39+'8') == 0
+    assert s.block.get_balance(('0'*39+'8').decode('hex')) == 0
 
 # Test stateless contracts
 
@@ -903,7 +903,7 @@ def test_crowdfund():
     c.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
-    assert 100001 == s.block.get_balance(utils.int_to_addr(48))
+    assert 100001 == s.block.get_balance(utils.int_to_addr(48).decode('hex'))
     mida1 = s.block.get_balance(tester.a1)
     mida3 = s.block.get_balance(tester.a3)
     # Mine 5 blocks to expire the campaign
