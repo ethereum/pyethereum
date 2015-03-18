@@ -92,7 +92,7 @@ class Chain(object):
     """
 
     def __init__(self, db, genesis=None, new_head_cb=None):
-        self.blockchain = db
+        self.db = self.blockchain = db
         self.new_head_cb = new_head_cb
         self.index = Index(db)
         if genesis:
