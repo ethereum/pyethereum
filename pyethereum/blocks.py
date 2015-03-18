@@ -205,8 +205,6 @@ class BlockHeader(rlp.Serializable):
         ('seedhash', binary),
         ('mixhash', binary),
         ('nonce', Binary(8, allow_empty=True))
-        #('nonce', binary)
-        #('nonce', Binary(32, allow_empty=True))
     ]
 
     def __init__(self,
@@ -701,8 +699,11 @@ class Block(rlp.Serializable):
         return all((self.prevhash == GENESIS_PREVHASH,
                     self.nonce == GENESIS_NONCE))
 
-    def get_acct(self, address):
-        """Get the account with the given address."""
+    def _get_acct(self, address):
+        """Get the account with the given address.
+        
+        Note that this method ignores cached account items.
+        """
         if len(address) == 40:
             address = address.decode('hex')
         assert len(address) == 20 or len(address) == 0
@@ -727,11 +728,11 @@ class Block(rlp.Serializable):
             if address in self.caches[param]:
                 return self.caches[param][address]
             else:
-                account = self.get_acct(address)
+                account = self._get_acct(address)
                 o = getattr(account, param)
                 self.caches[param][address] = o
                 return o
-        return getattr(self.get_acct(address), param)
+        return getattr(self._get_acct(address), param)
 
     def _set_acct_item(self, address, param, value):
         """Set a specific parameter of a specific account.
@@ -960,7 +961,7 @@ class Block(rlp.Serializable):
             # log_state.trace('delta', changes=[])
             return
         for address in self.caches['all']:
-            acct = self.get_acct(address)
+            acct = self._get_acct(address)
 
             # storage
             t = SecureTrie(Trie(self.db, acct.storage))
@@ -1012,7 +1013,7 @@ class Block(rlp.Serializable):
             assert len(self.journal) == 0
         med_dict = {}
 
-        account = self.get_acct(address)
+        account = self._get_acct(address)
         for field in ('balance', 'nonce'):
             value = self.caches[field].get(address, getattr(account, field))
             med_dict[field] = str(value)
@@ -1155,9 +1156,6 @@ class Block(rlp.Serializable):
         return utils.sha3(rlp.encode(self.header,
                                      BlockHeader.exclude(['nonce', 'mixhash'])))
 
-    def hex_hash(self):
-        return self.hash.encode('hex')
-
     def get_parent(self):
         """Get the parent of this block."""
         if self.number == 0:
@@ -1198,6 +1196,7 @@ class Block(rlp.Serializable):
             return rlp.decode(rlp.encode(l)) == l
 
     def __eq__(self, other):
+        """Two blocks are equal iff they have the same hash."""
         return isinstance(other, (Block, CachedBlock)) and  \
                self.hash == other.hash
 

@@ -4,13 +4,12 @@ import rlp
 from pyethereum import processblock as pb
 import tempfile
 import copy
-from db import DB
+from db import DB, EphemDB
 import json
 import os
 import time
 import ethash
-
-db = DB(utils.db_path(tempfile.mktemp()))
+db = EphemDB()
 
 env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -58,13 +57,13 @@ def mktest(code, language, data=None, fun=None, args=None,
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
-                "code": '0x'+s.block.get_code(ca).encode('hex'),
-                "data": '0x'+d.encode('hex'), "gas": str(gas),
+                "code": '0x' + s.block.get_code(ca).encode('hex'),
+                "data": '0x' + d.encode('hex'), "gas": str(gas),
                 "gasPrice": str(1), "origin": t.a0,
                 "value": str(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": '0x'+d.encode('hex'), "gasLimit": parse_int_or_hex(gas),
+        tx = {"data": '0x' + d.encode('hex'), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": str(1), "nonce": str(s.block.get_nonce(t.a0)),
               "secretKey": t.k0.encode('hex'), "to": ca, "value": str(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -81,12 +80,12 @@ def run_vm_test(params, mode):
                                    'currentDifficulty', 'currentNumber'])
     # setup env
     header = blocks.BlockHeader(
-                       prevhash=env['previousHash'].decode('hex'),
-                       number=int(env['currentNumber']),
-                       coinbase=env['currentCoinbase'].decode('hex'),
-                       difficulty=int(env['currentDifficulty']),
-                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
-                       timestamp=int(env['currentTimestamp']))
+        prevhash=env['previousHash'].decode('hex'),
+        number=int(env['currentNumber']),
+        coinbase=env['currentCoinbase'].decode('hex'),
+        difficulty=int(env['currentDifficulty']),
+        gas_limit=parse_int_or_hex(env['currentGasLimit']),
+        timestamp=int(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
     # setup state
@@ -126,7 +125,7 @@ def run_vm_test(params, mode):
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
                                         destination=msg.to.encode('hex'),
-                                        data='0x'+hexdata))
+                                        data='0x' + hexdata))
         return 1, msg.gas, ''
 
     def sendmsg_wrapper(msg, code):
@@ -135,7 +134,7 @@ def run_vm_test(params, mode):
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
                                         destination=msg.to.encode('hex'),
-                                        data='0x'+hexdata))
+                                        data='0x' + hexdata))
         return 1, msg.gas, ''
 
     def create_wrapper(msg):
@@ -147,7 +146,7 @@ def run_vm_test(params, mode):
         hexdata = msg.data.extract_all().encode('hex')
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
-                                        destination='', data='0x'+hexdata))
+                                        destination='', data='0x' + hexdata))
         return 1, msg.gas, addr
 
     ext.sendmsg = sendmsg_wrapper
@@ -222,12 +221,12 @@ def run_state_test(params, mode):
 
     # setup env
     header = blocks.BlockHeader(
-                       prevhash=env['previousHash'].decode('hex'),
-                       number=int(env['currentNumber']),
-                       coinbase=env['currentCoinbase'].decode('hex'),
-                       difficulty=int(env['currentDifficulty']),
-                       gas_limit=parse_int_or_hex(env['currentGasLimit']),
-                       timestamp=int(env['currentTimestamp']))
+        prevhash=env['previousHash'].decode('hex'),
+        number=int(env['currentNumber']),
+        coinbase=env['currentCoinbase'].decode('hex'),
+        difficulty=int(env['currentDifficulty']),
+        gas_limit=parse_int_or_hex(env['currentGasLimit']),
+        timestamp=int(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
     # setup state
@@ -249,7 +248,8 @@ def run_state_test(params, mode):
         assert blk.get_balance(address) == int(h['balance'])
         assert blk.get_code(address) == h['code'][2:].decode('hex')
         for k, v in h['storage'].iteritems():
-            assert blk.get_storage_data(address, utils.big_endian_to_int(k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
+            assert blk.get_storage_data(address, utils.big_endian_to_int(
+                k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
 
     # execute transactions
     tx = transactions.Transaction(
@@ -277,7 +277,7 @@ def run_state_test(params, mode):
 
     time_pre = time.time()
     try:
-        ### with a blk.commit_state() the tests pass
+        # with a blk.commit_state() the tests pass
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
