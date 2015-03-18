@@ -14,6 +14,11 @@ else:
     sys.argv.remove('--notrace')
 
 
+# SETUP TESTS IN GLOBAL NAME SPACE
+def gen_func(filename, testname, testdata):
+    return lambda: do_test_state(filename, testname, testdata)
+
+
 def do_test_state(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
     testutils.check_state_test(testdata)
@@ -40,4 +45,4 @@ else:
             continue
         for testname, testdata in tests.items():
             func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = lambda: do_test_state(filename, testname, testdata)
+            globals()[func_name] = gen_func(filename, testname, testdata)

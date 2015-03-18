@@ -45,7 +45,8 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0, is_create=False):
+    def __init__(self, sender, to, value, gas, data,
+                 depth=0, code_address=None, is_create=False):
         self.sender = sender
         self.to = to
         self.value = value
@@ -53,6 +54,7 @@ class Message(object):
         self.data = data
         self.depth = depth
         self.logs = []
+        self.code_address = code_address
         self.is_create = is_create
 
     def __repr__(self):
@@ -351,7 +353,7 @@ def vm_execute(ext, msg, code):
             if op == 'BLOCKHASH':
                 stk.append(utils.big_endian_to_int(ext.block_hash(stk.pop())))
             elif op == 'COINBASE':
-                stk.append(utils.big_endian_to_int(ext.block_coinbase.decode('hex')))
+                stk.append(utils.big_endian_to_int(ext.block_coinbase))
             elif op == 'TIMESTAMP':
                 stk.append(ext.block_timestamp)
             elif op == 'NUMBER':
@@ -486,8 +488,9 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, to, value, submsg_gas, cd, msg.depth + 1)
-                result, gas, data = ext.call(call_msg)
+                call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                   msg.depth + 1, code_address=to)
+                result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
                 else:
@@ -513,8 +516,9 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, msg.depth + 1)
-                result, gas, data = ext.sendmsg(call_msg, ext.get_code(to))
+                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, 
+                                   msg.depth + 1, code_address=to)
+                result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
                 else:

@@ -9,6 +9,7 @@ import json
 import os
 import time
 import ethash
+
 db = DB(utils.db_path(tempfile.mktemp()))
 
 env = {
@@ -242,6 +243,14 @@ def run_state_test(params, mode):
                                  utils.big_endian_to_int(k[2:].decode('hex')),
                                  utils.big_endian_to_int(v[2:].decode('hex')))
 
+    for address, h in pre.items():
+        address = address.decode('hex')
+        assert blk.get_nonce(address) == int(h['nonce'])
+        assert blk.get_balance(address) == int(h['balance'])
+        assert blk.get_code(address) == h['code'][2:].decode('hex')
+        for k, v in h['storage'].iteritems():
+            assert blk.get_storage_data(address, utils.big_endian_to_int(k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
+
     # execute transactions
     tx = transactions.Transaction(
         nonce=int(exek['nonce'] or "0"),
@@ -253,7 +262,7 @@ def run_state_test(params, mode):
 
     orig_apply_msg = pb.apply_msg
 
-    def apply_msg_wrapper(ext, msg, code):
+    def apply_msg_wrapper(ext, msg):
 
         def blkhash(n):
             if n >= blk.number or n < blk.number - 256:
@@ -262,12 +271,13 @@ def run_state_test(params, mode):
                 return utils.sha3(str(n))
 
         ext.block_hash = blkhash
-        return orig_apply_msg(ext, msg, code)
+        return orig_apply_msg(ext, msg)
 
     pb.apply_msg = apply_msg_wrapper
 
     time_pre = time.time()
     try:
+        ### with a blk.commit_state() the tests pass
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
@@ -302,9 +312,9 @@ def run_state_test(params, mode):
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
-            if params1.get(k, None) != params2.get(k, None):
-                shouldbe = params1.get(k, None)
-                reallyis = params2.get(k, None)
+            shouldbe = params1.get(k, None)
+            reallyis = params2.get(k, None)
+            if shouldbe != reallyis:
                 raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
 
     elif mode == TIME:

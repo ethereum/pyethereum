@@ -22,6 +22,7 @@ class ContractTranslator():
 
     def __init__(self, full_signature):
         self.function_data = {}
+        self.event_data = {}
         v = vars(self)
         if isinstance(full_signature, str):
             full_signature = json_decode(full_signature)
@@ -39,16 +40,27 @@ class ContractTranslator():
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
             sig = name + '(' + ','.join(encode_types) + ')'
-            prefix = big_endian_to_int(utils.sha3(sig)[:4])
-            decode_types = [f['type'] for f in sig_item['outputs']]
-            is_unknown_type = len(sig_item['outputs']) and \
-                sig_item['outputs'][0]['name'] == 'unknown_out'
-            self.function_data[name] = {
-                "prefix": prefix,
-                "encode_types": encode_types,
-                "decode_types": decode_types,
-                "is_unknown_type": is_unknown_type
-            }
+            if sig_item['type'] == 'function':
+                prefix = big_endian_to_int(utils.sha3(sig)[:4])
+                decode_types = [f['type'] for f in sig_item['outputs']]
+                is_unknown_type = len(sig_item['outputs']) and \
+                    sig_item['outputs'][0]['name'] == 'unknown_out'
+                self.function_data[name] = {
+                    "prefix": prefix,
+                    "encode_types": encode_types,
+                    "decode_types": decode_types,
+                    "is_unknown_type": is_unknown_type
+                }
+            elif sig_item['type'] == 'event':
+                prefix = big_endian_to_int(utils.sha3(sig))
+                indexed = [f['indexed'] for f in sig_item['inputs']]
+                names = [f['name'] for f in sig_item['inputs']]
+                self.event_data[prefix] = {
+                    "types": encode_types,
+                    "name": name,
+                    "names": names,
+                    "indexed": indexed,
+                }
 
     def encode(self, name, args):
         fdata = self.function_data[name]
@@ -66,6 +78,29 @@ class ContractTranslator():
     def is_unknown_type(self, name):
         return self.function_data[name]["is_unknown_type"]
 
+    def listen(self, log):
+        if not len(log.topics) or log.topics[0] not in self.event_data:
+            return
+        types = self.event_data[log.topics[0]]['types']
+        name = self.event_data[log.topics[0]]['name']
+        names = self.event_data[log.topics[0]]['names']
+        indexed = self.event_data[log.topics[0]]['indexed']
+        unindexed_types = [types[i] for i in range(len(types))
+                           if not indexed[i]]
+        print log.data
+        deserialized_args = decode_abi(unindexed_types, log.data)
+        o = {}
+        c1, c2 = 0, 0
+        for i in range(len(names)):
+            if indexed[i]:
+                o[names[i]] = log.topics[c1 + 1]
+                c1 += 1
+            else:
+                o[names[i]] = deserialized_args[c2]
+                c2 += 1
+        o["_event_type"] = name
+        print o
+        return o
 
 is_numeric = lambda x: isinstance(x, (int, long))
 is_string = lambda x: isinstance(x, (str, unicode))

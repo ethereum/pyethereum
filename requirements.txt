@@ -12,3 +12,4 @@ repoze.lru
 requests
 waitress
 structlog>=15.0.0
+pyethash

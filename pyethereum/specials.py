@@ -55,12 +55,12 @@ def proc_identity(ext, msg):
     msg.data.extract_copy(o, 0, 0, len(o))
     return 1, msg.gas - gas_cost, o
 
-specials = {address.decode('hex'): f for address, f in {
+specials = {
     '0000000000000000000000000000000000000001': proc_ecrecover,
     '0000000000000000000000000000000000000002': proc_sha256,
     '0000000000000000000000000000000000000003': proc_ripemd160,
     '0000000000000000000000000000000000000004': proc_identity,
-}.iteritems()}
+}
 
 if __name__ == '__main__':
     class msg(object):

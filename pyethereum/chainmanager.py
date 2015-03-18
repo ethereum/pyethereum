@@ -71,7 +71,7 @@ class ChainManager(StoppableLoopThread):
     def new_miner(self):
         "new miner is initialized if HEAD is updated"
         if not self.config:
-            return # not configured yet
+            return  # not configured yet
 
         # prepare uncles
         uncles = set(self.chain.get_uncles(self.chain.head))
@@ -117,8 +117,8 @@ class ChainManager(StoppableLoopThread):
                     continue
                 log.debug('Deserializing', block_hash=t_block.hash)
                 try:
-                    block = blocks.Block.init_from_transient(t_block,
-                                                             self.chain.db)
+                    block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles,
+                                         db=self.chain.db)
                 except processblock.InvalidTransaction as e:
                     # FIXME there might be another exception in
                     # blocks.deserializeChild when replaying transactions

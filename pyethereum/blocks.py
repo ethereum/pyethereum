@@ -204,7 +204,8 @@ class BlockHeader(rlp.Serializable):
         ('extra_data', binary),
         ('seedhash', binary),
         ('mixhash', binary),
-        ('nonce', binary)
+        ('nonce', Binary(8, allow_empty=True))
+        #('nonce', binary)
         #('nonce', Binary(32, allow_empty=True))
     ]
 
@@ -224,7 +225,7 @@ class BlockHeader(rlp.Serializable):
                  extra_data='',
                  seedhash=GENESIS_SEEDHASH,
                  mixhash=GENESIS_MIXHASH,
-                 nonce=GENESIS_NONCE):
+                 nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().iteritems() if k != 'self'}
         self.block = None
@@ -315,6 +316,22 @@ class BlockHeader(rlp.Serializable):
             return False
         return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
+    def to_dict(self):
+        """Serialize the header to a readable dictionary."""
+        d = {}
+        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
+                      'seedhash', 'mixhash'):
+            d[field] = '0x' + getattr(self, field).encode('hex')
+        for field in ('state_root', 'tx_list_root', 'receipts_root',
+                      'coinbase'):
+            d[field] = getattr(self, field).encode('hex')
+        for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
+                      'timestamp'):
+            d[field] = str(getattr(self, field))
+        d['bloom'] = int256.serialize(self.bloom).encode('hex')
+        assert len(d) == len(BlockHeader.fields)
+        return d
+
 
 def mirror_from(source, attributes, only_getters=True):
     """Decorator (factory) for classes that mirror some attributes from an
@@ -322,7 +339,7 @@ def mirror_from(source, attributes, only_getters=True):
     
     :param source: the name of the instance variable to mirror from
     :param attributes: list of attribute names to mirror
-    :param setters: if true getters but not setters are created
+    :param only_getters: if true only getters but not setters are created
     """
     def decorator(cls):
         for attribute in attributes:
@@ -393,22 +410,19 @@ class Block(rlp.Serializable):
     """A block.
 
     All attributes from the block header are accessible via properties
-    (i.e. ``transient_block.prevhash`` is equivalent to
-    ``transient_block.header.prevhash``). It is ensured that no discrepancies
-    between header and block occur.
+    (i.e. ``block.prevhash`` is equivalent to ``block.header.prevhash``). It
+    is ensured that no discrepancies between header and block occur.
 
     :param header: the block header
-    :param transaction_list: a list of transactions (which are replayed if the
-                             state given by the header is not known) or `None`
-                             to create a non finalized block without any
-                             transactions.
+    :param transaction_list: a list of transactions which are replayed if the
+                             state given by the header is not known. If the
+                             state is known, `None` can be used instead of the
+                             empty list.
     :param uncles: a list of the headers of the uncles of this block
     :param db: the database in which the block's  state, transactions and
                receipts are stored (required)
-    :param parent: optional parent which otherwise may have to be loaded from
+    :param parent: optional parent which if not given may have to be loaded from
                    the database for replay
-    :param force_replay: if true transactions are replayed even if state is
-                         already known
     """
 
     fields = [
@@ -418,8 +432,7 @@ class Block(rlp.Serializable):
     ]
 
 
-    def __init__(self, header, transaction_list=[], uncles=[], db=None,
-                 parent=None):
+    def __init__(self, header, transaction_list=[], uncles=[], db=None, parent=None):
         if not db:
             raise TypeError("No database object given")
         self.db = db
@@ -429,6 +442,7 @@ class Block(rlp.Serializable):
         self.uncles = uncles
         self.suicides = []
         self.logs = []
+        self.log_listeners = []
         self.refunds = 0
 
         self.ether_delta = 0
@@ -451,20 +465,18 @@ class Block(rlp.Serializable):
             if self.db != parent.db:
                 raise ValueError("Parent lives in different database")
             if self.prevhash != parent.header.hash:
-                raise ValueError("Block's prevhash and parent's hash do not "
-                                 "match")
+                raise ValueError("Block's prevhash and parent's hash do not match")
             if self.number != parent.header.number + 1:
-                raise ValueError("Block's number is not the successor of its "
-                                 "parent number")
+                raise ValueError("Block's number is not the successor of its parent number")
             if self.gas_limit != calc_gaslimit(parent):
-                # TODO: do we need to raise an error?
-                raise ValueError("Block's gaslimit is inconsistent with its "
-                                 "parent's gaslimit")
+                raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
             if self.difficulty != calc_difficulty(parent, self.timestamp):
-                raise ValueError("Block's difficulty is inconsistent with its "
-                                 "parent's difficulty")
+                raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
 
-        header_values = {
+        for uncle in uncles:
+            assert isinstance(uncle, BlockHeader)
+
+        original_values = {
             'gas_used': header.gas_used,
             'timestamp': header.timestamp,
             'difficulty': header.difficulty,
@@ -476,7 +488,7 @@ class Block(rlp.Serializable):
         self.receipts = Trie(db, trie.BLANK_ROOT)
         # replay transactions if state is unknown
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
-                 header.state_root != trie.BLANK_ROOT and  # TODO: correct?
+                 header.state_root != trie.BLANK_ROOT and
                  (len(header.state_root) != 32 or header.state_root not in db))
         if state_unknown:
             assert transaction_list is not None
@@ -490,7 +502,6 @@ class Block(rlp.Serializable):
             for tx in transaction_list:
                 success, output = processblock.apply_transaction(self, tx)
             self.finalize()
-
         else:
             # trust the state root in the header
             self.state = SecureTrie(Trie(self.db, header._state_root))
@@ -514,18 +525,17 @@ class Block(rlp.Serializable):
             must_le('gas_limit', self.gas_limit,
                     parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) /
                             GASLIMIT_ADJMAX_FACTOR)
-        must_equal('gas_used', header_values['gas_used'], self.gas_used)
-        must_equal('timestamp', self.timestamp, header_values['timestamp'])
-        must_equal('difficulty', self.difficulty, header_values['difficulty'])
-        must_equal('uncles_hash', utils.sha3(rlp.encode(uncles)),
-                    header_values['uncles_hash'])
+        must_equal('gas_used', original_values['gas_used'], self.gas_used)
+        must_equal('timestamp', self.timestamp, original_values['timestamp'])
+        must_equal('difficulty', self.difficulty, original_values['difficulty'])
+        must_equal('uncles_hash', utils.sha3(rlp.encode(uncles)), original_values['uncles_hash'])
         assert header.block is None
         must_equal('state_root', self.state.root_hash, header.state_root)
         must_equal('tx_list_root', self.transactions.root_hash,
                     header.tx_list_root)
         must_equal('receipts_root', self.receipts.root_hash,
                     header.receipts_root)
-        must_equal('bloom', self.bloom, header_values['bloom'])
+        must_equal('bloom', self.bloom, original_values['bloom'])
         set_aux(None)
 
         # from now on, trie roots refer to block instead of header
@@ -560,8 +570,7 @@ class Block(rlp.Serializable):
                          timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
 
-        The block will not include any transactions, will not be finalized and
-        will not have a valid nonce.
+        The block will not include any transactions and will not be finalized.
         """
         header = BlockHeader(prevhash=parent.hash,
                              uncles_hash=utils.sha3(rlp.encode(uncles)),
@@ -641,15 +650,7 @@ class Block(rlp.Serializable):
         return txs
 
     def validate_uncles(self):
-        """Validate the uncles of this block.
-
-        Valid uncles
-
-            * have a valid PoW,
-            * are neither a sibling nor the parent of this block,
-            * are a child of one of the previous 6 ancestors of this block and
-            * are not already included as uncles in the previous 6 blocks.
-        """
+        """Validate the uncles of this block."""
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             return False
         if len(self.uncles) > 2:
@@ -683,7 +684,6 @@ class Block(rlp.Serializable):
 
         :returns: a list [self, p(self), p(p(self)), ..., p^n(self)]
         """
-        # TODO: why 256 Nones?
         if self.number == 0:
             self.ancestors = [self] + [None] * 256
         elif len(self.ancestors) <= n:
@@ -720,6 +720,9 @@ class Block(rlp.Serializable):
         :param param: the requested parameter (`'nonce'`, `'balance'`,
                       `'storage'` or `'code'`)
         """
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20 or len(address) == 0
         if param != 'storage':
             if address in self.caches[param]:
                 return self.caches[param][address]
@@ -939,12 +942,19 @@ class Block(rlp.Serializable):
         self.set_and_journal(CACHE_KEY, index, value)
 
     def account_exists(self, address):
-        return len(self.state.get(address.decode('hex'))) > 0 or address in self.caches['all']
+        if len(address) == 40:
+            address = address.decode('hex')
+        assert len(address) == 20
+        return len(self.state.get(address)) > 0 or address in self.caches['all']
+
+    def add_log(self, log):
+        self.logs.append(log)
+        for L in self.log_listeners:
+            L(log)
 
     def commit_state(self):
-        """Put journaled account updates on the corresponding tries and clear
-        the cache.
-        """
+        """Commit account caches"""
+        """Write the acount caches on the corresponding tries."""
         changes = []
         if len(self.journal) == 0:
             # log_state.trace('delta', changes=[])
@@ -963,6 +973,7 @@ class Block(rlp.Serializable):
                 else:
                     t.delete(enckey)
             acct.storage = t.root_hash
+
             for field in ('balance', 'nonce', 'code'):
                 if address in self.caches[field]:
                     v = self.caches[field][address]
@@ -985,7 +996,7 @@ class Block(rlp.Serializable):
 
     def account_to_dict(self, address, with_storage_root=False,
                         with_storage=True):
-        """Serialize an account to a readable dictionary.
+        """Serialize an account to a dictionary with human readable entries.
 
         :param address: the 20 bytes account address
         :param with_storage_root: include the account's storage root
@@ -1111,21 +1122,7 @@ class Block(rlp.Serializable):
                                    their storage roots
         :param with_uncles: include uncle hashes
         """
-        # TODO: do this in header class
-        header = {}
-        for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
-                      'seedhash', 'mixhash'):
-            header[field] = '0x' + getattr(self, field).encode('hex')
-        for field in ('state_root', 'tx_list_root', 'receipts_root',
-                      'coinbase'):
-            header[field] = getattr(self, field).encode('hex')
-        for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
-                      'timestamp'):
-            header[field] = str(getattr(self, field))
-        header['bloom'] = int256.serialize(self.bloom).encode('hex')
-        assert len(header) == len(BlockHeader.fields)
-        b = {"header": header}
-
+        b = {"header": self.header.to_dict()}
         txlist = []
         for i, tx in enumerate(self.get_transactions()):
             receipt_rlp = self.receipts.get(rlp.encode(i))
@@ -1156,7 +1153,7 @@ class Block(rlp.Serializable):
     @property
     def mining_hash(self):
         return utils.sha3(rlp.encode(self.header,
-                                     BlockHeader(['nonce', 'mixhash'])))
+                                     BlockHeader.exclude(['nonce', 'mixhash'])))
 
     def hex_hash(self):
         return self.hash.encode('hex')
