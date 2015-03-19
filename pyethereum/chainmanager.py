@@ -25,9 +25,10 @@ NUM_BLOCKS_PER_REQUEST = 256  # MAX_GET_CHAIN_REQUEST_BLOCKS
 
 
 class ChainManager(StoppableLoopThread):
+    """Manages the chain and requests to it.
 
-    """
-    Manages the chain and requests to it.
+    :ivar head_candidate: the block which if mined by our miner would become
+                          the new head
     """
 
     # initialized after configure:
@@ -41,16 +42,24 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
 
     def configure(self, config, genesis=None, db=None):
-        config = config
+        self.config = config
         if not db:
             db_path = utils.db_path(config.get('misc', 'data_dir'))
             log.info('opening chain', db_path=db_path)
             db = DB(db_path)
         self.chain = Chain(db, genesis, new_head_cb=self._on_new_head)
+        self.head_candidate = None
         self.new_miner()
         self.synchronizer = Synchronizer(self)
 
     def _on_new_head(self, block):
+        """Called when a new block is added to the chain.
+
+        This will reset the mining and initiate further broadcasting of the
+        new head.
+
+        :param block: the new chain head
+        """
         self.new_miner()  # reset mining
         # if we are not syncing, forward all blocks
         if not self.synchronizer.synchronization_tasks:
@@ -69,7 +78,15 @@ class ChainManager(StoppableLoopThread):
             time.sleep(.01)
 
     def new_miner(self):
-        "new miner is initialized if HEAD is updated"
+        """Initialize a new miner.
+
+        This method sets up a new :attr:`head_canidate` as a child of the
+        current chain head. All transactions from the previous head canidate
+        are carried over. A new :class:`Miner` is initialized with this block
+        and bound to :attr:`miner`.
+
+        It should be called every time the chain head changes.
+        """
         if not self.config:
             return  # not configured yet
 
@@ -79,19 +96,29 @@ class ChainManager(StoppableLoopThread):
         for i in range(8):
             for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
-                if u in self:
+                if u in self.chain:
                     uncles.discard(self.chain.get(u))
             if blk.has_parent():
                 blk = blk.get_parent()
+        uncles = list(uncles)
 
+        # prepare head candidate (the block we want to mine)
+        if self.head_candidate:
+            transactions = self.get_transactions()
+        else:
+            transactions = []
         coinbase = self.config.get('wallet', 'coinbase').decode('hex')
-        miner = Miner(self.chain.head, uncles, coinbase)
-        if self.miner:
-            for tx in self.miner.get_transactions():
-                miner.add_transaction(tx)
-        self.miner = miner
+        parent = self.chain.head
+        ts = max(int(time.time()), parent.timestamp + 1)
+        self.head_candidate = blocks.Block.init_from_parent(parent, coinbase, timestamp=ts,
+                                                            uncles=uncles)
+        # add transactions
+        for tx in transactions:
+            self.add_transaction(tx)
+        self.miner = Miner(self.head_candidate)
 
     def mine(self):
+        """Perform some computation trying to mine the next block."""
         with self.lock:
             block = self.miner.mine()
             if block:
@@ -160,19 +187,48 @@ class ChainManager(StoppableLoopThread):
                         log.debug('added', block_hash=block)
 
     def add_transaction(self, transaction):
+        """Add a transaction to :attr:`head_candidate`.
+
+        If the transaction is invalid, :attr:`head_candidate` will not change.
+
+        :returns: `True` if the transaction was successfully added or `False`
+                  if the transaction was invalid
+        """
         _log = log.bind(tx_hash=transaction)
         _log.debug("add transaction")
         with self.lock:
-            res = self.miner.add_transaction(transaction)
-            if res:
-                _log.debug("broadcasting valid")
-                signals.send_local_transactions.send(
-                    sender=None, transactions=[transaction])
-            return res
+            old_state_root = self.head_candidate.state_root
+            # revert finalization
+            self.head_canidate.state_root = self.pre_finalize_state_root
+            try:
+                success, output = processblock.apply_transaction(self.head_candidate, transaction)
+            except processblock.InvalidTransaction as e:
+                # if unsuccessfull the prerequistes were not fullfilled
+                # and the tx is invalid, state must not have changed
+                log.debug('invalid tx', tx_hash=transaction, error=e)
+                success = False
+
+            # finalize
+            self.pre_finalize_state_root = self.head_candidate.state_root
+            self.block.finalize()
+
+            if not success:
+                log.debug('tx not applied', tx_hash=transaction)
+                assert old_state_root == self.head_candidate.state_root
+                return False
+            else:
+                assert transaction in self.get_transactions()
+                log.debug('transaction applied', tx_hash=transaction,
+                        block_hash=self.block, result=output)
+                assert old_state_root != self.block.state_root
+                return True
 
     def get_transactions(self):
+        """Get a list of new transactions not yet included in a mined block
+        but known to the manager.
+        """
         log.debug("get_transactions called")
-        return self.miner.get_transactions()
+        return self.head_candidate.get_transactions()
 
 
 chain_manager = ChainManager()
