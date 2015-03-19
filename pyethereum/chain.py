@@ -1,5 +1,7 @@
 import os
+import time
 import utils
+import threading
 import rlp
 import blocks
 import processblock
@@ -86,15 +88,19 @@ class Index(object):
 
 
 class Chain(object):
+    """The block chain.
 
-    """
-    Manages the chain and requests to it.
+    :ivar head_candidate: the block which if mined by our miner would become
+                          the new head
     """
 
-    def __init__(self, db, genesis=None, new_head_cb=None):
+    def __init__(self, db, genesis=None, new_head_cb=None, coinbase='\x00' * 20):
         self.db = self.blockchain = db
         self.new_head_cb = new_head_cb
         self.index = Index(db)
+        self.coinbase = coinbase
+        self.head_candidate = None
+        self.lock = threading.Lock()
         if genesis:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
@@ -127,6 +133,28 @@ class Chain(object):
                           head_hash=block, old_head_hash=self.head)
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
+
+        # update head candidate
+        transactions = self.get_transactions()
+        # prepare uncles
+        uncles = set(self.get_uncles(self.head))
+        blk = self.head
+        for i in range(8):
+            for u in blk.uncles:  # assuming uncle headers
+                assert isinstance(u, blocks.BlockHeader)
+                u = utils.sha3(rlp.encode(u))
+                if u in self:
+                    uncles.discard(self.get(u))
+            if blk.has_parent():
+                blk = blk.get_parent()
+        uncles = list(uncles)
+        transactions = self.get_transactions()
+        ts = max(int(time.time()), block.timestamp + 1)
+        self.head_candidate = blocks.Block.init_from_parent(block, coinbase=self.coinbase,
+                                                            timestamp=ts, uncles=uncles)
+        # add transactions from previous head candidate
+        for tx in transactions:
+            self.add_transaction(tx)
         if self.new_head_cb and not block.is_genesis():
             self.new_head_cb(block)
 
@@ -215,21 +243,52 @@ class Chain(object):
         return o
 
     def add_transaction(self, transaction):
-        # _log = log.bind(tx_hash=transaction)
-        # _log.debug("add transaction")
-        # with self.lock:
-        #     res = self.miner.add_transaction(transaction)
-        #     if res:
-        #         _log.debug("broadcasting valid")
-        #         signals.send_local_transactions.send(
-        #             sender=None, transactions=[transaction])
-        #     return res
-        pass
+        """Add a transaction to :attr:`head_candidate`.
+
+        If the transaction is invalid, :attr:`head_candidate` will not change.
+
+        :returns: `True` if the transaction was successfully added or `False`
+                  if the transaction was invalid
+        """
+        assert self.head_candidate is not None
+        _log = log.bind(tx_hash=transaction)
+        _log.debug("add transaction")
+        with self.lock:
+            old_state_root = self.head_candidate.state_root
+            # revert finalization
+            self.head_canidate.state_root = self.pre_finalize_state_root
+            try:
+                success, output = processblock.apply_transaction(self.head_candidate, transaction)
+            except processblock.InvalidTransaction as e:
+                # if unsuccessfull the prerequistes were not fullfilled
+                # and the tx is invalid, state must not have changed
+                log.debug('invalid tx', tx_hash=transaction, error=e)
+                success = False
+
+            # finalize
+            self.pre_finalize_state_root = self.head_candidate.state_root
+            self.head_candidate.finalize()
+
+            if not success:
+                log.debug('tx not applied', tx_hash=transaction)
+                assert old_state_root == self.head_candidate.state_root
+                return False
+            else:
+                assert transaction in self.get_transactions()
+                log.debug('transaction applied', tx_hash=transaction,
+                          block_hash=self.block, result=output)
+                assert old_state_root != self.block.state_root
+                return True
 
     def get_transactions(self):
-        # log.debug("get_transactions called")
-        # return self.miner.get_transactions()
-        pass
+        """Get a list of new transactions not yet included in a mined block
+        but known to the chain.
+        """
+        log.debug("get_transactions called")
+        if self.head_candidate:
+            return self.head_candidate.get_transactions()
+        else:
+            return []
 
     def get_chain(self, start='', count=10):
         "return 'count' blocks starting from head or start"
