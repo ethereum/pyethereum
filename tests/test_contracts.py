@@ -3,6 +3,7 @@ import os
 import pytest
 from pyethereum import tester, utils, abi
 import serpent
+from rlp.utils import decode_hex, encode_hex
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -46,7 +47,7 @@ sixten_code =\
 
 def test_sixten():
     s = tester.state()
-    c = '1231231231231234564564564564561231231231'.decode('hex')
+    c = decode_hex('1231231231231234564564564564561231231231')
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
@@ -465,9 +466,9 @@ def test_reverter():
     c = s.abi_contract(reverter_code, endowment=10**15)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(('0'*39+'7').decode('hex')) == 9
+    assert s.block.get_balance(decode_hex('0'*39+'7')) == 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(('0'*39+'8').decode('hex')) == 0
+    assert s.block.get_balance(decode_hex('0'*39+'8')) == 0
 
 # Test stateless contracts
 
@@ -903,7 +904,7 @@ def test_crowdfund():
     c.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
-    assert 100001 == s.block.get_balance(utils.int_to_addr(48).decode('hex'))
+    assert 100001 == s.block.get_balance(decode_hex(utils.int_to_addr(48)))
     mida1 = s.block.get_balance(tester.a1)
     mida3 = s.block.get_balance(tester.a3)
     # Mine 5 blocks to expire the campaign
@@ -1206,7 +1207,7 @@ def test_ecrecover():
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert int(utils.privtoaddr(priv), 16) == addr
 
-    result = c.test_ecrecover(utils.big_endian_to_int(msghash.decode('hex')), V, R, S)
+    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
     assert result == addr
 
 

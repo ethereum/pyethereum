@@ -9,6 +9,7 @@ from . import transactions
 import rlp
 from . import __version__
 from . config import read_config
+from rlp.utils import decode_hex, encode_hex
 
 config = read_config()
 
@@ -27,19 +28,19 @@ def sha3(x):
 
 def privtoaddr(x):
     if len(x) == 64:
-        x = x.decode('hex')
+        x = decode_hex(x)
     return utils.privtoaddr(x)
 
 
 def mktx(nonce, gasprice, startgas, to, value, data):
     return transactions.Transaction(
-        int(nonce), gasprice, startgas, to, int(value), data.decode('hex')
+        int(nonce), gasprice, startgas, to, int(value), decode_hex(data)
     ).hex_serialize(False)
 
 
 def contract(nonce, gasprice, startgas, value, code):
     return transactions.contract(
-        int(nonce), gasprice, startgas, int(value), code.decode('hex')
+        int(nonce), gasprice, startgas, int(value), decode_hex(code)
     ).hex_serialize(False)
 
 
@@ -101,7 +102,7 @@ class APIClient(object):
         sender = privtoaddr(pkey_hex)
         nonce = self.getnonce(sender)
         tx = contract(nonce, gasprice, startgas, value, code)
-        formatted_rlp = [sender.decode('hex'), utils.int_to_big_endian(nonce)]
+        formatted_rlp = [decode_hex(sender), utils.int_to_big_endian(nonce)]
         addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
         o = self.applytx(sign(tx, pkey_hex))
         o['addr'] = addr

@@ -5,6 +5,7 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import rlp
+from rlp.utils import decode_hex, encode_hex
 import pyethereum.testutils as testutils
 from tests.utils import new_db
 import serpent
@@ -20,7 +21,7 @@ configure_logging(':trace')
 
 
 def run_test(filename, testname, testdata):
-    rlpdata = testdata["rlp"][2:].decode('hex')
+    rlpdata = decode_hex(testdata["rlp"][2:])
     o = {}
     try:
         tx = rlp.decode(rlpdata, transactions.Transaction)

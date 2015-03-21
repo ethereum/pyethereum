@@ -1,6 +1,7 @@
 from pyethereum import blocks
 from pyethereum import processblock
 import rlp
+from rlp.utils import decode_hex, encode_hex
 from pyethereum import transactions
 from pyethereum.config import get_default_config
 from pyethereum.db import DB
@@ -30,7 +31,7 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     safe = {x: y["balance"] for x, y in 
             list(chain_manager.head.to_dict(True)["state"].items())}
     for hex_rlp_encoded_data in fh:
-        hexdata = hex_rlp_encoded_data.strip().decode('hex')
+        hexdata = decode_hex(hex_rlp_encoded_data.strip())
         blk = blocks.TransientBlock(hexdata)
         print(blk.number, blk.hash.encode('hex'), \
             '%d txs' % len(blk.transaction_list))

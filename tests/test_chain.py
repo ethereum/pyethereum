@@ -5,6 +5,7 @@ import pyethereum.processblock as processblock
 import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import rlp
+from rlp.utils import decode_hex, encode_hex
 import pyethereum.trie as trie
 import pyethereum.miner as miner
 import pyethereum.utils as utils
@@ -26,9 +27,9 @@ blocks.peck_cache(db, utils.sha3('\x00' * 32), ethash_utils.get_next_cache_size(
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3('cow')
-    v = utils.privtoaddr(k).decode('hex')
+    v = decode_hex(utils.privtoaddr(k))
     k2 = utils.sha3('horse')
-    v2 = utils.privtoaddr(k2).decode('hex')
+    v2 = decode_hex(utils.privtoaddr(k2))
     return k, v, k2, v2
 
 
@@ -490,8 +491,8 @@ def test_reward_uncles():
     """
     k, v, k2, v2 = accounts()
     blk0 = mkquickgenesis()
-    local_coinbase = ('1' * 40).decode('hex')
-    uncle_coinbase = ('2' * 40).decode('hex')
+    local_coinbase = decode_hex('1' * 40)
+    uncle_coinbase = decode_hex('2' * 40)
     cm = get_chainmanager(db=blk0.db, genesis=blk0)
     blk1 = mine_next_block(blk0, coinbase=local_coinbase)
     cm.chain.add_block(blk1)

@@ -10,6 +10,7 @@ import pyethereum.opcodes as opcodes
 import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
 import rlp
+from rlp.utils import decode_hex, encode_hex
 
 serpent = None
 
@@ -76,7 +77,7 @@ class state():
         self.block = b.genesis(self.db, o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
-        self.block.coinbase = a0.decode('hex')
+        self.block.coinbase = decode_hex(a0)
         self.block.gas_limit = 10 ** 9
 
     def __del__(self):
@@ -141,7 +142,7 @@ class state():
         return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
+        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         if gas is not None:
@@ -164,7 +165,7 @@ class state():
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
+        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)

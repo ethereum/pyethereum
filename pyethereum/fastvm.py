@@ -2,6 +2,7 @@ from .opcodes import opcodes, reverse_opcodes
 from . import utils
 import serpent
 import rlp
+from rlp.utils import decode_hex, encode_hex
 import copy
 
 code_cache = {}
@@ -380,7 +381,7 @@ def apply_msg(block, tx, msg, code):
         if not mem_extend(mem, msgtop.compustate, '', mstart, msz):
             return drop(OUT_OF_GAS)
         if block.get_balance(msgtop.to) >= value:
-            sender = msgtop.to.decode('hex') if len(msgtop.to) == 40 else msgtop.to
+            sender = decode_hex(msgtop.to) if len(msgtop.to) == 40 else msgtop.to
             block.increment_nonce(msgtop.to)
             data = [0] * ((msz >> 5) + 1)
             copy32(mem, data, mstart, 0, msz)
@@ -573,7 +574,7 @@ def apply_msg(block, tx, msg, code):
         stk.append(utils.big_endian_to_int(block.prevhash))
 
     def OP_COINBASE():
-        stk.append(utils.big_endian_to_int(block.coinbase.decode('hex')))
+        stk.append(utils.big_endian_to_int(decode_hex(block.coinbase)))
 
     def OP_TIMESTAMP():
         stk.append(block.timestamp)

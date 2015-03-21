@@ -1,7 +1,7 @@
 from pyethereum import blocks, utils, db
 from pyethereum.exceptions import VerificationFailed
 import rlp
-
+from rlp.utils import decode_hex, encode_hex
 import pytest, os, sys
 import pyethereum.testutils as testutils
 
@@ -51,7 +51,7 @@ def run_block_test(params):
     b.extra_data = utils.scanners['bin'](gbh["extraData"])
     b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
     b.gas_used = utils.scanners['int'](gbh["gasUsed"])
-    b.coinbase = utils.scanners['addr'](gbh["coinbase"].decode('hex'))
+    b.coinbase = utils.scanners['addr'](decode_hex(gbh["coinbase"]))
     b.difficulty = int(gbh["difficulty"])
     b.prevhash = utils.scanners['bin'](gbh["parentHash"])
     b.mixhash = utils.scanners['bin'](gbh["mixHash"])
@@ -68,7 +68,7 @@ def run_block_test(params):
         raise Exception("header hash mismatch")
     assert b.header.check_pow(e)
     for blk in params["blocks"]:
-        rlpdata = blk["rlp"][2:].decode('hex')
+        rlpdata = decode_hex(blk["rlp"][2:])
         if 'blockHeader' not in blk:
             try:
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)

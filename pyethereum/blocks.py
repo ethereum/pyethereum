@@ -1,6 +1,7 @@
 import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
+from rlp.utils import decode_hex, encode_hex
 from . import trie
 from .trie import Trie
 from .securetrie import SecureTrie
@@ -27,7 +28,7 @@ GENESIS_DIFFICULTY = 131072
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = '\00' * 32
-GENESIS_COINBASE = ("0" * 40).decode('hex')
+GENESIS_COINBASE = decode_hex("0" * 40)
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
 GENESIS_SEEDHASH = '\x00' * 32
 GENESIS_MIXHASH = '\x00' * 32
@@ -227,7 +228,7 @@ class BlockHeader(rlp.Serializable):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().items() if k != 'self'}
         if len(fields['coinbase']) == 40:
-            fields['coinbase'] = fields['coinbase'].decode('hex')
+            fields['coinbase'] = decode_hex(fields['coinbase'])
         assert len(fields['coinbase']) == 20
         self.block = None
         super(BlockHeader, self).__init__(**fields)
@@ -708,7 +709,7 @@ class Block(rlp.Serializable):
         Note that this method ignores cached account items.
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20 or len(address) == 0
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
@@ -725,7 +726,7 @@ class Block(rlp.Serializable):
                       `'storage'` or `'code'`)
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20 or len(address) == 0
         if param != 'storage':
             if address in self.caches[param]:
@@ -746,7 +747,7 @@ class Block(rlp.Serializable):
         :param value: the new value
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         self.set_and_journal(param, address, value)
         self.set_and_journal('all', address, True)
@@ -916,7 +917,7 @@ class Block(rlp.Serializable):
         :param index: the index of the requested item in the storage
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY in self.caches:
@@ -937,7 +938,7 @@ class Block(rlp.Serializable):
         :param value: the new value of the item
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY not in self.caches:
@@ -947,7 +948,7 @@ class Block(rlp.Serializable):
 
     def account_exists(self, address):
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         return len(self.state.get(address)) > 0 or address in self.caches['all']
 
@@ -993,7 +994,7 @@ class Block(rlp.Serializable):
         :param address: the address of the account (binary or hex string)
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         self.commit_state()
         self.state.delete(address)
@@ -1007,7 +1008,7 @@ class Block(rlp.Serializable):
         :param with_storage: include the whole account's storage
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
 
         if with_storage_root:
@@ -1329,7 +1330,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
     block = Block(header, [], [], db=db)
     for addr, data in start_alloc.items():
         if len(addr) == 40:
-            addr = addr.decode('hex')
+            addr = decode_hex(addr)
         assert len(addr) == 20
         if 'wei' in data:
             block.set_balance(addr, int(data['wei']))
@@ -1342,8 +1343,8 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         if 'storage' in data:
             for k, v in data['storage'].items():
                 blk.set_storage_data(addr,
-                                     utils.big_endian_to_int(k[2:].decode('hex')),
-                                     utils.big_endian_to_int(v[2:].decode('hex')))
+                                     utils.big_endian_to_int(decode_hex(k[2:])),
+                                     utils.big_endian_to_int(decode_hex(v[2:])))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization

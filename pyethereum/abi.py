@@ -1,5 +1,6 @@
-import utils, sys, re, json
-
+import sys, re, json
+import .utils
+from rlp.utils import decode_hex, encode_hex
 from .utils import encode_int, zpad, big_endian_to_int
 
 
@@ -113,7 +114,7 @@ def decint(n):
     elif is_numeric(n):
         raise Exception("Number out of range: %r" % n)
     elif is_string(n) and len(n) == 40:
-        return big_endian_to_int(n.decode('hex'))
+        return big_endian_to_int(decode_hex(n))
     elif is_string(n) and len(n) <= 32:
         return big_endian_to_int(n)
     elif is_string(n) and len(n) > 32:
@@ -173,7 +174,7 @@ def encode_single(arg, base, sub):
         elif len(arg) == len(sub):
             normal_args = zpad(arg, 32)
         elif len(arg) == len(sub) * 2:
-            normal_args = zpad(arg.decode('hex'), 32)
+            normal_args = zpad(decode_hex(arg), 32)
         else:
             raise Exception("Could not parse hash: %r" % arg)
     # Addresses: address (== hash160)
@@ -184,7 +185,7 @@ def encode_single(arg, base, sub):
         elif len(arg) == 20:
             normal_args = zpad(arg, 32)
         elif len(arg) == 40:
-            normal_args = zpad(arg.decode('hex'), 32)
+            normal_args = zpad(decode_hex(arg), 32)
         else:
             raise Exception("Could not parse address: %r" % arg)
     return len_args, normal_args, var_args

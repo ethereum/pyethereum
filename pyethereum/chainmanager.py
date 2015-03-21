@@ -6,6 +6,7 @@ from . import signals
 from .db import DB, EphemDB
 from . import utils
 import rlp
+from rlp.utils import decode_hex, encode_hex
 from . import blocks
 from . import processblock
 from . import peermanager
@@ -84,7 +85,7 @@ class ChainManager(StoppableLoopThread):
             if blk.has_parent():
                 blk = blk.get_parent()
 
-        coinbase = self.config.get('wallet', 'coinbase').decode('hex')
+        coinbase = decode_hex(self.config.get('wallet', 'coinbase'))
         miner = Miner(self.chain.head, uncles, coinbase)
         if self.miner:
             for tx in self.miner.get_transactions():

@@ -5,6 +5,7 @@ import pyethereum.utils as utils
 import pyethereum.bloom as bloom
 import os
 import sys
+from rlp.utils import decode_hex, encode_hex
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -46,7 +47,7 @@ for filename, tests in list(vm_tests_fixtures().items()):
 
 
 def decode_int_from_hex(x):
-    r = utils.decode_int(x.decode('hex').lstrip("\x00"))
+    r = utils.decode_int(decode_hex(x).lstrip("\x00"))
     return r
 
 def encode_hex_from_int(x):
@@ -62,15 +63,14 @@ def do_test_bloom(test_logs):
     topics: The topics of the logentry, given as an array of values.
     """
     for data in test_logs:
-        print(data)
         address = data['address']
         # Test via bloom
-        b = bloom.bloom_insert(0, address.decode('hex'))
+        b = bloom.bloom_insert(0, decode_hex(address))
         for t in data['topics']:
-            b = bloom.bloom_insert(b, t.decode('hex'))
+            b = bloom.bloom_insert(b, decode_hex(t))
         # Test via Log
         topics = [decode_int_from_hex(x) for x in data['topics']]
-        log = pb.Log(address.decode('hex'), topics, '')
+        log = pb.Log(decode_hex(address), topics, '')
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
         assert log_bloom.encode('hex') == encode_hex_from_int(b)
         assert data['bloom'] == log_bloom.encode('hex')

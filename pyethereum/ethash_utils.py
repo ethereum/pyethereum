@@ -1,4 +1,5 @@
 import sha3
+from rlp.utils import decode_hex, encode_hex
 
 WORD_BYTES = 4                    # bytes in word
 DATASET_BYTES_INIT = 2**30        # bytes in dataset at genesis
@@ -26,7 +27,7 @@ def decode_int(s):
 
 def encode_int(s):
     a = "%x" % s
-    return '' if s == 0 else ('0' * (len(a) % 2) + a).decode('hex')[::-1]
+    return '' if s == 0 else decode_hex('0' * (len(a) % 2) + a)[::-1]
 
 
 def zpad(s, length):

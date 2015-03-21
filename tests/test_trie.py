@@ -6,6 +6,7 @@ import pyethereum.trie as trie
 import pyethereum.db as db
 import itertools
 from pyethereum.slogging import get_logger, configure_logging
+from rlp.utils import decode_hex, encode_hex
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -38,7 +39,7 @@ def run_test(name):
 
     def _dec(x):
         if isinstance(x, str) and x.startswith('0x'):
-            return x[2:].decode('hex')
+            return decode_hex(x[2:])
         return x
 
     pairs['in'] = [(_dec(k), _dec(v)) for k,v in pairs['in']]

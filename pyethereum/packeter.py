@@ -1,6 +1,7 @@
 import sys
 from . import signals
 import rlp
+from rlp.utils import decode_hex, encode_hex
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
@@ -95,7 +96,7 @@ class Packeter(object):
         self.config = config
         self.CLIENT_VERSION = self.config.get('network', 'client_version') \
             or self.CLIENT_VERSION
-        self.NODE_ID = self.config.get('network', 'node_id').decode('hex')
+        self.NODE_ID = decode_hex(self.config.get('network', 'node_id'))
 
     @classmethod
     def packet_size(cls, packet):

@@ -4,6 +4,7 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
+from rlp.utils import decode_hex, encode_hex
 from . import opcodes
 from . import utils
 from . import blocks
@@ -54,7 +55,7 @@ class Log(rlp.Serializable):
 
     def __init__(self, address, topics, data):
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         super(Log, self).__init__(address, topics, data)
 
@@ -244,7 +245,7 @@ def _apply_msg(ext, msg, code):
 
 def create_contract(ext, msg):
     print('CREATING WITH GAS', msg.gas)
-    sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
+    sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)

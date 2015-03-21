@@ -5,7 +5,7 @@ import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import int_to_big_endian
+from rlp.utils import int_to_big_endian, decode_hex, encode_hex
 from . import db
 import random
 
@@ -59,7 +59,7 @@ def sha3(seed):
 
 def privtoaddr(x):
     if len(x) > 32:
-        x = x.decode('hex')
+        x = decode_hex(x)
     return sha3(privtopub(x)[1:])[12:].encode('hex')
 
 
@@ -86,7 +86,7 @@ def coerce_addr_to_bin(x):
     if isinstance(x, int):
         return zpad(big_endian_int.serialize(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
-        return x.decode('hex')
+        return decode_hex(x)
     else:
         return zpad(x, 20)[-20:]
 
@@ -104,7 +104,7 @@ def coerce_to_int(x):
     if isinstance(x, int):
         return x
     elif len(x) == 40:
-        return big_endian_to_int(x.decode('hex'))
+        return big_endian_to_int(decode_hex(x))
     else:
         return big_endian_to_int(x)
 
@@ -113,7 +113,7 @@ def coerce_to_bytes(x):
     if isinstance(x, int):
         return big_endian_int.serialize(x)
     elif len(x) == 40:
-        return x.decode('hex')
+        return decode_hex(x)
     else:
         return x
 
@@ -208,7 +208,7 @@ def encode_addr(v):
     '''encodes an address into serialization'''
     if not isinstance(v, str) or len(v) not in [0, 40]:
         raise Exception("Address must be empty or 40 chars long")
-    return v.decode('hex')
+    return decode_hex(v)
 
 
 def encode_int(v):
@@ -224,14 +224,14 @@ def encode_int256(v):
 
 def scan_bin(v):
     if v[:2] == '0x':
-        return v[2:].decode('hex')
+        return decode_hex(v[2:])
     else:
-        return v.decode('hex')
+        return decode_hex(v)
 
 
 def scan_int(v):
     if v[:2] == '0x':
-        return big_endian_to_int(v[2:].decode('hex'))
+        return big_endian_to_int(decode_hex(v[2:]))
     else:
         return int(v)
 
@@ -269,7 +269,7 @@ scanners = {
     "addr": lambda x: x[2:] if x[:2] == '0x' else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
-    "int256b": lambda x: big_endian_to_int(x.decode('hex'))
+    "int256b": lambda x: big_endian_to_int(decode_hex(x))
 }
 
 

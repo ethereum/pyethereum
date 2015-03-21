@@ -2,6 +2,7 @@ from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import rlp
 from rlp.sedes import big_endian_int, binary
+from rlp.utils import decode_hex, encode_hex
 
 from . import bloom
 from . import utils
@@ -41,7 +42,7 @@ class Transaction(rlp.Serializable):
     def __init__(self, nonce, gasprice, startgas, to, value, data,
                  v=0, r=0, s=0):
         if len(to) == 40:
-            to = to.decode('hex')
+            to = decode_hex(to)
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)
@@ -66,7 +67,7 @@ class Transaction(rlp.Serializable):
         """
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
-        self.sender = utils.privtoaddr(key).decode('hex')
+        self.sender = decode_hex(utils.privtoaddr(key))
         return self
 
     @property

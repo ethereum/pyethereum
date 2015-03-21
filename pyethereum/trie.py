@@ -4,7 +4,7 @@ import os
 import rlp
 from . import utils
 import copy
-
+from rlp.utils import decode_hex, encode_hex
 
 bin_to_nibbles_cache = {}
 
@@ -854,9 +854,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
-            t = Trie(_db, sys.argv[3].decode('hex'))
+            t = Trie(_db, decode_hex(sys.argv[3]))
             t.update(sys.argv[4], sys.argv[5])
             print(encode_node(t.root_hash))
         elif sys.argv[1] == 'get':
-            t = Trie(_db, sys.argv[3].decode('hex'))
+            t = Trie(_db, decode_hex(sys.argv[3]))
             print(t.get(sys.argv[4]))

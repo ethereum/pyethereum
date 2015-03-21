@@ -1,5 +1,6 @@
-NULLSHA3 = 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470' \
-    .decode('hex')
+from rlp.utils import decode_hex, encode_hex
+
+NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
 
 def compress(data):

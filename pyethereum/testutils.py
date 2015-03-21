@@ -1,6 +1,7 @@
 from pyethereum import tester as t
 from pyethereum import blocks, utils, transactions, vm
 import rlp
+from rlp.utils import decode_hex, encode_hex
 from pyethereum import processblock as pb
 import tempfile
 import copy
@@ -38,7 +39,7 @@ time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
 def parse_int_or_hex(s):
     if s[:2] == '0x':
-        return utils.big_endian_to_int(s[2:].decode('hex'))
+        return utils.big_endian_to_int(decode_hex(s[2:]))
     else:
         return int(s)
 
@@ -80,9 +81,9 @@ def run_vm_test(params, mode):
                                    'currentDifficulty', 'currentNumber'])
     # setup env
     header = blocks.BlockHeader(
-        prevhash=env['previousHash'].decode('hex'),
+        prevhash=decode_hex(env['previousHash']),
         number=int(env['currentNumber']),
-        coinbase=env['currentCoinbase'].decode('hex'),
+        coinbase=decode_hex(env['currentCoinbase']),
         difficulty=int(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=int(env['currentTimestamp']))
@@ -91,26 +92,26 @@ def run_vm_test(params, mode):
     # setup state
     for address, h in list(pre.items()):
         assert len(address) == 40
-        address = address.decode('hex')
+        address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
-        blk.set_code(address, h['code'][2:].decode('hex'))
+        blk.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
-                                 utils.big_endian_to_int(k[2:].decode('hex')),
-                                 utils.big_endian_to_int(v[2:].decode('hex')))
+                                 utils.big_endian_to_int(decode_hex(k[2:])),
+                                 utils.big_endian_to_int(decode_hex(v[2:])))
 
     # execute transactions
-    sender = exek['caller'].decode('hex')  # a party that originates a call
-    recvaddr = exek['address'].decode('hex')
+    sender = decode_hex(exek['caller'])  # a party that originates a call
+    recvaddr = decode_hex(exek['address'])
     tx = transactions.Transaction(
-        nonce=blk._get_acct_item(exek['caller'].decode('hex'), 'nonce'),
+        nonce=blk._get_acct_item(decode_hex(exek['caller']), 'nonce'),
         gasprice=int(exek['gasPrice']),
         startgas=int(exek['gas']),
         to=recvaddr,
         value=int(exek['value']),
-        data=exek['data'][2:].decode('hex'))
+        data=decode_hex(exek['data'][2:]))
     tx.sender = sender
 
     # capture apply_message calls
@@ -139,7 +140,7 @@ def run_vm_test(params, mode):
 
     def create_wrapper(msg):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
-        sender = msg.sender.decode('hex') if \
+        sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
         addr = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
@@ -165,7 +166,7 @@ def run_vm_test(params, mode):
                      vm.CallData([ord(x) for x in tx.data]))
     time_pre = time.time()
     success, gas_remained, output = \
-        vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
+        vm.vm_execute(ext, msg, decode_hex(exek['code'][2:]))
     pb.apply_msg = orig_apply_msg
     blk.commit_state()
     for s in blk.suicides:
@@ -221,9 +222,9 @@ def run_state_test(params, mode):
 
     # setup env
     header = blocks.BlockHeader(
-        prevhash=env['previousHash'].decode('hex'),
+        prevhash=decode_hex(env['previousHash']),
         number=int(env['currentNumber']),
-        coinbase=env['currentCoinbase'].decode('hex'),
+        coinbase=decode_hex(env['currentCoinbase']),
         difficulty=int(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=int(env['currentTimestamp']))
@@ -232,33 +233,33 @@ def run_state_test(params, mode):
     # setup state
     for address, h in list(pre.items()):
         assert len(address) == 40
-        address = address.decode('hex')
+        address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
-        blk.set_code(address, h['code'][2:].decode('hex'))
+        blk.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
-                                 utils.big_endian_to_int(k[2:].decode('hex')),
-                                 utils.big_endian_to_int(v[2:].decode('hex')))
+                                 utils.big_endian_to_int(decode_hex(k[2:])),
+                                 utils.big_endian_to_int(decode_hex(v[2:])))
 
     for address, h in list(pre.items()):
-        address = address.decode('hex')
+        address = decode_hex(address)
         assert blk.get_nonce(address) == int(h['nonce'])
         assert blk.get_balance(address) == int(h['balance'])
-        assert blk.get_code(address) == h['code'][2:].decode('hex')
+        assert blk.get_code(address) == decode_hex(h['code'][2:])
         for k, v in h['storage'].items():
             assert blk.get_storage_data(address, utils.big_endian_to_int(
-                k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
+                decode_hex(k[2:]))) == utils.big_endian_to_int(decode_hex(v[2:]))
 
     # execute transactions
     tx = transactions.Transaction(
         nonce=int(exek['nonce'] or "0"),
         gasprice=int(exek['gasPrice'] or "0"),
         startgas=parse_int_or_hex(exek['gasLimit'] or "0"),
-        to=(exek['to'][2:] if exek['to'][:2] == '0x' else exek['to']).decode('hex'),
+        to=decode_hex(exek['to'][2:] if exek['to'][:2] == '0x' else exek['to']),
         value=int(exek['value'] or "0"),
-        data=exek['data'][2:].decode('hex')).sign(exek['secretKey'])
+        data=decode_hex(exek['data'][2:])).sign(exek['secretKey'])
 
     orig_apply_msg = pb.apply_msg
 
@@ -324,11 +325,11 @@ def run_state_test(params, mode):
 def run_ethash_test(params, mode):
     if 'header' not in params:
         b = blocks.genesis(db)
-        b.seedhash = params['seed'].decode('hex')
-        b.nonce = params['nonce'].decode('hex')
+        b.seedhash = decode_hex(params['seed'])
+        b.nonce = decode_hex(params['nonce'])
         b.number = params.get('number', 0)
-        params['header'] = b.serialize_header().encode('hex')
-    header = params['header'].decode('hex')
+        params['header'] = decode_hex(b.serialize_header())
+    header = decode_hex(params['header'])
     block = blocks.Block.init_from_header(db, header, transient=True)
     header_hash = utils.sha3(block.serialize_header_without_nonce())
     cache_size = ethash.get_cache_size(block.number)
