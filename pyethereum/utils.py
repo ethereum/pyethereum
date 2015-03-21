@@ -7,13 +7,22 @@ import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import int_to_big_endian, decode_hex, encode_hex
 from pyethereum import db
-from pyethereum.abi import is_numeric, is_string
 import random
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
+if sys.version_info.major == 2:
+    is_numeric = lambda x: isinstance(x, (int, long))
+    is_string = lambda x: isinstance(x, (str, unicode))
+else:
+    is_numeric = lambda x: isinstance(x, int)
+    is_string = lambda x: isinstance(x, bytes)
+
+
+def big_endian_to_int(value):
+    return BigEndianInt().deserialize(value)
 
 # decorator
 

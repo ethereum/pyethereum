@@ -7,7 +7,6 @@ from rlp.sedes import CountableList, binary
 from rlp.utils import decode_hex, encode_hex
 from pyethereum import opcodes
 from pyethereum import utils
-from pyethereum import blocks
 from pyethereum import transactions
 from pyethereum import trie
 from pyethereum import fastvm
@@ -34,6 +33,7 @@ CREATE_CONTRACT_ADDRESS = ''
 
 
 def verify(block, parent):
+    from pyethereum import blocks
     try:
         block2 = rlp.decode(rlp.encode(block), blocks.Block,
                             db=parent.db, parent=parent)

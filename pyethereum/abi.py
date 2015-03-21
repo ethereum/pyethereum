@@ -1,8 +1,7 @@
 import sys, re, json
-import pyethereum.utils
+from  pyethereum import utils
 from rlp.utils import decode_hex, encode_hex
-from pyethereum.utils import encode_int, zpad, big_endian_to_int
-
+from pyethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
 
 if sys.version_info.major == 2:
     def json_decode(x):
@@ -105,14 +104,6 @@ class ContractTranslator():
         o["_event_type"] = name
         print(o)
         return o
-
-if sys.version_info.major == 2:
-    is_numeric = lambda x: isinstance(x, (int, long))
-    is_string = lambda x: isinstance(x, (str, unicode))
-else:
-    is_numeric = lambda x: isinstance(x, int)
-    is_string = lambda x: isinstance(x, bytes)
-
 
 # Decode an integer
 def decint(n):

@@ -1,12 +1,17 @@
-
+import sys
 import os
 import uuid
-import io
-import configparser
+
 from pyethereum.utils import default_data_dir
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
 
+if sys.version_info.major == 3:
+    import configparser
+    import io
+else:
+    import ConfigParser as configparser
+    import StringIO as io
 
 def default_config_path():
     return os.path.join(default_data_dir, 'config.txt')

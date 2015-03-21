@@ -1,5 +1,10 @@
 import time
-import queue
+import sys
+
+if sys.version_info.major == 3:
+    import queue
+else:
+    import Queue as queue
 import socket
 
 from pyethereum import signals
