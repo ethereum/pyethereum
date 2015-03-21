@@ -1,7 +1,7 @@
 import sys, re, json
-import .utils
+import pyethereum.utils
 from rlp.utils import decode_hex, encode_hex
-from .utils import encode_int, zpad, big_endian_to_int
+from pyethereum.utils import encode_int, zpad, big_endian_to_int
 
 
 if sys.version_info.major == 2:

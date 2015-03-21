@@ -2,19 +2,19 @@ import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
 from rlp.utils import decode_hex, encode_hex
-from . import trie
-from .trie import Trie
-from .securetrie import SecureTrie
-from . import utils
-from .utils import address, int256, trie_root, hash32
-from . import processblock
-from .transactions import Transaction
-from . import bloom
+from pyethereum import trie
+from pyethereum.trie import Trie
+from pyethereum.securetrie import SecureTrie
+from pyethereum import utils
+from pyethereum.utils import address, int256, trie_root, hash32
+from pyethereum import processblock
+from pyethereum.transactions import Transaction
+from pyethereum import bloom
 import copy
 import sys
-from . import ethash, ethash_utils
+from pyethereum import ethash, ethash_utils
 from repoze.lru import lru_cache
-from .exceptions import *
+from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')

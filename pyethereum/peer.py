@@ -2,13 +2,13 @@ import time
 import queue
 import socket
 
-from . import signals
-from .stoppable import StoppableLoopThread
-from .packeter import packeter
-from .utils import big_endian_to_int as idec
-from .utils import recursive_int_to_big_endian
+from pyethereum import signals
+from pyethereum.stoppable import StoppableLoopThread
+from pyethereum.packeter import packeter
+from pyethereum.utils import big_endian_to_int as idec
+from pyethereum.utils import recursive_int_to_big_endian
 import rlp
-from . import blocks
+from pyethereum import blocks
 from pyethereum.slogging import get_logger
 log_net = get_logger('net')
 log_p2p = get_logger('p2p')

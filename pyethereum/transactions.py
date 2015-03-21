@@ -4,8 +4,8 @@ import rlp
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import decode_hex, encode_hex
 
-from . import bloom
-from . import utils
+from pyethereum import bloom
+from pyethereum import utils
 
 
 class Transaction(rlp.Serializable):

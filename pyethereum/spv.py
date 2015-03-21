@@ -1,9 +1,9 @@
-from . import blocks
-from . import processblock
-from . import transactions
-from . import utils
+from pyethereum import blocks
+from pyethereum import processblock
+from pyethereum import transactions
+from pyethereum import utils
 import rlp
-from . import trie
+from pyethereum import trie
 
 
 def mk_transaction_spv_proof(block, tx):

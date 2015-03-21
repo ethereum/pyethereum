@@ -1,8 +1,8 @@
 import time
 import struct
-from . import blocks
-from . import processblock
-from . import utils
+from pyethereum import blocks
+from pyethereum import processblock
+from pyethereum import utils
 import rlp
 from pyethereum.slogging import get_logger
 log = get_logger('eth.miner')

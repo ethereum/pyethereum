@@ -3,7 +3,7 @@ import tempfile
 import time
 import logging
 import sys
-from . import spv
+from pyethereum import spv
 import pyethereum
 import pyethereum.db as db
 import pyethereum.opcodes as opcodes

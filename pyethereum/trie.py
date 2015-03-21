@@ -2,8 +2,8 @@
 
 import os
 import rlp
-from . import utils
-from .abi import is_string
+from pyethereum import utils
+from pyethereum.abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex
 

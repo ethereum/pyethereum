@@ -6,7 +6,7 @@ import pyethereum.db as db
 import itertools
 from pyethereum.slogging import get_logger, configure_logging
 from rlp.utils import decode_hex, encode_hex
-from .abi import is_string
+from pyethereum.abi import is_string
 logger = get_logger()
 
 # customize VM log output to your needs

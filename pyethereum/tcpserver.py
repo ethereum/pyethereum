@@ -3,10 +3,10 @@ import time
 import sys
 import traceback
 
-from .dispatch import receiver
+from pyethereum.dispatch import receiver
 
-from .stoppable import StoppableLoopThread
-from . import signals
+from pyethereum.stoppable import StoppableLoopThread
+from pyethereum import signals
 from pyethereum.slogging import get_logger
 log_net = get_logger('net')
 

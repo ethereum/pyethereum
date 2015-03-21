@@ -3,13 +3,13 @@ import socket
 import json
 import os
 
-from .dispatch import receiver
+from pyethereum.dispatch import receiver
 
-from .stoppable import StoppableLoopThread
+from pyethereum.stoppable import StoppableLoopThread
 import rlp
-from . import signals
-from . import bloom
-from .peer import Peer
+from pyethereum import signals
+from pyethereum import bloom
+from pyethereum.peer import Peer
 from pyethereum.slogging import get_logger
 log_net = get_logger('net')
 log_p2p = get_logger('p2p')

@@ -4,11 +4,11 @@ import sys
 import requests
 import json
 from docopt import docopt
-from . import utils
-from . import transactions
+from pyethereum import utils
+from pyethereum import transactions
 import rlp
-from . import __version__
-from . config import read_config
+from pyethereum import __version__
+from pyethereum config import read_config
 from rlp.utils import decode_hex, encode_hex
 
 config = read_config()

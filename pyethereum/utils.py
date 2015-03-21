@@ -6,8 +6,8 @@ import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import int_to_big_endian, decode_hex, encode_hex
-from . import db
-from .abi import is_numeric, is_string
+from pyethereum import db
+from pyethereum.abi import is_numeric, is_string
 import random
 
 TT256 = 2 ** 256

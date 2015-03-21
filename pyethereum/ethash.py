@@ -1,5 +1,5 @@
 import copy
-from .ethash_utils import *
+from pyethereum.ethash_utils import *
 import sys
 
 

@@ -5,11 +5,11 @@ from rlp.utils import decode_hex, encode_hex
 from pyethereum import processblock as pb
 import tempfile
 import copy
-from .db import DB, EphemDB
+from pyethereum.db import DB, EphemDB
 import json
 import os
 import time
-from . import ethash
+from pyethereum import ethash
 db = EphemDB()
 
 env = {

@@ -1,5 +1,5 @@
-from .opcodes import opcodes, reverse_opcodes
-from . import utils
+from pyethereum.opcodes import opcodes, reverse_opcodes
+from pyethereum import utils
 import serpent
 import rlp
 from rlp.utils import decode_hex, encode_hex

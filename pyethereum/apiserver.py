@@ -14,7 +14,7 @@ import pyethereum.utils as utils
 import rlp
 from rlp.utils import decode_hex, encode_hex
 from pyethereum.slogging import get_logger, LogRecorder
-from ._version import get_versions
+from pyethereum._version import get_versions
 
 chain = chain_manager.chain
 

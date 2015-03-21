@@ -1,6 +1,6 @@
 import os
 import threading
-from . import compress
+from pyethereum import compress
 from hashlib import md5
 from pyethereum.slogging import get_logger
 log = get_logger('db')

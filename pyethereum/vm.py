@@ -1,7 +1,7 @@
-from . import utils
-from .abi import is_numeric
+from pyethereum import utils
+from pyethereum.abi import is_numeric
 import copy
-from . import opcodes
+from pyethereum import opcodes
 import json
 import time
 from pyethereum.slogging import get_logger

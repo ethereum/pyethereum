@@ -1,8 +1,8 @@
 import os
-from . import utils
+from pyethereum import utils
 import rlp
-from . import blocks
-from . import processblock
+from pyethereum import blocks
+from pyethereum import processblock
 from pyethereum.slogging import get_logger
 log = get_logger('eth.chain')
 

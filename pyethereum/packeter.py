@@ -1,5 +1,5 @@
 import sys
-from . import signals
+from pyethereum import signals
 import rlp
 from rlp.utils import decode_hex, encode_hex
 from pyethereum.utils import big_endian_to_int as idec
@@ -7,7 +7,7 @@ from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
 from pyethereum.utils import sha3
 from pyethereum import dispatch
-from .version import __version__
+from pyethereum.version import __version__
 from pyethereum.slogging import get_logger
 log = get_logger('net.wire')
 

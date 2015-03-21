@@ -5,16 +5,16 @@ import time
 import rlp
 from rlp.sedes import CountableList, binary
 from rlp.utils import decode_hex, encode_hex
-from . import opcodes
-from . import utils
-from . import blocks
-from . import transactions
-from . import trie
-from . import fastvm
-from . import specials
-from . import bloom
-from . import vm
-from .exceptions import *
+from pyethereum import opcodes
+from pyethereum import utils
+from pyethereum import blocks
+from pyethereum import transactions
+from pyethereum import trie
+from pyethereum import fastvm
+from pyethereum import specials
+from pyethereum import bloom
+from pyethereum import vm
+from pyethereum.exceptions import *
 
 sys.setrecursionlimit(100000)
 

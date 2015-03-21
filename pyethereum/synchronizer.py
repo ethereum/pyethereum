@@ -1,7 +1,7 @@
 
 from operator import attrgetter
 import sys
-from . import blocks
+from pyethereum import blocks
 from pyethereum.slogging import get_logger
 log = get_logger('eth.sync')
 
