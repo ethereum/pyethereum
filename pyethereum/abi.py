@@ -4,19 +4,22 @@ from rlp.utils import decode_hex, encode_hex
 from .utils import encode_int, zpad, big_endian_to_int
 
 
-def json_decode(x):
-    return json_non_unicode(json.loads(x))
+if sys.version_info.major == 2:
+    def json_decode(x):
+        return json_non_unicode(json.loads(x))
 
-
-def json_non_unicode(x):
-    if isinstance(x, str):
-        return str(x)
-    elif isinstance(x, list):
-        return [json_non_unicode(y) for y in x]
-    elif isinstance(x, dict):
-        return {x: json_non_unicode(y) for x, y in list(x.items())}
-    else:
-        return x
+    def json_non_unicode(x):
+        if isinstance(x, unicode):
+            return str(x)
+        elif isinstance(x, list):
+            return [json_non_unicode(y) for y in x]
+        elif isinstance(x, dict):
+            return {x: json_non_unicode(y) for x, y in x.items()}
+        else:
+            return x
+else:
+    def json_decode(x):
+        return json.loads(x)
 
 
 class ContractTranslator():
@@ -103,8 +106,12 @@ class ContractTranslator():
         print(o)
         return o
 
-is_numeric = lambda x: isinstance(x, int)
-is_string = lambda x: isinstance(x, str)
+if sys.version_info.major == 2:
+    is_numeric = lambda x: isinstance(x, (int, long))
+    is_string = lambda x: isinstance(x, (str, unicode))
+else:
+    is_numeric = lambda x: isinstance(x, int)
+    is_string = lambda x: isinstance(x, bytes)
 
 
 # Decode an integer

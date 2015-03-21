@@ -7,6 +7,7 @@ import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import int_to_big_endian, decode_hex, encode_hex
 from . import db
+from .abi import is_numeric, is_string
 import random
 
 TT256 = 2 ** 256
@@ -83,7 +84,7 @@ def int_to_addr(x):
 
 
 def coerce_addr_to_bin(x):
-    if isinstance(x, int):
+    if is_numeric(x):
         return zpad(big_endian_int.serialize(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return decode_hex(x)
@@ -92,7 +93,7 @@ def coerce_addr_to_bin(x):
 
 
 def coerce_addr_to_hex(x):
-    if isinstance(x, int):
+    if is_numeric(x):
         return zpad(big_endian_int.serialize(x), 20).encode('hex')
     elif len(x) == 40 or len(x) == 0:
         return x
@@ -101,7 +102,7 @@ def coerce_addr_to_hex(x):
 
 
 def coerce_to_int(x):
-    if isinstance(x, int):
+    if is_numeric(x):
         return x
     elif len(x) == 40:
         return big_endian_to_int(decode_hex(x))
@@ -110,7 +111,7 @@ def coerce_to_int(x):
 
 
 def coerce_to_bytes(x):
-    if isinstance(x, int):
+    if is_numeric(x):
         return big_endian_int.serialize(x)
     elif len(x) == 40:
         return decode_hex(x)
@@ -138,7 +139,7 @@ def int_to_big_endian4(integer):
 def recursive_int_to_big_endian(item):
     ''' convert all int to int_to_big_endian recursively
     '''
-    if isinstance(item, int):
+    if is_numeric(item):
         return big_endian_int.serialize(item)
     elif isinstance(item, (list, tuple)):
         res = []
@@ -159,7 +160,7 @@ def rlp_encode(item):
 
 def decode_bin(v):
     '''decodes a bytearray from serialization'''
-    if not isinstance(v, str):
+    if not is_string(v):
         raise Exception("Value must be binary, not RLP array")
     return v
 
@@ -182,7 +183,7 @@ def decode_root(root):
     if isinstance(root, list):
         if len(rlp.encode(root)) >= 32:
             raise Exception("Direct RLP roots must have length <32")
-    elif isinstance(root, str):
+    elif is_string(root):
         if len(root) != 0 and len(root) != 32:
             raise Exception("String roots must be empty or length-32")
     else:
@@ -206,14 +207,14 @@ def encode_root(v):
 
 def encode_addr(v):
     '''encodes an address into serialization'''
-    if not isinstance(v, str) or len(v) not in [0, 40]:
+    if not is_string(v) or len(v) not in [0, 40]:
         raise Exception("Address must be empty or 40 chars long")
     return decode_hex(v)
 
 
 def encode_int(v):
     '''encodes an integer into serialization'''
-    if not isinstance(v, int) or v < 0 or v >= TT256:
+    if not is_numeric(v) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
 

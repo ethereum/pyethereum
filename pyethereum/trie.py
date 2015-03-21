@@ -3,6 +3,7 @@
 import os
 import rlp
 from . import utils
+from .abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex
 
@@ -261,7 +262,7 @@ class Trie(object):
         self.set_root_hash(value)
 
     def set_root_hash(self, root_hash):
-        assert isinstance(root_hash, str)
+        assert is_string(root_hash)
         assert len(root_hash) in [0, 32]
         if self.transient:
             self.transient_root_hash = root_hash
@@ -676,7 +677,7 @@ class Trie(object):
         '''
         :param key: a string with length of [0, 32]
         '''
-        if not isinstance(key, str):
+        if not is_string(key):
             raise Exception("Key must be string")
 
         if len(key) > 32:
@@ -790,13 +791,13 @@ class Trie(object):
         :param key: a string
         :value: a string
         '''
-        if not isinstance(key, str):
+        if not is_string(key):
             raise Exception("Key must be string")
 
         # if len(key) > 32:
         #     raise Exception("Max key length is 32")
 
-        if not isinstance(value, str):
+        if not is_string(value):
             raise Exception("Value must be string")
 
         # if value == '':

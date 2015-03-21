@@ -1,4 +1,5 @@
 from . import utils
+from .abi import is_numeric
 import copy
 from . import opcodes
 import json
@@ -544,7 +545,7 @@ def vm_execute(ext, msg, code):
             print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
         for a in stk:
-            assert isinstance(a, int)
+            assert is_numeric(a)
             assert a >= 0 and a < 2**256, (a, op, stk)
 
 

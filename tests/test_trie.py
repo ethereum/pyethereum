@@ -1,4 +1,3 @@
-
 import pytest
 import json
 import tempfile
@@ -7,6 +6,7 @@ import pyethereum.db as db
 import itertools
 from pyethereum.slogging import get_logger, configure_logging
 from rlp.utils import decode_hex, encode_hex
+from .abi import is_string
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -38,7 +38,7 @@ def run_test(name):
     pairs = load_tests()[name]
 
     def _dec(x):
-        if isinstance(x, str) and x.startswith('0x'):
+        if is_string(x) and x.startswith('0x'):
             return decode_hex(x[2:])
         return x
 
