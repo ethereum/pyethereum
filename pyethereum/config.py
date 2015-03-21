@@ -2,7 +2,7 @@ import sys
 import os
 import uuid
 
-from pyethereum.utils import default_data_dir
+from pyethereum.utils import default_data_dir, to_string
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
 
@@ -24,7 +24,7 @@ def default_client_version():
 
 
 def default_node_id():
-    x = encode_hex(sha3(str(uuid.uuid1())) * 2)
+    x = encode_hex(sha3(to_string(uuid.uuid1())) * 2)
     assert len(x) == 128
     return x
 

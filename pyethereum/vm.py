@@ -6,6 +6,7 @@ import json
 import time
 from pyethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
+from pyethereum.utils import to_string
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -172,8 +173,8 @@ def vm_execute(ext, msg, code):
         # empty stack error
         if in_args > len(compustate.stack):
             return vm_exception('INSUFFICIENT STACK',
-                                op=op, needed=str(in_args),
-                                available=str(len(compustate.stack)))
+                                op=op, needed=to_string(in_args),
+                                available=to_string(len(compustate.stack)))
 
         # stack size limit error
         if len(compustate.stack) > 1024:
@@ -191,14 +192,14 @@ def vm_execute(ext, msg, code):
             """
             trace_data = {}
             if log_vm_op_stack.is_active():
-                trace_data['stack'] = list(map(str, list(compustate.stack)))
+                trace_data['stack'] = list(map(to_string, list(compustate.stack)))
             if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
                     ''.join([encode_hex(ascii_chr(x)) for x in compustate.memory])
             if log_vm_op_storage.is_active():
                 trace_data['storage'] = ext.log_storage(msg.to)
-            trace_data['gas'] = str(compustate.gas + fee)
-            trace_data['pc'] = str(compustate.pc - 1)
+            trace_data['gas'] = to_string(compustate.gas + fee)
+            trace_data['pc'] = to_string(compustate.pc - 1)
             trace_data['op'] = op
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval

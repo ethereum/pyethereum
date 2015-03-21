@@ -6,6 +6,7 @@ from pyethereum import processblock as pb
 import tempfile
 import copy
 from pyethereum.db import DB, EphemDB
+from pyethereum.utils import to_string
 import json
 import os
 import time
@@ -59,14 +60,14 @@ def mktest(code, language, data=None, fun=None, args=None,
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
                 "code": '0x' + encode_hex(s.block.get_code(ca)),
-                "data": '0x' + encode_hex(d), "gas": str(gas),
-                "gasPrice": str(1), "origin": t.a0,
-                "value": str(value)}
+                "data": '0x' + encode_hex(d), "gas": to_string(gas),
+                "gasPrice": to_string(1), "origin": t.a0,
+                "value": to_string(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
         tx = {"data": '0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
-              "gasPrice": str(1), "nonce": str(s.block.get_nonce(t.a0)),
-              "secretKey": encode_hex(t.k0), "to": ca, "value": str(value)}
+              "gasPrice": to_string(1), "nonce": to_string(s.block.get_nonce(t.a0)),
+              "secretKey": encode_hex(t.k0), "to": ca, "value": to_string(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
 
 
@@ -123,8 +124,8 @@ def run_vm_test(params, mode):
     def call_wrapper(msg):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
         hexdata = encode_hex(msg.data.extract_all())
-        apply_message_calls.append(dict(gasLimit=str(msg.gas),
-                                        value=str(msg.value),
+        apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
+                                        value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
                                         data='0x' + hexdata))
         return 1, msg.gas, ''
@@ -132,8 +133,8 @@ def run_vm_test(params, mode):
     def sendmsg_wrapper(msg, code):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
         hexdata = encode_hex(msg.data.extract_all())
-        apply_message_calls.append(dict(gasLimit=str(msg.gas),
-                                        value=str(msg.value),
+        apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
+                                        value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
                                         data='0x' + hexdata))
         return 1, msg.gas, ''
@@ -145,8 +146,8 @@ def run_vm_test(params, mode):
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
         addr = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
         hexdata = encode_hex(msg.data.extract_all())
-        apply_message_calls.append(dict(gasLimit=str(msg.gas),
-                                        value=str(msg.value),
+        apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
+                                        value=to_string(msg.value),
                                         destination='', data='0x' + hexdata))
         return 1, msg.gas, addr
 
@@ -158,7 +159,7 @@ def run_vm_test(params, mode):
         if n >= ext.block_number or n < ext.block_number - 256:
             return ''
         else:
-            return utils.sha3(str(n))
+            return utils.sha3(to_string(n))
 
     ext.block_hash = blkhash
 
@@ -185,7 +186,7 @@ def run_vm_test(params, mode):
     if success:
         params2['callcreates'] = apply_message_calls
         params2['out'] = '0x' + encode_hex(''.join(map(ascii_chr, output)))
-        params2['gas'] = str(gas_remained)
+        params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(True)['state']
 
@@ -269,7 +270,7 @@ def run_state_test(params, mode):
             if n >= blk.number or n < blk.number - 256:
                 return ''
             else:
-                return utils.sha3(str(n))
+                return utils.sha3(to_string(n))
 
         ext.block_hash = blkhash
         return orig_apply_msg(ext, msg)

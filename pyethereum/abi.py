@@ -27,7 +27,7 @@ class ContractTranslator():
         self.function_data = {}
         self.event_data = {}
         v = vars(self)
-        if isinstance(full_signature, str):
+        if is_string(full_signature):
             full_signature = json_decode(full_signature)
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
@@ -36,9 +36,9 @@ class ContractTranslator():
                 name = name[:name.find('(')]
             if name in v:
                 i = 2
-                while name+str(i) in v:
+                while name + to_string(i) in v:
                     i += 1
-                name += str(i)
+                name += to_string(i)
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
@@ -153,7 +153,7 @@ def encode_single(arg, base, sub):
         normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
     elif base == 'string':
-        if not isinstance(arg, str):
+        if not is_string(arg):
             raise Exception("Expecting string: %r" % arg)
         # Fixed length: string<sz>
         if len(sub):

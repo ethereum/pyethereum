@@ -5,7 +5,7 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
-from pyethereum.utils import sha3
+from pyethereum.utils import sha3, to_string, is_string
 from pyethereum import dispatch
 from pyethereum.version import __version__
 from pyethereum.slogging import get_logger
@@ -15,7 +15,7 @@ log = get_logger('net.wire')
 def lrlp_decode(data):
     "always return a list"
     d = rlp.decode(data)
-    if isinstance(d, str):
+    if is_string(d):
         d = [d]
     return d
 
@@ -132,7 +132,7 @@ class Packeter(object):
         try:
             payload_len = idec(packet[4:8])
         except Exception as e:
-            return False, str(e)
+            return False, to_string(e)
 
         if len(packet) < payload_len + 8:
             return False, 'Packet is broken'
@@ -140,7 +140,7 @@ class Packeter(object):
         try:
             payload = lrlp_decode(packet[8:8 + payload_len])
         except Exception as e:
-            return False, str(e)
+            return False, to_string(e)
 
         log.trace('load packet', cmd_id=idec(
             payload[0]), cmd=Packeter.cmd_map.get(idec(payload[0]), 'unknown'))

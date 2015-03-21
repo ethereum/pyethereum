@@ -1,5 +1,6 @@
 import os
 from pyethereum import utils
+from pyethereum.utils import to_string, is_string
 import rlp
 from rlp.utils import encode_hex
 from pyethereum import blocks
@@ -132,12 +133,12 @@ class Chain(object):
             self.new_head_cb(block)
 
     def get(self, blockhash):
-        assert isinstance(blockhash, str)
+        assert is_string(blockhash)
         assert len(blockhash) == 32
         return blocks.get_block(self.blockchain, blockhash)
 
     def has_block(self, blockhash):
-        assert isinstance(blockhash, str)
+        assert is_string(blockhash)
         assert len(blockhash) == 32
         return blockhash in self.blockchain
 
@@ -178,7 +179,7 @@ class Chain(object):
             except processblock.VerificationFailed as e:
                 _log.critical('VERIFICATION FAILED', error=e)
                 f = os.path.join(utils.data_dir, 'badblock.log')
-                open(f, 'w').write(str(block.hex_serialize()))
+                open(f, 'w').write(to_string(block.hex_serialize()))
                 return False
 
         if block.number < self.head.number:

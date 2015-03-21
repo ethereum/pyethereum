@@ -16,10 +16,21 @@ TT255 = 2 ** 255
 if sys.version_info.major == 2:
     is_numeric = lambda x: isinstance(x, (int, long))
     is_string = lambda x: isinstance(x, (str, unicode))
+
+    def to_string(value):
+        return str(value)
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
 
+    def to_string(value):
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            return bytes(value, 'utf-8')
+        if isinstance(value, int):
+            return bytes(str(value), 'utf-8')
 
 def big_endian_to_int(value):
     return BigEndianInt().deserialize(value)
@@ -268,7 +279,7 @@ encoders = {
 printers = {
     "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
-    "int": lambda v: str(v),
+    "int": lambda v: to_string(v),
     "trie_root": lambda v: encode_hex(v),
     "int256b": lambda x: encode_hex(zpad(encode_int256(x), 256))
 }
@@ -299,7 +310,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
     from functools import wraps
 
     def display(x):
-        x = str(x)
+        x = to_string(x)
         try:
             x.decode('ascii')
         except:
@@ -319,7 +330,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
                 f.__name__,
                 this_call_number,
                 ', '.join([display(x) for x in tmp_args]),
-                ', '.join(display(key) + '=' + str(value)
+                ', '.join(display(key) + '=' + to_string(value)
                           for key, value in kwargs.items())
             )))
             res = f(*args, **kwargs)

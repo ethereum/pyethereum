@@ -11,7 +11,7 @@ from pyethereum import signals
 from pyethereum.stoppable import StoppableLoopThread
 from pyethereum.packeter import packeter
 from pyethereum.utils import big_endian_to_int as idec
-from pyethereum.utils import recursive_int_to_big_endian
+from pyethereum.utils import recursive_int_to_big_endian, to_string
 import rlp
 from rlp.utils import encode_hex
 from pyethereum import blocks
@@ -294,7 +294,7 @@ class Peer(StoppableLoopThread):
         addresses = []
         for ip, port, pid in data:
             assert len(ip) == 4
-            ip = '.'.join(str(ord(b)) for b in ip)
+            ip = '.'.join(to_string(ord(b)) for b in ip)
             port = idec(port)
             log_p2p.trace('received peer address', remote_id=self, ip=ip, port=port)
             addresses.append([ip, port, pid])

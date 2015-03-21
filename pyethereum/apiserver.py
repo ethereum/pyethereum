@@ -15,6 +15,7 @@ import rlp
 from rlp.utils import decode_hex, encode_hex
 from pyethereum.slogging import get_logger, LogRecorder
 from pyethereum._version import get_versions
+from pyethereum.utils import to_string
 
 chain = chain_manager.chain
 
@@ -339,7 +340,7 @@ def getacctdata(addr, index):
     """
     /storage/<addr>/<index>        return storage item
     """
-    return str(chain.head.get_storage_data(addr, int(index)))
+    return to_string(chain.head.get_storage_data(addr, int(index)))
 
 
 @app.get('/dump/<txblkhash>')

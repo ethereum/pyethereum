@@ -6,7 +6,7 @@ from pyethereum import trie
 from pyethereum.trie import Trie
 from pyethereum.securetrie import SecureTrie
 from pyethereum import utils
-from pyethereum.utils import address, int256, trie_root, hash32
+from pyethereum.utils import address, int256, trie_root, hash32, to_string
 from pyethereum import processblock
 from pyethereum.transactions import Transaction
 from pyethereum import bloom
@@ -329,7 +329,7 @@ class BlockHeader(rlp.Serializable):
             d[field] = encode_hex(getattr(self, field))
         for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
                       'timestamp'):
-            d[field] = str(getattr(self, field))
+            d[field] = to_string(getattr(self, field))
         d['bloom'] = encode_hex(int256.serialize(self.bloom))
         assert len(d) == len(BlockHeader.fields)
         return d
@@ -1020,7 +1020,7 @@ class Block(rlp.Serializable):
         account = self._get_acct(address)
         for field in ('balance', 'nonce'):
             value = self.caches[field].get(address, getattr(account, field))
-            med_dict[field] = str(value)
+            med_dict[field] = to_string(value)
         code = self.caches['code'].get(address, account.code)
         med_dict['code'] = '0x' + encode_hex(code)
 
@@ -1138,7 +1138,7 @@ class Block(rlp.Serializable):
             txlist.append({
                 "tx": txjson,
                 "medstate": encode_hex(receipt.state_root),
-                "gas": str(receipt.gas_used),
+                "gas": to_string(receipt.gas_used),
                 "logs": [Log.serialize(log) for log in receipt.logs],
                 "bloom": utils.int256.serialize(receipt.bloom)
             })
@@ -1235,7 +1235,7 @@ cache_cache = {}
 
 
 def peck_cache(db, seedhash, size):
-    key = 'cache:'+seedhash+','+str(size)
+    key = 'cache:' + seedhash + ',' + to_string(size)
     if key not in db:
         cache = ethash.mkcache(size, seedhash)
         cache_cache[key] = cache
@@ -1250,7 +1250,7 @@ def peck_cache(db, seedhash, size):
 
 
 def get_cache_memoized(db, seedhash, size):
-    key = 'cache:'+seedhash+','+str(size)
+    key = 'cache:' + seedhash + ',' + to_string(size)
     peck_cache(db, seedhash, size)
     return cache_cache[key]
 
@@ -1361,6 +1361,6 @@ def dump_genesis_block_tests_data(db):
         initial_alloc=dict()
     )
     for addr, balance in GENESIS_INITIAL_ALLOC.items():
-        data['initial_alloc'][addr] = str(balance)
+        data['initial_alloc'][addr] = to_string(balance)
 
     print(json.dumps(data, indent=1))

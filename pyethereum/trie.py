@@ -3,6 +3,7 @@
 import os
 import rlp
 from pyethereum import utils
+from pyethereum.utils import to_string
 from pyethereum.abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr
@@ -685,7 +686,7 @@ class Trie(object):
 
         self.root_node = self._delete_and_delete_storage(
             self.root_node,
-            bin_to_nibbles(str(key)))
+            bin_to_nibbles(to_string(key)))
         self.get_root_hash()
 
     def _get_size(self, node):
@@ -727,11 +728,11 @@ class Trie(object):
 
         if is_key_value_type(node_type):
             nibbles = without_terminator(unpack_to_nibbles(node[0]))
-            key = '+'.join([str(x) for x in nibbles])
+            key = '+'.join([to_string(x) for x in nibbles])
             if node_type == NODE_TYPE_EXTENSION:
                 sub_dict = self._to_dict(self._decode_to_node(node[1]))
             else:
-                sub_dict = {str(NIBBLE_TERMINATOR): node[1]}
+                sub_dict = {to_string(NIBBLE_TERMINATOR): node[1]}
 
             # prepend key of this node to the keys of children
             res = {}
@@ -750,7 +751,7 @@ class Trie(object):
                     res[full_key] = sub_value
 
             if node[16]:
-                res[str(NIBBLE_TERMINATOR)] = node[-1]
+                res[to_string(NIBBLE_TERMINATOR)] = node[-1]
             return res
 
     def to_dict(self):
@@ -766,7 +767,7 @@ class Trie(object):
         return res
 
     def get(self, key):
-        return self._get(self.root_node, bin_to_nibbles(str(key)))
+        return self._get(self.root_node, bin_to_nibbles(to_string(key)))
 
     def __len__(self):
         return self._get_size(self.root_node)
@@ -848,7 +849,7 @@ if __name__ == "__main__":
     _db = db.DB(sys.argv[2])
 
     def encode_node(nd):
-        if isinstance(nd, str):
+        if is_string(nd):
             return encode_hex(nd)
         else:
             return encode_hex(rlp.encode(nd))
