@@ -51,7 +51,7 @@ peer.Peer.lowest_block = None
 
 
 def _recv_Blocks(self, data):
-    print(("RECEIVED BLOCKS", len(data)))
+    print("RECEIVED BLOCKS", len(data))
     if len(data) < MIN_BLOCKS:
         return
     assert blocks.TransientBlock(rlp.encode(data[0])).number >= blocks.TransientBlock(
@@ -78,7 +78,7 @@ def _recv_Blocks(self, data):
                 fh.write(tb.rlpdata.encode('hex') + '\n')  # LOG line
             sys.exit(0)
     # fetch more
-    print(("ASKING FOR MORE HASHES", tb.hash.encode('hex'), tb.number))
+    print("ASKING FOR MORE HASHES", tb.hash.encode('hex'), tb.number)
     self.send_GetBlockHashes(tb.hash, NUM_BLOCKS_PER_REQUEST)
 
 peer.Peer._recv_Blocks = _recv_Blocks
@@ -101,7 +101,7 @@ peer.Peer._recv_Status = _recv_Status
 
 
 def _recv_BlockHashes(self, data):
-    print(("RECEIVED BLOCKHASHES", len(data)))  # youngest to oldest
+    print("RECEIVED BLOCKHASHES", len(data))  # youngest to oldest
     # print [x.encode('hex') for x in data]
     block_hashes = data  # youngest to oldest
     self.send_GetBlocks(block_hashes)
