@@ -4,11 +4,11 @@ import rlp
 from pyethereum import processblock as pb
 import tempfile
 import copy
-from db import DB, EphemDB
+from .db import DB, EphemDB
 import json
 import os
 import time
-import ethash
+from . import ethash
 db = EphemDB()
 
 env = {
@@ -89,14 +89,14 @@ def run_vm_test(params, mode):
     blk = blocks.Block(header, db=db)
 
     # setup state
-    for address, h in pre.items():
+    for address, h in list(pre.items()):
         assert len(address) == 40
         address = address.decode('hex')
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, h['code'][2:].decode('hex'))
-        for k, v in h['storage'].iteritems():
+        for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(k[2:].decode('hex')),
                                  utils.big_endian_to_int(v[2:].decode('hex')))
@@ -193,12 +193,12 @@ def run_vm_test(params, mode):
     elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
-            for k, v in params1['post'].items():
-                if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
+            for k, v in list(params1['post'].items()):
+                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params1['post'][k]
         if 'post' in params2:
-            for k, v in params2['post'].items():
-                if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
+            for k, v in list(params2['post'].items()):
+                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post']:
@@ -230,24 +230,24 @@ def run_state_test(params, mode):
     blk = blocks.Block(header, db=db)
 
     # setup state
-    for address, h in pre.items():
+    for address, h in list(pre.items()):
         assert len(address) == 40
         address = address.decode('hex')
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, h['code'][2:].decode('hex'))
-        for k, v in h['storage'].iteritems():
+        for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(k[2:].decode('hex')),
                                  utils.big_endian_to_int(v[2:].decode('hex')))
 
-    for address, h in pre.items():
+    for address, h in list(pre.items()):
         address = address.decode('hex')
         assert blk.get_nonce(address) == int(h['nonce'])
         assert blk.get_balance(address) == int(h['balance'])
         assert blk.get_code(address) == h['code'][2:].decode('hex')
-        for k, v in h['storage'].iteritems():
+        for k, v in h['storage'].items():
             assert blk.get_storage_data(address, utils.big_endian_to_int(
                 k[2:].decode('hex'))) == utils.big_endian_to_int(v[2:].decode('hex'))
 
@@ -303,12 +303,12 @@ def run_state_test(params, mode):
     elif mode == VERIFY:
         params1 = copy.deepcopy(params)
         if 'post' in params1:
-            for k, v in params1['post'].items():
-                if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
+            for k, v in list(params1['post'].items()):
+                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params1['post'][k]
         if 'post' in params2:
-            for k, v in params2['post'].items():
-                if v == {u'code': u'0x', u'nonce': u'0', u'balance': u'0', u'storage': {}}:
+            for k, v in list(params2['post'].items()):
+                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
@@ -358,13 +358,13 @@ def run_ethash_test(params, mode):
     if mode == FILL:
         block.mixhash = light_verify["mixhash"]
         params["header"] = block.serialize_header().encode('hex')
-        for k, v in out.items():
+        for k, v in list(out.items()):
             params[k] = v
         return params
     elif mode == VERIFY:
         should, actual = block.mixhash, light_verify['mixhash']
         assert should == actual, "Mismatch: mixhash %r %r" % (should, actual)
-        for k, v in out.items():
+        for k, v in list(out.items()):
             assert params[k] == v, "Mismatch: " + k + ' %r %r' % (params[k], v)
     elif mode == TIME:
         return {
@@ -383,6 +383,6 @@ def get_tests_from_file_or_dir(dname, json_only=False):
         o = {}
         for f in os.listdir(dname):
             fullpath = os.path.join(dname, f)
-            for k, v in get_tests_from_file_or_dir(fullpath, True).items():
+            for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
                 o[k] = v
         return o

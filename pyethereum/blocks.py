@@ -1,19 +1,19 @@
 import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
-import trie
-from trie import Trie
-from securetrie import SecureTrie
-import utils
-from utils import address, int256, trie_root, hash32
-import processblock
-from transactions import Transaction
-import bloom
+from . import trie
+from .trie import Trie
+from .securetrie import SecureTrie
+from . import utils
+from .utils import address, int256, trie_root, hash32
+from . import processblock
+from .transactions import Transaction
+from . import bloom
 import copy
 import sys
-import ethash, ethash_utils
+from . import ethash, ethash_utils
 from repoze.lru import lru_cache
-from exceptions import *
+from .exceptions import *
 from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')
@@ -225,7 +225,7 @@ class BlockHeader(rlp.Serializable):
                  mixhash=GENESIS_MIXHASH,
                  nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
-        fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        fields = {k: v for k, v in locals().items() if k != 'self'}
         if len(fields['coinbase']) == 40:
             fields['coinbase'] = fields['coinbase'].decode('hex')
         assert len(fields['coinbase']) == 20
@@ -968,7 +968,7 @@ class Block(rlp.Serializable):
 
             # storage
             t = SecureTrie(Trie(self.db, acct.storage))
-            for k, v in self.caches.get('storage:' + address, {}).iteritems():
+            for k, v in self.caches.get('storage:' + address, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
                 changes.append(['storage', address, k, v])
@@ -1032,8 +1032,8 @@ class Block(rlp.Serializable):
             d = storage_trie.to_dict()
             subcache = self.caches.get('storage:' + address, {})
             subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32)
-                       for kk in subcache.keys()]
-            for k in d.keys() + subkeys:
+                       for kk in list(subcache.keys())]
+            for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
                 hexkey = '0x' + utils.zunpad(k).encode('hex')
@@ -1145,7 +1145,7 @@ class Block(rlp.Serializable):
         b["transactions"] = txlist
         if with_state:
             state_dump = {}
-            for address, v in self.state.to_dict().iteritems():
+            for address, v in self.state.to_dict().items():
                 state_dump[address.encode('hex')] = \
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
@@ -1327,7 +1327,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         nonce=GENESIS_NONCE,
     )
     block = Block(header, [], [], db=db)
-    for addr, data in start_alloc.iteritems():
+    for addr, data in start_alloc.items():
         if len(addr) == 40:
             addr = addr.decode('hex')
         assert len(addr) == 20
@@ -1340,7 +1340,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         if 'nonce' in data:
             block.set_nonce(addr, int(data['nonce']))
         if 'storage' in data:
-            for k, v in data['storage'].iteritems():
+            for k, v in data['storage'].items():
                 blk.set_storage_data(addr,
                                      utils.big_endian_to_int(k[2:].decode('hex')),
                                      utils.big_endian_to_int(v[2:].decode('hex')))
@@ -1360,7 +1360,7 @@ def dump_genesis_block_tests_data(db):
         genesis_rlp_hex=g.serialize().encode('hex'),
         initial_alloc=dict()
     )
-    for addr, balance in GENESIS_INITIAL_ALLOC.iteritems():
+    for addr, balance in GENESIS_INITIAL_ALLOC.items():
         data['initial_alloc'][addr] = str(balance)
 
-    print json.dumps(data, indent=1)
+    print(json.dumps(data, indent=1))

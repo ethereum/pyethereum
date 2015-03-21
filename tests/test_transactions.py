@@ -49,18 +49,18 @@ if __name__ == '__main__':
     else:
         # load fixtures from specified file or dir
         fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items():
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
-                print "Testing: %s %s" % (filename, testname)
+                print("Testing: %s %s" % (filename, testname))
                 testutils.check_state_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'TransactionTests'))
-    for filename, tests in fixtures.items():
+    for filename, tests in list(fixtures.items()):
         if 'stQuadraticComplexityTest.json' in filename or \
                 'stMemoryStressTest.json' in filename:
             continue
-        for testname, testdata in tests.items():
+        for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = lambda: run_test(filename, testname, testdata)

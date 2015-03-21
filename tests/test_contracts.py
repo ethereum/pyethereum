@@ -769,37 +769,37 @@ def test_storagevar_fails():
         0, 0, 0, 0, 0, 0
     try:
         s.contract(fail1)
-    except Exception, e:
+    except Exception as e:
         success1 = "Storage variable access not deep enough" in str(e)
     assert success1, e
 
     try:
         s.contract(fail2)
-    except Exception, e:
+    except Exception as e:
         success2 = "Too few array index lookups" in str(e)
     assert success2, e
 
     try:
         s.contract(fail3)
-    except Exception, e:
+    except Exception as e:
         success3 = "Too many array index lookups" in str(e)
     assert success3, e
 
     try:
         s.contract(fail4)
-    except Exception, e:
+    except Exception as e:
         success4 = "Too few array index lookups" in str(e)
     assert success4, e
 
     try:
         s.contract(fail5)
-    except Exception, e:
+    except Exception as e:
         success5 = "Invalid object member" in str(e)
     assert success5, e
 
     try:
         s.contract(fail6)
-    except Exception, e:
+    except Exception as e:
         success6 = "Invalid object member" in str(e)
     assert success6, e
 
@@ -810,7 +810,7 @@ def test_type_system_fails():
 
     try:
         s.contract(fail7)
-    except Exception, e:
+    except Exception as e:
         success7 = "Please specify maximum" in str(e)
     assert success7, e
 
@@ -1375,8 +1375,7 @@ def test_mcopy2():
     s = tester.state()
     c = s.abi_contract(mcopy_code_2)
     assert c.mcopy_test() == \
-        ''.join(map(lambda x: utils.zpad(utils.int_to_big_endian(x), 32),
-                [99, 111, 119]))
+        ''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
 array_saveload_code = """

@@ -1,4 +1,4 @@
-import utils
+from . import utils
 """
 Blooms are the 3-point, 2048-bit (11-bits/point) Bloom filter of each
 component (except data) of each log entry of each transaction.
@@ -37,7 +37,7 @@ def bloom_bits(val):
 
 
 def bits_in_number(val):
-    assert isinstance(val, (int, long))
+    assert isinstance(val, int)
     return [n for n in range(2048) if (1 << n) & val]
 
 

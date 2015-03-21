@@ -1,6 +1,6 @@
-import utils
+from . import utils
 import copy
-import opcodes
+from . import opcodes
 import json
 import time
 from pyethereum.slogging import get_logger
@@ -188,7 +188,7 @@ def vm_execute(ext, msg, code):
             """
             trace_data = {}
             if log_vm_op_stack.is_active():
-                trace_data['stack'] = map(str, list(compustate.stack))
+                trace_data['stack'] = list(map(str, list(compustate.stack)))
             if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
                     ''.join([chr(x).encode('hex') for x in compustate.memory])
@@ -453,8 +453,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            log_log.trace('LOG', to=msg.to, topics=topics, data=map(ord, data))
-            print ('LOG', msg.to, topics, map(ord, data))
+            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(ord, data)))
+            print(('LOG', msg.to, topics, list(map(ord, data))))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
@@ -541,10 +541,10 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
-            print 'suiciding %s %s %d' % (msg.to, to, xfer)
+            print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
         for a in stk:
-            assert isinstance(a, (int, long))
+            assert isinstance(a, int)
             assert a >= 0 and a < 2**256, (a, op, stk)
 
 

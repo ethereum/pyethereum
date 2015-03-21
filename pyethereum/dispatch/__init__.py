@@ -7,4 +7,4 @@ Heavily modified for Django's purposes.
 """
 
 # from django.dispatch.dispatcher import Signal, receiver  # NOQA
-from dispatcher import Signal, receiver  # NOQA
+from .dispatcher import Signal, receiver  # NOQA

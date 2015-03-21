@@ -1,8 +1,8 @@
 
 import os
 import uuid
-import StringIO
-import ConfigParser
+import io
+import configparser
 from pyethereum.utils import default_data_dir
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
@@ -80,10 +80,10 @@ coinbase = 6c386a4b26f73c802f34673f7248bb118f97424a
 
 
 def get_default_config():
-    f = StringIO.StringIO()
+    f = io.StringIO()
     f.write(config_template)
     f.seek(0)
-    config = ConfigParser.ConfigParser()
+    config = configparser.ConfigParser()
     config.readfp(f)
     config.set('network', 'client_version', default_client_version())
     return config

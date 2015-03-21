@@ -2,7 +2,7 @@
 
 import os
 import rlp
-import utils
+from . import utils
 import copy
 
 
@@ -75,7 +75,7 @@ class ProofConstructor():
             proving = False
 
     def get_nodelist(self):
-        return map(rlp.decode, list(self.nodes[-1]))
+        return list(map(rlp.decode, list(self.nodes[-1])))
 
     def get_nodes(self):
         return self.nodes[-1]
@@ -261,7 +261,7 @@ class Trie(object):
         self.set_root_hash(value)
 
     def set_root_hash(self, root_hash):
-        assert isinstance(root_hash, (str, unicode))
+        assert isinstance(root_hash, str)
         assert len(root_hash) in [0, 32]
         if self.transient:
             self.transient_root_hash = root_hash
@@ -462,7 +462,7 @@ class Trie(object):
         if node_type == NODE_TYPE_BRANCH:
             if node[16]:
                 return [16]
-            scan_range = range(16)
+            scan_range = list(range(16))
             if reverse:
                 scan_range.reverse()
             for i in scan_range:
@@ -492,9 +492,9 @@ class Trie(object):
                 if o:
                     return [key[0]] + o
             if reverse:
-                scan_range = range(key[0] if len(key) else 0)
+                scan_range = list(range(key[0] if len(key) else 0))
             else:
-                scan_range = range(key[0] + 1 if len(key) else 0, 16)
+                scan_range = list(range(key[0] + 1 if len(key) else 0, 16))
             for i in scan_range:
                 sub_node = self._decode_to_node(node[i])
                 o = self._getany(sub_node, reverse, path + [i])
@@ -676,7 +676,7 @@ class Trie(object):
         '''
         :param key: a string with length of [0, 32]
         '''
-        if not isinstance(key, (str, unicode)):
+        if not isinstance(key, str):
             raise Exception("Key must be string")
 
         if len(key) > 32:
@@ -734,7 +734,7 @@ class Trie(object):
 
             # prepend key of this node to the keys of children
             res = {}
-            for sub_key, sub_value in sub_dict.iteritems():
+            for sub_key, sub_value in sub_dict.items():
                 full_key = '{0}+{1}'.format(key, sub_key).strip('+')
                 res[full_key] = sub_value
             return res
@@ -744,7 +744,7 @@ class Trie(object):
             for i in range(16):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
-                for sub_key, sub_value in sub_dict.iteritems():
+                for sub_key, sub_value in sub_dict.items():
                     full_key = '{0}+{1}'.format(i, sub_key).strip('+')
                     res[full_key] = sub_value
 
@@ -755,7 +755,7 @@ class Trie(object):
     def to_dict(self):
         d = self._to_dict(self.root_node)
         res = {}
-        for key_str, value in d.iteritems():
+        for key_str, value in d.items():
             if key_str:
                 nibbles = [int(x) for x in key_str.split('+')]
             else:
@@ -790,13 +790,13 @@ class Trie(object):
         :param key: a string
         :value: a string
         '''
-        if not isinstance(key, (str, unicode)):
+        if not isinstance(key, str):
             raise Exception("Key must be string")
 
         # if len(key) > 32:
         #     raise Exception("Max key length is 32")
 
-        if not isinstance(value, (str, unicode)):
+        if not isinstance(value, str):
             raise Exception("Value must be string")
 
         # if value == '':
@@ -834,15 +834,15 @@ def verify_spv_proof(root, key, proof):
         t.get(key)
         proof.pop()
         return True
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
         proof.pop()
         return False
 
 
 if __name__ == "__main__":
     import sys
-    import db
+    from . import db
 
     _db = db.DB(sys.argv[2])
 
@@ -856,7 +856,7 @@ if __name__ == "__main__":
         if sys.argv[1] == 'insert':
             t = Trie(_db, sys.argv[3].decode('hex'))
             t.update(sys.argv[4], sys.argv[5])
-            print encode_node(t.root_hash)
+            print(encode_node(t.root_hash))
         elif sys.argv[1] == 'get':
             t = Trie(_db, sys.argv[3].decode('hex'))
-            print t.get(sys.argv[4])
+            print(t.get(sys.argv[4]))

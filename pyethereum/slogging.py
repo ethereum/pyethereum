@@ -205,7 +205,7 @@ def get_configuration():
     configure(**snapshot)
     """
     name_levels = [('', logging.getLevelName(logging.getLogger().level))]
-    for name, logger in logging.Logger.manager.loggerDict.items():
+    for name, logger in list(logging.Logger.manager.loggerDict.items()):
         name_levels.append((name, logging.getLevelName(logger.level)))
     config_string = ','.join('%s:%s' % x for x in name_levels)
     struct_root = get_logger().bind()

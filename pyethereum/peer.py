@@ -1,14 +1,14 @@
 import time
-import Queue
+import queue
 import socket
 
-import signals
-from stoppable import StoppableLoopThread
-from packeter import packeter
-from utils import big_endian_to_int as idec
-from utils import recursive_int_to_big_endian
+from . import signals
+from .stoppable import StoppableLoopThread
+from .packeter import packeter
+from .utils import big_endian_to_int as idec
+from .utils import recursive_int_to_big_endian
 import rlp
-import blocks
+from . import blocks
 from pyethereum.slogging import get_logger
 log_net = get_logger('net')
 log_p2p = get_logger('p2p')
@@ -55,7 +55,7 @@ class Peer(StoppableLoopThread):
         self.status_head_hash = None
 
         self.recv_buffer = ''
-        self.response_queue = Queue.Queue()
+        self.response_queue = queue.Queue()
 
     def __repr__(self):
         return "<Peer(%s:%r)>" % (self.ip, self.port)
@@ -93,7 +93,7 @@ class Peer(StoppableLoopThread):
         # send packet
         try:
             packet = self.response_queue.get(block=False)
-        except Queue.Empty:
+        except queue.Empty:
             return 0
         try:
             self.connection().sendall(packet)

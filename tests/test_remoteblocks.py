@@ -25,21 +25,21 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     for i in range(skip):
         fh.readline()
     tot = sum([int(y["balance"]) for x, y in
-               chain_manager.head.to_dict(True)["state"].items()])
+               list(chain_manager.head.to_dict(True)["state"].items())])
 
     safe = {x: y["balance"] for x, y in 
-            chain_manager.head.to_dict(True)["state"].items()}
+            list(chain_manager.head.to_dict(True)["state"].items())}
     for hex_rlp_encoded_data in fh:
         hexdata = hex_rlp_encoded_data.strip().decode('hex')
         blk = blocks.TransientBlock(hexdata)
-        print blk.number, blk.hash.encode('hex'), \
-            '%d txs' % len(blk.transaction_list)
+        print(blk.number, blk.hash.encode('hex'), \
+            '%d txs' % len(blk.transaction_list))
         head = chain_manager.head
         assert blocks.check_header_pow(blk.header_args)
         chain_manager.receive_chain([blk])
         newhead = chain_manager.head
         newtot = sum([int(y["balance"]) for x, y in
-                      newhead.to_dict(True)["state"].items()])
+                      list(newhead.to_dict(True)["state"].items())])
         if newtot != tot + newhead.ether_delta:
             raise Exception("Ether balance sum mismatch: %d %d" %
                             (newtot, tot + newhead.ether_delta))
@@ -47,15 +47,15 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
             safe[tx.sender] = max(safe.get(tx.sender, 0) - tx.value, 0)
         tot = newtot
         if blk.hash not in chain_manager:
-            print 'block could not be added'
+            print('block could not be added')
             assert head == chain_manager.head
             chain_manager.head.deserialize_child(blk.rlpdata)
             assert blk.hash in chain_manager
-        print safe
+        print(safe)
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print "usage:%s <raw_blocks_fn> <db_path> <skip>" % sys.argv[0]
+        print("usage:%s <raw_blocks_fn> <db_path> <skip>" % sys.argv[0])
         sys.exit(1)
     raw_blocks_fn = sys.argv[1]
     test_db_path = sys.argv[2]

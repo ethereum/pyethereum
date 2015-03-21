@@ -127,7 +127,7 @@ def test_tracebacks():
         try:
             r =  a/b
             log.error('heres the stack', stack_info=True)
-        except Exception, e:
+        except Exception as e:
             log.error('an Exception trace should preceed this msg', exc_info=True)
     div(1,0)
     assert 'an Exception' in th.logged

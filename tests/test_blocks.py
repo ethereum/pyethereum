@@ -11,7 +11,7 @@ logger = get_logger()
 
 def translate_keys(olddict, keymap, valueconv, deletes):
     o = {}
-    for k in olddict.keys():
+    for k in list(olddict.keys()):
         if k not in deletes:
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
@@ -97,20 +97,20 @@ if __name__ == '__main__':
     assert len(sys.argv) >= 2, "Please specify file or dir name"
     fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
     if len(sys.argv) >= 3:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
+        for filename, tests in list(fixtures.items()):
+            for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
-                    print "Testing: %s %s" % (filename, testname)
+                    print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata)
     else:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
-                print "Testing: %s %s" % (filename, testname)
+        for filename, tests in list(fixtures.items()):
+            for testname, testdata in list(tests.items()):
+                print("Testing: %s %s" % (filename, testname))
                 run_block_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'BlockTests'))
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items()[:500]:
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items())[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = lambda: do_test_block(filename, testname, testdata)

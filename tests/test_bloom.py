@@ -26,7 +26,7 @@ def vm_tests_fixtures():
         for f, fn in zip(files, filenames):
             if f[-5:] == '.json':
                 vm_fixtures[fn[:-5]] = json.load(open(f, 'r'))
-    except IOError, e:
+    except IOError as e:
         raise IOError("Could not read vmtests.json from fixtures",
                       "Make sure you did 'git submodule init'")
     return vm_fixtures
@@ -36,8 +36,8 @@ def vm_tests_fixtures():
 def gen_func(testdata):
     return lambda: do_test_bloom(testdata)
 
-for filename, tests in vm_tests_fixtures().items():
-    for testname, testdata in tests.items():
+for filename, tests in list(vm_tests_fixtures().items()):
+    for testname, testdata in list(tests.items()):
         if 'logs' not in testdata or 'log' not in testname.lower():
             continue
         func_name = 'test_%s_%s' % (filename, testname)
@@ -62,7 +62,7 @@ def do_test_bloom(test_logs):
     topics: The topics of the logentry, given as an array of values.
     """
     for data in test_logs:
-        print data
+        print(data)
         address = data['address']
         # Test via bloom
         b = bloom.bloom_insert(0, address.decode('hex'))

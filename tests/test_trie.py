@@ -26,8 +26,8 @@ def load_tests():
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
             "Make sure you did 'git submodule init'")
-    expected_keys = set([u'jeff', u'emptyValues', 'branchingTests'])
-    assert set(fixture.keys()) == expected_keys, ("test data changed!", fixture.keys())
+    expected_keys = set(['jeff', 'emptyValues', 'branchingTests'])
+    assert set(fixture.keys()) == expected_keys, ("test data changed!", list(fixture.keys()))
     return fixture
 
 
@@ -37,7 +37,7 @@ def run_test(name):
     pairs = load_tests()[name]
 
     def _dec(x):
-        if isinstance(x, (str, unicode)) and x.startswith('0x'):
+        if isinstance(x, str) and x.startswith('0x'):
             return x[2:].decode('hex')
         return x
 

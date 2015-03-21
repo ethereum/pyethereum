@@ -3,7 +3,7 @@ import tempfile
 import time
 import logging
 import sys
-import spv
+from . import spv
 import pyethereum
 import pyethereum.db as db
 import pyethereum.opcodes as opcodes
@@ -36,7 +36,7 @@ seed = 3 ** 160
 
 def dict_without(d, *args):
     o = {}
-    for k, v in d.items():
+    for k, v in list(d.items()):
         if k not in args:
             o[k] = v
     return o
@@ -44,9 +44,9 @@ def dict_without(d, *args):
 
 def dict_with(d, **kwargs):
     o = {}
-    for k, v in d.items():
+    for k, v in list(d.items()):
         o[k] = v
-    for k, v in kwargs.items():
+    for k, v in list(kwargs.items()):
         o[k] = v
     return o
 
@@ -146,7 +146,7 @@ class state():
         tx.sign(sender)
         if gas is not None:
             tx.startgas = gas
-        print 'starting', tx.startgas, gas_limit
+        print('starting', tx.startgas, gas_limit)
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Contract creation failed")
@@ -252,7 +252,7 @@ def set_logging_level(lvl=1):
         'eth.vm.storage:trace,eth.vm.memory:trace'
     ]
     configure_logging(config_string=trace_lvl_map[lvl])
-    print 'Set logging level: %d' % lvl
+    print('Set logging level: %d' % lvl)
 
 
 def set_log_trace(logger_names=[]):

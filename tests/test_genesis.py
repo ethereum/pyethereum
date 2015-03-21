@@ -32,7 +32,7 @@ def test_genesis_state_root(genesis_fixture):
 
 def test_genesis_initial_alloc(genesis_fixture):
     genesis = blocks.genesis(new_db())
-    for k, v in blocks.GENESIS_INITIAL_ALLOC.items():
+    for k, v in list(blocks.GENESIS_INITIAL_ALLOC.items()):
         assert genesis.get_balance(k) == v.get("balance", 0) or v.get("wei", 0)
 
 
@@ -42,4 +42,4 @@ def test_genesis_hash(genesis_fixture):
 
 
 if __name__ == '__main__':
-    print 'current genesis:', blocks.genesis(new_db()).hex_hash()
+    print('current genesis:', blocks.genesis(new_db()).hex_hash())

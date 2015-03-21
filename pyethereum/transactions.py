@@ -3,8 +3,8 @@ from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import rlp
 from rlp.sedes import big_endian_int, binary
 
-import bloom
-import utils
+from . import bloom
+from . import utils
 
 
 class Transaction(rlp.Serializable):

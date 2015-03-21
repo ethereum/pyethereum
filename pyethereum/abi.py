@@ -1,6 +1,6 @@
 import utils, sys, re, json
 
-from utils import encode_int, zpad, big_endian_to_int
+from .utils import encode_int, zpad, big_endian_to_int
 
 
 def json_decode(x):
@@ -8,12 +8,12 @@ def json_decode(x):
 
 
 def json_non_unicode(x):
-    if isinstance(x, unicode):
+    if isinstance(x, str):
         return str(x)
     elif isinstance(x, list):
         return [json_non_unicode(y) for y in x]
     elif isinstance(x, dict):
-        return {x: json_non_unicode(y) for x, y in x.items()}
+        return {x: json_non_unicode(y) for x, y in list(x.items())}
     else:
         return x
 
@@ -87,7 +87,7 @@ class ContractTranslator():
         indexed = self.event_data[log.topics[0]]['indexed']
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        print log.data
+        print(log.data)
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0
@@ -99,11 +99,11 @@ class ContractTranslator():
                 o[names[i]] = deserialized_args[c2]
                 c2 += 1
         o["_event_type"] = name
-        print o
+        print(o)
         return o
 
-is_numeric = lambda x: isinstance(x, (int, long))
-is_string = lambda x: isinstance(x, (str, unicode))
+is_numeric = lambda x: isinstance(x, int)
+is_string = lambda x: isinstance(x, str)
 
 
 # Decode an integer

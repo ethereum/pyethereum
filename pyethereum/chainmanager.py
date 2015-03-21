@@ -1,21 +1,21 @@
 import time
 from operator import attrgetter
-from dispatch import receiver
-from stoppable import StoppableLoopThread
-import signals
-from db import DB, EphemDB
-import utils
+from .dispatch import receiver
+from .stoppable import StoppableLoopThread
+from . import signals
+from .db import DB, EphemDB
+from . import utils
 import rlp
-import blocks
-import processblock
-import peermanager
-from transactions import Transaction
-from miner import Miner
-from synchronizer import Synchronizer
-from peer import MAX_GET_CHAIN_SEND_HASHES
-from peer import MAX_GET_CHAIN_REQUEST_BLOCKS
+from . import blocks
+from . import processblock
+from . import peermanager
+from .transactions import Transaction
+from .miner import Miner
+from .synchronizer import Synchronizer
+from .peer import MAX_GET_CHAIN_SEND_HASHES
+from .peer import MAX_GET_CHAIN_REQUEST_BLOCKS
 from pyethereum.slogging import get_logger
-from chain import Chain
+from .chain import Chain
 log = get_logger('eth.chainmgr')
 
 

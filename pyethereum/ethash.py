@@ -1,5 +1,5 @@
 import copy
-from ethash_utils import *
+from .ethash_utils import *
 import sys
 
 
@@ -14,7 +14,7 @@ def mkcache(cache_size, seed):
     for _ in range(CACHE_ROUNDS):
         for i in range(n):
             v = o[i][0] % n
-            o[i] = sha3_512(map(xor, o[(i-1+n) % n], o[v]))
+            o[i] = sha3_512(list(map(xor, o[(i-1+n) % n], o[v])))
 
     return o
 
@@ -27,7 +27,7 @@ def calc_dataset_item(cache, i):
     mix = sha3_512(mix)
     for j in range(DATASET_PARENTS):
         cache_index = fnv(i ^ j, mix[j % r])
-        mix = map(fnv, mix, cache[cache_index % n])
+        mix = list(map(fnv, mix, cache[cache_index % n]))
     return sha3_512(mix)
 
 
@@ -54,7 +54,7 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
         newdata = []
         for j in range(mixhashes):
             newdata.extend(dataset_lookup(p + j))
-        mix = map(fnv, mix, newdata)
+        mix = list(map(fnv, mix, newdata))
     cmix = []
     for i in range(0, len(mix), 4):
         cmix.append(fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]))

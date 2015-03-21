@@ -1,4 +1,4 @@
-from dispatch import Signal
+from .dispatch import Signal
 
 '''
 .. note::

@@ -29,15 +29,15 @@ if __name__ == '__main__':
             fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
         except:
             fixtures = {'stdin': json.loads(sys.argv[1])}
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items():
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
-                print "Testing: %s %s" % (filename, testname)
+                print("Testing: %s %s" % (filename, testname))
                 testutils.check_vm_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'VMTests'))
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items()[:500]:
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items())[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = lambda: do_test_vm(filename, testname, testdata)

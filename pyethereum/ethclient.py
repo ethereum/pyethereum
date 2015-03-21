@@ -4,8 +4,8 @@ import sys
 import requests
 import json
 from docopt import docopt
-import utils
-import transactions
+from . import utils
+from . import transactions
 import rlp
 from . import __version__
 from . config import read_config
@@ -128,9 +128,9 @@ class APIClient(object):
         if 'trace' in res:
             out = []
             for l in res['trace']:
-                name, data = l.items()[0]
+                name, data = list(l.items())[0]
                 order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-                items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
+                items = sorted(list(data.items()), key=lambda x: order.get(x[0], 0))
                 msg = ", ".join("%s=%s" % (k, v) for k, v in items)
                 out.append("%s: %s" % (name.ljust(15), msg))
             return '\n'.join(out)
@@ -220,7 +220,7 @@ def main():
         if arguments.get(k):
             cmd_args = cmd_map.get(k)
             out = cmd_args[0](*cmd_args[1:])
-            print out
+            print(out)
             break
 
 if __name__ == '__main__':

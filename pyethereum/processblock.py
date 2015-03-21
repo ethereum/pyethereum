@@ -4,16 +4,16 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
-import opcodes
-import utils
-import blocks
-import transactions
-import trie
-import fastvm
-import specials
-import bloom
-import vm
-from exceptions import *
+from . import opcodes
+from . import utils
+from . import blocks
+from . import transactions
+from . import trie
+from . import fastvm
+from . import specials
+from . import bloom
+from . import vm
+from .exceptions import *
 
 sys.setrecursionlimit(100000)
 
@@ -243,7 +243,7 @@ def _apply_msg(ext, msg, code):
 
 
 def create_contract(ext, msg):
-    print 'CREATING WITH GAS', msg.gas
+    print('CREATING WITH GAS', msg.gas)
     sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
@@ -260,7 +260,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            print 'CONTRACT CREATION OOG', 'have', gas, 'want', gcost
+            print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, ''.join(map(chr, dat)))
         return 1, gas, msg.to

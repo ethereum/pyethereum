@@ -1,8 +1,8 @@
 import os
-import utils
+from . import utils
 import rlp
-import blocks
-import processblock
+from . import blocks
+from . import processblock
 from pyethereum.slogging import get_logger
 log = get_logger('eth.chain')
 
@@ -258,6 +258,6 @@ class Chain(object):
     def get_descendants(self, block, count=1):
         log.debug("get_descendants", block_hash=block)
         assert block.hash in self
-        block_numbers = range(block.number + 1, min(self.head.number + 1,
-                                                    block.number + count + 1))
+        block_numbers = list(range(block.number + 1, min(self.head.number + 1,
+                                                    block.number + count + 1)))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]

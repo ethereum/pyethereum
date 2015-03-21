@@ -6,7 +6,7 @@ import signal
 from argparse import ArgumentParser
 
 # this must be called before all other import to enable full qualified import
-from common import enable_full_qualified_import
+from .common import enable_full_qualified_import
 enable_full_qualified_import()
 
 #from pyethereum.utils import data_dir
@@ -29,7 +29,7 @@ log = pyethereum.slogging.get_logger()
 try:
     import pyethereum.monkeypatch
     log.critical("Loaded your customizations from monkeypatch.py")
-except ImportError, e:
+except ImportError as e:
     pass
 
 

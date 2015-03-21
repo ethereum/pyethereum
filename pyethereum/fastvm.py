@@ -1,5 +1,5 @@
-from opcodes import opcodes, reverse_opcodes
-import utils
+from .opcodes import opcodes, reverse_opcodes
+from . import utils
 import serpent
 import rlp
 import copy
