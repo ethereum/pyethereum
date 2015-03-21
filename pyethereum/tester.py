@@ -10,7 +10,7 @@ import pyethereum.opcodes as opcodes
 import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 serpent = None
 
@@ -175,7 +175,7 @@ class state():
             raise Exception("Transaction failed")
         out = {"output": o}
         if profiling > 0:
-            zero_bytes = tx.data.count(chr(0))
+            zero_bytes = tx.data.count(ascii_chr(0))
             non_zero_bytes = len(tx.data) - zero_bytes
             intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
                 opcodes.GTXDATANONZERO * non_zero_bytes

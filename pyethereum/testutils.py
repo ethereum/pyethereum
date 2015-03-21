@@ -1,7 +1,7 @@
 from pyethereum import tester as t
 from pyethereum import blocks, utils, transactions, vm
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from pyethereum import processblock as pb
 import tempfile
 import copy
@@ -184,7 +184,7 @@ def run_vm_test(params, mode):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = '0x' + encode_hex(''.join(map(chr, output)))
+        params2['out'] = '0x' + encode_hex(''.join(map(ascii_chr, output)))
         params2['gas'] = str(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(True)['state']

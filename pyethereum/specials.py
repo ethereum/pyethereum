@@ -1,5 +1,5 @@
 import utils, bitcoin, opcodes
-
+from rlp.utils import ascii_chr
 
 def proc_ecrecover(ext, msg):
     print('ecrecover proc', msg.gas)
@@ -9,7 +9,7 @@ def proc_ecrecover(ext, msg):
         return 0, 0, []
     b = [0] * 32
     msg.data.extract_copy(b, 0, 0, 32)
-    h = ''.join([chr(x) for x in b])
+    h = ''.join([ascii_chr(x) for x in b])
     v = msg.data.extract32(32)
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)

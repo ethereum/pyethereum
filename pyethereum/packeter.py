@@ -1,7 +1,7 @@
 import sys
 from pyethereum import signals
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
@@ -217,7 +217,7 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Peers']]
         for ip, port, pid in peers:
             assert ip.count('.') == 3
-            ip = ''.join(chr(int(x)) for x in ip.split('.'))
+            ip = ''.join(ascii_chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)
 

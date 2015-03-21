@@ -2,7 +2,7 @@ from pyethereum.opcodes import opcodes, reverse_opcodes
 from pyethereum import utils
 import serpent
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 import copy
 
 code_cache = {}
@@ -294,7 +294,7 @@ def apply_msg(block, tx, msg, code):
         def cb(res, gas, dat, databytes):
             if res:
                 b = extract_bytes(dat, 0, databytes)
-                block.set_code(callstack[-1].to, ''.join([chr(x) for x in b]))
+                block.set_code(callstack[-1].to, ''.join([ascii_chr(x) for x in b]))
                 res = utils.coerce_to_int(callstack[-1].to)
             else:
                 if tx.sender != callstack[-1].sender:
@@ -391,7 +391,7 @@ def apply_msg(block, tx, msg, code):
             create_msg.to = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
             special[0] = 'create'
             special[1] = create_msg
-            special[2] = ''.join([chr(x) for x in extract_bytes(data, 0, msz)])
+            special[2] = ''.join([ascii_chr(x) for x in extract_bytes(data, 0, msz)])
         else:
             stk.append(0)
 
@@ -505,7 +505,7 @@ def apply_msg(block, tx, msg, code):
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, msgtop.compustate, '', s0, s1):
             return drop(OUT_OF_GAS)
-        data = ''.join([chr(x) for x in mem[s0: s0 + s1]])
+        data = ''.join([ascii_chr(x) for x in mem[s0: s0 + s1]])
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
 
     def OP_ADDRESS():

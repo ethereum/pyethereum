@@ -4,13 +4,13 @@ import tempfile
 import pytest
 from pyethereum.db import _EphemDB, _CodernityDB, _LevelDB
 from pyethereum.utils import db_path
-
+from rlp.utils import ascii_chr
 
 random.seed(0)
 
 
 def random_string(length):
-    return ''.join([chr(random.randint(0, 255)) for _ in range(length)])
+    return ''.join([ascii_chr(random.randint(0, 255)) for _ in range(length)])
 
 
 content = {random_string(lk): random_string(lv)

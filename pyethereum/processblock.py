@@ -4,7 +4,7 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from pyethereum import opcodes
 from pyethereum import utils
 from pyethereum import transactions
@@ -93,7 +93,7 @@ def apply_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    num_zero_bytes = tx.data.count(chr(0))
+    num_zero_bytes = tx.data.count(ascii_chr(0))
     num_non_zero_bytes = len(tx.data) - num_zero_bytes
     intrinsic_gas_used = (opcodes.GTXCOST
                           + opcodes.GTXDATAZERO * num_zero_bytes
@@ -161,7 +161,7 @@ def apply_transaction(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
         if tx.to:
-            output = ''.join(map(chr, data))
+            output = ''.join(map(ascii_chr, data))
         else:
             output = data
         success = 1
@@ -263,7 +263,7 @@ def create_contract(ext, msg):
             dat = []
             print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
-        ext._block.set_code(msg.to, ''.join(map(chr, dat)))
+        ext._block.set_code(msg.to, ''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
         return 0, gas, ''

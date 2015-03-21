@@ -1,4 +1,4 @@
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
@@ -16,7 +16,7 @@ def compress(data):
             p = 2
             while p < 255 and i + p < len(data) and data[i + p] == '\x00':
                 p += 1
-            o += '\xfe' + chr(p)
+            o += '\xfe' + ascii_chr(p)
             i += p - 1
         else:
             o += data[i]

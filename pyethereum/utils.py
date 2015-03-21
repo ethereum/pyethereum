@@ -5,7 +5,7 @@ import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import int_to_big_endian, decode_hex, encode_hex
+from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr
 from pyethereum import db
 import random
 
@@ -87,7 +87,7 @@ def zunpad(x):
 def int_to_addr(x):
     o = [''] * 20
     for i in range(20):
-        o[19 - i] = chr(x & 0xff)
+        o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
     return encode_hex(''.join(o))
 

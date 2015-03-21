@@ -5,7 +5,7 @@ import rlp
 from pyethereum import utils
 from pyethereum.abi import is_string
 import copy
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 bin_to_nibbles_cache = {}
 
@@ -38,7 +38,7 @@ def nibbles_to_bin(nibbles):
 
     res = ''
     for i in range(0, len(nibbles), 2):
-        res += chr(16 * nibbles[i] + nibbles[i + 1])
+        res += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return res
 
 
@@ -140,7 +140,7 @@ def pack_nibbles(nibbles):
         nibbles = [flags, 0] + nibbles
     o = ''
     for i in range(0, len(nibbles), 2):
-        o += chr(16 * nibbles[i] + nibbles[i + 1])
+        o += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return o
 
 

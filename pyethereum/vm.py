@@ -5,7 +5,7 @@ from pyethereum import opcodes
 import json
 import time
 from pyethereum.slogging import get_logger
-from rlp.utils import encode_hex
+from rlp.utils import encode_hex, ascii_chr
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -30,7 +30,7 @@ class CallData(object):
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
         d += [0] * (self.size - len(d))
-        return ''.join([chr(x) for x in d])
+        return ''.join([ascii_chr(x) for x in d])
 
     def extract32(self, i):
         if i >= self.size:
@@ -194,7 +194,7 @@ def vm_execute(ext, msg, code):
                 trace_data['stack'] = list(map(str, list(compustate.stack)))
             if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
-                    ''.join([encode_hex(chr(x)) for x in compustate.memory])
+                    ''.join([encode_hex(ascii_chr(x)) for x in compustate.memory])
             if log_vm_op_storage.is_active():
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = str(compustate.gas + fee)
@@ -297,7 +297,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG PAYING FOR SHA3')
                 if not mem_extend(mem, compustate, op, s0, s1):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = ''.join(map(chr, mem[s0: s0 + s1]))
+                data = ''.join(map(ascii_chr, mem[s0: s0 + s1]))
                 stk.append(utils.big_endian_to_int(utils.sha3(data)))
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
@@ -372,7 +372,7 @@ def vm_execute(ext, msg, code):
                 s0 = stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = ''.join(map(chr, mem[s0: s0 + 32]))
+                data = ''.join(map(ascii_chr, mem[s0: s0 + 32]))
                 stk.append(utils.big_endian_to_int(data))
             elif op == 'MSTORE':
                 s0, s1 = stk.pop(), stk.pop()
@@ -454,7 +454,7 @@ def vm_execute(ext, msg, code):
             compustate.gas -= msz * opcodes.GLOGBYTE
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            data = ''.join(map(chr, mem[mstart: mstart + msz]))
+            data = ''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(ord, data)))
             print('LOG', msg.to, topics, list(map(ord, data)))

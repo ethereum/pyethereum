@@ -4,7 +4,7 @@ t = pyethereum.tester
 pb = pyethereum.processblock
 import serpent
 import sys
-from rlp.utils import encode_hex
+from rlp.utils import encode_hex, ascii_chr
 
 
 # Code: serpent code
@@ -62,7 +62,7 @@ def gen_test(code, val, data):
         "post": post,
         "exec": exek,
         "gas": str(gas),
-        "out": '0x'+encode_hex(''.join(map(chr, o)))
+        "out": '0x'+encode_hex(''.join(map(ascii_chr, o)))
     }
 
 if __name__ == "__main__":

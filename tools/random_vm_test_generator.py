@@ -5,7 +5,7 @@ pb = pyethereum.processblock
 u = pyethereum.utils
 import sys
 import random
-from rlp.utils import encode_hex
+from rlp.utils import encode_hex, ascii_chr
 
 def mkrndgen(seed):
     state = [0, 0]
@@ -27,7 +27,7 @@ def gen_random_code(rnd):
         o.extend([99] + [rnd(256) for i in range(4)])
     ops = pyethereum.opcodes.opcodes.keys()
     o += [ops[rnd(len(ops))] for i in range(64)]
-    return ''.join(map(chr, o))
+    return ''.join(map(ascii_chr, o))
 
 
 # Code: serpent code
@@ -94,7 +94,7 @@ def gen_test(seed):
         "post": post,
         "exec": exek,
         "gas": str(gas),
-        "out": '0x' + encode_hex(''.join(map(chr, o)))
+        "out": '0x' + encode_hex(''.join(map(ascii_chr, o)))
     }
 
 if __name__ == "__main__":
