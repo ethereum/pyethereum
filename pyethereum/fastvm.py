@@ -388,7 +388,7 @@ def apply_msg(block, tx, msg, code):
             create_msg = Message(msgtop.to, '', value, gaz() - 100, data, msz)
             msgtop.compustate.gas -= gaz() - 100
             nonce = utils.encode_int(block.get_nonce(msgtop.to) - 1)
-            create_msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
+            create_msg.to = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
             special[0] = 'create'
             special[1] = create_msg
             special[2] = ''.join([chr(x) for x in extract_bytes(data, 0, msz)])
@@ -446,7 +446,7 @@ def apply_msg(block, tx, msg, code):
 
     def OP_SUICIDE():
         to = utils.encode_int(stk.pop())
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+        to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
         block.transfer_value(msgtop.to, to, block.get_balance(msgtop.to))
         block.suicides.append(msgtop.to)
         drop([])

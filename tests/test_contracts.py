@@ -1197,10 +1197,10 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = utils.sha3('some big long brainwallet password').encode('hex')
+    priv = encode_hex(utils.sha3('some big long brainwallet password'))
     pub = bitcoin.privtopub(priv)
 
-    msghash = utils.sha3('the quick brown fox jumps over the lazy dog').encode('hex')
+    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
     V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 

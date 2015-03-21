@@ -64,16 +64,16 @@ class Log(rlp.Serializable):
 
     def to_dict(self):
         return {
-            "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
-            "address": self.address.encode('hex'),
-            "data": '0x' + self.data.encode('hex'),
-            "topics": [utils.int32.serialize(t).encode('hex')
+            "bloom": encode_hex(bloom.b64(bloom.bloom_from_list(self.bloomables()))),
+            "address": encode_hex(self.address),
+            "data": '0x' + encode_hex(self.data),
+            "topics": [encode_hex(utils.int32.serialize(t))
                        for t in self.topics]
         }
 
     def __repr__(self):
         return '<Log(address=%r, topics=%r, data=%r)>' %  \
-            (self.address.encode('hex'), self.topics, self.data)
+            (encode_hex(self.address), self.topics, self.data)
 
 
 def apply_transaction(block, tx):
@@ -112,7 +112,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    log_tx.debug('TX NEW', tx=tx.hash.encode('hex'), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx=encode_hex(tx.hash), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
@@ -214,9 +214,9 @@ def apply_msg(ext, msg):
 
 def _apply_msg(ext, msg, code):
     if log_msg.is_active:
-        log_msg.debug("MSG APPLY", sender=msg.sender.encode('hex'), to=msg.to.encode('hex'),
+        log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
-                      data=msg.data.extract_all().encode('hex'))
+                      data=encode_hex(msg.data.extract_all()))
     if log_state.is_active:
         log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough

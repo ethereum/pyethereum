@@ -22,7 +22,7 @@ def fnv(v1, v2):
 
 # Assumes little endian bit ordering (same as Intel architectures)
 def decode_int(s):
-    return int(s[::-1].encode('hex'), 16) if s else 0
+    return int(encode_hex(s[::-1]), 16) if s else 0
 
 
 def encode_int(s):

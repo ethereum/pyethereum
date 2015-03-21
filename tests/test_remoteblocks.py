@@ -33,7 +33,7 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     for hex_rlp_encoded_data in fh:
         hexdata = decode_hex(hex_rlp_encoded_data.strip())
         blk = blocks.TransientBlock(hexdata)
-        print(blk.number, blk.hash.encode('hex'), \
+        print(blk.number, encode_hex(blk.hash), \
             '%d txs' % len(blk.transaction_list))
         head = chain_manager.head
         assert blocks.check_header_pow(blk.header_args)

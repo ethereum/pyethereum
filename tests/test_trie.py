@@ -59,7 +59,7 @@ def run_test(name):
         # make sure we have deletes at the end
         for k,v in deletes:
             t.delete(k)
-        assert pairs['root'] == '0x'+t.root_hash.encode('hex'), (i, list(permut) + deletes)
+        assert pairs['root'] == '0x'+encode_hex(t.root_hash), (i, list(permut) + deletes)
 
 
 def test_emptyValues():

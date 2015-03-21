@@ -157,7 +157,7 @@ def block_children(arg=None):
         children = chain.index.get_children(h)
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Block  %s' % arg)
-    return dict(children=[c.encode('hex') for c in children])
+    return dict(children=[encode_hex(c) for c in children])
 
 
 # ######## Transactions ############
@@ -308,7 +308,7 @@ def spvtrace(txhash):
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
 
-    return processblock.mk_independent_transaction_spv_proof(blk, i).encode('hex')
+    return encode_hex(processblock.mk_independent_transaction_spv_proof(blk, i))
 
 
 @app.get('/spv/acct/<addr>')
@@ -321,7 +321,7 @@ def spvstorage(addr, index):
     prf1 = chain.head.state.produce_spv_proof(decode_hex(addr))
     storetree = chain.head.get_storage(addr)
     prf2 = storetree.produce_spv_proof(utils.zpad(utils.encode_int(index), 32))
-    return rlp.encode(prf1 + prf2).encode('hex')
+    return encode_hex(rlp.encode(prf1 + prf2))
 
 
 # Fetch state data
@@ -370,7 +370,7 @@ def account(address=None):
 
 # ######## Peers ###################
 def make_peers_response(peers):
-    objs = [dict(ip=ip, port=port, node_id=node_id.encode('hex'))
+    objs = [dict(ip=ip, port=port, node_id=encode_hex(node_id))
             for (ip, port, node_id) in peers]
     return dict(peers=objs)
 

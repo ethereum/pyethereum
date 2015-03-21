@@ -102,7 +102,7 @@ class state():
                     languages[language] = __import__(language)
                 language = languages[language]
                 evm = language.compile(code)
-                self.address = me.evm(evm, sender, endowment, gas).encode('hex')
+                self.address = encode_hex(me.evm(evm, sender, endowment, gas))
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
                 sig = language.mk_full_signature(code)

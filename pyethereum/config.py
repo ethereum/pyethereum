@@ -6,6 +6,8 @@ from pyethereum.utils import default_data_dir
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
 
+from rlp.utils import encode_hex
+
 if sys.version_info.major == 3:
     import configparser
     import io
@@ -22,7 +24,7 @@ def default_client_version():
 
 
 def default_node_id():
-    x = (sha3(str(uuid.uuid1())) * 2).encode('hex')
+    x = encode_hex(sha3(str(uuid.uuid1())) * 2)
     assert len(x) == 128
     return x
 

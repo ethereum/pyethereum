@@ -3,6 +3,7 @@ import pytest
 import json
 import pyethereum.blocks as blocks
 import rlp
+from rlp.utils import encode_hex
 import pyethereum.utils as utils
 from tests.utils import new_db
 from pyethereum.slogging import get_logger, configure_logging
@@ -27,7 +28,7 @@ def genesis_fixture():
 
 def test_genesis_state_root(genesis_fixture):
     genesis = blocks.genesis(new_db())
-    assert genesis.state_root.encode('hex') == genesis_fixture['genesis_state_root']
+    assert encode_hex(genesis.state_root) == genesis_fixture['genesis_state_root']
 
 
 def test_genesis_initial_alloc(genesis_fixture):

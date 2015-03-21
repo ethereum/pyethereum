@@ -23,7 +23,7 @@ DEFAULT_STARTGAS = 10000
 
 
 def sha3(x):
-    return utils.sha3(x).encode('hex')
+    return encode_hex(utils.sha3(x))
 
 
 def privtoaddr(x):
@@ -103,7 +103,7 @@ class APIClient(object):
         nonce = self.getnonce(sender)
         tx = contract(nonce, gasprice, startgas, value, code)
         formatted_rlp = [decode_hex(sender), utils.int_to_big_endian(nonce)]
-        addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
+        addr = encode_hex(utils.sha3(rlp.encode(formatted_rlp))[12:])
         o = self.applytx(sign(tx, pkey_hex))
         o['addr'] = addr
         return o

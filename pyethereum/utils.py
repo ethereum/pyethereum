@@ -70,7 +70,7 @@ def sha3(seed):
 def privtoaddr(x):
     if len(x) > 32:
         x = decode_hex(x)
-    return sha3(privtopub(x)[1:])[12:].encode('hex')
+    return encode_hex(sha3(privtopub(x)[1:])[12:])
 
 
 def zpad(x, l):
@@ -89,12 +89,12 @@ def int_to_addr(x):
     for i in range(20):
         o[19 - i] = chr(x & 0xff)
         x >>= 8
-    return ''.join(o).encode('hex')
+    return encode_hex(''.join(o))
 
 
 def coerce_addr_to_bin(x):
     if is_numeric(x):
-        return zpad(big_endian_int.serialize(x), 20).encode('hex')
+        return encode_hex(zpad(big_endian_int.serialize(x), 20))
     elif len(x) == 40 or len(x) == 0:
         return decode_hex(x)
     else:
@@ -103,11 +103,11 @@ def coerce_addr_to_bin(x):
 
 def coerce_addr_to_hex(x):
     if is_numeric(x):
-        return zpad(big_endian_int.serialize(x), 20).encode('hex')
+        return encode_hex(zpad(big_endian_int.serialize(x), 20))
     elif len(x) == 40 or len(x) == 0:
         return x
     else:
-        return zpad(x, 20)[-20:].encode('hex')
+        return encode_hex(zpad(x, 20)[-20:])
 
 
 def coerce_to_int(x):
@@ -178,7 +178,7 @@ def decode_addr(v):
     '''decodes an address from serialization'''
     if len(v) not in [0, 20]:
         raise Exception("Serialized addresses must be empty or 20 bytes long!")
-    return v.encode('hex')
+    return encode_hex(v)
 
 
 def decode_int(v):
@@ -266,11 +266,11 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: '0x' + v.encode('hex'),
+    "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
     "int": lambda v: str(v),
-    "trie_root": lambda v: v.encode('hex'),
-    "int256b": lambda x: zpad(encode_int256(x), 256).encode('hex')
+    "trie_root": lambda v: encode_hex(v),
+    "int256b": lambda x: encode_hex(zpad(encode_int256(x), 256))
 }
 
 # Decoding from printable format
@@ -378,7 +378,7 @@ def db_path(data_dir):
 def dump_state(trie):
     res = ''
     for k, v in list(trie.to_dict().items()):
-        res += '%r:%r\n' % (k.encode('hex'), v.encode('hex'))
+        res += '%r:%r\n' % (encode_hex(k), encode_hex(v))
     return res
 
 

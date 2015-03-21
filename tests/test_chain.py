@@ -268,7 +268,7 @@ def test_block_serialization_other_db():
 
 def test_block_serialization_with_transaction_other_db():
 
-    hx = lambda x: x.encode('hex')
+    hx = lambda x: encode_hex(x)
 
     k, v, k2, v2 = accounts()
     # mine two blocks

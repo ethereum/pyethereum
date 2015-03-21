@@ -282,7 +282,7 @@ class BlockHeader(rlp.Serializable):
 
     def hex_hash(self):
         """The hex encoded block hash"""
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     def check_pow(self, db=None, nonce=None):
         """Check if the proof-of-work of the block is valid.
@@ -323,14 +323,14 @@ class BlockHeader(rlp.Serializable):
         d = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
                       'seedhash', 'mixhash'):
-            d[field] = '0x' + getattr(self, field).encode('hex')
+            d[field] = '0x' + encode_hex(getattr(self, field))
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
-            d[field] = getattr(self, field).encode('hex')
+            d[field] = encode_hex(getattr(self, field))
         for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
                       'timestamp'):
             d[field] = str(getattr(self, field))
-        d['bloom'] = int256.serialize(self.bloom).encode('hex')
+        d['bloom'] = encode_hex(int256.serialize(self.bloom))
         assert len(d) == len(BlockHeader.fields)
         return d
 
@@ -395,14 +395,14 @@ class TransientBlock(rlp.Serializable):
 
         This is equivalent to ``header.hex_hash().
         """
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.number,
-                                             self.hash.encode('hex')[:8])
+                                             encode_hex(self.hash)[:8])
 
     def __structlog__(self):
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
 
 @mirror_from('header', set(field for field, _ in BlockHeader.fields) -
@@ -612,7 +612,7 @@ class Block(rlp.Serializable):
 
         This is equivalent to ``header.hex_hash().
         """
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     @property
     def tx_list_root(self):
@@ -674,7 +674,7 @@ class Block(rlp.Serializable):
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
-                          uncle=utils.sha3(rlp.encode(uncle)).encode('hex'))
+                          uncle=encode_hex(utils.sha3(rlp.encode(uncle))))
                 return False
             ineligible.append(uncle)
         return True
@@ -1022,12 +1022,11 @@ class Block(rlp.Serializable):
             value = self.caches[field].get(address, getattr(account, field))
             med_dict[field] = str(value)
         code = self.caches['code'].get(address, account.code)
-        med_dict['code'] = '0x' + code.encode('hex')
+        med_dict['code'] = '0x' + encode_hex(code)
 
         storage_trie = SecureTrie(Trie(self.db, account.storage))
         if with_storage_root:
-            med_dict['storage_root'] = storage_trie.get_root_hash()  \
-                                                   .encode('hex')
+            med_dict['storage_root'] = encode_hex(storage_trie.get_root_hash())
         if with_storage:
             med_dict['storage'] = {}
             d = storage_trie.to_dict()
@@ -1037,13 +1036,13 @@ class Block(rlp.Serializable):
             for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x' + utils.zunpad(k).encode('hex')
+                hexkey = '0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
                     if v2 != 0:
                         med_dict['storage'][hexkey] = \
-                            '0x' + utils.int_to_big_endian(v2).encode('hex')
+                            '0x' + encode_hex(utils.int_to_big_endian(v2))
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x' + rlp.decode(v).encode('hex')
+                    med_dict['storage'][hexkey] = '0x' + encode_hex(rlp.decode(v))
 
         return med_dict
 
@@ -1138,7 +1137,7 @@ class Block(rlp.Serializable):
                 txjson = tx.hash
             txlist.append({
                 "tx": txjson,
-                "medstate": receipt.state_root.encode('hex'),
+                "medstate": encode_hex(receipt.state_root),
                 "gas": str(receipt.gas_used),
                 "logs": [Log.serialize(log) for log in receipt.logs],
                 "bloom": utils.int256.serialize(receipt.bloom)
@@ -1147,7 +1146,7 @@ class Block(rlp.Serializable):
         if with_state:
             state_dump = {}
             for address, v in self.state.to_dict().items():
-                state_dump[address.encode('hex')] = \
+                state_dump[encode_hex(address)] = \
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         if with_uncles:
@@ -1167,7 +1166,7 @@ class Block(rlp.Serializable):
         try:
             parent = get_block(self.db, self.prevhash)
         except KeyError:
-            raise UnknownParentException(self.prevhash.encode('hex'))
+            raise UnknownParentException(encode_hex(self.prevhash))
         # assert parent.state.db.db == self.state.db.db
         return parent
 
@@ -1187,13 +1186,13 @@ class Block(rlp.Serializable):
         """
         if self.is_genesis():
             return self.difficulty
-        elif 'difficulty:' + self.hash.encode('hex') in self.db:
-            encoded = self.db.get('difficulty:' + self.hash.encode('hex'))
+        elif 'difficulty:' + encode_hex(self.hash) in self.db:
+            encoded = self.db.get('difficulty:' + encode_hex(self.hash))
             return utils.decode_int(encoded)
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
             o += sum([uncle.difficulty for uncle in self.uncles])
-            self.state.db.put('difficulty:' + self.hash.encode('hex'),
+            self.state.db.put('difficulty:' + encode_hex(self.hash),
                               utils.encode_int(o))
             return o
 
@@ -1214,10 +1213,10 @@ class Block(rlp.Serializable):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
+        return '<Block(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
 
     def __structlog__(self):
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
 
 def calc_seedhash(parent):
@@ -1356,9 +1355,9 @@ def dump_genesis_block_tests_data(db):
     import json
     g = genesis(db)
     data = dict(
-        genesis_state_root=g.state_root.encode('hex'),
+        genesis_state_root=encode_hex(g.state_root),
         genesis_hash=g.hex_hash(),
-        genesis_rlp_hex=g.serialize().encode('hex'),
+        genesis_rlp_hex=encode_hex(g.serialize()),
         initial_alloc=dict()
     )
     for addr, balance in GENESIS_INITIAL_ALLOC.items():

@@ -1,6 +1,7 @@
 
 from operator import attrgetter
 import sys
+from rlp.utils import encode_hex
 from pyethereum import blocks
 from pyethereum.slogging import get_logger
 log = get_logger('eth.sync')
@@ -21,7 +22,7 @@ class HashChainTask(object):
         self.request(block_hash)
 
     def request(self, block_hash):
-        log.debug('requesting block_hashes', peer=self.peer, start=block_hash.encode('hex'))
+        log.debug('requesting block_hashes', peer=self.peer, start=encode_hex(block_hash))
         self.peer.send_GetBlockHashes(block_hash, self.NUM_HASHES_PER_REQUEST)
 
     def received_block_hashes(self, block_hashes):
@@ -31,7 +32,7 @@ class HashChainTask(object):
         for bh in block_hashes:
             if bh in self.chain_manager or bh == self.chain_manager.genesis.hash:
                 log.debug('matching block hash found', peer=self.peer,
-                          hash=bh.encode('hex'), num_to_fetch=len(self.hash_chain))
+                          hash=encode_hex(bh), num_to_fetch=len(self.hash_chain))
                 return list(reversed(self.hash_chain))
             self.hash_chain.append(bh)
         if len(block_hashes) == 0:
@@ -56,7 +57,7 @@ class SynchronizationTask(object):
         self.chain_manager = chain_manager
         self.peer = peer
         self.hash_chain = []  # [oldest to youngest]
-        log.debug('syncing', peer=self.peer, hash=block_hash.encode('hex'))
+        log.debug('syncing', peer=self.peer, hash=encode_hex(block_hash))
         self.hash_chain_task = HashChainTask(self.chain_manager, self.peer, block_hash)
 
     def received_block_hashes(self, block_hashes):
@@ -118,9 +119,9 @@ class Synchronizer(object):
 
     def synchronize_unknown_block(self, peer, block_hash, force=False):
         "Case: block with unknown parent. Fetches unknown ancestors and this block"
-        log.debug('sync unknown', peer=peer, block=block_hash.encode('hex'))
+        log.debug('sync unknown', peer=peer, block=encode_hex(block_hash))
         if block_hash == self.chain_manager.genesis.hash or block_hash in self.chain_manager:
-            log.debug('known_hash, skipping', peer=peer, hash=block_hash.encode('hex'))
+            log.debug('known_hash, skipping', peer=peer, hash=encode_hex(block_hash))
             return
 
         if peer and (not peer in self.synchronization_tasks) or force:

@@ -27,20 +27,20 @@ def run_test(filename, testname, testdata):
         tx = rlp.decode(rlpdata, transactions.Transaction)
         o["sender"] = tx.sender
         o["transaction"] = {
-            "data": '0x' * (len(tx.data) > 0) + tx.data.encode('hex'),
+            "data": '0x' * (len(tx.data) > 0) + encode_hex(tx.data),
             "gasLimit": str(tx.startgas),
             "gasPrice": str(tx.gasprice),
             "nonce": str(tx.nonce),
-            "r": '0x'+utils.zpad(utils.int_to_big_endian(tx.r), 32).encode('hex'),
-            "s": '0x'+utils.zpad(utils.int_to_big_endian(tx.s), 32).encode('hex'),
+            "r": '0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.r), 32)),
+            "s": '0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.s), 32)),
             "v": str(tx.v),
             "value": str(tx.value),
-            "to": str(tx.to).encode('hex'),
+            "to": encode_hex(str(tx.to)),
         }
     except:
         pass
     assert o.get("transaction", None) == testdata.get("transaction", None)
-    assert o.get("sender", None).encode('hex') == testdata.get("sender", None)
+    assert encode_hex(o.get("sender", None)) == testdata.get("sender", None)
 
 
 if __name__ == '__main__':

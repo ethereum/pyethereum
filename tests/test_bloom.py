@@ -51,7 +51,7 @@ def decode_int_from_hex(x):
     return r
 
 def encode_hex_from_int(x):
-    return utils.zpad(utils.int_to_big_endian(x), 256).encode('hex')
+    return encode_hex(utils.zpad(utils.int_to_big_endian(x), 256))
 
 
 def do_test_bloom(test_logs):
@@ -72,6 +72,6 @@ def do_test_bloom(test_logs):
         topics = [decode_int_from_hex(x) for x in data['topics']]
         log = pb.Log(decode_hex(address), topics, '')
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
-        assert log_bloom.encode('hex') == encode_hex_from_int(b)
-        assert data['bloom'] == log_bloom.encode('hex')
+        assert encode_hex(log_bloom) == encode_hex_from_int(b)
+        assert data['bloom'] == encode_hex(log_bloom)
 

@@ -1,6 +1,7 @@
 import os
 from pyethereum import utils
 import rlp
+from rlp.utils import encode_hex
 from pyethereum import blocks
 from pyethereum import processblock
 from pyethereum.slogging import get_logger
@@ -233,7 +234,7 @@ class Chain(object):
 
     def get_chain(self, start='', count=10):
         "return 'count' blocks starting from head or start"
-        log.debug("get_chain", start=start.encode('hex'), count=count)
+        log.debug("get_chain", start=encode_hex(start), count=count)
         blocks = []
         block = self.head
         if start:

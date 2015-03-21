@@ -26,7 +26,7 @@ def bin_to_nibbles(s):
     >>> bin_to_nibbles("hello")
     [6, 8, 6, 5, 6, 12, 6, 12, 6, 15]
     """
-    return [hti[c] for c in s.encode('hex')]
+    return [hti[c] for c in encode_hex(s)]
 
 
 def nibbles_to_bin(nibbles):
@@ -224,9 +224,9 @@ class Trie(object):
             pass
         elif proof.get_mode() == RECORDING:
             proof.add_node(copy.copy(node))
-            # print 'recording %s' % utils.sha3(rlp.encode(node)).encode('hex')
+            # print('recording %s' % encode_hex(utils.sha3(rlp.encode(node))))
         elif proof.get_mode() == VERIFYING:
-            # print 'verifying %s' % utils.sha3(rlp.encode(node)).encode('hex')
+            # print('verifying %s' % encode_hex(utils.sha3(rlp.encode(node))))
             if rlp.encode(node) not in proof.get_nodes():
                 raise InvalidSPVProof("Proof invalid!")
 
@@ -849,9 +849,9 @@ if __name__ == "__main__":
 
     def encode_node(nd):
         if isinstance(nd, str):
-            return nd.encode('hex')
+            return encode_hex(nd)
         else:
-            return rlp.encode(nd).encode('hex')
+            return encode_hex(rlp.encode(nd))
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':

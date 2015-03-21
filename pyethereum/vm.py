@@ -5,6 +5,8 @@ from pyethereum import opcodes
 import json
 import time
 from pyethereum.slogging import get_logger
+from rlp.utils import encode_hex
+
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
 log_vm_op = get_logger('eth.vm.op')
@@ -192,7 +194,7 @@ def vm_execute(ext, msg, code):
                 trace_data['stack'] = list(map(str, list(compustate.stack)))
             if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
-                    ''.join([chr(x).encode('hex') for x in compustate.memory])
+                    ''.join([encode_hex(chr(x)) for x in compustate.memory])
             if log_vm_op_storage.is_active():
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = str(compustate.gas + fee)
@@ -480,7 +482,7 @@ def vm_execute(ext, msg, code):
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+            to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
@@ -515,7 +517,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
-                to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+                to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, 
                                    msg.depth + 1, code_address=to)
@@ -537,7 +539,7 @@ def vm_execute(ext, msg, code):
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
-            to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+            to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
             xfer = ext.get_balance(msg.to)
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)

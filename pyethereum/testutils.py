@@ -58,15 +58,15 @@ def mktest(code, language, data=None, fun=None, args=None,
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
-                "code": '0x' + s.block.get_code(ca).encode('hex'),
-                "data": '0x' + d.encode('hex'), "gas": str(gas),
+                "code": '0x' + encode_hex(s.block.get_code(ca)),
+                "data": '0x' + encode_hex(d), "gas": str(gas),
                 "gasPrice": str(1), "origin": t.a0,
                 "value": str(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": '0x' + d.encode('hex'), "gasLimit": parse_int_or_hex(gas),
+        tx = {"data": '0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": str(1), "nonce": str(s.block.get_nonce(t.a0)),
-              "secretKey": t.k0.encode('hex'), "to": ca, "value": str(value)}
+              "secretKey": encode_hex(t.k0), "to": ca, "value": str(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
 
 
@@ -122,19 +122,19 @@ def run_vm_test(params, mode):
 
     def call_wrapper(msg):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
-        hexdata = msg.data.extract_all().encode('hex')
+        hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
-                                        destination=msg.to.encode('hex'),
+                                        destination=encode_hex(msg.to),
                                         data='0x' + hexdata))
         return 1, msg.gas, ''
 
     def sendmsg_wrapper(msg, code):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
-        hexdata = msg.data.extract_all().encode('hex')
+        hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
-                                        destination=msg.to.encode('hex'),
+                                        destination=encode_hex(msg.to),
                                         data='0x' + hexdata))
         return 1, msg.gas, ''
 
@@ -143,8 +143,8 @@ def run_vm_test(params, mode):
         sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
-        addr = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
-        hexdata = msg.data.extract_all().encode('hex')
+        addr = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
+        hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=str(msg.gas),
                                         value=str(msg.value),
                                         destination='', data='0x' + hexdata))
@@ -184,7 +184,7 @@ def run_vm_test(params, mode):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = '0x' + ''.join(map(chr, output)).encode('hex')
+        params2['out'] = '0x' + encode_hex(''.join(map(chr, output)))
         params2['gas'] = str(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(True)['state']
@@ -294,10 +294,10 @@ def run_state_test(params, mode):
 
     params2 = copy.deepcopy(params)
     if success:
-        params2['out'] = '0x' + output.encode('hex')
+        params2['out'] = '0x' + encode_hex(output)
         params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
         params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
-        params2['postStateRoot'] = blk.state.root_hash.encode('hex')
+        params2['postStateRoot'] = encode_hex(blk.state.root_hash)
 
     if mode == FILL:
         return params2
@@ -341,24 +341,24 @@ def run_ethash_test(params, mode):
     t1 = time.time()
     cache = ethash.mkcache(cache_size, seed)
     t2 = time.time()
-    cache_hash = utils.sha3(ethash.serialize_cache(cache)).encode('hex')
+    cache_hash = encode_hex(utils.sha3(ethash.serialize_cache(cache)))
     t6 = time.time()
     light_verify = ethash.hashimoto_light(full_size, cache, header_hash, nonce)
     t7 = time.time()
     # assert full_mine == light_mine
     out = {
-        "seed": seed.encode('hex'),
-        "header_hash": header_hash.encode('hex'),
-        "nonce": nonce.encode('hex'),
+        "seed": encode_hex(seed),
+        "header_hash": encode_hex(header_hash),
+        "nonce": encode_hex(nonce),
         "cache_size": cache_size,
         "full_size": full_size,
         "cache_hash": cache_hash,
-        "mixhash": light_verify["mixhash"].encode('hex'),
-        "result": light_verify["result"].encode('hex'),
+        "mixhash": encode_hex(light_verify["mixhash"]),
+        "result": encode_hex(light_verify["result"]),
     }
     if mode == FILL:
         block.mixhash = light_verify["mixhash"]
-        params["header"] = block.serialize_header().encode('hex')
+        params["header"] = encode_hex(block.serialize_header())
         for k, v in list(out.items()):
             params[k] = v
         return params

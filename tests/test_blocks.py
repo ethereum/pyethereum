@@ -37,7 +37,7 @@ translator_list = {
 
 def valueconv(k, v):
     if k in ['r', 's']:
-        return '0x'+utils.int_to_big_endian(v).encode('hex')
+        return '0x' + encode_hex(utils.int_to_big_endian(v))
     return v
 
 
@@ -61,7 +61,7 @@ def run_block_test(params):
         utils.scanners['bin'](gbh["transactionsTrie"])
     assert utils.sha3rlp(b.uncles) == \
         utils.scanners['bin'](gbh["uncleHash"])
-    h = b.state.root_hash.encode('hex')
+    h = encode_hex(b.state.root_hash)
     if h != gbh["stateRoot"]:
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
