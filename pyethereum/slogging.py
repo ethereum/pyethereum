@@ -24,10 +24,7 @@ eth.chain.new_block
 """
 
 def hexprint(x):
-    if type(x) == bytes:
-        return ('0x' + binascii.hexlify(x).decode('ascii'))
-    else:
-        return repr(x)
+    return repr(x)
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 

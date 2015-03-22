@@ -32,11 +32,11 @@ GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
-GENESIS_PREVHASH = '\00' * 32
-GENESIS_COINBASE = decode_hex("0" * 40)
+GENESIS_PREVHASH = b'\x00' * 32
+GENESIS_COINBASE = b'\x00' * 20
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
-GENESIS_SEEDHASH = '\x00' * 32
-GENESIS_MIXHASH = '\x00' * 32
+GENESIS_SEEDHASH = b'\x00' * 32
+GENESIS_MIXHASH = b'\x00' * 32
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
 # Gas limit adjustment algo:
@@ -137,8 +137,8 @@ class Account(rlp.Serializable):
 
         :param db: the db in which the account will store its code.
         """
-        code_hash = utils.sha3('')
-        db.put(code_hash, '')
+        code_hash = utils.sha3(b'')
+        db.put(code_hash, b'')
         return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
 
 
@@ -328,7 +328,7 @@ class BlockHeader(rlp.Serializable):
         d = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
                       'seedhash', 'mixhash'):
-            d[field] = '0x' + encode_hex(getattr(self, field))
+            d[field] = b'0x' + encode_hex(getattr(self, field))
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
             d[field] = encode_hex(getattr(self, field))
@@ -573,7 +573,7 @@ class Block(rlp.Serializable):
         return cls(header, None, [], db=db)
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, nonce='', extra_data='',
+    def init_from_parent(cls, parent, coinbase, nonce=b'', extra_data=b'',
                          timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
 
@@ -974,7 +974,7 @@ class Block(rlp.Serializable):
 
             # storage
             t = SecureTrie(Trie(self.db, acct.storage))
-            for k, v in self.caches.get('storage:' + address, {}).items():
+            for k, v in self.caches.get(b'storage:' + address, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
                 changes.append(['storage', address, k, v])

@@ -11,7 +11,7 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr
 bin_to_nibbles_cache = {}
 
 hti = {}
-for i, c in enumerate('0123456789abcdef'):
+for i, c in enumerate(b'0123456789abcdef'):
     hti[c] = i
 
 
@@ -139,7 +139,7 @@ def pack_nibbles(nibbles):
         nibbles = [flags] + nibbles
     else:
         nibbles = [flags, 0] + nibbles
-    o = ''
+    o = b''
     for i in range(0, len(nibbles), 2):
         o += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return o
@@ -183,8 +183,8 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF,
                          NODE_TYPE_EXTENSION]
 
-BLANK_NODE = ''
-BLANK_ROOT = utils.sha3rlp('')
+BLANK_NODE = b''
+BLANK_ROOT = utils.sha3rlp(b'')
 
 
 def transient_trie_exception(*args):

@@ -20,6 +20,11 @@ if sys.version_info.major == 2:
     def to_string(value):
         return str(value)
 
+    def int_to_bytes(value):
+        if isinstance(value, str):
+            return value
+        return int_to_big_endian(value)
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -31,6 +36,11 @@ else:
             return bytes(value, 'utf-8')
         if isinstance(value, int):
             return bytes(str(value), 'utf-8')
+
+    def int_to_bytes(value):
+        if isinstance(value, bytes):
+            return value
+        return int_to_big_endian(value)
 
 def safe_ord(value):
     if isinstance(value, int):
@@ -61,7 +71,7 @@ def flatten(li):
         o.extend(l)
     return o
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip('\x00'))
+big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 
@@ -91,12 +101,12 @@ def privtoaddr(x):
 
 
 def zpad(x, l):
-    return '\x00' * max(0, l - len(x)) + x
+    return b'\x00' * max(0, l - len(x)) + x
 
 
 def zunpad(x):
     i = 0
-    while i < len(x) and x[i] == '\x00':
+    while i < len(x) and x[i] == b'\x00':
         i += 1
     return x[i:]
 
@@ -106,7 +116,7 @@ def int_to_addr(x):
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
-    return encode_hex(''.join(o))
+    return encode_hex(b''.join(o))
 
 
 def coerce_addr_to_bin(x):
@@ -200,7 +210,7 @@ def decode_addr(v):
 
 def decode_int(v):
     '''decodes and integer from serialization'''
-    if len(v) > 0 and v[0] == '\x00':
+    if len(v) > 0 and v[0] == b'\x00':
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
