@@ -22,6 +22,11 @@ eth.chain
 eth.chain.new_block
 """
 
+def hexprint(x):
+    if type(x) == bytes:
+        return ('0x' + binascii.hexlify(x).decode('ascii'))
+    else:
+        return repr(x)
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 
@@ -32,7 +37,7 @@ class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 
     def __call__(self, _, __, event_dict):
         msg = event_dict.pop('event', '')
-        kvs = ' '.join(k + '=' + repr(v) for k, v in self._ordered_items(event_dict))
+        kvs = ' '.join(k + '=' + hexprint(v) for k, v in self._ordered_items(event_dict))
         return "%s\t%s" % (msg, kvs)
 
 
