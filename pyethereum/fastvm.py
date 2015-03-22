@@ -347,7 +347,7 @@ def apply_msg(block, tx, msg, code):
 
     def OP_DIV():
         s0, s1 = stk.pop(), stk.pop()
-        stk.append(0 if s1 == 0 else s0 / s1)
+        stk.append(0 if s1 == 0 else s0 // s1)
 
     def OP_MOD():
         s0, s1 = stk.pop(), stk.pop()
@@ -491,7 +491,7 @@ def apply_msg(block, tx, msg, code):
         if s0 >= 32:
             stk.append(0)
         else:
-            stk.append((s1 / 256 ** (31 - s0)) % 256)
+            stk.append((s1 // 256 ** (31 - s0)) % 256)
 
     def OP_ADDMOD():
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()

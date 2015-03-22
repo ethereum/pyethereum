@@ -133,6 +133,7 @@ def apply_transaction(block, tx):
         log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
+        assert utils.is_numeric(gas_remained)
         log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
 
     assert gas_remained >= 0
@@ -231,6 +232,7 @@ def _apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
+    assert utils.is_numeric(gas)
     if log_msg.is_active:
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active:
@@ -253,6 +255,8 @@ def create_contract(ext, msg):
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())
+    assert utils.is_numeric(gas)
+
     if res:
         if not len(dat):
             return 1, gas, msg.to

@@ -62,7 +62,7 @@ POW_EPOCH_LENGTH = 30000
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
-    offset = parent.difficulty / BLOCK_DIFF_FACTOR
+    offset = parent.difficulty // BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never

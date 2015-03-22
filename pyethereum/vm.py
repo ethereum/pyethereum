@@ -98,10 +98,10 @@ def preprocess_code(code):
 
 def mem_extend(mem, compustate, op, start, sz):
     if sz:
-        oldsize = len(mem) / 32
+        oldsize = len(mem) // 32
         old_totalfee = oldsize * opcodes.GMEMORY + \
             oldsize**2 // opcodes.GQUADRATICMEMDENOM
-        newsize = utils.ceil32(start + sz) / 32
+        newsize = utils.ceil32(start + sz) // 32
         new_totalfee = newsize * opcodes.GMEMORY + \
             newsize**2 // opcodes.GQUADRATICMEMDENOM
         if old_totalfee < new_totalfee:
@@ -222,7 +222,7 @@ def vm_execute(ext, msg, code):
                 stk.append((stk.pop() * stk.pop()) & TT256M1)
             elif op == 'DIV':
                 s0, s1 = stk.pop(), stk.pop()
-                stk.append(0 if s1 == 0 else s0 / s1)
+                stk.append(0 if s1 == 0 else s0 // s1)
             elif op == 'MOD':
                 s0, s1 = stk.pop(), stk.pop()
                 stk.append(0 if s1 == 0 else s0 % s1)
@@ -289,11 +289,11 @@ def vm_execute(ext, msg, code):
                 if s0 >= 32:
                     stk.append(0)
                 else:
-                    stk.append((s1 / 256 ** (31 - s0)) % 256)
+                    stk.append((s1 // 256 ** (31 - s0)) % 256)
         elif opcode < 0x40:
             if op == 'SHA3':
                 s0, s1 = stk.pop(), stk.pop()
-                compustate.gas -= opcodes.GSHA3WORD * (utils.ceil32(s1) / 32)
+                compustate.gas -= opcodes.GSHA3WORD * (utils.ceil32(s1) // 32)
                 if compustate.gas < 0:
                     return vm_exception('OOG PAYING FOR SHA3')
                 if not mem_extend(mem, compustate, op, s0, s1):
@@ -382,7 +382,7 @@ def vm_execute(ext, msg, code):
                 v = s1
                 for i in range(31, -1, -1):
                     mem[s0 + i] = v % 256
-                    v /= 256
+                    v //= 256
             elif op == 'MSTORE8':
                 s0, s1 = stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 1):
