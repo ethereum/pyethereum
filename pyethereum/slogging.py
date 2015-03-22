@@ -2,6 +2,7 @@ import structlog
 import logging
 import sys
 import json
+import binascii
 """
 See test_logging.py for examples
 

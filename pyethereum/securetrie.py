@@ -1,4 +1,5 @@
-import rlp, utils
+import rlp
+from pyethereum import utils
 
 
 class SecureTrie(object):

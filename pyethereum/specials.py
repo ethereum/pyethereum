@@ -1,4 +1,5 @@
-import utils, bitcoin, opcodes
+import bitcoin
+from pyethereum import utils, opcodes
 from rlp.utils import ascii_chr
 
 def proc_ecrecover(ext, msg):

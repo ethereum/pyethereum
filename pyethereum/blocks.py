@@ -13,7 +13,12 @@ from pyethereum import bloom
 import copy
 import sys
 from pyethereum import ethash, ethash_utils
-from repoze.lru import lru_cache
+
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
+
 from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
