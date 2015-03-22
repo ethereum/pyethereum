@@ -4,6 +4,7 @@ import pytest
 from pyethereum import tester, utils, abi
 import serpent
 from rlp.utils import decode_hex, encode_hex
+from pyethereum.utils import safe_ord
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -1089,7 +1090,7 @@ def test_multiarg_code():
     s = tester.state()
     c = s.abi_contract(multiarg_code)
     o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
-    assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
+    assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
 
 peano_code = """
 macro padd($x, psuc($y)):

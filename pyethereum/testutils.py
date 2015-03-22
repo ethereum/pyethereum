@@ -6,7 +6,7 @@ from pyethereum import processblock as pb
 import tempfile
 import copy
 from pyethereum.db import DB, EphemDB
-from pyethereum.utils import to_string
+from pyethereum.utils import to_string, safe_ord
 import json
 import os
 import time
@@ -164,7 +164,7 @@ def run_vm_test(params, mode):
     ext.block_hash = blkhash
 
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
-                     vm.CallData([ord(x) for x in tx.data]))
+                     vm.CallData([safe_ord(x) for x in tx.data]))
     time_pre = time.time()
     success, gas_remained, output = \
         vm.vm_execute(ext, msg, decode_hex(exek['code'][2:]))

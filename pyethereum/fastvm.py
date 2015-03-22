@@ -1,5 +1,6 @@
 from pyethereum.opcodes import opcodes, reverse_opcodes
 from pyethereum import utils
+from pyethereum.utils import safe_ord
 import serpent
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
@@ -188,14 +189,14 @@ def preprocess_vmcode(code):
     o = []
     jumps = {}
     # Round 1: Locate all JUMP, JUMPI, JUMPDEST, STOP, RETURN, INVALID locs
-    opcodez = copy.deepcopy([opcodes.get(ord(c), ['INVALID', 0, 0, 1]) +
-                             [ord(c)] for c in code])
+    opcodez = copy.deepcopy([opcodes.get(safe_ord(c), ['INVALID', 0, 0, 1]) +
+                             [safe_ord(c)] for c in code])
     for i, o in enumerate(opcodez):
         if o[0] in filter1:
             jumps[i] = True
 
     chunks = {}
-    chunks["code"] = [ord(x) for x in code]
+    chunks["code"] = [safe_ord(x) for x in code]
     c = []
     h, reqh, gascost = 0, 0, 0
     i = 0
@@ -235,7 +236,7 @@ def preprocess_vmcode(code):
 # Main function, drop-in replacement for apply_msg in processblock.py
 def apply_msg(block, tx, msg, code):
     msg = Message(msg.sender, msg.to, msg.value, msg.gas, bytearray_to_32s(
-        [ord(x) for x in msg.data]), len(msg.data))
+        [safe_ord(x) for x in msg.data]), len(msg.data))
     # print '### applying msg ###'
     callstack = []
     msgtop, mem, stk, ops, index = None, None, None, [], [None]
@@ -566,7 +567,7 @@ def apply_msg(block, tx, msg, code):
             return drop(OUT_OF_GAS)
         for i in range(s3):
             if s2 + i < len(extcode):
-                mem[s1 + i] = ord(extcode[s2 + i])
+                mem[s1 + i] = safe_ord(extcode[s2 + i])
             else:
                 mem[s1 + i] = 0
 

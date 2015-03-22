@@ -11,7 +11,7 @@ from pyethereum import signals
 from pyethereum.stoppable import StoppableLoopThread
 from pyethereum.packeter import packeter
 from pyethereum.utils import big_endian_to_int as idec
-from pyethereum.utils import recursive_int_to_big_endian, to_string
+from pyethereum.utils import recursive_int_to_big_endian, to_string, safe_ord
 import rlp
 from rlp.utils import encode_hex
 from pyethereum import blocks
@@ -167,7 +167,7 @@ class Peer(StoppableLoopThread):
             data = [_decode[i](x) for i, x in enumerate(data)]
             network_protocol_version, client_version = data[0], data[1]
             capabilities, listen_port, node_id = data[2], data[3], data[4]
-            self.capabilities = [(p, ord(v)) for p, v in capabilities]
+            self.capabilities = [(p, safe_ord(v)) for p, v in capabilities]
         except (IndexError, ValueError) as e:
             log_p2p.debug('could not decode Hello', remote_id=self, error=e)
             return self.send_Disconnect(reason='Incompatible network protocols')
@@ -177,7 +177,7 @@ class Peer(StoppableLoopThread):
             log_p2p.critical('connected myself')
             return self.send_Disconnect(reason='Incompatible network protocols')
 
-        self.capabilities = [(p, ord(v)) for p, v in capabilities]
+        self.capabilities = [(p, safe_ord(v)) for p, v in capabilities]
         log_p2p.debug('received Hello',
                       remote_id=self,
                       network_protocol_version=network_protocol_version,
@@ -294,7 +294,7 @@ class Peer(StoppableLoopThread):
         addresses = []
         for ip, port, pid in data:
             assert len(ip) == 4
-            ip = '.'.join(to_string(ord(b)) for b in ip)
+            ip = '.'.join(to_string(safe_ord(b)) for b in ip)
             port = idec(port)
             log_p2p.trace('received peer address', remote_id=self, ip=ip, port=port)
             addresses.append([ip, port, pid])

@@ -6,7 +6,7 @@ import json
 import time
 from pyethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from pyethereum.utils import to_string
+from pyethereum.utils import to_string, safe_ord
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -82,13 +82,13 @@ def preprocess_code(code):
     i = 0
     ops = []
     while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) +
-                      [ord(code[i]), 0])
+        o = copy.copy(opcodes.opcodes.get(safe_ord(code[i]), ['INVALID', 0, 0, 0]) +
+                      [safe_ord(code[i]), 0])
         ops.append(o)
         if o[0][:4] == 'PUSH':
             for j in range(int(o[0][4:])):
                 i += 1
-                byte = ord(code[i]) if i < len(code) else 0
+                byte = safe_ord(code[i]) if i < len(code) else 0
                 o[-1] = (o[-1] << 8) + byte
                 if i < len(code):
                     ops.append(['INVALID', 0, 0, 0, byte, 0])
@@ -350,7 +350,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s2 + i < len(extcode):
-                        mem[start + i] = ord(extcode[s2 + i])
+                        mem[start + i] = safe_ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
         elif opcode < 0x50:
@@ -457,8 +457,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(ord, data)))
-            print('LOG', msg.to, topics, list(map(ord, data)))
+            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(safe_ord, data)))
+            print('LOG', msg.to, topics, list(map(safe_ord, data)))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()

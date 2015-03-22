@@ -1,5 +1,6 @@
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 
+
 NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
 
@@ -25,6 +26,7 @@ def compress(data):
 
 
 def decompress(data):
+    from pyethereum.utils import safe_ord
     o = ''
     i = 0
     while i < len(data):
@@ -36,7 +38,7 @@ def decompress(data):
             elif data[i + 1] == '\x01':
                 o += NULLSHA3
             else:
-                o += '\x00' * ord(data[i + 1])
+                o += '\x00' * safe_ord(data[i + 1])
             i += 1
         else:
             o += data[i]

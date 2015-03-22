@@ -32,6 +32,12 @@ else:
         if isinstance(value, int):
             return bytes(str(value), 'utf-8')
 
+def safe_ord(value):
+    if isinstance(value, int):
+        return value
+    else:
+        return ord(value)
+
 def big_endian_to_int(value):
     return BigEndianInt().deserialize(value)
 

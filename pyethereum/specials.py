@@ -1,5 +1,6 @@
 import bitcoin
 from pyethereum import utils, opcodes
+from pyethereum.utils import safe_ord
 from rlp.utils import ascii_chr
 
 def proc_ecrecover(ext, msg):
@@ -17,7 +18,7 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, [0] * 32
     pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
-    o = [0] * 12 + [ord(x) for x in utils.sha3(pub[1:])[-20:]]
+    o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
 
 
@@ -29,7 +30,7 @@ def proc_sha256(ext, msg):
     if msg.gas < gas_cost:
         return 0, 0, []
     d = msg.data.extract_all()
-    o = [ord(x) for x in bitcoin.bin_sha256(d)]
+    o = [safe_ord(x) for x in bitcoin.bin_sha256(d)]
     return 1, msg.gas - gas_cost, o
 
 
@@ -41,7 +42,7 @@ def proc_ripemd160(ext, msg):
     if msg.gas < gas_cost:
         return 0, 0, []
     d = msg.data.extract_all()
-    o = [0] * 12 + [ord(x) for x in bitcoin.ripemd.RIPEMD160(d).digest()]
+    o = [0] * 12 + [safe_ord(x) for x in bitcoin.ripemd.RIPEMD160(d).digest()]
     return 1, msg.gas - gas_cost, o
 
 

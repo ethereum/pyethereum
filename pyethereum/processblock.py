@@ -14,6 +14,7 @@ from pyethereum import specials
 from pyethereum import bloom
 from pyethereum import vm
 from pyethereum.exceptions import *
+from pyethereum.utils import safe_ord
 
 sys.setrecursionlimit(100000)
 
@@ -122,7 +123,7 @@ def apply_transaction(block, tx):
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
 
     message_gas = tx.startgas - intrinsic_gas_used
-    message_data = vm.CallData([ord(x) for x in tx.data], 0, len(tx.data))
+    message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data,
                          code_address=tx.to)
 
