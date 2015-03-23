@@ -102,6 +102,8 @@ def mem_extend(mem, compustate, op, start, sz):
         old_totalfee = oldsize * opcodes.GMEMORY + \
             oldsize**2 // opcodes.GQUADRATICMEMDENOM
         newsize = utils.ceil32(start + sz) // 32
+        # if newsize > 524288:
+        #     raise Exception("Memory above 16 MB per call not supported by this VM")
         new_totalfee = newsize * opcodes.GMEMORY + \
             newsize**2 // opcodes.GQUADRATICMEMDENOM
         if old_totalfee < new_totalfee:
@@ -160,6 +162,7 @@ def vm_execute(ext, msg, code):
     while 1:
         # print 'op: ', op, time.time() - s
         # s = time.time()
+        # stack size limit error
         if compustate.pc >= codelen:
             return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
@@ -176,9 +179,9 @@ def vm_execute(ext, msg, code):
                                 op=op, needed=to_string(in_args),
                                 available=to_string(len(compustate.stack)))
 
-        # stack size limit error
-        if len(compustate.stack) > 1024:
+        if len(compustate.stack) + out_args > 1024:
             return vm_exception('STACK SIZE LIMIT EXCEEDED')
+
 
         # Apply operation
         compustate.gas -= fee
