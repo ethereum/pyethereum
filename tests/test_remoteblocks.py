@@ -18,23 +18,23 @@ logger = get_logger()
 configure_logging(':trace')
 
 
-def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
+def import_chain_data(raw_blocks_fn, test_db_path, skip=0, formt='lines'):
     db = DB(test_db_path)
     chain_manager = utils.get_chainmanager(db, blocks.genesis(db))
 
-    fh = open(raw_blocks_fn)
-    for i in range(skip):
-        fh.readline()
+    fh = open(raw_blocks_fn).read()
+    if formt == 'rlp':
+        blks = rlp.decode(decode_hex(fh.strip()))
+    elif formt == 'lines':
+        blks = [rlp.decode(decode_hex(h.strip())) for h in fh]
     tot = sum([int(y["balance"]) for x, y in
                list(chain_manager.head.to_dict(True)["state"].items())])
 
-    safe = {x: y["balance"] for x, y in 
+    safe = {x: y["balance"] for x, y in
             list(chain_manager.head.to_dict(True)["state"].items())}
-    for hex_rlp_encoded_data in fh:
-        hexdata = decode_hex(hex_rlp_encoded_data.strip())
-        blk = blocks.TransientBlock(hexdata)
-        print(blk.number, encode_hex(blk.hash), \
-            '%d txs' % len(blk.transaction_list))
+    for blk in blks:
+        print(blk.number, encode_hex(blk.hash),
+              '%d txs' % len(blk.transaction_list))
         head = chain_manager.head
         assert blocks.check_header_pow(blk.header_args)
         chain_manager.receive_chain([blk])
@@ -55,10 +55,12 @@ def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
         print(safe)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("usage:%s <raw_blocks_fn> <db_path> <skip>" % sys.argv[0])
+    if len(sys.argv) < 3:
+        print("usage:%s <raw_blocks_fn> <db_path> <skip?> <formt?>"
+              % sys.argv[0])
         sys.exit(1)
     raw_blocks_fn = sys.argv[1]
     test_db_path = sys.argv[2]
-    skip = int(sys.argv[3])
+    skip = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+    formt = sys.argv[4] if len(sys.argv) > 4 else 'lines'
     import_chain_data(raw_blocks_fn, test_db_path, skip)

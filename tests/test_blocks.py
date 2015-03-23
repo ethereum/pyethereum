@@ -26,7 +26,6 @@ translator_list = {
     "mixhash": "mixHash",
     "prevhash": "parentHash",
     "receipts_root": "receiptTrie",
-    "seedhash": "seedHash",
     "tx_list_root": "transactionsTrie",
     "uncles_hash": "uncleHash",
     "gas_price": "gasPrice",
@@ -44,7 +43,6 @@ def valueconv(k, v):
 def run_block_test(params):
     b = blocks.genesis(e, params["pre"])
     gbh = params["genesisBlockHeader"]
-    b.seedhash = utils.scanners['bin'](gbh["seedHash"])
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
     b.timestamp = utils.scanners['int'](gbh["timestamp"])
     b.nonce = utils.scanners['bin'](gbh["nonce"])
@@ -68,16 +66,17 @@ def run_block_test(params):
         raise Exception("header hash mismatch")
     assert b.header.check_pow(e)
     for blk in params["blocks"]:
-        rlpdata = decode_hex(blk["rlp"][2:])
         if 'blockHeader' not in blk:
             try:
+                rlpdata = decode_hex(blk["rlp"][2:])
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except (ValueError, VerificationFailed):
+            except (ValueError, TypeError, VerificationFailed):
                 success = False
             assert not success
         else:
-            b2 = rlp.decode(rlpdata, block.Block, parent=b, db=e)
+            rlpdata = decode_hex(blk["rlp"][2:])
+            b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

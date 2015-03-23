@@ -21,7 +21,6 @@ configure_logging('eth.vm:trace,eth.vm.memory:info')
 db = EphemDB()
 
 blocks.peck_cache(db, '\x00' * 32, ethash_utils.get_cache_size(0))
-blocks.peck_cache(db, utils.sha3('\x00' * 32), ethash_utils.get_next_cache_size(0))
 
 
 @pytest.fixture(scope="module")
@@ -53,14 +52,14 @@ def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
         except:
             pass
     b.finalize()
-    sz = ethash_utils.get_cache_size(b.number)
-    cache = blocks.get_cache_memoized(db, b.seedhash, sz)
-    fsz = ethash_utils.get_full_size(b.number)
+    sz = blocks.get_cache_size(b.number)
+    cache = blocks.get_cache_memoized(db, b.header.seed, sz)
+    fsz = blocks.get_full_size(b.number)
     while 1:
         n = (utils.big_endian_to_int(b.nonce) + 1) % 2**64
         b.nonce = utils.zpad(utils.int_to_big_endian(n), 8)
-        o = ethash.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
-        b.mixhash = o["mixhash"]
+        o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
+        b.mixhash = o["mix digest"]
         if utils.big_endian_to_int(o["result"]) <= 2**256 / b.difficulty:
             break
         else:

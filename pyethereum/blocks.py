@@ -12,7 +12,6 @@ from pyethereum.transactions import Transaction
 from pyethereum import bloom
 import copy
 import sys
-from pyethereum import ethash, ethash_utils
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -22,9 +21,34 @@ else:
 from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
+
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 Log = processblock.Log
+
+ETHASH_LIB = 'pyethash'
+
+if ETHASH_LIB == 'ethash':
+    from pyethereum import ethash, ethash_utils
+    mkcache = ethash.mkcache
+    serialize_cache = ethash_utils.serialize_cache
+    deserialize_cache = ethash_utils.deserialize_cache
+    EPOCH_LENGTH = ethash_utils.EPOCH_LENGTH
+    get_cache_size = ethash_utils.get_cache_size
+    get_full_size = ethash_utils.get_full_size
+    hashimoto_light = ethash.hashimoto_light
+elif ETHASH_LIB == 'pyethash':
+    import pyethash
+    mkcache = pyethash.mkcache_bytes
+    serialize_cache = lambda x: x
+    deserialize_cache = lambda x: x
+    EPOCH_LENGTH = pyethash.EPOCH_LENGTH
+    get_cache_size = pyethash.get_cache_size
+    get_full_size = pyethash.get_full_size
+    hashimoto_light = lambda s, c, h, n: \
+        pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
+else:
+    raise Exception("invalid ethash library set")
 
 
 # Genesis block difficulty
@@ -291,6 +315,13 @@ class BlockHeader(rlp.Serializable):
         return utils.sha3(rlp.encode(self,
                           BlockHeader.exclude(['mixhash', 'nonce'])))
 
+    @property
+    def seed(self):
+        seed = '\x00' * 32
+        for i in range(self.number // EPOCH_LENGTH):
+            seed = utils.sha3(seed)
+        return seed
+
     def check_pow(self, db=None, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
@@ -307,23 +338,16 @@ class BlockHeader(rlp.Serializable):
             raise ValueError("Bad mixhash or nonce length")
         # exclude mixhash and nonce
         header_hash = self.mining_hash
-        seed = '\x00' * 32
-        for i in range(header.number // ethash_utils.EPOCH_LENGTH):
-            seed = utils.sha3(seed)
+        seed = self.seed
 
-        # Prefetch future data now (so that we don't get interrupted later)
-        # TODO: separate thread
-        future_seed = get_next_seedhash(seed)
-        future_cache_size = ethash_utils.get_next_cache_size(self.number)
-        peck_cache(db, future_seed, future_cache_size)
         # Grab current cache
-        current_cache_size = ethash_utils.get_cache_size(self.number)
+        current_cache_size = get_cache_size(self.number)
         cache = get_cache_memoized(db, seed, current_cache_size)
-        current_full_size = ethash_utils.get_full_size(self.number)
-        mining_output = ethash.hashimoto_light(current_full_size, cache,
-                                               header_hash, nonce)
+        current_full_size = get_full_size(self.number)
+        mining_output = hashimoto_light(current_full_size, cache,
+                                        header_hash, nonce)
         diff = self.difficulty
-        if mining_output['mixhash'] != self.mixhash:
+        if mining_output['mix digest'] != self.mixhash:
             return False
         return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
 
@@ -1228,26 +1252,22 @@ class Block(rlp.Serializable):
         return encode_hex(self.hash)
 
 
-def get_next_seedhash(h):
-    return utils.sha3(h)
-
-
 cache_cache = {}
 
 
 def peck_cache(db, seedhash, size):
     key = 'cache:' + seedhash + ',' + to_string(size)
     if key not in db:
-        cache = ethash.mkcache(size, seedhash)
+        cache = mkcache(size, seedhash)
         cache_cache[key] = cache
-        cache_serialized = ethash_utils.serialize_cache(cache)
+        cache_serialized = serialize_cache(cache)
         cache_hash = utils.sha3(cache_serialized)
         db.put(cache_hash, cache_serialized)
         db.put(key, cache_hash)
     elif key not in cache_cache:
         o = db.get(db.get(key))
         cache_cache[key] = o
-        return ethash_utils.deserialize_cache(o)
+        return deserialize_cache(o)
 
 
 def get_cache_memoized(db, seedhash, size):

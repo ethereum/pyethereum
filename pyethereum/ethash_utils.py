@@ -3,8 +3,9 @@ from rlp.utils import decode_hex, encode_hex
 
 WORD_BYTES = 4                    # bytes in word
 DATASET_BYTES_INIT = 2**30        # bytes in dataset at genesis
-DATASET_BYTES_GROWTH = 113000000  # growth per epoch (~7 GB per year)
-CACHE_MULTIPLIER = 1024           # Size of the dataset relative to the cache
+DATASET_BYTES_GROWTH = 2**23      # growth per epoch (~7 GB per year)
+CACHE_BYTES_INIT = 2**24          # Size of the dataset relative to the cache
+CACHE_BYTES_GROWTH = 2**17        # Size of the dataset relative to the cache
 EPOCH_LENGTH = 30000              # blocks per epoch
 MIX_BYTES = 128                   # width of mix
 HASH_BYTES = 64                   # hash length in bytes
@@ -64,6 +65,8 @@ def xor(a, b):
 
 # Works for dataset and cache
 def serialize_cache(ds):
+    if isinstance(ds, (str, bytes)):
+        return ds
     return ''.join([serialize_hash(h) for h in ds])
 
 serialize_dataset = serialize_cache
@@ -97,17 +100,24 @@ class ListWrapper(list):
         return repr([x for x in self])
 
 
-def get_full_size(block_number):
-    return 1073739904
+def isprime(x):
+    for i in range(2, int(x**0.5)):
+        if not x % i:
+            return False
+    return True
 
 
 def get_cache_size(block_number):
-    return 16776896
+    sz = CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
+    sz -= HASH_BYTES
+    while not isprime(sz / HASH_BYTES):
+        sz -= 2 * HASH_BYTES
+    return sz
 
 
-def get_next_cache_size(block_number):
-    return get_cache_size(block_number + EPOCH_LENGTH)
-
-
-def get_next_full_size(block_number):
-    return get_full_size(block_number + EPOCH_LENGTH)
+def get_full_size(block_number):
+    sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
+    sz -= MIX_BYTES
+    while not isprime(sz / MIX_BYTES):
+        sz -= 2 * MIX_BYTES
+    return sz

@@ -357,7 +357,7 @@ def run_ethash_test(params, mode):
         "cache_size": cache_size,
         "full_size": full_size,
         "cache_hash": cache_hash,
-        "mixhash": encode_hex(light_verify["mixhash"]),
+        "mixhash": encode_hex(light_verify["mix digest"]),
         "result": encode_hex(light_verify["result"]),
     }
     if mode == FILL:
