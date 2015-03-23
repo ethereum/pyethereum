@@ -43,27 +43,10 @@ def mkquickgenesis(initial_alloc={}, db=db):
 
 
 def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
-    # advance one block
-    coinbase = coinbase or parent.coinbase
-    b = blocks.Block.init_from_parent(parent, coinbase=coinbase, uncles=uncles)
+    m = miner.Miner(parent, uncles, coinbase or parent.coinbase)
     for t in transactions:
-        try:
-            processblock.apply_transaction(b, t)
-        except:
-            pass
-    b.finalize()
-    sz = blocks.get_cache_size(b.number)
-    cache = blocks.get_cache_memoized(db, b.header.seed, sz)
-    fsz = blocks.get_full_size(b.number)
-    while 1:
-        n = (utils.big_endian_to_int(b.nonce) + 1) % 2**64
-        b.nonce = utils.zpad(utils.int_to_big_endian(n), 8)
-        o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
-        b.mixhash = o["mix digest"]
-        if utils.big_endian_to_int(o["result"]) <= 2**256 / b.difficulty:
-            break
-        else:
-            raise Exception("lol: " + str(b.difficulty))
+        m.add_transaction(t)
+    b = m.mine()
     assert b.header.check_pow()
     return b
 

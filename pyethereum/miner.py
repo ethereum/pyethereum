@@ -27,7 +27,7 @@ class Miner():
         self.db = parent.db
         ts = max(int(time.time()), parent.timestamp + 1)
         self.block = blocks.Block.init_from_parent(parent, coinbase, extra_data='', timestamp=ts,
-                                                   uncles=[u.header for u in uncles][:2])
+                                                   uncles=uncles[:2])
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         log.debug('mining', block_number=self.block.number,
@@ -80,22 +80,22 @@ class Miner():
         BE(X) evaluates to the value equal to X when interpreted as a
             big-endian-encoded integer.
         """
-        target = 2 ** 256 / self.block.difficulty
-        rlp_Hn = rlp.encode(self.block.header,
-                            blocks.BlockHeader.exclude(['nonce']))
-
-        for nonce in range(self.nonce, self.nonce + steps):
-            nonce_bin = struct.pack('>q', nonce)
-            # BE(SHA3(SHA3(RLP(Hn)) o n))
-            h = utils.sha3(utils.sha3(rlp_Hn) + nonce_bin)
-            l256 = utils.big_endian_to_int(h)
-            if l256 < target:
-                self.block.nonce = nonce_bin
-                assert self.block.header.check_pow() is True
-                assert self.block.get_parent()
-                log.debug('nonce found', block_nonce=nonce,
-                          block_hash=encode_hex(self.block.hash))
-                return self.block
+        b = self.block
+        sz = blocks.get_cache_size(b.number)
+        cache = blocks.get_cache_memoized(b.db, b.header.seed, sz)
+        fsz = blocks.get_full_size(b.number)
+        nonce = utils.big_endian_to_int(b.nonce)
+        TT64M1 = 2**64-1
+        target = utils.zpad(utils.int_to_big_endian(2**256 // b.difficulty), 32)
+        for i in range(1, steps + 1):
+            b.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
+            o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
+            if o["result"] <= target:
+                b.mixhash = o["mix digest"]
+                break
+            steps -= 1
+        if b.header.check_pow():
+            return self.block
 
         self.nonce = nonce
         return False
