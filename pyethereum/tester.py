@@ -3,13 +3,15 @@ import tempfile
 import time
 import logging
 import sys
-import spv
+from pyethereum import spv
 import pyethereum
 import pyethereum.db as db
 import pyethereum.opcodes as opcodes
 import pyethereum.abi as abi
 from pyethereum.slogging import get_logger, LogRecorder, configure_logging
+from pyethereum.utils import to_string
 import rlp
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 serpent = None
 
@@ -23,7 +25,7 @@ accounts = []
 keys = []
 
 for i in range(10):
-    keys.append(u.sha3(str(i)))
+    keys.append(u.sha3(to_string(i)))
     accounts.append(u.privtoaddr(keys[-1]))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
@@ -36,7 +38,7 @@ seed = 3 ** 160
 
 def dict_without(d, *args):
     o = {}
-    for k, v in d.items():
+    for k, v in list(d.items()):
         if k not in args:
             o[k] = v
     return o
@@ -44,9 +46,9 @@ def dict_without(d, *args):
 
 def dict_with(d, **kwargs):
     o = {}
-    for k, v in d.items():
+    for k, v in list(d.items()):
         o[k] = v
-    for k, v in kwargs.items():
+    for k, v in list(kwargs.items()):
         o[k] = v
     return o
 
@@ -76,7 +78,7 @@ class state():
         self.block = b.genesis(self.db, o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
-        self.block.coinbase = a0.decode('hex')
+        self.block.coinbase = decode_hex(a0)
         self.block.gas_limit = 10 ** 9
 
     def __del__(self):
@@ -101,7 +103,7 @@ class state():
                     languages[language] = __import__(language)
                 language = languages[language]
                 evm = language.compile(code)
-                self.address = me.evm(evm, sender, endowment, gas).encode('hex')
+                self.address = encode_hex(me.evm(evm, sender, endowment, gas))
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
                 sig = language.mk_full_signature(code)
@@ -141,12 +143,12 @@ class state():
         return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
+        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         if gas is not None:
             tx.startgas = gas
-        print 'starting', tx.startgas, gas_limit
+        print('starting', tx.startgas, gas_limit)
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Contract creation failed")
@@ -164,7 +166,7 @@ class state():
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender).decode('hex'))
+        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -174,7 +176,7 @@ class state():
             raise Exception("Transaction failed")
         out = {"output": o}
         if profiling > 0:
-            zero_bytes = tx.data.count(chr(0))
+            zero_bytes = tx.data.count(ascii_chr(0))
             non_zero_bytes = len(tx.data) - zero_bytes
             intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
                 opcodes.GTXDATANONZERO * non_zero_bytes
@@ -252,7 +254,7 @@ def set_logging_level(lvl=1):
         'eth.vm.storage:trace,eth.vm.memory:trace'
     ]
     configure_logging(config_string=trace_lvl_map[lvl])
-    print 'Set logging level: %d' % lvl
+    print('Set logging level: %d' % lvl)
 
 
 def set_log_trace(logger_names=[]):

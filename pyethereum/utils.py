@@ -5,41 +5,61 @@ import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-import db
+from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr
+from pyethereum import db
 import random
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
+if sys.version_info.major == 2:
+    is_numeric = lambda x: isinstance(x, (int, long))
+    is_string = lambda x: isinstance(x, (str, unicode))
 
-def int_to_big_endian(integer):
-    '''convert a integer to big endian binary string'''
-    # 0 is a special case, treated same as ''
-    if integer == 0:
-        return ''
-    s = '%x' % integer
-    if len(s) & 1:
-        s = '0' + s
-    return s.decode('hex')
+    def to_string(value):
+        return str(value)
 
+    def int_to_bytes(value):
+        if isinstance(value, str):
+            return value
+        return int_to_big_endian(value)
 
-def big_endian_to_int(string):
-    '''convert a big endian binary string to integer'''
-    # '' is a special case, treated same as 0
-    s = string.encode('hex') or '0'
-    return long(s, 16)
+else:
+    is_numeric = lambda x: isinstance(x, int)
+    is_string = lambda x: isinstance(x, bytes)
+
+    def to_string(value):
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            return bytes(value, 'utf-8')
+        if isinstance(value, int):
+            return bytes(str(value), 'utf-8')
+
+    def int_to_bytes(value):
+        if isinstance(value, bytes):
+            return value
+        return int_to_big_endian(value)
+
+def safe_ord(value):
+    if isinstance(value, int):
+        return value
+    else:
+        return ord(value)
+
+def big_endian_to_int(value):
+    return BigEndianInt().deserialize(value)
 
 # decorator
-
 
 def debug(label):
     def deb(f):
         def inner(*args, **kwargs):
             i = random.randrange(1000000)
-            print label, i, 'start', args
+            print(label, i, 'start', args)
             x = f(*args, **kwargs)
-            print label, i, 'end', x
+            print(label, i, 'end', x)
             return x
         return inner
     return deb
@@ -51,7 +71,7 @@ def flatten(li):
         o.extend(l)
     return o
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip('\x00'))
+big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 
@@ -76,17 +96,17 @@ def sha3(seed):
 
 def privtoaddr(x):
     if len(x) > 32:
-        x = x.decode('hex')
-    return sha3(privtopub(x)[1:])[12:].encode('hex')
+        x = decode_hex(x)
+    return encode_hex(sha3(privtopub(x)[1:])[12:])
 
 
 def zpad(x, l):
-    return '\x00' * max(0, l - len(x)) + x
+    return b'\x00' * max(0, l - len(x)) + x
 
 
 def zunpad(x):
     i = 0
-    while i < len(x) and x[i] == '\x00':
+    while i < len(x) and x[i] == b'\x00':
         i += 1
     return x[i:]
 
@@ -94,43 +114,43 @@ def zunpad(x):
 def int_to_addr(x):
     o = [''] * 20
     for i in range(20):
-        o[19 - i] = chr(x & 0xff)
+        o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
-    return ''.join(o).encode('hex')
+    return encode_hex(b''.join(o))
 
 
 def coerce_addr_to_bin(x):
-    if isinstance(x, (int, long)):
-        return zpad(big_endian_int.serialize(x), 20).encode('hex')
+    if is_numeric(x):
+        return encode_hex(zpad(big_endian_int.serialize(x), 20))
     elif len(x) == 40 or len(x) == 0:
-        return x.decode('hex')
+        return decode_hex(x)
     else:
         return zpad(x, 20)[-20:]
 
 
 def coerce_addr_to_hex(x):
-    if isinstance(x, (int, long)):
-        return zpad(big_endian_int.serialize(x), 20).encode('hex')
+    if is_numeric(x):
+        return encode_hex(zpad(big_endian_int.serialize(x), 20))
     elif len(x) == 40 or len(x) == 0:
         return x
     else:
-        return zpad(x, 20)[-20:].encode('hex')
+        return encode_hex(zpad(x, 20)[-20:])
 
 
 def coerce_to_int(x):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return x
     elif len(x) == 40:
-        return big_endian_to_int(x.decode('hex'))
+        return big_endian_to_int(decode_hex(x))
     else:
         return big_endian_to_int(x)
 
 
 def coerce_to_bytes(x):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return big_endian_int.serialize(x)
     elif len(x) == 40:
-        return x.decode('hex')
+        return decode_hex(x)
     else:
         return x
 
@@ -155,7 +175,7 @@ def int_to_big_endian4(integer):
 def recursive_int_to_big_endian(item):
     ''' convert all int to int_to_big_endian recursively
     '''
-    if isinstance(item, (int, long)):
+    if is_numeric(item):
         return big_endian_int.serialize(item)
     elif isinstance(item, (list, tuple)):
         res = []
@@ -176,7 +196,7 @@ def rlp_encode(item):
 
 def decode_bin(v):
     '''decodes a bytearray from serialization'''
-    if not isinstance(v, (str, unicode)):
+    if not is_string(v):
         raise Exception("Value must be binary, not RLP array")
     return v
 
@@ -185,12 +205,12 @@ def decode_addr(v):
     '''decodes an address from serialization'''
     if len(v) not in [0, 20]:
         raise Exception("Serialized addresses must be empty or 20 bytes long!")
-    return v.encode('hex')
+    return encode_hex(v)
 
 
 def decode_int(v):
     '''decodes and integer from serialization'''
-    if len(v) > 0 and v[0] == '\x00':
+    if len(v) > 0 and v[0] == b'\x00':
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
@@ -199,7 +219,7 @@ def decode_root(root):
     if isinstance(root, list):
         if len(rlp.encode(root)) >= 32:
             raise Exception("Direct RLP roots must have length <32")
-    elif isinstance(root, (str, unicode)):
+    elif is_string(root):
         if len(root) != 0 and len(root) != 32:
             raise Exception("String roots must be empty or length-32")
     else:
@@ -223,14 +243,14 @@ def encode_root(v):
 
 def encode_addr(v):
     '''encodes an address into serialization'''
-    if not isinstance(v, (str, unicode)) or len(v) not in [0, 40]:
+    if not is_string(v) or len(v) not in [0, 40]:
         raise Exception("Address must be empty or 40 chars long")
-    return v.decode('hex')
+    return decode_hex(v)
 
 
 def encode_int(v):
     '''encodes an integer into serialization'''
-    if not isinstance(v, (int, long)) or v < 0 or v >= TT256:
+    if not is_numeric(v) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
 
@@ -241,14 +261,14 @@ def encode_int256(v):
 
 def scan_bin(v):
     if v[:2] == '0x':
-        return v[2:].decode('hex')
+        return decode_hex(v[2:])
     else:
-        return v.decode('hex')
+        return decode_hex(v)
 
 
 def scan_int(v):
     if v[:2] == '0x':
-        return big_endian_to_int(v[2:].decode('hex'))
+        return big_endian_to_int(decode_hex(v[2:]))
     else:
         return int(v)
 
@@ -273,11 +293,11 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: '0x' + v.encode('hex'),
+    "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
-    "int": lambda v: str(v),
-    "trie_root": lambda v: v.encode('hex'),
-    "int256b": lambda x: zpad(encode_int256(x), 256).encode('hex')
+    "int": lambda v: to_string(v),
+    "trie_root": lambda v: encode_hex(v),
+    "int256b": lambda x: encode_hex(zpad(encode_int256(x), 256))
 }
 
 # Decoding from printable format
@@ -286,7 +306,7 @@ scanners = {
     "addr": lambda x: x[2:] if x[:2] == '0x' else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
-    "int256b": lambda x: big_endian_to_int(x.decode('hex'))
+    "int256b": lambda x: big_endian_to_int(decode_hex(x))
 }
 
 
@@ -306,7 +326,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
     from functools import wraps
 
     def display(x):
-        x = str(x)
+        x = to_string(x)
         try:
             x.decode('ascii')
         except:
@@ -322,18 +342,18 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
             local['call_number'] += 1
             tmp_args = args[1:] if ignore_first_arg and len(args) else args
             this_call_number = local['call_number']
-            print('{0}#{1} args: {2}, {3}'.format(
+            print(('{0}#{1} args: {2}, {3}'.format(
                 f.__name__,
                 this_call_number,
                 ', '.join([display(x) for x in tmp_args]),
-                ', '.join(display(key) + '=' + str(value)
-                          for key, value in kwargs.iteritems())
-            ))
+                ', '.join(display(key) + '=' + to_string(value)
+                          for key, value in kwargs.items())
+            )))
             res = f(*args, **kwargs)
-            print('{0}#{1} return: {2}'.format(
+            print(('{0}#{1} return: {2}'.format(
                 f.__name__,
                 this_call_number,
-                display(res)))
+                display(res))))
 
             if local['call_number'] > 100:
                 raise Exception("Touch max call number!")
@@ -384,8 +404,8 @@ def db_path(data_dir):
 
 def dump_state(trie):
     res = ''
-    for k, v in trie.to_dict().items():
-        res += '%r:%r\n' % (k.encode('hex'), v.encode('hex'))
+    for k, v in list(trie.to_dict().items()):
+        res += '%r:%r\n' % (encode_hex(k), encode_hex(v))
     return res
 
 

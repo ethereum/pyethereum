@@ -1,6 +1,6 @@
 import os
 import threading
-import compress
+from pyethereum import compress
 from hashlib import md5
 from pyethereum.slogging import get_logger
 log = get_logger('db')
@@ -63,7 +63,7 @@ else:
         def commit(self):
             log.debug('commit', db=self)
             with self.uncommitted_lock:
-                for k, v in self.uncommitted.iteritems():
+                for k, v in self.uncommitted.items():
                     if v is None:
                         doc = self.db.get('key', k, with_doc=True)['doc']
                         self.db.delete(doc)
@@ -126,7 +126,7 @@ else:
             log.debug('commit', db=self)
             with self.lock:
                 batch = leveldb.WriteBatch()
-                for k, v in self.uncommitted.iteritems():
+                for k, v in self.uncommitted.items():
                     if v is None:
                         batch.Delete(k)
                     else:

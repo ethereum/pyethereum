@@ -2,14 +2,16 @@
 
 import os
 import rlp
-import utils
+from pyethereum import utils
+from pyethereum.utils import to_string
+from pyethereum.abi import is_string
 import copy
-
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 bin_to_nibbles_cache = {}
 
 hti = {}
-for i, c in enumerate('0123456789abcdef'):
+for i, c in enumerate(b'0123456789abcdef'):
     hti[c] = i
 
 
@@ -25,7 +27,7 @@ def bin_to_nibbles(s):
     >>> bin_to_nibbles("hello")
     [6, 8, 6, 5, 6, 12, 6, 12, 6, 15]
     """
-    return [hti[c] for c in s.encode('hex')]
+    return [hti[c] for c in encode_hex(s)]
 
 
 def nibbles_to_bin(nibbles):
@@ -37,7 +39,7 @@ def nibbles_to_bin(nibbles):
 
     res = ''
     for i in range(0, len(nibbles), 2):
-        res += chr(16 * nibbles[i] + nibbles[i + 1])
+        res += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return res
 
 
@@ -75,7 +77,7 @@ class ProofConstructor():
             proving = False
 
     def get_nodelist(self):
-        return map(rlp.decode, list(self.nodes[-1]))
+        return list(map(rlp.decode, list(self.nodes[-1])))
 
     def get_nodes(self):
         return self.nodes[-1]
@@ -137,9 +139,9 @@ def pack_nibbles(nibbles):
         nibbles = [flags] + nibbles
     else:
         nibbles = [flags, 0] + nibbles
-    o = ''
+    o = b''
     for i in range(0, len(nibbles), 2):
-        o += chr(16 * nibbles[i] + nibbles[i + 1])
+        o += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return o
 
 
@@ -181,8 +183,8 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF,
                          NODE_TYPE_EXTENSION]
 
-BLANK_NODE = ''
-BLANK_ROOT = utils.sha3rlp('')
+BLANK_NODE = b''
+BLANK_ROOT = utils.sha3rlp(b'')
 
 
 def transient_trie_exception(*args):
@@ -223,9 +225,9 @@ class Trie(object):
             pass
         elif proof.get_mode() == RECORDING:
             proof.add_node(copy.copy(node))
-            # print 'recording %s' % utils.sha3(rlp.encode(node)).encode('hex')
+            # print('recording %s' % encode_hex(utils.sha3(rlp.encode(node))))
         elif proof.get_mode() == VERIFYING:
-            # print 'verifying %s' % utils.sha3(rlp.encode(node)).encode('hex')
+            # print('verifying %s' % encode_hex(utils.sha3(rlp.encode(node))))
             if rlp.encode(node) not in proof.get_nodes():
                 raise InvalidSPVProof("Proof invalid!")
 
@@ -261,7 +263,7 @@ class Trie(object):
         self.set_root_hash(value)
 
     def set_root_hash(self, root_hash):
-        assert isinstance(root_hash, (str, unicode))
+        assert is_string(root_hash)
         assert len(root_hash) in [0, 32]
         if self.transient:
             self.transient_root_hash = root_hash
@@ -462,7 +464,7 @@ class Trie(object):
         if node_type == NODE_TYPE_BRANCH:
             if node[16]:
                 return [16]
-            scan_range = range(16)
+            scan_range = list(range(16))
             if reverse:
                 scan_range.reverse()
             for i in scan_range:
@@ -492,9 +494,9 @@ class Trie(object):
                 if o:
                     return [key[0]] + o
             if reverse:
-                scan_range = range(key[0] if len(key) else 0)
+                scan_range = list(range(key[0] if len(key) else 0))
             else:
-                scan_range = range(key[0] + 1 if len(key) else 0, 16)
+                scan_range = list(range(key[0] + 1 if len(key) else 0, 16))
             for i in scan_range:
                 sub_node = self._decode_to_node(node[i])
                 o = self._getany(sub_node, reverse, path + [i])
@@ -676,7 +678,7 @@ class Trie(object):
         '''
         :param key: a string with length of [0, 32]
         '''
-        if not isinstance(key, (str, unicode)):
+        if not is_string(key):
             raise Exception("Key must be string")
 
         if len(key) > 32:
@@ -684,7 +686,7 @@ class Trie(object):
 
         self.root_node = self._delete_and_delete_storage(
             self.root_node,
-            bin_to_nibbles(str(key)))
+            bin_to_nibbles(to_string(key)))
         self.get_root_hash()
 
     def _get_size(self, node):
@@ -726,15 +728,15 @@ class Trie(object):
 
         if is_key_value_type(node_type):
             nibbles = without_terminator(unpack_to_nibbles(node[0]))
-            key = '+'.join([str(x) for x in nibbles])
+            key = '+'.join([to_string(x) for x in nibbles])
             if node_type == NODE_TYPE_EXTENSION:
                 sub_dict = self._to_dict(self._decode_to_node(node[1]))
             else:
-                sub_dict = {str(NIBBLE_TERMINATOR): node[1]}
+                sub_dict = {to_string(NIBBLE_TERMINATOR): node[1]}
 
             # prepend key of this node to the keys of children
             res = {}
-            for sub_key, sub_value in sub_dict.iteritems():
+            for sub_key, sub_value in sub_dict.items():
                 full_key = '{0}+{1}'.format(key, sub_key).strip('+')
                 res[full_key] = sub_value
             return res
@@ -744,18 +746,18 @@ class Trie(object):
             for i in range(16):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
-                for sub_key, sub_value in sub_dict.iteritems():
+                for sub_key, sub_value in sub_dict.items():
                     full_key = '{0}+{1}'.format(i, sub_key).strip('+')
                     res[full_key] = sub_value
 
             if node[16]:
-                res[str(NIBBLE_TERMINATOR)] = node[-1]
+                res[to_string(NIBBLE_TERMINATOR)] = node[-1]
             return res
 
     def to_dict(self):
         d = self._to_dict(self.root_node)
         res = {}
-        for key_str, value in d.iteritems():
+        for key_str, value in d.items():
             if key_str:
                 nibbles = [int(x) for x in key_str.split('+')]
             else:
@@ -765,7 +767,7 @@ class Trie(object):
         return res
 
     def get(self, key):
-        return self._get(self.root_node, bin_to_nibbles(str(key)))
+        return self._get(self.root_node, bin_to_nibbles(to_string(key)))
 
     def __len__(self):
         return self._get_size(self.root_node)
@@ -790,13 +792,13 @@ class Trie(object):
         :param key: a string
         :value: a string
         '''
-        if not isinstance(key, (str, unicode)):
+        if not is_string(key):
             raise Exception("Key must be string")
 
         # if len(key) > 32:
         #     raise Exception("Max key length is 32")
 
-        if not isinstance(value, (str, unicode)):
+        if not is_string(value):
             raise Exception("Value must be string")
 
         # if value == '':
@@ -834,29 +836,29 @@ def verify_spv_proof(root, key, proof):
         t.get(key)
         proof.pop()
         return True
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
         proof.pop()
         return False
 
 
 if __name__ == "__main__":
     import sys
-    import db
+    from . import db
 
     _db = db.DB(sys.argv[2])
 
     def encode_node(nd):
-        if isinstance(nd, str):
-            return nd.encode('hex')
+        if is_string(nd):
+            return encode_hex(nd)
         else:
-            return rlp.encode(nd).encode('hex')
+            return encode_hex(rlp.encode(nd))
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
-            t = Trie(_db, sys.argv[3].decode('hex'))
+            t = Trie(_db, decode_hex(sys.argv[3]))
             t.update(sys.argv[4], sys.argv[5])
-            print encode_node(t.root_hash)
+            print(encode_node(t.root_hash))
         elif sys.argv[1] == 'get':
-            t = Trie(_db, sys.argv[3].decode('hex'))
-            print t.get(sys.argv[4])
+            t = Trie(_db, decode_hex(sys.argv[3]))
+            print(t.get(sys.argv[4]))

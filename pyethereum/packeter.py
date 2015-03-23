@@ -1,12 +1,13 @@
 import sys
-import signals
+from pyethereum import signals
 import rlp
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
-from pyethereum.utils import sha3
+from pyethereum.utils import sha3, to_string, is_string
 from pyethereum import dispatch
-from .version import __version__
+from pyethereum.version import __version__
 from pyethereum.slogging import get_logger
 log = get_logger('net.wire')
 
@@ -14,7 +15,7 @@ log = get_logger('net.wire')
 def lrlp_decode(data):
     "always return a list"
     d = rlp.decode(data)
-    if isinstance(d, str):
+    if is_string(d):
         d = [d]
     return d
 
@@ -64,10 +65,10 @@ class Packeter(object):
     # FAKE ADAPTIVE MESSAGE IDs (eth,eth)
     cmd_map = dict(p2p_cmd_map)
     offset = 11 + max(p2p_cmd_map.keys())
-    for _id, name in eth_cmd_map.items():
+    for _id, name in list(eth_cmd_map.items()):
         cmd_map[offset + _id] = name
 
-    cmd_map_by_name = dict((v, k) for k, v in cmd_map.items())
+    cmd_map_by_name = dict((v, k) for k, v in list(cmd_map.items()))
 
     # for now we only have eth capabilities.
     # if we add, shh we also need to add Adaptive Message IDs
@@ -86,7 +87,7 @@ class Packeter(object):
         ('Client quitting', 0x08)))
 
     disconnect_reasons_map_by_id = \
-        dict((v, k) for k, v in disconnect_reasons_map.items())
+        dict((v, k) for k, v in list(disconnect_reasons_map.items()))
 
     def __init__(self):
         pass
@@ -95,7 +96,7 @@ class Packeter(object):
         self.config = config
         self.CLIENT_VERSION = self.config.get('network', 'client_version') \
             or self.CLIENT_VERSION
-        self.NODE_ID = self.config.get('network', 'node_id').decode('hex')
+        self.NODE_ID = decode_hex(self.config.get('network', 'node_id'))
 
     @classmethod
     def packet_size(cls, packet):
@@ -131,7 +132,7 @@ class Packeter(object):
         try:
             payload_len = idec(packet[4:8])
         except Exception as e:
-            return False, str(e)
+            return False, to_string(e)
 
         if len(packet) < payload_len + 8:
             return False, 'Packet is broken'
@@ -139,7 +140,7 @@ class Packeter(object):
         try:
             payload = lrlp_decode(packet[8:8 + payload_len])
         except Exception as e:
-            return False, str(e)
+            return False, to_string(e)
 
         log.trace('load packet', cmd_id=idec(
             payload[0]), cmd=Packeter.cmd_map.get(idec(payload[0]), 'unknown'))
@@ -216,7 +217,7 @@ class Packeter(object):
         data = [self.cmd_map_by_name['Peers']]
         for ip, port, pid in peers:
             assert ip.count('.') == 3
-            ip = ''.join(chr(int(x)) for x in ip.split('.'))
+            ip = ''.join(ascii_chr(int(x)) for x in ip.split('.'))
             data.append([ip, port, pid])
         return self.dump_packet(data)
 

@@ -6,7 +6,7 @@ import signal
 from argparse import ArgumentParser
 
 # this must be called before all other import to enable full qualified import
-from common import enable_full_qualified_import
+from .common import enable_full_qualified_import
 enable_full_qualified_import()
 
 #from pyethereum.utils import data_dir
@@ -17,7 +17,7 @@ from pyethereum.apiserver import api_server
 from pyethereum.packeter import Packeter
 from pyethereum.chainmanager import chain_manager
 from pyethereum.db import DB
-from pyethereum.utils import db_path
+from pyethereum.utils import db_path, to_string
 import pyethereum.slogging
 import pyethereum.config as konfig
 from . import __version__
@@ -29,7 +29,7 @@ log = pyethereum.slogging.get_logger()
 try:
     import pyethereum.monkeypatch
     log.critical("Loaded your customizations from monkeypatch.py")
-except ImportError, e:
+except ImportError as e:
     pass
 
 
@@ -93,7 +93,7 @@ def parse_arguments():
 
 def check_chain_version(config):
     key = '__chain_version__'
-    chain_version = str(Packeter.ETHEREUM_PROTOCOL_VERSION)
+    chain_version = to_string(Packeter.ETHEREUM_PROTOCOL_VERSION)
     db = DB(db_path(config.get('misc', 'data_dir')))
     if not key in db:
         db.put(key, chain_version)

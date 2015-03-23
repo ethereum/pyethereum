@@ -1,19 +1,25 @@
 import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
-import trie
-from trie import Trie
-from securetrie import SecureTrie
-import utils
-from utils import address, int256, trie_root, hash32
-import processblock
-from transactions import Transaction
-import bloom
+from rlp.utils import decode_hex, encode_hex
+from pyethereum import trie
+from pyethereum.trie import Trie
+from pyethereum.securetrie import SecureTrie
+from pyethereum import utils
+from pyethereum.utils import address, int256, trie_root, hash32, to_string
+from pyethereum import processblock
+from pyethereum.transactions import Transaction
+from pyethereum import bloom
 import copy
 import sys
-import ethash, ethash_utils
-from repoze.lru import lru_cache
-from exceptions import *
+from pyethereum import ethash, ethash_utils
+
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
+
+from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
 from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')
@@ -26,11 +32,11 @@ GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
 GENESIS_GAS_LIMIT = 10 ** 6
 # Genesis block prevhash, coinbase, nonce
-GENESIS_PREVHASH = '\00' * 32
-GENESIS_COINBASE = ("0" * 40).decode('hex')
+GENESIS_PREVHASH = b'\x00' * 32
+GENESIS_COINBASE = b'\x00' * 20
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
-GENESIS_SEEDHASH = '\x00' * 32
-GENESIS_MIXHASH = '\x00' * 32
+GENESIS_SEEDHASH = b'\x00' * 32
+GENESIS_MIXHASH = b'\x00' * 32
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
 # Gas limit adjustment algo:
@@ -56,7 +62,7 @@ POW_EPOCH_LENGTH = 30000
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
-    offset = parent.difficulty / BLOCK_DIFF_FACTOR
+    offset = parent.difficulty // BLOCK_DIFF_FACTOR
     sign = 1 if timestamp - parent.timestamp < DIFF_ADJUSTMENT_CUTOFF else -1
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
@@ -131,8 +137,8 @@ class Account(rlp.Serializable):
 
         :param db: the db in which the account will store its code.
         """
-        code_hash = utils.sha3('')
-        db.put(code_hash, '')
+        code_hash = utils.sha3(b'')
+        db.put(code_hash, b'')
         return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
 
 
@@ -225,9 +231,9 @@ class BlockHeader(rlp.Serializable):
                  mixhash=GENESIS_MIXHASH,
                  nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
-        fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        fields = {k: v for k, v in locals().items() if k != 'self'}
         if len(fields['coinbase']) == 40:
-            fields['coinbase'] = fields['coinbase'].decode('hex')
+            fields['coinbase'] = decode_hex(fields['coinbase'])
         assert len(fields['coinbase']) == 20
         self.block = None
         super(BlockHeader, self).__init__(**fields)
@@ -281,7 +287,7 @@ class BlockHeader(rlp.Serializable):
 
     def hex_hash(self):
         """The hex encoded block hash"""
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     def check_pow(self, db=None, nonce=None):
         """Check if the proof-of-work of the block is valid.
@@ -322,14 +328,14 @@ class BlockHeader(rlp.Serializable):
         d = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
                       'seedhash', 'mixhash'):
-            d[field] = '0x' + getattr(self, field).encode('hex')
+            d[field] = b'0x' + encode_hex(getattr(self, field))
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
-            d[field] = getattr(self, field).encode('hex')
+            d[field] = encode_hex(getattr(self, field))
         for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
                       'timestamp'):
-            d[field] = str(getattr(self, field))
-        d['bloom'] = int256.serialize(self.bloom).encode('hex')
+            d[field] = to_string(getattr(self, field))
+        d['bloom'] = encode_hex(int256.serialize(self.bloom))
         assert len(d) == len(BlockHeader.fields)
         return d
 
@@ -394,14 +400,14 @@ class TransientBlock(rlp.Serializable):
 
         This is equivalent to ``header.hex_hash().
         """
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.number,
-                                             self.hash.encode('hex')[:8])
+                                             encode_hex(self.hash)[:8])
 
     def __structlog__(self):
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
 
 @mirror_from('header', set(field for field, _ in BlockHeader.fields) -
@@ -567,7 +573,7 @@ class Block(rlp.Serializable):
         return cls(header, None, [], db=db)
 
     @classmethod
-    def init_from_parent(cls, parent, coinbase, nonce='', extra_data='',
+    def init_from_parent(cls, parent, coinbase, nonce=b'', extra_data=b'',
                          timestamp=int(time.time()), uncles=[]):
         """Create a new block based on a parent block.
 
@@ -611,7 +617,7 @@ class Block(rlp.Serializable):
 
         This is equivalent to ``header.hex_hash().
         """
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
     @property
     def tx_list_root(self):
@@ -673,7 +679,7 @@ class Block(rlp.Serializable):
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
-                          uncle=utils.sha3(rlp.encode(uncle)).encode('hex'))
+                          uncle=encode_hex(utils.sha3(rlp.encode(uncle))))
                 return False
             ineligible.append(uncle)
         return True
@@ -708,7 +714,7 @@ class Block(rlp.Serializable):
         Note that this method ignores cached account items.
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20 or len(address) == 0
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
@@ -725,7 +731,7 @@ class Block(rlp.Serializable):
                       `'storage'` or `'code'`)
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20 or len(address) == 0
         if param != 'storage':
             if address in self.caches[param]:
@@ -746,7 +752,7 @@ class Block(rlp.Serializable):
         :param value: the new value
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         self.set_and_journal(param, address, value)
         self.set_and_journal('all', address, True)
@@ -916,7 +922,7 @@ class Block(rlp.Serializable):
         :param index: the index of the requested item in the storage
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY in self.caches:
@@ -937,7 +943,7 @@ class Block(rlp.Serializable):
         :param value: the new value of the item
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         CACHE_KEY = 'storage:' + address
         if CACHE_KEY not in self.caches:
@@ -947,7 +953,7 @@ class Block(rlp.Serializable):
 
     def account_exists(self, address):
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         return len(self.state.get(address)) > 0 or address in self.caches['all']
 
@@ -968,7 +974,7 @@ class Block(rlp.Serializable):
 
             # storage
             t = SecureTrie(Trie(self.db, acct.storage))
-            for k, v in self.caches.get('storage:' + address, {}).iteritems():
+            for k, v in self.caches.get(b'storage:' + address, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
                 changes.append(['storage', address, k, v])
@@ -993,7 +999,7 @@ class Block(rlp.Serializable):
         :param address: the address of the account (binary or hex string)
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         self.commit_state()
         self.state.delete(address)
@@ -1007,7 +1013,7 @@ class Block(rlp.Serializable):
         :param with_storage: include the whole account's storage
         """
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
 
         if with_storage_root:
@@ -1019,30 +1025,29 @@ class Block(rlp.Serializable):
         account = self._get_acct(address)
         for field in ('balance', 'nonce'):
             value = self.caches[field].get(address, getattr(account, field))
-            med_dict[field] = str(value)
+            med_dict[field] = to_string(value)
         code = self.caches['code'].get(address, account.code)
-        med_dict['code'] = '0x' + code.encode('hex')
+        med_dict['code'] = '0x' + encode_hex(code)
 
         storage_trie = SecureTrie(Trie(self.db, account.storage))
         if with_storage_root:
-            med_dict['storage_root'] = storage_trie.get_root_hash()  \
-                                                   .encode('hex')
+            med_dict['storage_root'] = encode_hex(storage_trie.get_root_hash())
         if with_storage:
             med_dict['storage'] = {}
             d = storage_trie.to_dict()
             subcache = self.caches.get('storage:' + address, {})
             subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32)
-                       for kk in subcache.keys()]
-            for k in d.keys() + subkeys:
+                       for kk in list(subcache.keys())]
+            for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x' + utils.zunpad(k).encode('hex')
+                hexkey = '0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
                     if v2 != 0:
                         med_dict['storage'][hexkey] = \
-                            '0x' + utils.int_to_big_endian(v2).encode('hex')
+                            '0x' + encode_hex(utils.int_to_big_endian(v2))
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x' + rlp.decode(v).encode('hex')
+                    med_dict['storage'][hexkey] = '0x' + encode_hex(rlp.decode(v))
 
         return med_dict
 
@@ -1137,16 +1142,16 @@ class Block(rlp.Serializable):
                 txjson = tx.hash
             txlist.append({
                 "tx": txjson,
-                "medstate": receipt.state_root.encode('hex'),
-                "gas": str(receipt.gas_used),
+                "medstate": encode_hex(receipt.state_root),
+                "gas": to_string(receipt.gas_used),
                 "logs": [Log.serialize(log) for log in receipt.logs],
                 "bloom": utils.int256.serialize(receipt.bloom)
             })
         b["transactions"] = txlist
         if with_state:
             state_dump = {}
-            for address, v in self.state.to_dict().iteritems():
-                state_dump[address.encode('hex')] = \
+            for address, v in self.state.to_dict().items():
+                state_dump[encode_hex(address)] = \
                     self.account_to_dict(address, with_storage_roots)
             b['state'] = state_dump
         if with_uncles:
@@ -1166,7 +1171,7 @@ class Block(rlp.Serializable):
         try:
             parent = get_block(self.db, self.prevhash)
         except KeyError:
-            raise UnknownParentException(self.prevhash.encode('hex'))
+            raise UnknownParentException(encode_hex(self.prevhash))
         # assert parent.state.db.db == self.state.db.db
         return parent
 
@@ -1186,13 +1191,13 @@ class Block(rlp.Serializable):
         """
         if self.is_genesis():
             return self.difficulty
-        elif 'difficulty:' + self.hash.encode('hex') in self.db:
-            encoded = self.db.get('difficulty:' + self.hash.encode('hex'))
+        elif 'difficulty:' + encode_hex(self.hash) in self.db:
+            encoded = self.db.get('difficulty:' + encode_hex(self.hash))
             return utils.decode_int(encoded)
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
             o += sum([uncle.difficulty for uncle in self.uncles])
-            self.state.db.put('difficulty:' + self.hash.encode('hex'),
+            self.state.db.put('difficulty:' + encode_hex(self.hash),
                               utils.encode_int(o))
             return o
 
@@ -1213,10 +1218,10 @@ class Block(rlp.Serializable):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s)>' % (self.number, self.hash.encode('hex')[:8])
+        return '<Block(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
 
     def __structlog__(self):
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
 
 def calc_seedhash(parent):
@@ -1235,7 +1240,7 @@ cache_cache = {}
 
 
 def peck_cache(db, seedhash, size):
-    key = 'cache:'+seedhash+','+str(size)
+    key = 'cache:' + seedhash + ',' + to_string(size)
     if key not in db:
         cache = ethash.mkcache(size, seedhash)
         cache_cache[key] = cache
@@ -1250,7 +1255,7 @@ def peck_cache(db, seedhash, size):
 
 
 def get_cache_memoized(db, seedhash, size):
-    key = 'cache:'+seedhash+','+str(size)
+    key = 'cache:' + seedhash + ',' + to_string(size)
     peck_cache(db, seedhash, size)
     return cache_cache[key]
 
@@ -1327,9 +1332,9 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         nonce=GENESIS_NONCE,
     )
     block = Block(header, [], [], db=db)
-    for addr, data in start_alloc.iteritems():
+    for addr, data in start_alloc.items():
         if len(addr) == 40:
-            addr = addr.decode('hex')
+            addr = decode_hex(addr)
         assert len(addr) == 20
         if 'wei' in data:
             block.set_balance(addr, int(data['wei']))
@@ -1340,10 +1345,10 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         if 'nonce' in data:
             block.set_nonce(addr, int(data['nonce']))
         if 'storage' in data:
-            for k, v in data['storage'].iteritems():
+            for k, v in data['storage'].items():
                 blk.set_storage_data(addr,
-                                     utils.big_endian_to_int(k[2:].decode('hex')),
-                                     utils.big_endian_to_int(v[2:].decode('hex')))
+                                     utils.big_endian_to_int(decode_hex(k[2:])),
+                                     utils.big_endian_to_int(decode_hex(v[2:])))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization
@@ -1355,12 +1360,12 @@ def dump_genesis_block_tests_data(db):
     import json
     g = genesis(db)
     data = dict(
-        genesis_state_root=g.state_root.encode('hex'),
+        genesis_state_root=encode_hex(g.state_root),
         genesis_hash=g.hex_hash(),
-        genesis_rlp_hex=g.serialize().encode('hex'),
+        genesis_rlp_hex=encode_hex(g.serialize()),
         initial_alloc=dict()
     )
-    for addr, balance in GENESIS_INITIAL_ALLOC.iteritems():
-        data['initial_alloc'][addr] = str(balance)
+    for addr, balance in GENESIS_INITIAL_ALLOC.items():
+        data['initial_alloc'][addr] = to_string(balance)
 
-    print json.dumps(data, indent=1)
+    print(json.dumps(data, indent=1))

@@ -3,6 +3,8 @@ import os
 import pytest
 from pyethereum import tester, utils, abi
 import serpent
+from rlp.utils import decode_hex, encode_hex
+from pyethereum.utils import safe_ord
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -46,7 +48,7 @@ sixten_code =\
 
 def test_sixten():
     s = tester.state()
-    c = '1231231231231234564564564564561231231231'.decode('hex')
+    c = decode_hex('1231231231231234564564564564561231231231')
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
@@ -465,9 +467,9 @@ def test_reverter():
     c = s.abi_contract(reverter_code, endowment=10**15)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(('0'*39+'7').decode('hex')) == 9
+    assert s.block.get_balance(decode_hex('0'*39+'7')) == 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(('0'*39+'8').decode('hex')) == 0
+    assert s.block.get_balance(decode_hex('0'*39+'8')) == 0
 
 # Test stateless contracts
 
@@ -769,37 +771,37 @@ def test_storagevar_fails():
         0, 0, 0, 0, 0, 0
     try:
         s.contract(fail1)
-    except Exception, e:
+    except Exception as e:
         success1 = "Storage variable access not deep enough" in str(e)
     assert success1, e
 
     try:
         s.contract(fail2)
-    except Exception, e:
+    except Exception as e:
         success2 = "Too few array index lookups" in str(e)
     assert success2, e
 
     try:
         s.contract(fail3)
-    except Exception, e:
+    except Exception as e:
         success3 = "Too many array index lookups" in str(e)
     assert success3, e
 
     try:
         s.contract(fail4)
-    except Exception, e:
+    except Exception as e:
         success4 = "Too few array index lookups" in str(e)
     assert success4, e
 
     try:
         s.contract(fail5)
-    except Exception, e:
+    except Exception as e:
         success5 = "Invalid object member" in str(e)
     assert success5, e
 
     try:
         s.contract(fail6)
-    except Exception, e:
+    except Exception as e:
         success6 = "Invalid object member" in str(e)
     assert success6, e
 
@@ -810,7 +812,7 @@ def test_type_system_fails():
 
     try:
         s.contract(fail7)
-    except Exception, e:
+    except Exception as e:
         success7 = "Please specify maximum" in str(e)
     assert success7, e
 
@@ -903,7 +905,7 @@ def test_crowdfund():
     c.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
-    assert 100001 == s.block.get_balance(utils.int_to_addr(48).decode('hex'))
+    assert 100001 == s.block.get_balance(decode_hex(utils.int_to_addr(48)))
     mida1 = s.block.get_balance(tester.a1)
     mida3 = s.block.get_balance(tester.a3)
     # Mine 5 blocks to expire the campaign
@@ -1088,7 +1090,7 @@ def test_multiarg_code():
     s = tester.state()
     c = s.abi_contract(multiarg_code)
     o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
-    assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
+    assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
 
 peano_code = """
 macro padd($x, psuc($y)):
@@ -1196,17 +1198,17 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = utils.sha3('some big long brainwallet password').encode('hex')
+    priv = encode_hex(utils.sha3('some big long brainwallet password'))
     pub = bitcoin.privtopub(priv)
 
-    msghash = utils.sha3('the quick brown fox jumps over the lazy dog').encode('hex')
+    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
     V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert int(utils.privtoaddr(priv), 16) == addr
 
-    result = c.test_ecrecover(utils.big_endian_to_int(msghash.decode('hex')), V, R, S)
+    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
     assert result == addr
 
 
@@ -1375,8 +1377,7 @@ def test_mcopy2():
     s = tester.state()
     c = s.abi_contract(mcopy_code_2)
     assert c.mcopy_test() == \
-        ''.join(map(lambda x: utils.zpad(utils.int_to_big_endian(x), 32),
-                [99, 111, 119]))
+        ''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
 array_saveload_code = """

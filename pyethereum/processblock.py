@@ -4,16 +4,17 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
-import opcodes
-import utils
-import blocks
-import transactions
-import trie
-import fastvm
-import specials
-import bloom
-import vm
-from exceptions import *
+from rlp.utils import decode_hex, encode_hex, ascii_chr
+from pyethereum import opcodes
+from pyethereum import utils
+from pyethereum import transactions
+from pyethereum import trie
+from pyethereum import fastvm
+from pyethereum import specials
+from pyethereum import bloom
+from pyethereum import vm
+from pyethereum.exceptions import *
+from pyethereum.utils import safe_ord
 
 sys.setrecursionlimit(100000)
 
@@ -33,6 +34,7 @@ CREATE_CONTRACT_ADDRESS = ''
 
 
 def verify(block, parent):
+    from pyethereum import blocks
     try:
         block2 = rlp.decode(rlp.encode(block), blocks.Block,
                             db=parent.db, parent=parent)
@@ -54,7 +56,7 @@ class Log(rlp.Serializable):
 
     def __init__(self, address, topics, data):
         if len(address) == 40:
-            address = address.decode('hex')
+            address = decode_hex(address)
         assert len(address) == 20
         super(Log, self).__init__(address, topics, data)
 
@@ -63,16 +65,16 @@ class Log(rlp.Serializable):
 
     def to_dict(self):
         return {
-            "bloom": bloom.b64(bloom.bloom_from_list(self.bloomables())).encode('hex'),
-            "address": self.address.encode('hex'),
-            "data": '0x' + self.data.encode('hex'),
-            "topics": [utils.int32.serialize(t).encode('hex')
+            "bloom": encode_hex(bloom.b64(bloom.bloom_from_list(self.bloomables()))),
+            "address": encode_hex(self.address),
+            "data": '0x' + encode_hex(self.data),
+            "topics": [encode_hex(utils.int32.serialize(t))
                        for t in self.topics]
         }
 
     def __repr__(self):
         return '<Log(address=%r, topics=%r, data=%r)>' %  \
-            (self.address.encode('hex'), self.topics, self.data)
+            (encode_hex(self.address), self.topics, self.data)
 
 
 def apply_transaction(block, tx):
@@ -92,7 +94,7 @@ def apply_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    num_zero_bytes = tx.data.count(chr(0))
+    num_zero_bytes = tx.data.count(ascii_chr(0))
     num_non_zero_bytes = len(tx.data) - num_zero_bytes
     intrinsic_gas_used = (opcodes.GTXCOST
                           + opcodes.GTXDATAZERO * num_zero_bytes
@@ -111,7 +113,7 @@ def apply_transaction(block, tx):
     if block.gas_used + tx.startgas > block.gas_limit:
         raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
 
-    log_tx.debug('TX NEW', tx=tx.hash.encode('hex'), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx=encode_hex(tx.hash), tx_dict=tx.to_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
@@ -121,7 +123,7 @@ def apply_transaction(block, tx):
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
 
     message_gas = tx.startgas - intrinsic_gas_used
-    message_data = vm.CallData([ord(x) for x in tx.data], 0, len(tx.data))
+    message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data,
                          code_address=tx.to)
 
@@ -132,6 +134,7 @@ def apply_transaction(block, tx):
         log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
+        assert utils.is_numeric(gas_remained)
         log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
 
     assert gas_remained >= 0
@@ -160,7 +163,7 @@ def apply_transaction(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
         if tx.to:
-            output = ''.join(map(chr, data))
+            output = ''.join(map(ascii_chr, data))
         else:
             output = data
         success = 1
@@ -213,9 +216,9 @@ def apply_msg(ext, msg):
 
 def _apply_msg(ext, msg, code):
     if log_msg.is_active:
-        log_msg.debug("MSG APPLY", sender=msg.sender.encode('hex'), to=msg.to.encode('hex'),
+        log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
-                      data=msg.data.extract_all().encode('hex'))
+                      data=encode_hex(msg.data.extract_all()))
     if log_state.is_active:
         log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
@@ -230,6 +233,7 @@ def _apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
+    assert utils.is_numeric(gas)
     if log_msg.is_active:
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active:
@@ -243,8 +247,8 @@ def _apply_msg(ext, msg, code):
 
 
 def create_contract(ext, msg):
-    print 'CREATING WITH GAS', msg.gas
-    sender = msg.sender.decode('hex') if len(msg.sender) == 40 else msg.sender
+    print('CREATING WITH GAS', msg.gas)
+    sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
@@ -252,6 +256,8 @@ def create_contract(ext, msg):
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())
+    assert utils.is_numeric(gas)
+
     if res:
         if not len(dat):
             return 1, gas, msg.to
@@ -260,9 +266,9 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            print 'CONTRACT CREATION OOG', 'have', gas, 'want', gcost
+            print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
-        ext._block.set_code(msg.to, ''.join(map(chr, dat)))
+        ext._block.set_code(msg.to, ''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
         return 0, gas, ''

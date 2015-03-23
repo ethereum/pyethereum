@@ -1,4 +1,5 @@
 import sha3
+from rlp.utils import decode_hex, encode_hex
 
 WORD_BYTES = 4                    # bytes in word
 DATASET_BYTES_INIT = 2**30        # bytes in dataset at genesis
@@ -21,12 +22,12 @@ def fnv(v1, v2):
 
 # Assumes little endian bit ordering (same as Intel architectures)
 def decode_int(s):
-    return int(s[::-1].encode('hex'), 16) if s else 0
+    return int(encode_hex(s[::-1]), 16) if s else 0
 
 
 def encode_int(s):
     a = "%x" % s
-    return '' if s == 0 else ('0' * (len(a) % 2) + a).decode('hex')[::-1]
+    return '' if s == 0 else decode_hex('0' * (len(a) % 2) + a)[::-1]
 
 
 def zpad(s, length):

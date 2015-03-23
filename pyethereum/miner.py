@@ -1,9 +1,10 @@
 import time
 import struct
-import blocks
-import processblock
-import utils
+from pyethereum import blocks
+from pyethereum import processblock
+from pyethereum import utils
 import rlp
+from rlp.utils import encode_hex
 from pyethereum.slogging import get_logger
 log = get_logger('eth.miner')
 pyethash = None
@@ -30,7 +31,7 @@ class Miner():
         self.pre_finalize_state_root = self.block.state_root
         self.block.finalize()
         log.debug('mining', block_number=self.block.number,
-                  block_hash=self.block.hash.encode('hex'),
+                  block_hash=encode_hex(self.block.hash),
                   block_difficulty=self.block.difficulty)
         global pyethash
         if not pyethash:
@@ -93,7 +94,7 @@ class Miner():
                 assert self.block.header.check_pow() is True
                 assert self.block.get_parent()
                 log.debug('nonce found', block_nonce=nonce,
-                          block_hash=self.block.hash.encode('hex'))
+                          block_hash=encode_hex(self.block.hash))
                 return self.block
 
         self.nonce = nonce

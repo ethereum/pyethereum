@@ -1,4 +1,5 @@
-import rlp, utils
+import rlp
+from pyethereum import utils
 
 
 class SecureTrie(object):
@@ -20,7 +21,7 @@ class SecureTrie(object):
 
     def to_dict(self):
         o = {}
-        for h, v in self.trie.to_dict().items():
+        for h, v in list(self.trie.to_dict().items()):
             k = self.db.get(h)
             o[k] = v
         return o

@@ -1,12 +1,19 @@
-
+import sys
 import os
 import uuid
-import StringIO
-import ConfigParser
-from pyethereum.utils import default_data_dir
+
+from pyethereum.utils import default_data_dir, to_string
 from pyethereum.packeter import Packeter
 from pyethereum.utils import sha3
 
+from rlp.utils import encode_hex
+
+if sys.version_info.major == 3:
+    import configparser
+    import io
+else:
+    import ConfigParser as configparser
+    import StringIO as io
 
 def default_config_path():
     return os.path.join(default_data_dir, 'config.txt')
@@ -17,7 +24,7 @@ def default_client_version():
 
 
 def default_node_id():
-    x = (sha3(str(uuid.uuid1())) * 2).encode('hex')
+    x = encode_hex(sha3(to_string(uuid.uuid1())) * 2)
     assert len(x) == 128
     return x
 
@@ -80,10 +87,10 @@ coinbase = 6c386a4b26f73c802f34673f7248bb118f97424a
 
 
 def get_default_config():
-    f = StringIO.StringIO()
+    f = io.StringIO()
     f.write(config_template)
     f.seek(0)
-    config = ConfigParser.ConfigParser()
+    config = configparser.ConfigParser()
     config.readfp(f)
     config.set('network', 'client_version', default_client_version())
     return config
