@@ -1,43 +1,47 @@
-NULLSHA3 = 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470' \
-    .decode('hex')
+from rlp.utils import decode_hex, encode_hex, ascii_chr
+
+
+NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
 
 def compress(data):
-    o = ''
+    from pyethereum.utils import int_to_bytes
+    o = b''
     i = 0
     while i < len(data):
-        if data[i] == '\xfe':
-            o += '\xfe\x00'
+        if int_to_bytes(data[i]) == b'\xfe':
+            o += b'\xfe\x00'
         elif data[i:i + 32] == NULLSHA3:
-            o += '\xfe\x01'
+            o += b'\xfe\x01'
             i += 31
-        elif data[i:i + 2] == '\x00\x00':
+        elif data[i:i + 2] == b'\x00\x00':
             p = 2
-            while p < 255 and i + p < len(data) and data[i + p] == '\x00':
+            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'\x00':
                 p += 1
-            o += '\xfe' + chr(p)
+            o += b'\xfe' + ascii_chr(p)
             i += p - 1
         else:
-            o += data[i]
+            o += int_to_bytes(data[i])
         i += 1
     return o
 
 
 def decompress(data):
-    o = ''
+    from pyethereum.utils import safe_ord, int_to_bytes
+    o = b''
     i = 0
     while i < len(data):
-        if data[i] == '\xfe':
+        if int_to_bytes(data[i]) == b'\xfe':
             if i == len(data) - 1:
                 raise Exception("Invalid encoding, \\xfe at end")
-            elif data[i + 1] == '\x00':
-                o += '\xfe'
-            elif data[i + 1] == '\x01':
+            elif int_to_bytes(data[i + 1]) == b'\x00':
+                o += b'\xfe'
+            elif int_to_bytes(data[i + 1]) == b'\x01':
                 o += NULLSHA3
             else:
-                o += '\x00' * ord(data[i + 1])
+                o += b'\x00' * safe_ord(data[i + 1])
             i += 1
         else:
-            o += data[i]
+            o += int_to_bytes(data[i])
         i += 1
     return o

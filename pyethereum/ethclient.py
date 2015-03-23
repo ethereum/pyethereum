@@ -4,11 +4,12 @@ import sys
 import requests
 import json
 from docopt import docopt
-import utils
-import transactions
+from pyethereum import utils
+from pyethereum import transactions
 import rlp
-from . import __version__
-from . config import read_config
+from pyethereum import __version__
+from pyethereum config import read_config
+from rlp.utils import decode_hex, encode_hex
 
 config = read_config()
 
@@ -22,24 +23,24 @@ DEFAULT_STARTGAS = 10000
 
 
 def sha3(x):
-    return utils.sha3(x).encode('hex')
+    return encode_hex(utils.sha3(x))
 
 
 def privtoaddr(x):
     if len(x) == 64:
-        x = x.decode('hex')
+        x = decode_hex(x)
     return utils.privtoaddr(x)
 
 
 def mktx(nonce, gasprice, startgas, to, value, data):
     return transactions.Transaction(
-        int(nonce), gasprice, startgas, to, int(value), data.decode('hex')
+        int(nonce), gasprice, startgas, to, int(value), decode_hex(data)
     ).hex_serialize(False)
 
 
 def contract(nonce, gasprice, startgas, value, code):
     return transactions.contract(
-        int(nonce), gasprice, startgas, int(value), code.decode('hex')
+        int(nonce), gasprice, startgas, int(value), decode_hex(code)
     ).hex_serialize(False)
 
 
@@ -101,8 +102,8 @@ class APIClient(object):
         sender = privtoaddr(pkey_hex)
         nonce = self.getnonce(sender)
         tx = contract(nonce, gasprice, startgas, value, code)
-        formatted_rlp = [sender.decode('hex'), utils.int_to_big_endian(nonce)]
-        addr = utils.sha3(rlp.encode(formatted_rlp))[12:].encode('hex')
+        formatted_rlp = [decode_hex(sender), utils.int_to_big_endian(nonce)]
+        addr = encode_hex(utils.sha3(rlp.encode(formatted_rlp))[12:])
         o = self.applytx(sign(tx, pkey_hex))
         o['addr'] = addr
         return o
@@ -128,9 +129,9 @@ class APIClient(object):
         if 'trace' in res:
             out = []
             for l in res['trace']:
-                name, data = l.items()[0]
+                name, data = list(l.items())[0]
                 order = dict(pc=-2, op=-1, stackargs=1, data=2, code=3)
-                items = sorted(data.items(), key=lambda x: order.get(x[0], 0))
+                items = sorted(list(data.items()), key=lambda x: order.get(x[0], 0))
                 msg = ", ".join("%s=%s" % (k, v) for k, v in items)
                 out.append("%s: %s" % (name.ljust(15), msg))
             return '\n'.join(out)
@@ -220,7 +221,7 @@ def main():
         if arguments.get(k):
             cmd_args = cmd_map.get(k)
             out = cmd_args[0](*cmd_args[1:])
-            print out
+            print(out)
             break
 
 if __name__ == '__main__':

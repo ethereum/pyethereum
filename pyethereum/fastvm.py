@@ -1,7 +1,9 @@
-from opcodes import opcodes, reverse_opcodes
-import utils
+from pyethereum.opcodes import opcodes, reverse_opcodes
+from pyethereum import utils
+from pyethereum.utils import safe_ord
 import serpent
 import rlp
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 import copy
 
 code_cache = {}
@@ -187,14 +189,14 @@ def preprocess_vmcode(code):
     o = []
     jumps = {}
     # Round 1: Locate all JUMP, JUMPI, JUMPDEST, STOP, RETURN, INVALID locs
-    opcodez = copy.deepcopy([opcodes.get(ord(c), ['INVALID', 0, 0, 1]) +
-                             [ord(c)] for c in code])
+    opcodez = copy.deepcopy([opcodes.get(safe_ord(c), ['INVALID', 0, 0, 1]) +
+                             [safe_ord(c)] for c in code])
     for i, o in enumerate(opcodez):
         if o[0] in filter1:
             jumps[i] = True
 
     chunks = {}
-    chunks["code"] = [ord(x) for x in code]
+    chunks["code"] = [safe_ord(x) for x in code]
     c = []
     h, reqh, gascost = 0, 0, 0
     i = 0
@@ -234,7 +236,7 @@ def preprocess_vmcode(code):
 # Main function, drop-in replacement for apply_msg in processblock.py
 def apply_msg(block, tx, msg, code):
     msg = Message(msg.sender, msg.to, msg.value, msg.gas, bytearray_to_32s(
-        [ord(x) for x in msg.data]), len(msg.data))
+        [safe_ord(x) for x in msg.data]), len(msg.data))
     # print '### applying msg ###'
     callstack = []
     msgtop, mem, stk, ops, index = None, None, None, [], [None]
@@ -293,7 +295,7 @@ def apply_msg(block, tx, msg, code):
         def cb(res, gas, dat, databytes):
             if res:
                 b = extract_bytes(dat, 0, databytes)
-                block.set_code(callstack[-1].to, ''.join([chr(x) for x in b]))
+                block.set_code(callstack[-1].to, ''.join([ascii_chr(x) for x in b]))
                 res = utils.coerce_to_int(callstack[-1].to)
             else:
                 if tx.sender != callstack[-1].sender:
@@ -346,7 +348,7 @@ def apply_msg(block, tx, msg, code):
 
     def OP_DIV():
         s0, s1 = stk.pop(), stk.pop()
-        stk.append(0 if s1 == 0 else s0 / s1)
+        stk.append(0 if s1 == 0 else s0 // s1)
 
     def OP_MOD():
         s0, s1 = stk.pop(), stk.pop()
@@ -380,17 +382,17 @@ def apply_msg(block, tx, msg, code):
         if not mem_extend(mem, msgtop.compustate, '', mstart, msz):
             return drop(OUT_OF_GAS)
         if block.get_balance(msgtop.to) >= value:
-            sender = msgtop.to.decode('hex') if len(msgtop.to) == 40 else msgtop.to
+            sender = decode_hex(msgtop.to) if len(msgtop.to) == 40 else msgtop.to
             block.increment_nonce(msgtop.to)
             data = [0] * ((msz >> 5) + 1)
             copy32(mem, data, mstart, 0, msz)
             create_msg = Message(msgtop.to, '', value, gaz() - 100, data, msz)
             msgtop.compustate.gas -= gaz() - 100
             nonce = utils.encode_int(block.get_nonce(msgtop.to) - 1)
-            create_msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
+            create_msg.to = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
             special[0] = 'create'
             special[1] = create_msg
-            special[2] = ''.join([chr(x) for x in extract_bytes(data, 0, msz)])
+            special[2] = ''.join([ascii_chr(x) for x in extract_bytes(data, 0, msz)])
         else:
             stk.append(0)
 
@@ -445,7 +447,7 @@ def apply_msg(block, tx, msg, code):
 
     def OP_SUICIDE():
         to = utils.encode_int(stk.pop())
-        to = (('\x00' * (32 - len(to))) + to)[12:].encode('hex')
+        to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
         block.transfer_value(msgtop.to, to, block.get_balance(msgtop.to))
         block.suicides.append(msgtop.to)
         drop([])
@@ -490,7 +492,7 @@ def apply_msg(block, tx, msg, code):
         if s0 >= 32:
             stk.append(0)
         else:
-            stk.append((s1 / 256 ** (31 - s0)) % 256)
+            stk.append((s1 // 256 ** (31 - s0)) % 256)
 
     def OP_ADDMOD():
         s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
@@ -504,7 +506,7 @@ def apply_msg(block, tx, msg, code):
         s0, s1 = stk.pop(), stk.pop()
         if not mem_extend(mem, msgtop.compustate, '', s0, s1):
             return drop(OUT_OF_GAS)
-        data = ''.join([chr(x) for x in mem[s0: s0 + s1]])
+        data = ''.join([ascii_chr(x) for x in mem[s0: s0 + s1]])
         stk.append(utils.big_endian_to_int(utils.sha3(data)))
 
     def OP_ADDRESS():
@@ -565,7 +567,7 @@ def apply_msg(block, tx, msg, code):
             return drop(OUT_OF_GAS)
         for i in range(s3):
             if s2 + i < len(extcode):
-                mem[s1 + i] = ord(extcode[s2 + i])
+                mem[s1 + i] = safe_ord(extcode[s2 + i])
             else:
                 mem[s1 + i] = 0
 
@@ -573,7 +575,7 @@ def apply_msg(block, tx, msg, code):
         stk.append(utils.big_endian_to_int(block.prevhash))
 
     def OP_COINBASE():
-        stk.append(utils.big_endian_to_int(block.coinbase.decode('hex')))
+        stk.append(utils.big_endian_to_int(decode_hex(block.coinbase)))
 
     def OP_TIMESTAMP():
         stk.append(block.timestamp)

@@ -3,10 +3,10 @@ import time
 import sys
 import traceback
 
-from dispatch import receiver
+from pyethereum.dispatch import receiver
 
-from stoppable import StoppableLoopThread
-import signals
+from pyethereum.stoppable import StoppableLoopThread
+from pyethereum import signals
 from pyethereum.slogging import get_logger
 log_net = get_logger('net')
 
@@ -17,7 +17,7 @@ def get_public_ip():
         from urllib.request import urlopen
     except ImportError:
         # for python2
-        from urllib import urlopen
+        from urllib.request import urlopen
     return urlopen('http://icanhazip.com/').read().strip()
 
 

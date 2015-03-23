@@ -1,7 +1,7 @@
 from pyethereum import blocks, utils, db
 from pyethereum.exceptions import VerificationFailed
 import rlp
-
+from rlp.utils import decode_hex, encode_hex
 import pytest, os, sys
 import pyethereum.testutils as testutils
 
@@ -11,7 +11,7 @@ logger = get_logger()
 
 def translate_keys(olddict, keymap, valueconv, deletes):
     o = {}
-    for k in olddict.keys():
+    for k in list(olddict.keys()):
         if k not in deletes:
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
@@ -37,7 +37,7 @@ translator_list = {
 
 def valueconv(k, v):
     if k in ['r', 's']:
-        return '0x'+utils.int_to_big_endian(v).encode('hex')
+        return '0x' + encode_hex(utils.int_to_big_endian(v))
     return v
 
 
@@ -51,7 +51,7 @@ def run_block_test(params):
     b.extra_data = utils.scanners['bin'](gbh["extraData"])
     b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
     b.gas_used = utils.scanners['int'](gbh["gasUsed"])
-    b.coinbase = utils.scanners['addr'](gbh["coinbase"].decode('hex'))
+    b.coinbase = utils.scanners['addr'](decode_hex(gbh["coinbase"]))
     b.difficulty = int(gbh["difficulty"])
     b.prevhash = utils.scanners['bin'](gbh["parentHash"])
     b.mixhash = utils.scanners['bin'](gbh["mixHash"])
@@ -61,14 +61,14 @@ def run_block_test(params):
         utils.scanners['bin'](gbh["transactionsTrie"])
     assert utils.sha3rlp(b.uncles) == \
         utils.scanners['bin'](gbh["uncleHash"])
-    h = b.state.root_hash.encode('hex')
+    h = encode_hex(b.state.root_hash)
     if h != gbh["stateRoot"]:
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
         raise Exception("header hash mismatch")
     assert b.header.check_pow(e)
     for blk in params["blocks"]:
-        rlpdata = blk["rlp"][2:].decode('hex')
+        rlpdata = decode_hex(blk["rlp"][2:])
         if 'blockHeader' not in blk:
             try:
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
@@ -97,20 +97,20 @@ if __name__ == '__main__':
     assert len(sys.argv) >= 2, "Please specify file or dir name"
     fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
     if len(sys.argv) >= 3:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
+        for filename, tests in list(fixtures.items()):
+            for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
-                    print "Testing: %s %s" % (filename, testname)
+                    print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata)
     else:
-        for filename, tests in fixtures.items():
-            for testname, testdata in tests.items():
-                print "Testing: %s %s" % (filename, testname)
+        for filename, tests in list(fixtures.items()):
+            for testname, testdata in list(tests.items()):
+                print("Testing: %s %s" % (filename, testname))
                 run_block_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'BlockTests'))
-    for filename, tests in fixtures.items():
-        for testname, testdata in tests.items()[:500]:
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items())[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = lambda: do_test_block(filename, testname, testdata)

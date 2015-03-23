@@ -2,9 +2,10 @@ from bitcoin import encode_pubkey
 from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
 import rlp
 from rlp.sedes import big_endian_int, binary
+from rlp.utils import decode_hex, encode_hex
 
-import bloom
-import utils
+from pyethereum import bloom
+from pyethereum import utils
 
 
 class Transaction(rlp.Serializable):
@@ -40,6 +41,8 @@ class Transaction(rlp.Serializable):
 
     def __init__(self, nonce, gasprice, startgas, to, value, data,
                  v=0, r=0, s=0):
+        if len(to) == 40:
+            to = decode_hex(to)
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)
@@ -64,7 +67,7 @@ class Transaction(rlp.Serializable):
         """
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
-        self.sender = utils.privtoaddr(key).decode('hex')
+        self.sender = decode_hex(utils.privtoaddr(key))
         return self
 
     @property
@@ -85,7 +88,7 @@ class Transaction(rlp.Serializable):
         for name, _ in self.__class__.fields:
             d[name] = getattr(self, name)
         d['sender'] = self.sender
-        d['hash'] = self.hash.encode('hex')
+        d['hash'] = encode_hex(self.hash)
         return d
 
     def __eq__(self, other):
@@ -95,10 +98,10 @@ class Transaction(rlp.Serializable):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '<Transaction(%s)>' % self.hash.encode('hex')[:4]
+        return '<Transaction(%s)>' % encode_hex(self.hash)[:4]
 
     def __structlog__(self):
-        return self.hash.encode('hex')
+        return encode_hex(self.hash)
 
 
 UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])

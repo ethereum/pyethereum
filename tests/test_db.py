@@ -4,13 +4,13 @@ import tempfile
 import pytest
 from pyethereum.db import _EphemDB, _CodernityDB, _LevelDB
 from pyethereum.utils import db_path
-
+from rlp.utils import ascii_chr
 
 random.seed(0)
 
 
 def random_string(length):
-    return ''.join([chr(random.randint(0, 255)) for _ in range(length)])
+    return ''.join([ascii_chr(random.randint(0, 255)) for _ in range(length)])
 
 
 content = {random_string(lk): random_string(lv)
@@ -24,7 +24,7 @@ def test_ephem():
         assert key not in db
         with pytest.raises(KeyError):
             db.get(key)
-    for key, value in content.iteritems():
+    for key, value in content.items():
         db.put(key, value)
         assert key in db
         assert db.get(key) == value
@@ -32,7 +32,7 @@ def test_ephem():
         db.put(key, alt_content[key])
         assert key in db
         assert db.get(key) == alt_content[key]
-    for key, value in content.iteritems():
+    for key, value in content.items():
         db.delete(key)
         assert key not in db
         with pytest.raises(KeyError):
@@ -50,7 +50,7 @@ def test_db(DB):
         assert key not in db1
         with pytest.raises(KeyError):
             db1.get(key)
-    for key, value in content.iteritems():
+    for key, value in content.items():
         db1.put(key, value)
         assert key in db1
         assert db1.get(key) == value
@@ -61,10 +61,10 @@ def test_db(DB):
         assert key not in db2
         with pytest.raises(KeyError):
             db2.get(key)
-    for key, value in content.iteritems():
+    for key, value in content.items():
         db2.put(key, value)
     db2.commit()
-    for key, value in content.iteritems():
+    for key, value in content.items():
         assert key in db2
         assert db2.get(key) == value
     for key in content:
@@ -74,10 +74,10 @@ def test_db(DB):
 
     # alt_content not commited, so db3 still contains original content
     db3 = DB(f)
-    for key, value in content.iteritems():
+    for key, value in content.items():
         assert key in db3
         assert db3.get(key) == value
-    for key in content.iteritems():
+    for key in content.items():
         db3.delete(key)
         assert key not in db3
         with pytest.raises(KeyError):

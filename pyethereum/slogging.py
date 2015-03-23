@@ -2,6 +2,7 @@ import structlog
 import logging
 import sys
 import json
+import binascii
 """
 See test_logging.py for examples
 
@@ -22,6 +23,8 @@ eth.chain
 eth.chain.new_block
 """
 
+def hexprint(x):
+    return repr(x)
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 
@@ -32,7 +35,7 @@ class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 
     def __call__(self, _, __, event_dict):
         msg = event_dict.pop('event', '')
-        kvs = ' '.join(k + '=' + repr(v) for k, v in self._ordered_items(event_dict))
+        kvs = ' '.join(k + '=' + hexprint(v) for k, v in self._ordered_items(event_dict))
         return "%s\t%s" % (msg, kvs)
 
 
@@ -205,7 +208,7 @@ def get_configuration():
     configure(**snapshot)
     """
     name_levels = [('', logging.getLevelName(logging.getLogger().level))]
-    for name, logger in logging.Logger.manager.loggerDict.items():
+    for name, logger in list(logging.Logger.manager.loggerDict.items()):
         name_levels.append((name, logging.getLevelName(logger.level)))
     config_string = ','.join('%s:%s' % x for x in name_levels)
     struct_root = get_logger().bind()

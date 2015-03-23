@@ -1,4 +1,6 @@
-import utils
+from pyethereum import utils
+from pyethereum.utils import safe_ord
+from pyethereum.abi import is_numeric
 """
 Blooms are the 3-point, 2048-bit (11-bits/point) Bloom filter of each
 component (except data) of each log entry of each transaction.
@@ -27,17 +29,17 @@ def bloom_insert(bloom, val):
     h = utils.sha3(val)
 #    print 'bloom_insert', bloom_bits(val), repr(val)
     for i in range(0, BUCKETS_PER_VAL * 2, 2):
-        bloom |= 1 << ((ord(h[i + 1]) + (ord(h[i]) << 8)) & 2047)
+        bloom |= 1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047)
     return bloom
 
 
 def bloom_bits(val):
     h = utils.sha3(val)
-    return [bits_in_number(1 << ((ord(h[i + 1]) + (ord(h[i]) << 8)) & 2047)) for i in range(0, BUCKETS_PER_VAL * 2, 2)]
+    return [bits_in_number(1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047)) for i in range(0, BUCKETS_PER_VAL * 2, 2)]
 
 
 def bits_in_number(val):
-    assert isinstance(val, (int, long))
+    assert is_numeric(val)
     return [n for n in range(2048) if (1 << n) & val]
 
 

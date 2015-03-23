@@ -13,10 +13,10 @@ fn = 'tests/raw_remote_blocks_hex.txt'
 
 import pyethereum.config
 import tempfile
-
+from rlp.utils import encode_hex
 
 def read_config(fn=None):
-    print "Read config called"
+    print("Read config called")
     cfg = pyethereum.config.get_default_config()
     # set to 2 as, the bootsrapping server does not talk 'eth'
     cfg.set('network', 'num_peers', '1')
@@ -59,7 +59,7 @@ def _recv_Blocks(self, data):
     for x in data:
         enc = rlp.encode(x)
         tb = blocks.TransientBlock(enc)
-        print tb
+        print(tb)
         self.blk_counter += 1
         if self.lowest_block is None:
             self.lowest_block = tb.number
@@ -72,13 +72,13 @@ def _recv_Blocks(self, data):
             collected_blocks.append(tb)
         # exit if we are at the genesis
         if tb.number == 1:
-            print 'done'
+            print('done')
             for tb in sorted(collected_blocks, key=attrgetter('number')):
-                print 'writing', tb
-                fh.write(tb.rlpdata.encode('hex') + '\n')  # LOG line
+                print('writing', tb)
+                fh.write(encode_hex(tb.rlpdata) + '\n')  # LOG line
             sys.exit(0)
     # fetch more
-    print("ASKING FOR MORE HASHES", tb.hash.encode('hex'), tb.number)
+    print("ASKING FOR MORE HASHES", encode_hex(tb.hash), tb.number)
     self.send_GetBlockHashes(tb.hash, NUM_BLOCKS_PER_REQUEST)
 
 peer.Peer._recv_Blocks = _recv_Blocks
@@ -91,8 +91,8 @@ def _recv_Status(self, data):
     h = blocks.genesis().hash
     print('Status RECEIVED')
     head_hash = data[3]
-    print "head_hash", head_hash.encode('hex')
-    print "head difficulty", idec(data[2])
+    print("head_hash", encode_hex(head_hash))
+    print("head difficulty", idec(data[2]))
     assert not len(collected_blocks)
     self.send_GetBlockHashes(head_hash, NUM_BLOCKS_PER_REQUEST)
 
@@ -102,7 +102,7 @@ peer.Peer._recv_Status = _recv_Status
 
 def _recv_BlockHashes(self, data):
     print("RECEIVED BLOCKHASHES", len(data))  # youngest to oldest
-    # print [x.encode('hex') for x in data]
+    # print [encode_hex(x) for x in data]
     block_hashes = data  # youngest to oldest
     self.send_GetBlocks(block_hashes)
 

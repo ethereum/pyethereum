@@ -4,6 +4,7 @@ t = pyethereum.tester
 pb = pyethereum.processblock
 import serpent
 import sys
+from rlp.utils import encode_hex, ascii_chr
 
 
 # Code: serpent code
@@ -19,7 +20,7 @@ def gen_test(code, val, data):
             "currentGasLimit": str(s.block.gas_limit),
             "currentNumber": str(s.block.number),
             "currentTimestamp": str(s.block.timestamp),
-            "previousHash": s.block.prevhash.encode('hex')
+            "previousHash": encode_hex(s.block.prevhash)
         }
         apply_message_calls = []
 
@@ -28,7 +29,7 @@ def gen_test(code, val, data):
         def apply_msg_wrapper(_block, _tx, msg, code):
             apply_message_calls.append(dict(gasLimit=msg.gas, value=msg.value,
                                             desgination=msg.to,
-                                            data=msg.data.encode('hex')))
+                                            data=encode_hex(msg.data)))
             result, gas_rem, data = orig_apply_msg(_block, _tx, msg, code)
             return result, gas_rem, data
 
@@ -41,8 +42,8 @@ def gen_test(code, val, data):
         exek = {
             "address": msg.to,
             "caller": msg.sender,
-            "code": '0x'+s.block.get_code(c).encode('hex'),
-            "data": '0x'+d.encode('hex'),
+            "code": '0x' + encode_hex(s.block.get_code(c)),
+            "data": '0x' + encode_hex(d),
             "gas": str(10000),
             "gasPrice": str(10**12),
             "origin": tx.sender,
@@ -61,7 +62,7 @@ def gen_test(code, val, data):
         "post": post,
         "exec": exek,
         "gas": str(gas),
-        "out": '0x'+''.join(map(chr, o)).encode('hex')
+        "out": '0x'+encode_hex(''.join(map(ascii_chr, o)))
     }
 
 if __name__ == "__main__":

@@ -12,8 +12,10 @@ from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
 import rlp
+from rlp.utils import decode_hex, encode_hex
 from pyethereum.slogging import get_logger, LogRecorder
-from ._version import get_versions
+from pyethereum._version import get_versions
+from pyethereum.utils import to_string
 
 chain = chain_manager.chain
 
@@ -136,7 +138,7 @@ def block(arg=None):
             blk = chain.get(chain_manager.index.get_block_by_number(int(arg)))
         else:
             try:
-                h = arg.decode('hex')
+                h = decode_hex(arg)
             except TypeError:
                 raise KeyError
             blk = chain.get(h)
@@ -152,11 +154,11 @@ def block_children(arg=None):
     """
     log.debug('blocks/%s/children' % arg)
     try:
-        h = arg.decode('hex')
+        h = decode_hex(arg)
         children = chain.index.get_children(h)
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Block  %s' % arg)
-    return dict(children=[c.encode('hex') for c in children])
+    return dict(children=[encode_hex(c) for c in children])
 
 
 # ######## Transactions ############
@@ -180,7 +182,7 @@ def add_transaction():
 
 def get_transaction_and_block(arg=None):
     try:
-        tx_hash = arg.decode('hex')
+        tx_hash = decode_hex(arg)
     except TypeError:
         bottle.abort(500, 'No hex  %s' % arg)
     try:  # index
@@ -230,7 +232,7 @@ def get_pending():
 
 # ########### Trace ############
 def _get_block_before_tx(txhash):
-    tx, blk, i = chain_manager.index.get_transaction(txhash.decode('hex'))
+    tx, blk, i = chain_manager.index.get_transaction(decode_hex(txhash))
     # get the state we had before this transaction
     test_blk = Block.init_from_parent(blk.get_parent(),
                                       blk.coinbase,
@@ -303,24 +305,24 @@ def dtrace(params, txhash):
 @app.get('/spv/tx/<txhash>')
 def spvtrace(txhash):
     try:  # index
-        tx, blk, i = chain_manager.index.get_transaction(txhash.decode('hex'))
+        tx, blk, i = chain_manager.index.get_transaction(decode_hex(txhash))
     except (KeyError, TypeError):
         return bottle.abort(404, 'Unknown Transaction  %s' % txhash)
 
-    return processblock.mk_independent_transaction_spv_proof(blk, i).encode('hex')
+    return encode_hex(processblock.mk_independent_transaction_spv_proof(blk, i))
 
 
 @app.get('/spv/acct/<addr>')
 def spvaddr(addr):
-    return chain.head.state.produce_spv_proof(addr.decode('hex'))
+    return chain.head.state.produce_spv_proof(decode_hex(addr))
 
 
 @app.get('/spv/storage/<addr>/<index>')
 def spvstorage(addr, index):
-    prf1 = chain.head.state.produce_spv_proof(addr.decode('hex'))
+    prf1 = chain.head.state.produce_spv_proof(decode_hex(addr))
     storetree = chain.head.get_storage(addr)
     prf2 = storetree.produce_spv_proof(utils.zpad(utils.encode_int(index), 32))
-    return rlp.encode(prf1 + prf2).encode('hex')
+    return encode_hex(rlp.encode(prf1 + prf2))
 
 
 # Fetch state data
@@ -338,7 +340,7 @@ def getacctdata(addr, index):
     """
     /storage/<addr>/<index>        return storage item
     """
-    return str(chain.head.get_storage_data(addr, int(index)))
+    return to_string(chain.head.get_storage_data(addr, int(index)))
 
 
 @app.get('/dump/<txblkhash>')
@@ -347,7 +349,7 @@ def dump(txblkhash):
     /dump/<hash>        return state dump after transaction or block
     """
     try:
-        blk = chain.get(txblkhash.decode('hex'))
+        blk = chain.get(decode_hex(txblkhash))
     except:
         try:  # index
             test_blk, tx, i = _get_block_before_tx(txblkhash)
@@ -369,7 +371,7 @@ def account(address=None):
 
 # ######## Peers ###################
 def make_peers_response(peers):
-    objs = [dict(ip=ip, port=port, node_id=node_id.encode('hex'))
+    objs = [dict(ip=ip, port=port, node_id=encode_hex(node_id))
             for (ip, port, node_id) in peers]
     return dict(peers=objs)
 

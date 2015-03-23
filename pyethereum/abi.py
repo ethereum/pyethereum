@@ -1,21 +1,24 @@
-import utils, sys, re, json
+import sys, re, json
+from  pyethereum import utils
+from rlp.utils import decode_hex, encode_hex
+from pyethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
 
-from utils import encode_int, zpad, big_endian_to_int
+if sys.version_info.major == 2:
+    def json_decode(x):
+        return json_non_unicode(json.loads(x))
 
-
-def json_decode(x):
-    return json_non_unicode(json.loads(x))
-
-
-def json_non_unicode(x):
-    if isinstance(x, unicode):
-        return str(x)
-    elif isinstance(x, list):
-        return [json_non_unicode(y) for y in x]
-    elif isinstance(x, dict):
-        return {x: json_non_unicode(y) for x, y in x.items()}
-    else:
-        return x
+    def json_non_unicode(x):
+        if isinstance(x, unicode):
+            return str(x)
+        elif isinstance(x, list):
+            return [json_non_unicode(y) for y in x]
+        elif isinstance(x, dict):
+            return {x: json_non_unicode(y) for x, y in x.items()}
+        else:
+            return x
+else:
+    def json_decode(x):
+        return json.loads(x)
 
 
 class ContractTranslator():
@@ -24,7 +27,7 @@ class ContractTranslator():
         self.function_data = {}
         self.event_data = {}
         v = vars(self)
-        if isinstance(full_signature, str):
+        if is_string(full_signature):
             full_signature = json_decode(full_signature)
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
@@ -33,9 +36,9 @@ class ContractTranslator():
                 name = name[:name.find('(')]
             if name in v:
                 i = 2
-                while name+str(i) in v:
+                while name + to_string(i) in v:
                     i += 1
-                name += str(i)
+                name += to_string(i)
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
@@ -87,7 +90,7 @@ class ContractTranslator():
         indexed = self.event_data[log.topics[0]]['indexed']
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        print log.data
+        print(log.data)
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0
@@ -99,12 +102,8 @@ class ContractTranslator():
                 o[names[i]] = deserialized_args[c2]
                 c2 += 1
         o["_event_type"] = name
-        print o
+        print(o)
         return o
-
-is_numeric = lambda x: isinstance(x, (int, long))
-is_string = lambda x: isinstance(x, (str, unicode))
-
 
 # Decode an integer
 def decint(n):
@@ -113,7 +112,7 @@ def decint(n):
     elif is_numeric(n):
         raise Exception("Number out of range: %r" % n)
     elif is_string(n) and len(n) == 40:
-        return big_endian_to_int(n.decode('hex'))
+        return big_endian_to_int(decode_hex(n))
     elif is_string(n) and len(n) <= 32:
         return big_endian_to_int(n)
     elif is_string(n) and len(n) > 32:
@@ -154,7 +153,7 @@ def encode_single(arg, base, sub):
         normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
     elif base == 'string':
-        if not isinstance(arg, str):
+        if not is_string(arg):
             raise Exception("Expecting string: %r" % arg)
         # Fixed length: string<sz>
         if len(sub):
@@ -173,7 +172,7 @@ def encode_single(arg, base, sub):
         elif len(arg) == len(sub):
             normal_args = zpad(arg, 32)
         elif len(arg) == len(sub) * 2:
-            normal_args = zpad(arg.decode('hex'), 32)
+            normal_args = zpad(decode_hex(arg), 32)
         else:
             raise Exception("Could not parse hash: %r" % arg)
     # Addresses: address (== hash160)
@@ -184,7 +183,7 @@ def encode_single(arg, base, sub):
         elif len(arg) == 20:
             normal_args = zpad(arg, 32)
         elif len(arg) == 40:
-            normal_args = zpad(arg.decode('hex'), 32)
+            normal_args = zpad(decode_hex(arg), 32)
         else:
             raise Exception("Could not parse address: %r" % arg)
     return len_args, normal_args, var_args
@@ -298,7 +297,7 @@ def getlen(base, sub, arrlist):
 
 def decode_single(data, base, sub):
     if base == 'address':
-        return data[12:].encode('hex')
+        return encode_hex(data[12:])
     elif base == 'string' or base == 'hash':
         return data[:int(sub)] if len(sub) else data
     elif base == 'uint':

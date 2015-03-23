@@ -1,6 +1,7 @@
 import sys
 import threading
 import weakref
+import collections
 
 if sys.version_info < (3, 4):
     from .weakref_backports import WeakMethod
@@ -87,7 +88,7 @@ class Signal(object):
         # if settings.configured and settings.DEBUG:
         if True:
             import inspect
-            assert callable(receiver), "Signal receivers must be callable."
+            assert isinstance(receiver, collections.Callable), "Signal receivers must be callable."
 
             # Check for **kwargs
             # Not all callables are inspectable with getargspec, so we'll
