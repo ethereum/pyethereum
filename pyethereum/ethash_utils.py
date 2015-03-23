@@ -65,8 +65,6 @@ def xor(a, b):
 
 # Works for dataset and cache
 def serialize_cache(ds):
-    if isinstance(ds, (str, bytes)):
-        return ds
     return ''.join([serialize_hash(h) for h in ds])
 
 serialize_dataset = serialize_cache

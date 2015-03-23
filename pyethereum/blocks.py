@@ -317,7 +317,7 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def seed(self):
-        seed = '\x00' * 32
+        seed = b'\x00' * 32
         for i in range(self.number // EPOCH_LENGTH):
             seed = utils.sha3(seed)
         return seed
