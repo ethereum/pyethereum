@@ -24,7 +24,7 @@ keys = []
 
 for i in range(10):
     keys.append(u.sha3(str(i)))
-    accounts.append(u.privtoaddr(keys[-1]).decode('hex'))
+    accounts.append(u.privtoaddr(keys[-1]))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
@@ -76,7 +76,7 @@ class state():
         self.block = b.genesis(self.db, o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
-        self.block.coinbase = a0
+        self.block.coinbase = a0.decode('hex')
         self.block.gas_limit = 10 ** 9
 
     def __del__(self):
@@ -101,7 +101,7 @@ class state():
                     languages[language] = __import__(language)
                 language = languages[language]
                 evm = language.compile(code)
-                self.address = me.evm(evm, sender, endowment, gas)
+                self.address = me.evm(evm, sender, endowment, gas).encode('hex')
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
                 sig = language.mk_full_signature(code)
@@ -230,8 +230,7 @@ class state():
         for i in range(n):
             self.block.finalize()
             t = self.block.timestamp + 6 + rand() % 12
-            self.block = b.Block.init_from_parent(self.block, coinbase,
-                                                  timestamp=t)
+            self.block = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
             self.blocks.append(self.block)
 
     def snapshot(self):

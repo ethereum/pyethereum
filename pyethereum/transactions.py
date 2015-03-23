@@ -40,6 +40,8 @@ class Transaction(rlp.Serializable):
 
     def __init__(self, nonce, gasprice, startgas, to, value, data,
                  v=0, r=0, s=0):
+        if len(to) == 40:
+            to = to.decode('hex')
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to,
                                           value, data, v, r, s)

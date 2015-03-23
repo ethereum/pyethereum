@@ -226,6 +226,9 @@ class BlockHeader(rlp.Serializable):
                  nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
         fields = {k: v for k, v in locals().iteritems() if k != 'self'}
+        if len(fields['coinbase']) == 40:
+            fields['coinbase'] = fields['coinbase'].decode('hex')
+        assert len(fields['coinbase']) == 20
         self.block = None
         super(BlockHeader, self).__init__(**fields)
 
