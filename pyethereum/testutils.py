@@ -9,6 +9,7 @@ import json
 import os
 import time
 import ethash
+import ethash_utils
 db = EphemDB()
 
 env = {
@@ -324,17 +325,19 @@ def run_state_test(params, mode):
 def run_ethash_test(params, mode):
     if 'header' not in params:
         b = blocks.genesis(db)
-        b.seedhash = params['seed'].decode('hex')
         b.nonce = params['nonce'].decode('hex')
         b.number = params.get('number', 0)
-        params['header'] = b.serialize_header().encode('hex')
-    header = params['header'].decode('hex')
-    block = blocks.Block.init_from_header(db, header, transient=True)
-    header_hash = utils.sha3(block.serialize_header_without_nonce())
-    cache_size = ethash.get_cache_size(block.number)
-    full_size = ethash.get_full_size(block.number)
-    seed = block.seedhash
-    nonce = block.nonce
+        header = b.header
+        params['header'] = rlp.encode(b.header).encode('hex')
+    else:
+        header = blocks.BlockHeader(params['header'].decode('hex'))
+    header_hash = header.mining_hash
+    cache_size = ethash.get_cache_size(header.number)
+    full_size = ethash.get_full_size(header.number)
+    seed = '\x00' * 32
+    for i in range(header.number // ethash_utils.EPOCH_LENGTH):
+        seed = utils.sha3(seed)
+    nonce = header.nonce
     assert len(nonce) == 8
     assert len(seed) == 32
     t1 = time.time()
@@ -356,13 +359,13 @@ def run_ethash_test(params, mode):
         "result": light_verify["result"].encode('hex'),
     }
     if mode == FILL:
-        block.mixhash = light_verify["mixhash"]
-        params["header"] = block.serialize_header().encode('hex')
+        header.mixhash = light_verify["mixhash"]
+        params["header"] = rlp.encode(header).encode('hex')
         for k, v in out.items():
             params[k] = v
         return params
     elif mode == VERIFY:
-        should, actual = block.mixhash, light_verify['mixhash']
+        should, actual = header.mixhash, light_verify['mixhash']
         assert should == actual, "Mismatch: mixhash %r %r" % (should, actual)
         for k, v in out.items():
             assert params[k] == v, "Mismatch: " + k + ' %r %r' % (params[k], v)

@@ -101,7 +101,7 @@ def get_full_size(block_number):
 
 
 def get_cache_size(block_number):
-    return 1048384
+    return 16776896
 
 
 def get_next_cache_size(block_number):

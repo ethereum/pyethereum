@@ -29,7 +29,6 @@ GENESIS_GAS_LIMIT = 10 ** 6
 GENESIS_PREVHASH = '\00' * 32
 GENESIS_COINBASE = ("0" * 40).decode('hex')
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
-GENESIS_SEEDHASH = '\x00' * 32
 GENESIS_MIXHASH = '\x00' * 32
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
@@ -202,7 +201,6 @@ class BlockHeader(rlp.Serializable):
         ('gas_used', big_endian_int),
         ('timestamp', big_endian_int),
         ('extra_data', binary),
-        ('seedhash', binary),
         ('mixhash', binary),
         ('nonce', Binary(8, allow_empty=True))
     ]
@@ -221,7 +219,6 @@ class BlockHeader(rlp.Serializable):
                  gas_used=0,
                  timestamp=0,
                  extra_data='',
-                 seedhash=GENESIS_SEEDHASH,
                  mixhash=GENESIS_MIXHASH,
                  nonce=''):
         # at the beginning of a method, locals() is a dict of all arguments
@@ -280,6 +277,11 @@ class BlockHeader(rlp.Serializable):
         """The hex encoded block hash"""
         return self.hash.encode('hex')
 
+    @property
+    def mining_hash(self):
+        return utils.sha3(rlp.encode(self,
+                          BlockHeader.exclude(['mixhash', 'nonce'])))
+
     def check_pow(self, db=None, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
@@ -295,17 +297,19 @@ class BlockHeader(rlp.Serializable):
         if len(self.mixhash) != 32 or len(self.nonce) != 8:
             raise ValueError("Bad mixhash or nonce length")
         # exclude mixhash and nonce
-        header_hash = utils.sha3(rlp.encode(self,
-                BlockHeader.exclude(['mixhash', 'nonce'])))
+        header_hash = self.mining_hash
+        seed = '\x00' * 32
+        for i in range(header.number // ethash_utils.EPOCH_LENGTH):
+            seed = utils.sha3(seed)
 
         # Prefetch future data now (so that we don't get interrupted later)
         # TODO: separate thread
-        future_hash = get_next_seedhash(self.seedhash)
+        future_seed = get_next_seedhash(seed)
         future_cache_size = ethash_utils.get_next_cache_size(self.number)
-        peck_cache(db, future_hash, future_cache_size)
+        peck_cache(db, future_seed, future_cache_size)
         # Grab current cache
         current_cache_size = ethash_utils.get_cache_size(self.number)
-        cache = get_cache_memoized(db, self.seedhash, current_cache_size)
+        cache = get_cache_memoized(db, seed, current_cache_size)
         current_full_size = ethash_utils.get_full_size(self.number)
         mining_output = ethash.hashimoto_light(current_full_size, cache,
                                                header_hash, nonce)
@@ -318,7 +322,7 @@ class BlockHeader(rlp.Serializable):
         """Serialize the header to a readable dictionary."""
         d = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
-                      'seedhash', 'mixhash'):
+                      'mixhash'):
             d[field] = '0x' + getattr(self, field).encode('hex')
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
@@ -1216,14 +1220,6 @@ class Block(rlp.Serializable):
         return self.hash.encode('hex')
 
 
-def calc_seedhash(parent):
-    """Seedhash incrementing algo"""
-    if (parent.number + 1) % POW_EPOCH_LENGTH == 0:
-        return utils.sha3(parent.seedhash)
-    else:
-        return parent.seedhash
-
-
 def get_next_seedhash(h):
     return utils.sha3(h)
 
@@ -1319,7 +1315,6 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
         gas_used=0,
         timestamp=0,
         extra_data='',
-        seedhash=GENESIS_SEEDHASH,
         mixhash=GENESIS_MIXHASH,
         nonce=GENESIS_NONCE,
     )
