@@ -86,7 +86,7 @@ class Miner():
         fsz = blocks.get_full_size(b.number)
         nonce = utils.big_endian_to_int(b.nonce)
         TT64M1 = 2**64-1
-        target = utils.zpad(utils.int_to_big_endian(2**256 // b.difficulty), 32)
+        target = utils.zpad(utils.int_to_big_endian(2**256 // (b.difficulty or 1)), 32)
         for i in range(1, steps + 1):
             b.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
             o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)

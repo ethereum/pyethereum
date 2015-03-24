@@ -349,7 +349,7 @@ class BlockHeader(rlp.Serializable):
         diff = self.difficulty
         if mining_output['mix digest'] != self.mixhash:
             return False
-        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / diff
+        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (diff or 1)
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
