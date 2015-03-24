@@ -1,7 +1,7 @@
 from pyethereum import tester as t
 from pyethereum import blocks, utils, transactions, vm
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from pyethereum import processblock as pb
 import tempfile
 import copy
@@ -128,8 +128,8 @@ def run_vm_test(params, mode):
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
-                                        data='0x' + hexdata))
-        return 1, msg.gas, ''
+                                        data=b'0x' + hexdata))
+        return 1, msg.gas, b''
 
     def sendmsg_wrapper(msg, code):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
@@ -137,8 +137,8 @@ def run_vm_test(params, mode):
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
-                                        data='0x' + hexdata))
-        return 1, msg.gas, ''
+                                        data=b'0x' + hexdata))
+        return 1, msg.gas, b''
 
     def create_wrapper(msg):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
@@ -149,7 +149,7 @@ def run_vm_test(params, mode):
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
-                                        destination='', data='0x' + hexdata))
+                                        destination=b'', data=b'0x' + hexdata))
         return 1, msg.gas, addr
 
     ext.sendmsg = sendmsg_wrapper
@@ -158,7 +158,7 @@ def run_vm_test(params, mode):
 
     def blkhash(n):
         if n >= ext.block_number or n < ext.block_number - 256:
-            return ''
+            return b''
         else:
             return utils.sha3(to_string(n))
 
@@ -186,7 +186,7 @@ def run_vm_test(params, mode):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = '0x' + encode_hex(''.join(map(ascii_chr, output)))
+        params2['out'] = b'0x' + encode_hex(''.join(map(ascii_chr, output)))
         params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(True)['state']
@@ -197,11 +197,11 @@ def run_vm_test(params, mode):
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in list(params1['post'].items()):
-                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params1['post'][k]
         if 'post' in params2:
             for k, v in list(params2['post'].items()):
-                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post']:
@@ -256,11 +256,11 @@ def run_state_test(params, mode):
 
     # execute transactions
     tx = transactions.Transaction(
-        nonce=int(exek['nonce'] or "0"),
-        gasprice=int(exek['gasPrice'] or "0"),
-        startgas=parse_int_or_hex(exek['gasLimit'] or "0"),
-        to=decode_hex(exek['to'][2:] if exek['to'][:2] == '0x' else exek['to']),
-        value=int(exek['value'] or "0"),
+        nonce=int(exek['nonce'] or b"0"),
+        gasprice=int(exek['gasPrice'] or b"0"),
+        startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
+        to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
+        value=int(exek['value'] or b"0"),
         data=decode_hex(exek['data'][2:])).sign(exek['secretKey'])
 
     orig_apply_msg = pb.apply_msg
@@ -269,7 +269,7 @@ def run_state_test(params, mode):
 
         def blkhash(n):
             if n >= blk.number or n < blk.number - 256:
-                return ''
+                return b''
             else:
                 return utils.sha3(to_string(n))
 
@@ -284,19 +284,19 @@ def run_state_test(params, mode):
         success, output = pb.apply_transaction(blk, tx)
         blk.commit_state()
     except pb.InvalidTransaction:
-        success, output = False, ''
+        success, output = False, b''
         blk.commit_state()
         pass
     time_post = time.time()
 
-    if tx.to == '':
+    if tx.to == b'':
         output = blk.get_code(output)
 
     pb.apply_msg = orig_apply_msg
 
     params2 = copy.deepcopy(params)
     if success:
-        params2['out'] = '0x' + encode_hex(output)
+        params2['out'] = b'0x' + encode_hex(output)
         params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
         params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
         params2['postStateRoot'] = encode_hex(blk.state.root_hash)
@@ -307,16 +307,16 @@ def run_state_test(params, mode):
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in list(params1['post'].items()):
-                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params1['post'][k]
         if 'post' in params2:
             for k, v in list(params2['post'].items()):
-                if v == {'code': '0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
-            shouldbe = params1.get(k, None)
-            reallyis = params2.get(k, None)
+            shouldbe = str_to_bytes(params1.get(k, None))
+            reallyis = str_to_bytes(params2.get(k, None))
             if shouldbe != reallyis:
                 raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
 

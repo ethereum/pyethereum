@@ -5,7 +5,7 @@ import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr
+from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr, str_to_bytes
 from pyethereum import db
 import random
 
@@ -48,9 +48,6 @@ def safe_ord(value):
     else:
         return ord(value)
 
-def big_endian_to_int(value):
-    return BigEndianInt().deserialize(value)
-
 # decorator
 
 def debug(label):
@@ -71,7 +68,7 @@ def flatten(li):
         o.extend(l)
     return o
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(x.lstrip(b'\x00'))
+big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 

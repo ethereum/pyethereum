@@ -147,7 +147,7 @@ def apply_transaction(block, tx):
                      startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
         block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
-        output = ''
+        output = b''
         success = 0
     else:
         log_tx.debug('TX SUCCESS', data=data)
@@ -163,7 +163,7 @@ def apply_transaction(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
         if tx.to:
-            output = ''.join(map(ascii_chr, data))
+            output = b''.join(map(ascii_chr, data))
         else:
             output = data
         success = 1
