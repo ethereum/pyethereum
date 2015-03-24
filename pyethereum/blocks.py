@@ -90,7 +90,7 @@ def calc_difficulty(parent, timestamp):
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
-    return max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF))
+    return int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
 
 
 # Auxiliary value for must_* error messages
@@ -555,10 +555,10 @@ class Block(rlp.Serializable):
         if parent:
             must_equal('prev_hash', self.prevhash, parent.hash)
             must_ge('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) /
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) //
                             GASLIMIT_ADJMAX_FACTOR)
             must_le('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) /
+                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) //
                             GASLIMIT_ADJMAX_FACTOR)
         must_equal('gas_used', original_values['gas_used'], self.gas_used)
         must_equal('timestamp', self.timestamp, original_values['timestamp'])
@@ -997,7 +997,8 @@ class Block(rlp.Serializable):
         if len(self.journal) == 0:
             # log_state.trace('delta', changes=[])
             return
-        for address in self.caches['all']:
+        addresses = sorted(list(self.caches['all'].keys()))
+        for address in addresses:
             acct = self._get_acct(address)
 
             # storage
@@ -1136,14 +1137,15 @@ class Block(rlp.Serializable):
 
     def finalize(self):
         """Apply rewards and commit."""
-        self.delta_balance(self.coinbase,
-                           BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
-        self.ether_delta += BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles)
+        delta = int(BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
+        self.delta_balance(self.coinbase, delta)
+        self.ether_delta += delta
 
         for uncle in self.uncles:
             r = BLOCK_REWARD * \
                 (UNCLE_DEPTH_PENALTY_FACTOR + uncle.number - self.number) \
                 / UNCLE_DEPTH_PENALTY_FACTOR
+            r = int(r)
             self.delta_balance(uncle.coinbase, r)
             self.ether_delta += r
         self.commit_state()
@@ -1279,8 +1281,8 @@ def get_cache_memoized(db, seedhash, size):
 # Gas limit adjustment algo
 def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
-    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM / BLKLIM_FACTOR_DEN
-    gl = (prior_contribution + new_contribution) / GASLIMIT_EMA_FACTOR
+    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM // BLKLIM_FACTOR_DEN
+    gl = (prior_contribution + new_contribution) // GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
 
 

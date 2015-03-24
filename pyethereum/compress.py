@@ -16,7 +16,7 @@ def compress(data):
             i += 31
         elif data[i:i + 2] == b'\x00\x00':
             p = 2
-            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'\x00':
+            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'':
                 p += 1
             o += b'\xfe' + ascii_chr(p)
             i += p - 1
@@ -34,7 +34,7 @@ def decompress(data):
         if int_to_bytes(data[i]) == b'\xfe':
             if i == len(data) - 1:
                 raise Exception("Invalid encoding, \\xfe at end")
-            elif int_to_bytes(data[i + 1]) == b'\x00':
+            elif int_to_bytes(data[i + 1]) == b'':
                 o += b'\xfe'
             elif int_to_bytes(data[i + 1]) == b'\x01':
                 o += NULLSHA3
