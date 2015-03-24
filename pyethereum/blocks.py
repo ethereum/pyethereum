@@ -15,8 +15,10 @@ import sys
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
+    ETHASH_LIB = 'pyethash'
 else:
     from functools import lru_cache
+    ETHASH_LIB = 'ethash'
 
 from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
@@ -25,8 +27,6 @@ from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 Log = processblock.Log
-
-ETHASH_LIB = 'pyethash'
 
 if ETHASH_LIB == 'ethash':
     from pyethereum import ethash, ethash_utils
