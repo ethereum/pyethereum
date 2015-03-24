@@ -1,5 +1,6 @@
 import time
 import struct
+import sys
 from pyethereum import blocks
 from pyethereum import processblock
 from pyethereum import utils
@@ -7,7 +8,12 @@ import rlp
 from rlp.utils import encode_hex
 from pyethereum.slogging import get_logger
 log = get_logger('eth.miner')
+
 pyethash = None
+'''if sys.version_info.major == 2:
+    import pyethash
+else:
+    from pyethereum import ethash as pyethash'''
 
 
 class Miner():
@@ -33,9 +39,13 @@ class Miner():
         log.debug('mining', block_number=self.block.number,
                   block_hash=encode_hex(self.block.hash),
                   block_difficulty=self.block.difficulty)
+        
         global pyethash
         if not pyethash:
-            pyethash = __import__('pyethash')
+            if sys.version_info.major == 2:
+                pyethash = __import__('pyethash')
+            else:
+                pyethash = __import__('pyethereum.ethash')
 
     def add_transaction(self, transaction):
         old_state_root = self.block.state_root

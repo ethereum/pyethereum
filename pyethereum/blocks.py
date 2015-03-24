@@ -1,7 +1,7 @@
 import time
 import rlp
 from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from pyethereum import trie
 from pyethereum.trie import Trie
 from pyethereum.securetrie import SecureTrie
@@ -952,7 +952,7 @@ class Block(rlp.Serializable):
         if len(address) == 40:
             address = decode_hex(address)
         assert len(address) == 20
-        CACHE_KEY = 'storage:' + address
+        CACHE_KEY = b'storage:' + address
         if CACHE_KEY in self.caches:
             if index in self.caches[CACHE_KEY]:
                 return self.caches[CACHE_KEY][index]
@@ -973,7 +973,7 @@ class Block(rlp.Serializable):
         if len(address) == 40:
             address = decode_hex(address)
         assert len(address) == 20
-        CACHE_KEY = 'storage:' + address
+        CACHE_KEY = b'storage:' + address
         if CACHE_KEY not in self.caches:
             self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
@@ -1056,7 +1056,7 @@ class Block(rlp.Serializable):
             value = self.caches[field].get(address, getattr(account, field))
             med_dict[field] = to_string(value)
         code = self.caches['code'].get(address, account.code)
-        med_dict['code'] = '0x' + encode_hex(code)
+        med_dict['code'] = b'0x' + encode_hex(code)
 
         storage_trie = SecureTrie(Trie(self.db, account.storage))
         if with_storage_root:
@@ -1064,19 +1064,19 @@ class Block(rlp.Serializable):
         if with_storage:
             med_dict['storage'] = {}
             d = storage_trie.to_dict()
-            subcache = self.caches.get('storage:' + address, {})
+            subcache = self.caches.get(b'storage:' + address, {})
             subkeys = [utils.zpad(utils.coerce_to_bytes(kk), 32)
                        for kk in list(subcache.keys())]
             for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
-                hexkey = '0x' + encode_hex(utils.zunpad(k))
+                hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
                     if v2 != 0:
                         med_dict['storage'][hexkey] = \
-                            '0x' + encode_hex(utils.int_to_big_endian(v2))
+                            b'0x' + encode_hex(utils.int_to_big_endian(v2))
                 elif v is not None:
-                    med_dict['storage'][hexkey] = '0x' + encode_hex(rlp.decode(v))
+                    med_dict['storage'][hexkey] = b'0x' + encode_hex(rlp.decode(v))
 
         return med_dict
 
@@ -1221,13 +1221,13 @@ class Block(rlp.Serializable):
         """
         if self.is_genesis():
             return self.difficulty
-        elif 'difficulty:' + encode_hex(self.hash) in self.db:
-            encoded = self.db.get('difficulty:' + encode_hex(self.hash))
+        elif b'difficulty:' + encode_hex(self.hash) in self.db:
+            encoded = self.db.get(b'difficulty:' + encode_hex(self.hash))
             return utils.decode_int(encoded)
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
             o += sum([uncle.difficulty for uncle in self.uncles])
-            self.state.db.put('difficulty:' + encode_hex(self.hash),
+            self.state.db.put(b'difficulty:' + encode_hex(self.hash),
                               utils.encode_int(o))
             return o
 
@@ -1237,6 +1237,9 @@ class Block(rlp.Serializable):
         """Two blocks are equal iff they have the same hash."""
         return isinstance(other, (Block, CachedBlock)) and  \
                self.hash == other.hash
+
+    def __hash__(self):
+        return utils.big_endian_to_int(self.hash)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -1258,7 +1261,7 @@ cache_cache = {}
 
 
 def peck_cache(db, seedhash, size):
-    key = 'cache:' + seedhash + ',' + to_string(size)
+    key = b'cache:' + seedhash + b',' + str_to_bytes(str(size))
     if key not in db:
         cache = mkcache(size, seedhash)
         cache_cache[key] = cache
@@ -1273,7 +1276,7 @@ def peck_cache(db, seedhash, size):
 
 
 def get_cache_memoized(db, seedhash, size):
-    key = 'cache:' + seedhash + ',' + to_string(size)
+    key = b'cache:' + seedhash + b',' + str_to_bytes(str(size))
     peck_cache(db, seedhash, size)
     return cache_cache[key]
 
@@ -1301,6 +1304,9 @@ class CachedBlock(Block):
 
     def commit_state(self):
         pass
+
+    def __hash__(self):
+        return utils.big_endian_to_int(self.hash())
 
     @property
     def hash(self):
@@ -1363,7 +1369,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
             block.set_nonce(addr, int(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                blk.set_storage_data(addr,
+                block.set_storage_data(addr,
                                      utils.big_endian_to_int(decode_hex(k[2:])),
                                      utils.big_endian_to_int(decode_hex(v[2:])))
     block.commit_state()

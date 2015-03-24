@@ -28,15 +28,15 @@ def decode_int(s):
 
 def encode_int(s):
     a = "%x" % s
-    return '' if s == 0 else decode_hex('0' * (len(a) % 2) + a)[::-1]
+    return b'' if s == 0 else decode_hex('0' * (len(a) % 2) + a)[::-1]
 
 
 def zpad(s, length):
-    return s + '\x00' * max(0, length - len(s))
+    return s + b'\x00' * max(0, length - len(s))
 
 
 def serialize_hash(h):
-    return ''.join([zpad(encode_int(x), 4) for x in h])
+    return b''.join([zpad(encode_int(x), 4) for x in h])
 
 
 def deserialize_hash(h):
@@ -65,7 +65,7 @@ def xor(a, b):
 
 # Works for dataset and cache
 def serialize_cache(ds):
-    return ''.join([serialize_hash(h) for h in ds])
+    return b''.join([serialize_hash(h) for h in ds])
 
 serialize_dataset = serialize_cache
 

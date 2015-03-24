@@ -3,6 +3,7 @@ import threading
 from pyethereum import compress
 from hashlib import md5
 from pyethereum.slogging import get_logger
+from rlp.utils import str_to_bytes
 log = get_logger('db')
 
 databases = {}
@@ -54,7 +55,7 @@ else:
                 value = self.db.get('key', key, with_doc=True)['doc']['value']
             except RecordNotFound:
                 raise KeyError("key not in db")
-            return compress.decompress(value)
+            return compress.decompress(str_to_bytes(value))
 
         def put(self, key, value):
             with self.uncommitted_lock:
@@ -85,6 +86,10 @@ else:
         def __eq__(self, other):
             return isinstance(other, self.__class__) and self.db == other.db
 
+        def __hash__(self):
+            from pyethereum import utils
+            return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
+
         def __repr__(self):
             return '<DB at %d uncommitted=%d>' % (id(self.db), len(self.uncommitted))
 
@@ -114,7 +119,7 @@ else:
                 if self.uncommitted[key] is None:
                     raise KeyError("key not in db")
                 return self.uncommitted[key]
-            o = compress.decompress(self.db.Get(key))
+            o = compress.decompress(str_to_bytes(self.db.Get(key)))
             self.uncommitted[key] = o
             return o
 
@@ -151,6 +156,10 @@ else:
         def __eq__(self, other):
             return isinstance(other, self.__class__) and self.db == other.db
 
+        def __hash__(self):
+            from pyethereum import utils
+            return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
+
         def __repr__(self):
             return '<DB at %d uncommitted=%d>' % (id(self.db), len(self.uncommitted))
 
@@ -183,6 +192,10 @@ class _EphemDB(object):
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.db == other.db
+
+    def __hash__(self):
+        from pyethereum import utils
+        return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
 
 DB = _LevelDB or _CodernityDB

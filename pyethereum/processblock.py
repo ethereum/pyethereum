@@ -4,7 +4,7 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import decode_hex, encode_hex, ascii_chr, bytes_to_str, str_to_bytes
 from pyethereum import opcodes
 from pyethereum import utils
 from pyethereum import transactions
@@ -94,7 +94,7 @@ def apply_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    num_zero_bytes = tx.data.count(ascii_chr(0))
+    num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
     num_non_zero_bytes = len(tx.data) - num_zero_bytes
     intrinsic_gas_used = (opcodes.GTXCOST
                           + opcodes.GTXDATAZERO * num_zero_bytes
