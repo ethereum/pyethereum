@@ -338,6 +338,7 @@ class Trie(object):
             BLANK_NODE if does not exist, otherwise value or hash
         """
         node_type = self._get_node_type(node)
+
         if node_type == NODE_TYPE_BLANK:
             return BLANK_NODE
 
@@ -803,10 +804,9 @@ class Trie(object):
 
         # if value == '':
         #     return self.delete(key)
-
         self.root_node = self._update_and_delete_storage(
             self.root_node,
-            bin_to_nibbles(str(key)),
+            bin_to_nibbles(to_string(key)),
             value)
         self.get_root_hash()
 
