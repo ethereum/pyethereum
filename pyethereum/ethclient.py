@@ -8,7 +8,7 @@ from pyethereum import utils
 from pyethereum import transactions
 import rlp
 from pyethereum import __version__
-from pyethereum config import read_config
+from pyethereum.config import read_config
 from rlp.utils import decode_hex, encode_hex
 
 config = read_config()
