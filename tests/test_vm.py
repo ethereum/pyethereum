@@ -14,23 +14,9 @@ else:
     sys.argv.remove('--notrace')
 
 
-def to_bytes(value):
-    if isinstance(value, str):
-        return str_to_bytes(value)
-    elif isinstance(value, list):
-        return [to_bytes(v) for v in value]
-    elif isinstance(value, dict):
-        ret = {}
-        for k, v in list(value.items()):
-            key = str_to_bytes(k) if len(k) == 40 and isinstance(k, str) else k
-            ret[key] = to_bytes(v)
-        return ret
-    else:
-        return value
-
 def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
-    testutils.check_vm_test(to_bytes(testdata))
+    testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
 
 
 if __name__ == '__main__':

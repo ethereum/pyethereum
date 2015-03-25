@@ -30,7 +30,7 @@ TT256M1 = 2 ** 256 - 1
 OUT_OF_GAS = -1
 
 # contract creating transactions send to an empty address
-CREATE_CONTRACT_ADDRESS = ''
+CREATE_CONTRACT_ADDRESS = b''
 
 
 def verify(block, parent):
@@ -67,7 +67,7 @@ class Log(rlp.Serializable):
         return {
             "bloom": encode_hex(bloom.b64(bloom.bloom_from_list(self.bloomables()))),
             "address": encode_hex(self.address),
-            "data": '0x' + encode_hex(self.data),
+            "data": b'0x' + encode_hex(self.data),
             "topics": [encode_hex(utils.int32.serialize(t))
                        for t in self.topics]
         }
@@ -195,7 +195,7 @@ class VMExt():
         self.add_refund = lambda x: \
             setattr(block, 'refunds', block.refunds + x)
         self.block_hash = lambda x: block.get_ancestor(block.number - x).hash \
-            if (1 <= block.number - x <= 256 and x <= block.number) else ''
+            if (1 <= block.number - x <= 256 and x <= block.number) else b''
         self.block_coinbase = block.coinbase
         self.block_timestamp = block.timestamp
         self.block_number = block.number
@@ -233,6 +233,7 @@ def _apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
+    gas = int(gas)
     assert utils.is_numeric(gas)
     if log_msg.is_active:
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
@@ -268,7 +269,7 @@ def create_contract(ext, msg):
             dat = []
             print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
-        ext._block.set_code(msg.to, ''.join(map(ascii_chr, dat)))
+        ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
-        return 0, gas, ''
+        return 0, gas, b''

@@ -1,12 +1,12 @@
 from pyethereum import tester as t
 from pyethereum import blocks, utils, transactions, vm
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes, bytes_to_str
 from pyethereum import processblock as pb
 import tempfile
 import copy
 from pyethereum.db import DB, EphemDB
-from pyethereum.utils import to_string, safe_ord
+from pyethereum.utils import to_string, safe_ord, int_to_big_endian, big_endian_to_int
 import json
 import os
 import time
@@ -15,12 +15,12 @@ from pyethereum import ethash_utils
 db = EphemDB()
 
 env = {
-    "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+    "currentCoinbase": b"2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
     "currentDifficulty": "256",
     "currentGasLimit": "1000000000",
     "currentNumber": "257",
     "currentTimestamp": "1",
-    "previousHash": "5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+    "previousHash": b"5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
 }
 
 FILL = 1
@@ -40,7 +40,7 @@ time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
 
 def parse_int_or_hex(s):
-    if s[:2] == '0x':
+    if s[:2] == b'0x':
         return utils.big_endian_to_int(decode_hex(s[2:]))
     else:
         return int(s)
@@ -52,7 +52,7 @@ def mktest(code, language, data=None, fun=None, args=None,
     if language == 'evm':
         ca = s.contract('x = 5')
         s.block.set_code(ca, code)
-        d = data or ''
+        d = data or b''
     else:
         c = s.abi_contract(code, language=language)
         d = c._translator.encode(fun, args) if fun else (data or '')
@@ -60,13 +60,13 @@ def mktest(code, language, data=None, fun=None, args=None,
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
-                "code": '0x' + encode_hex(s.block.get_code(ca)),
-                "data": '0x' + encode_hex(d), "gas": to_string(gas),
+                "code": b'0x' + encode_hex(s.block.get_code(ca)),
+                "data": b'0x' + encode_hex(d), "gas": to_string(gas),
                 "gasPrice": to_string(1), "origin": t.a0,
                 "value": to_string(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": '0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
+        tx = {"data": b'0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": to_string(1), "nonce": to_string(s.block.get_nonce(t.a0)),
               "secretKey": encode_hex(t.k0), "to": ca, "value": to_string(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -315,10 +315,10 @@ def run_state_test(params, mode):
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:
-            shouldbe = str_to_bytes(params1.get(k, None))
-            reallyis = str_to_bytes(params2.get(k, None))
+            shouldbe = params1.get(k, None)
+            reallyis = params2.get(k, None)
             if shouldbe != reallyis:
-                raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
+                raise Exception("Mismatch: " + k + ': %r \n\n %r' % (shouldbe, reallyis))
 
     elif mode == TIME:
         return time_post - time_pre
@@ -391,3 +391,20 @@ def get_tests_from_file_or_dir(dname, json_only=False):
             for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
                 o[k] = v
         return o
+
+def fixture_to_bytes(value):
+    if isinstance(value, str):
+        return str_to_bytes(value)
+    elif isinstance(value, list):
+        return [fixture_to_bytes(v) for v in value]
+    elif isinstance(value, dict):
+        ret = {}
+        for k, v in list(value.items()):
+            if isinstance(k, str) and (len(k) == 40 or k[:2] == '0x'):
+                key = str_to_bytes(k)
+            else:
+                key = k
+            ret[key] = fixture_to_bytes(v)
+        return ret
+    else:
+        return value

@@ -103,7 +103,7 @@ def zpad(x, l):
 
 def zunpad(x):
     i = 0
-    while i < len(x) and x[i] == b'\x00':
+    while i < len(x) and (x[i] == 0 or x[i] == '\x00'):
         i += 1
     return x[i:]
 
@@ -207,7 +207,7 @@ def decode_addr(v):
 
 def decode_int(v):
     '''decodes and integer from serialization'''
-    if len(v) > 0 and v[0] == b'\x00':
+    if len(v) > 0 and (v[0] == '\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
@@ -290,7 +290,7 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: '0x' + encode_hex(v),
+    "bin": lambda v: b'0x' + encode_hex(v),
     "addr": lambda v: v,
     "int": lambda v: to_string(v),
     "trie_root": lambda v: encode_hex(v),
@@ -300,7 +300,7 @@ printers = {
 # Decoding from printable format
 scanners = {
     "bin": scan_bin,
-    "addr": lambda x: x[2:] if x[:2] == '0x' else x,
+    "addr": lambda x: x[2:] if x[:2] == b'0x' else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
     "int256b": lambda x: big_endian_to_int(decode_hex(x))
