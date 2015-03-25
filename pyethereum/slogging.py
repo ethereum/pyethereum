@@ -222,7 +222,7 @@ known_loggers = set()  # know to structlog (i.e. maybe not yet initialized w/ lo
 
 def get_logger_names():
     # logging.Logger.manager.loggerDict.keys() # used ones
-    return sorted(known_loggers)  # initialized at module load get_logger
+    return sorted(known_loggers, key=lambda x: '' if not x else x)  # initialized at module load get_logger
 
 
 def get_logger(name=None):
