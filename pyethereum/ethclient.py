@@ -6,9 +6,10 @@ import json
 from docopt import docopt
 from pyethereum import utils
 from pyethereum import transactions
+from pyethereum import testutils
 import rlp
 from pyethereum import __version__
-from pyethereum config import read_config
+from pyethereum.config import read_config
 from rlp.utils import decode_hex, encode_hex
 
 config = read_config()
@@ -46,6 +47,13 @@ def contract(nonce, gasprice, startgas, value, code):
 
 def sign(txdata, key):
     return transactions.Transaction.hex_deserialize(txdata).sign(key).hex_serialize(True)
+
+
+def validate_chain(filename):
+    f = sys.stdin if filename == 'stdin' else open(filename)
+    blks = testutils.get_blocks_from_textdump(f.read().strip())
+    testutils.test_chain_data(blks)
+    return True
 
 
 class APIClient(object):
@@ -201,6 +209,7 @@ def main():
                    applytx=(api.applytx, arguments['<tx_hex>']),
                    sha3=(sha3, arguments['<data>']),
                    privtoaddr=(privtoaddr, arguments['<pkey_hex>']),
+                   validate_chain=(validate_chain, arguments['<filename>']),
                    mkcontract=(contract, arguments['<nonce>'], gasprice, startgas, arguments[
                        '<value>'], arguments['<code_hex>']),
                    mktx=(mktx, arguments['<nonce>'], gasprice, startgas, arguments[

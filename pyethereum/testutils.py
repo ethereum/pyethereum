@@ -318,7 +318,10 @@ def run_state_test(params, mode):
             shouldbe = params1.get(k, None)
             reallyis = params2.get(k, None)
             if shouldbe != reallyis:
-                raise Exception("Mismatch: " + k + ': %r %r' % (shouldbe, reallyis))
+                if k == 'postStateRoot':
+                    print 'sb', params1['post']
+                    print 'ti', params2['post']
+                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' % (shouldbe, reallyis))
 
     elif mode == TIME:
         return time_post - time_pre
@@ -391,3 +394,53 @@ def get_tests_from_file_or_dir(dname, json_only=False):
             for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
                 o[k] = v
         return o
+
+
+def get_blocks_from_textdump(data):
+    if '\n' not in data:
+        r = rlp.decode(decode_hex(data))
+        if len(r[0]) != 3:
+            blocks = [r]
+        else:
+            blocks = r
+    else:
+        blocks = [rlp.decode(decode_hex(ln)) for ln in data.split('\n')]
+    return blocks
+
+
+def test_chain_data(blks, db=None, skip=0):
+    if db is None:
+        db = EphemDB()
+
+    chain_manager = utils.get_chainmanager(db, blocks.genesis(db))
+
+    # Total quantity of ether
+    tot = sum([int(y["balance"]) for x, y in
+               list(chain_manager.head.to_dict(True)["state"].items())])
+
+    # Guaranteed safe funds in each account
+    safe = {x: y["balance"] for x, y in
+            list(chain_manager.head.to_dict(True)["state"].items())}
+
+    # Process blocks sequentially
+    for blk in blks[skip:]:
+        print(blk.number, encode_hex(blk.hash),
+              '%d txs' % len(blk.transaction_list))
+        head = chain_manager.head
+        assert blocks.check_header_pow(blk.header_args)
+        chain_manager.receive_chain([blk])
+        newhead = chain_manager.head
+        newtot = sum([int(y["balance"]) for x, y in
+                      list(newhead.to_dict(True)["state"].items())])
+        if newtot != tot + newhead.ether_delta:
+            raise Exception("Ether balance sum mismatch: %d %d" %
+                            (newtot, tot + newhead.ether_delta))
+        for tx in blk.get_transactions():
+            safe[tx.sender] = max(safe.get(tx.sender, 0) - tx.value, 0)
+        tot = newtot
+        if blk.hash not in chain_manager:
+            print('block could not be added')
+            assert head == chain_manager.head
+            chain_manager.head.deserialize_child(blk.rlpdata)
+            assert blk.hash in chain_manager
+    return safe

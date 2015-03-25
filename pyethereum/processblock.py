@@ -222,6 +222,7 @@ def _apply_msg(ext, msg, code):
     if log_state.is_active:
         log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
+    snapshot = ext._block.snapshot()
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
     if not o:
         log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
@@ -229,7 +230,6 @@ def _apply_msg(ext, msg, code):
         return 1, msg.gas, []
     if msg.code_address in specials.specials:
         return specials.specials[msg.code_address](ext, msg)
-    snapshot = ext._block.snapshot()
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)

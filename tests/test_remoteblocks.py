@@ -11,6 +11,7 @@ import pytest
 import tempfile
 from tests.utils import new_chainmanager
 from pyethereum.slogging import get_logger, configure_logging
+from pyethereum import testutils
 import sys
 logger = get_logger()
 # customize VM log output to your needs
@@ -18,41 +19,12 @@ logger = get_logger()
 configure_logging(':trace')
 
 
-def import_chain_data(raw_blocks_fn, test_db_path, skip=0, formt='lines'):
+def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     db = DB(test_db_path)
-    chain_manager = utils.get_chainmanager(db, blocks.genesis(db))
+    blks = testutils.get_blocks_from_textdump(
+        open(raw_blocks_fn).read().strip())
+    testutils.test_chain_data(blks, db, skip)
 
-    fh = open(raw_blocks_fn).read()
-    if formt == 'rlp':
-        blks = rlp.decode(decode_hex(fh.strip()))
-    elif formt == 'lines':
-        blks = [rlp.decode(decode_hex(h.strip())) for h in fh]
-    tot = sum([int(y["balance"]) for x, y in
-               list(chain_manager.head.to_dict(True)["state"].items())])
-
-    safe = {x: y["balance"] for x, y in
-            list(chain_manager.head.to_dict(True)["state"].items())}
-    for blk in blks:
-        print(blk.number, encode_hex(blk.hash),
-              '%d txs' % len(blk.transaction_list))
-        head = chain_manager.head
-        assert blocks.check_header_pow(blk.header_args)
-        chain_manager.receive_chain([blk])
-        newhead = chain_manager.head
-        newtot = sum([int(y["balance"]) for x, y in
-                      list(newhead.to_dict(True)["state"].items())])
-        if newtot != tot + newhead.ether_delta:
-            raise Exception("Ether balance sum mismatch: %d %d" %
-                            (newtot, tot + newhead.ether_delta))
-        for tx in blk.get_transactions():
-            safe[tx.sender] = max(safe.get(tx.sender, 0) - tx.value, 0)
-        tot = newtot
-        if blk.hash not in chain_manager:
-            print('block could not be added')
-            assert head == chain_manager.head
-            chain_manager.head.deserialize_child(blk.rlpdata)
-            assert blk.hash in chain_manager
-        print(safe)
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
