@@ -32,7 +32,7 @@ def get_chainmanager(db, genesis=None):
 def new_config(data_dir=None):
     cfg = _get_default_config()
     if not data_dir:
-        tempfile.mktemp()
+        data_dir = tempfile.mktemp()
     cfg.set('misc', 'data_dir', data_dir)
     return cfg
 

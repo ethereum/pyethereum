@@ -71,7 +71,7 @@ class Index(object):
     # children ##############
 
     def _child_db_key(self, blk_hash):
-        return 'ci:' + blk_hash
+        return b'ci:' + blk_hash
 
     def add_child(self, parent_hash, child_hash):
         # only efficient for few children per block

@@ -47,7 +47,7 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
     mixhashes = MIX_BYTES // HASH_BYTES
     s = sha3_512(header + nonce[::-1])
     mix = []
-    for _ in range(MIX_BYTES / HASH_BYTES):
+    for _ in range(MIX_BYTES // HASH_BYTES):
         mix.extend(s)
     for i in range(ACCESSES):
         p = fnv(i ^ s[0], mix[i % w]) % (n // mixhashes) * mixhashes

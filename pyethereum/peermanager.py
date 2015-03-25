@@ -210,7 +210,7 @@ class SentFilter(object):
     # filter for 10sseconds
 
     "filters data that should only be sent once"
-    bloom = bloom.bloom_insert(0, '')
+    bloom = bloom.bloom_insert(0, b'')
 
     def add(self, data, peer):
         "returns True if data was previously not added for peer"

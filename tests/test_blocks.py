@@ -1,7 +1,7 @@
 from pyethereum import blocks, utils, db
 from pyethereum.exceptions import VerificationFailed
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, str_to_bytes
 import pytest, os, sys
 import pyethereum.testutils as testutils
 
@@ -60,7 +60,7 @@ def run_block_test(params):
     assert utils.sha3rlp(b.uncles) == \
         utils.scanners['bin'](gbh["uncleHash"])
     h = encode_hex(b.state.root_hash)
-    if h != gbh["stateRoot"]:
+    if h != str_to_bytes(gbh["stateRoot"]):
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
         raise Exception("header hash mismatch")
