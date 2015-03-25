@@ -5,8 +5,9 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import pyethereum.utils as utils
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, str_to_bytes
 import pyethereum.testutils as testutils
+from pyethereum.testutils import fixture_to_bytes
 from tests.utils import new_db
 import serpent
 import sys
@@ -21,24 +22,22 @@ configure_logging(':trace')
 
 
 def run_test(filename, testname, testdata):
+    testdata = fixture_to_bytes(testdata)
     rlpdata = decode_hex(testdata["rlp"][2:])
     o = {}
-    try:
-        tx = rlp.decode(rlpdata, transactions.Transaction)
-        o["sender"] = tx.sender
-        o["transaction"] = {
-            "data": '0x' * (len(tx.data) > 0) + encode_hex(tx.data),
-            "gasLimit": str(tx.startgas),
-            "gasPrice": str(tx.gasprice),
-            "nonce": str(tx.nonce),
-            "r": '0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.r), 32)),
-            "s": '0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.s), 32)),
-            "v": str(tx.v),
-            "value": str(tx.value),
-            "to": encode_hex(str(tx.to)),
-        }
-    except:
-        pass
+    tx = rlp.decode(rlpdata, transactions.Transaction)
+    o["sender"] = tx.sender
+    o["transaction"] = {
+        "data": b'0x' * (len(tx.data) > 0) + encode_hex(tx.data),
+        "gasLimit": str_to_bytes(str(tx.startgas)),
+        "gasPrice": str_to_bytes(str(tx.gasprice)),
+        "nonce": str_to_bytes(str(tx.nonce)),
+        "r": b'0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.r), 32)),
+        "s": b'0x'+encode_hex(utils.zpad(utils.int_to_big_endian(tx.s), 32)),
+        "v": str_to_bytes(str(tx.v)),
+        "value": str_to_bytes(str(tx.value)),
+        "to": encode_hex(tx.to),
+    }
     assert o.get("transaction", None) == testdata.get("transaction", None)
     assert encode_hex(o.get("sender", None)) == testdata.get("sender", None)
 
@@ -65,3 +64,4 @@ else:
         for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = lambda: run_test(filename, testname, testdata)
+
