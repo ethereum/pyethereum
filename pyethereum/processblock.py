@@ -4,7 +4,7 @@ import sys
 import time
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import decode_hex, encode_hex, ascii_chr, bytes_to_str, str_to_bytes
 from pyethereum import opcodes
 from pyethereum import utils
 from pyethereum import transactions
@@ -30,7 +30,7 @@ TT256M1 = 2 ** 256 - 1
 OUT_OF_GAS = -1
 
 # contract creating transactions send to an empty address
-CREATE_CONTRACT_ADDRESS = ''
+CREATE_CONTRACT_ADDRESS = b''
 
 
 def verify(block, parent):
@@ -67,7 +67,7 @@ class Log(rlp.Serializable):
         return {
             "bloom": encode_hex(bloom.b64(bloom.bloom_from_list(self.bloomables()))),
             "address": encode_hex(self.address),
-            "data": '0x' + encode_hex(self.data),
+            "data": b'0x' + encode_hex(self.data),
             "topics": [encode_hex(utils.int32.serialize(t))
                        for t in self.topics]
         }
@@ -94,7 +94,7 @@ def apply_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    num_zero_bytes = tx.data.count(ascii_chr(0))
+    num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
     num_non_zero_bytes = len(tx.data) - num_zero_bytes
     intrinsic_gas_used = (opcodes.GTXCOST
                           + opcodes.GTXDATAZERO * num_zero_bytes
@@ -147,7 +147,7 @@ def apply_transaction(block, tx):
                      startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
         block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
-        output = ''
+        output = b''
         success = 0
     else:
         log_tx.debug('TX SUCCESS', data=data)
@@ -163,7 +163,7 @@ def apply_transaction(block, tx):
         block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
         if tx.to:
-            output = ''.join(map(ascii_chr, data))
+            output = b''.join(map(ascii_chr, data))
         else:
             output = data
         success = 1
@@ -195,7 +195,7 @@ class VMExt():
         self.add_refund = lambda x: \
             setattr(block, 'refunds', block.refunds + x)
         self.block_hash = lambda x: block.get_ancestor(block.number - x).hash \
-            if (1 <= block.number - x <= 256 and x <= block.number) else ''
+            if (1 <= block.number - x <= 256 and x <= block.number) else b''
         self.block_coinbase = block.coinbase
         self.block_timestamp = block.timestamp
         self.block_number = block.number
@@ -233,6 +233,7 @@ def _apply_msg(ext, msg, code):
 
     # Main loop
     res, gas, dat = vm.vm_execute(ext, msg, code)
+    gas = int(gas)
     assert utils.is_numeric(gas)
     if log_msg.is_active:
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
@@ -268,7 +269,7 @@ def create_contract(ext, msg):
             dat = []
             print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
-        ext._block.set_code(msg.to, ''.join(map(ascii_chr, dat)))
+        ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
-        return 0, gas, ''
+        return 0, gas, b''

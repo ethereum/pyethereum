@@ -31,7 +31,7 @@ class CallData(object):
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
         d += [0] * (self.size - len(d))
-        return ''.join([ascii_chr(x) for x in d])
+        return b''.join([ascii_chr(x) for x in d])
 
     def extract32(self, i):
         if i >= self.size:
@@ -198,7 +198,7 @@ def vm_execute(ext, msg, code):
                 trace_data['stack'] = list(map(to_string, list(compustate.stack)))
             if log_vm_op_memory.is_active():
                 trace_data['memory'] = \
-                    ''.join([encode_hex(ascii_chr(x)) for x in compustate.memory])
+                    b''.join([encode_hex(ascii_chr(x)) for x in compustate.memory])
             if log_vm_op_storage.is_active():
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = to_string(compustate.gas + fee)
@@ -301,7 +301,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG PAYING FOR SHA3')
                 if not mem_extend(mem, compustate, op, s0, s1):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = ''.join(map(ascii_chr, mem[s0: s0 + s1]))
+                data = b''.join(map(ascii_chr, mem[s0: s0 + s1]))
                 stk.append(utils.big_endian_to_int(utils.sha3(data)))
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
@@ -342,11 +342,11 @@ def vm_execute(ext, msg, code):
                 stk.append(ext.tx_gasprice)
             elif op == 'EXTCODESIZE':
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
-                stk.append(len(ext.get_code(addr) or ''))
+                stk.append(len(ext.get_code(addr) or b''))
             elif op == 'EXTCODECOPY':
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
-                extcode = ext.get_code(addr) or ''
+                extcode = ext.get_code(addr) or b''
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
@@ -376,7 +376,7 @@ def vm_execute(ext, msg, code):
                 s0 = stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = ''.join(map(ascii_chr, mem[s0: s0 + 32]))
+                data = b''.join(map(ascii_chr, mem[s0: s0 + 32]))
                 stk.append(utils.big_endian_to_int(data))
             elif op == 'MSTORE':
                 s0, s1 = stk.pop(), stk.pop()
@@ -458,7 +458,7 @@ def vm_execute(ext, msg, code):
             compustate.gas -= msz * opcodes.GLOGBYTE
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            data = ''.join(map(ascii_chr, mem[mstart: mstart + msz]))
+            data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(safe_ord, data)))
             print('LOG', msg.to, topics, list(map(safe_ord, data)))
@@ -469,7 +469,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
-                create_msg = Message(msg.to, '', value, compustate.gas, cd, msg.depth + 1)
+                create_msg = Message(msg.to, b'', value, compustate.gas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
@@ -486,7 +486,7 @@ def vm_execute(ext, msg, code):
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
-            to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
+            to = encode_hex(((b'\x00' * (32 - len(to))) + to)[12:])
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
@@ -521,7 +521,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
-                to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
+                to = encode_hex(((b'\x00' * (32 - len(to))) + to)[12:])
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, 
                                    msg.depth + 1, code_address=to)
@@ -543,7 +543,7 @@ def vm_execute(ext, msg, code):
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
-            to = encode_hex((('\x00' * (32 - len(to))) + to)[12:])
+            to = encode_hex(((b'\x00' * (32 - len(to))) + to)[12:])
             xfer = ext.get_balance(msg.to)
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
@@ -558,7 +558,7 @@ def vm_execute(ext, msg, code):
 class VmExtBase():
 
     def __init__(self):
-        self.get_code = lambda addr: ''
+        self.get_code = lambda addr: b''
         self.get_balance = lambda addr: 0
         self.set_balance = lambda addr, balance: 0
         self.set_storage_data = lambda addr, key, value: 0
@@ -573,7 +573,7 @@ class VmExtBase():
         self.block_difficulty = 0
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: 0
-        self.tx_origin = '0' * 40
+        self.tx_origin = b'0' * 40
         self.tx_gasprice = 0
         self.create = lambda msg: 0, 0, 0
         self.call = lambda msg: 0, 0, 0

@@ -6,7 +6,7 @@ from pyethereum import utils
 from pyethereum.utils import to_string
 from pyethereum.abi import is_string
 import copy
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 
 bin_to_nibbles_cache = {}
 
@@ -37,7 +37,7 @@ def nibbles_to_bin(nibbles):
     if len(nibbles) % 2:
         raise Exception("nibbles must be of even numbers")
 
-    res = ''
+    res = b''
     for i in range(0, len(nibbles), 2):
         res += ascii_chr(16 * nibbles[i] + nibbles[i + 1])
     return res
@@ -729,7 +729,7 @@ class Trie(object):
 
         if is_key_value_type(node_type):
             nibbles = without_terminator(unpack_to_nibbles(node[0]))
-            key = '+'.join([to_string(x) for x in nibbles])
+            key = b'+'.join([to_string(x) for x in nibbles])
             if node_type == NODE_TYPE_EXTENSION:
                 sub_dict = self._to_dict(self._decode_to_node(node[1]))
             else:
@@ -738,7 +738,7 @@ class Trie(object):
             # prepend key of this node to the keys of children
             res = {}
             for sub_key, sub_value in sub_dict.items():
-                full_key = '{0}+{1}'.format(key, sub_key).strip('+')
+                full_key = (key + b'+' + sub_key).strip(b'+')
                 res[full_key] = sub_value
             return res
 
@@ -748,7 +748,7 @@ class Trie(object):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
                 for sub_key, sub_value in sub_dict.items():
-                    full_key = '{0}+{1}'.format(i, sub_key).strip('+')
+                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
                     res[full_key] = sub_value
 
             if node[16]:
@@ -760,7 +760,7 @@ class Trie(object):
         res = {}
         for key_str, value in d.items():
             if key_str:
-                nibbles = [int(x) for x in key_str.split('+')]
+                nibbles = [int(x) for x in key_str.split(b'+')]
             else:
                 nibbles = []
             key = nibbles_to_bin(without_terminator(nibbles))

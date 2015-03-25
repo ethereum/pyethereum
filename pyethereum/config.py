@@ -24,7 +24,7 @@ def default_client_version():
 
 
 def default_node_id():
-    x = encode_hex(sha3(to_string(uuid.uuid1())) * 2)
+    x = encode_hex(sha3(to_string(str(uuid.uuid1()))) * 2)
     assert len(x) == 128
     return x
 

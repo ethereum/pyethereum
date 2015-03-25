@@ -7,6 +7,7 @@ import itertools
 from pyethereum.slogging import get_logger, configure_logging
 from rlp.utils import decode_hex, encode_hex
 from pyethereum.abi import is_string
+from pyethereum.testutils import fixture_to_bytes
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -29,7 +30,7 @@ def load_tests():
             "Make sure you did 'git submodule init'")
     expected_keys = set(['jeff', 'emptyValues', 'branchingTests'])
     assert set(fixture.keys()) == expected_keys, ("test data changed!", list(fixture.keys()))
-    return fixture
+    return fixture_to_bytes(fixture)
 
 
 def run_test(name):
@@ -38,7 +39,7 @@ def run_test(name):
     pairs = load_tests()[name]
 
     def _dec(x):
-        if is_string(x) and x.startswith('0x'):
+        if is_string(x) and x.startswith(b'0x'):
             return decode_hex(x[2:])
         return x
 
@@ -59,7 +60,7 @@ def run_test(name):
         # make sure we have deletes at the end
         for k,v in deletes:
             t.delete(k)
-        assert pairs['root'] == '0x'+encode_hex(t.root_hash), (i, list(permut) + deletes)
+        assert pairs['root'] == b'0x'+encode_hex(t.root_hash), (i, list(permut) + deletes)
 
 
 def test_emptyValues():

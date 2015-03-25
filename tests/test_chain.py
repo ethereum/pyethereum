@@ -20,14 +20,14 @@ configure_logging('eth.vm:trace,eth.vm.memory:info')
 
 db = EphemDB()
 
-blocks.peck_cache(db, '\x00' * 32, ethash_utils.get_cache_size(0))
+blocks.peck_cache(db, b'\x00' * 32, ethash_utils.get_cache_size(0))
 
 
 @pytest.fixture(scope="module")
 def accounts():
-    k = utils.sha3('cow')
+    k = utils.sha3(b'cow')
     v = decode_hex(utils.privtoaddr(k))
-    k2 = utils.sha3('horse')
+    k2 = utils.sha3(b'horse')
     v2 = decode_hex(utils.privtoaddr(k2))
     return k, v, k2, v2
 
@@ -70,12 +70,12 @@ def test_db():
     a, b = db, db
     assert a == b
     assert a.uncommitted == b.uncommitted
-    a.put('a', 'b')
-    b.get('a') == 'b'
+    a.put(b'a', b'b')
+    b.get(b'a') == b'b'
     assert a.uncommitted == b.uncommitted
     a.commit()
     assert a.uncommitted == b.uncommitted
-    assert 'test' not in db
+    assert b'test' not in db
     db = new_db()
     assert a != db
 

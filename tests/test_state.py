@@ -21,7 +21,7 @@ def gen_func(filename, testname, testdata):
 
 def do_test_state(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
-    testutils.check_state_test(testdata)
+    testutils.check_state_test(testutils.fixture_to_bytes(testdata))
 
 
 if __name__ == '__main__':
@@ -42,7 +42,10 @@ if __name__ == '__main__':
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'StateTests'))
-    for filename, tests in list(fixtures.items()):
+
+    filenames = sorted(list(fixtures.keys()))
+    for filename in filenames:
+        tests = fixtures[filename]
         if 'stQuadraticComplexityTest.json' in filename or \
                 'stMemoryStressTest.json' in filename:
             continue
