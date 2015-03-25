@@ -68,7 +68,7 @@ class state():
             serpent = __import__('serpent')
 
         self.temp_data_dir = tempfile.mkdtemp()
-        self.db = db.DB(u.db_path(self.temp_data_dir))
+        self.db = db.EphemDB()
 
         o = {}
         for i in range(num_accounts):
@@ -231,8 +231,10 @@ class state():
     def mine(self, n=1, coinbase=a0):
         for i in range(n):
             self.block.finalize()
+            self.block.commit_state()
             t = self.block.timestamp + 6 + rand() % 12
-            self.block = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
+            x = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
+            self.block = x
             self.blocks.append(self.block)
 
     def snapshot(self):

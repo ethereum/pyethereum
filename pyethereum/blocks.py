@@ -738,7 +738,7 @@ class Block(rlp.Serializable):
 
     def _get_acct(self, address):
         """Get the account with the given address.
-        
+
         Note that this method ignores cached account items.
         """
         if len(address) == 40:
@@ -998,15 +998,15 @@ class Block(rlp.Serializable):
             # log_state.trace('delta', changes=[])
             return
         addresses = sorted(list(self.caches['all'].keys()))
-        for address in addresses:
-            acct = self._get_acct(address)
+        for addr in addresses:
+            acct = self._get_acct(addr)
 
             # storage
             t = SecureTrie(Trie(self.db, acct.storage))
-            for k, v in self.caches.get(b'storage:' + address, {}).items():
+            for k, v in self.caches.get(b'storage:' + addr, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
-                changes.append(['storage', address, k, v])
+                changes.append(['storage', addr, k, v])
                 if v:
                     t.update(enckey, val)
                 else:
@@ -1014,11 +1014,11 @@ class Block(rlp.Serializable):
             acct.storage = t.root_hash
 
             for field in ('balance', 'nonce', 'code'):
-                if address in self.caches[field]:
-                    v = self.caches[field][address]
-                    changes.append([field, address, v])
+                if addr in self.caches[field]:
+                    v = self.caches[field][addr]
+                    changes.append([field, addr, v])
                     setattr(acct, field, v)
-            self.state.update(address, rlp.encode(acct))
+            self.state.update(addr, rlp.encode(acct))
         log_state.trace('delta', changes=changes)
         self.reset_cache()
 

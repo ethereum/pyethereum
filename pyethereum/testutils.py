@@ -318,9 +318,6 @@ def run_state_test(params, mode):
             shouldbe = params1.get(k, None)
             reallyis = params2.get(k, None)
             if shouldbe != reallyis:
-                if k == 'postStateRoot':
-                    print 'sb', params1['post']
-                    print 'ti', params2['post']
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' % (shouldbe, reallyis))
 
     elif mode == TIME:

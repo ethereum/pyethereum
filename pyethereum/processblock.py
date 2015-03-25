@@ -228,11 +228,11 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                       want=msg.value)
         return 1, msg.gas, []
-    if msg.code_address in specials.specials:
-        return specials.specials[msg.code_address](ext, msg)
-
     # Main loop
-    res, gas, dat = vm.vm_execute(ext, msg, code)
+    if msg.code_address in specials.specials:
+        res, gas, dat = specials.specials[msg.code_address](ext, msg)
+    else:
+        res, gas, dat = vm.vm_execute(ext, msg, code)
     gas = int(gas)
     assert utils.is_numeric(gas)
     if log_msg.is_active:
