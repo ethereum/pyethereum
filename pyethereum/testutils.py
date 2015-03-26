@@ -307,11 +307,11 @@ def run_state_test(params, mode):
         params1 = copy.deepcopy(params)
         if 'post' in params1:
             for k, v in list(params1['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': b'0', 'balance': b'0', 'storage': {}}:
                     del params1['post'][k]
         if 'post' in params2:
             for k, v in list(params2['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
+                if v == {'code': b'0x', 'nonce': b'0', 'balance': b'0', 'storage': {}}:
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post', 'postStateRoot']:

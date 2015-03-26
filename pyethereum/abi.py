@@ -1,6 +1,6 @@
 import sys, re, json
 from  pyethereum import utils
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, str_to_bytes, bytes_to_str
 from pyethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
 
 if sys.version_info.major == 2:
@@ -18,7 +18,7 @@ if sys.version_info.major == 2:
             return x
 else:
     def json_decode(x):
-        return json.loads(x)
+        return json.loads(bytes_to_str(x))
 
 
 class ContractTranslator():
@@ -42,7 +42,7 @@ class ContractTranslator():
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
-            sig = name + '(' + ','.join(encode_types) + ')'
+            sig = str_to_bytes(name + '(' + ','.join(encode_types) + ')')
             if sig_item['type'] == 'function':
                 prefix = big_endian_to_int(utils.sha3(sig)[:4])
                 decode_types = [f['type'] for f in sig_item['outputs']]
@@ -127,7 +127,7 @@ def decint(n):
 
 # Encodes a base type
 def encode_single(arg, base, sub):
-    normal_args, len_args, var_args = '', '', ''
+    normal_args, len_args, var_args = b'', b'', b''
     # Unsigned integers: uint<sz>
     if base == 'uint':
         sub = int(sub)
@@ -159,7 +159,7 @@ def encode_single(arg, base, sub):
         if len(sub):
             assert int(sub) <= 32
             assert len(arg) <= int(sub)
-            normal_args = arg + '\x00' * (32 - len(arg))
+            normal_args = arg + b'\x00' * (32 - len(arg))
         # Variable length: string
         else:
             len_args = zpad(encode_int(len(arg)), 32)
@@ -186,6 +186,7 @@ def encode_single(arg, base, sub):
             normal_args = zpad(decode_hex(arg), 32)
         else:
             raise Exception("Could not parse address: %r" % arg)
+
     return len_args, normal_args, var_args
 
 
@@ -243,31 +244,31 @@ def encode_any(arg, base, sub, arrlist):
         if base == 'string' and sub == '':
             raise Exception('Array of dynamic-sized items not allowed: %r'
                             % arg)
-        o = ''
+        o = b''
         assert isinstance(arg, list), "Expecting array: %r" % arg
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return zpad(encode_int(len(arg)), 32), '', o
+        return zpad(encode_int(len(arg)), 32), b'', o
     # Fixed-sized arrays
     else:
-        if base == 'string' and sub == '':
+        if base == 'string' and sub == b'':
             raise Exception('Array of dynamic-sized items not allowed')
         sz = int(arrlist[-1][1:-1])
         assert isinstance(arg, list), "Expecting array: %r" % arg
         assert sz == len(arg), "Wrong number of elements in array: %r" % arg
-        o = ''
+        o = b''
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return '', o, ''
+        return b'', o, b''
 
 
 # Encodes ABI data given a prefix, a list of types, and a list of arguments
 def encode_abi(types, args):
-    len_args = ''
-    normal_args = ''
-    var_args = ''
+    len_args = b''
+    normal_args = b''
+    var_args = b''
     if len(types) != len(args):
         raise Exception("Wrong number of arguments!")
     for typ, arg in zip(types, args):

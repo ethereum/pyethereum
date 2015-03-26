@@ -11,7 +11,7 @@ def proc_ecrecover(ext, msg):
         return 0, 0, []
     b = [0] * 32
     msg.data.extract_copy(b, 0, 0, 32)
-    h = ''.join([ascii_chr(x) for x in b])
+    h = b''.join([ascii_chr(x) for x in b])
     v = msg.data.extract32(32)
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)
@@ -25,7 +25,7 @@ def proc_ecrecover(ext, msg):
 def proc_sha256(ext, msg):
     print('sha256 proc', msg.gas)
     OP_GAS = opcodes.GSHA256BASE + \
-        (utils.ceil32(msg.data.size) / 32) * opcodes.GSHA256WORD
+        (utils.ceil32(msg.data.size) // 32) * opcodes.GSHA256WORD
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
@@ -37,7 +37,7 @@ def proc_sha256(ext, msg):
 def proc_ripemd160(ext, msg):
     print('ripemd160 proc', msg.gas)
     OP_GAS = opcodes.GRIPEMD160BASE + \
-        (utils.ceil32(msg.data.size) / 32) * opcodes.GRIPEMD160WORD
+        (utils.ceil32(msg.data.size) // 32) * opcodes.GRIPEMD160WORD
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
@@ -49,7 +49,7 @@ def proc_ripemd160(ext, msg):
 def proc_identity(ext, msg):
     print('identity proc', msg.gas)
     OP_GAS = opcodes.GIDENTITYBASE + \
-        opcodes.GIDENTITYWORD * (utils.ceil32(msg.data.size) / 32)
+        opcodes.GIDENTITYWORD * (utils.ceil32(msg.data.size) // 32)
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
@@ -58,10 +58,10 @@ def proc_identity(ext, msg):
     return 1, msg.gas - gas_cost, o
 
 specials = {
-    '0000000000000000000000000000000000000001': proc_ecrecover,
-    '0000000000000000000000000000000000000002': proc_sha256,
-    '0000000000000000000000000000000000000003': proc_ripemd160,
-    '0000000000000000000000000000000000000004': proc_identity,
+    b'0000000000000000000000000000000000000001': proc_ecrecover,
+    b'0000000000000000000000000000000000000002': proc_sha256,
+    b'0000000000000000000000000000000000000003': proc_ripemd160,
+    b'0000000000000000000000000000000000000004': proc_identity,
 }
 
 if __name__ == '__main__':

@@ -114,6 +114,7 @@ class state():
                     def kall(*args, **kwargs):
                         _state.block.log_listeners.append(
                             lambda log: self._translator.listen(log))
+
                         o = _state._send(kwargs.get('sender', k0),
                                          self.address,
                                          kwargs.get('value', 0),
@@ -121,6 +122,7 @@ class state():
                                          **dict_without(kwargs, 'sender',
                                                         'value', 'output'))
                         _state.block.log_listeners.pop()
+
                         # Compute output data
                         if kwargs.get('output', '') == 'raw':
                             outdata = o['output']

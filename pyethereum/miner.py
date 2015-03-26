@@ -100,8 +100,8 @@ class Miner():
         for i in range(1, steps + 1):
             b.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
             o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
-            if o["result"] <= target:
-                b.mixhash = o["mix digest"]
+            if o[b"result"] <= target:
+                b.mixhash = o[b"mix digest"]
                 break
             steps -= 1
         if b.header.check_pow():
