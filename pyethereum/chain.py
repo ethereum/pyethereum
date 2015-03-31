@@ -116,7 +116,7 @@ class Chain(object):
 
     @property
     def head(self):
-        if not self.blockchain or 'HEAD' not in self.blockchain:
+        if self.blockchain is None or 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
         ptr = self.blockchain.get('HEAD')
         return blocks.get_block(self.blockchain, ptr)

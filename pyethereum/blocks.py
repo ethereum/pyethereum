@@ -468,7 +468,7 @@ class Block(rlp.Serializable):
 
 
     def __init__(self, header, transaction_list=[], uncles=[], db=None, parent=None):
-        if not db:
+        if db is None:
             raise TypeError("No database object given")
         self.db = db
         self.header = header
