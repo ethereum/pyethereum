@@ -54,7 +54,7 @@ else:
 # Genesis block difficulty
 GENESIS_DIFFICULTY = 131072
 # Genesis block gas limit
-GENESIS_GAS_LIMIT = 10 ** 6
+GENESIS_GAS_LIMIT = 3141592
 # Genesis block prevhash, coinbase, nonce
 GENESIS_PREVHASH = b'\x00' * 32
 GENESIS_COINBASE = b'\x00' * 20
@@ -371,7 +371,7 @@ class BlockHeader(rlp.Serializable):
 def mirror_from(source, attributes, only_getters=True):
     """Decorator (factory) for classes that mirror some attributes from an
     instance variable.
-    
+
     :param source: the name of the instance variable to mirror from
     :param attributes: list of attribute names to mirror
     :param only_getters: if true only getters but not setters are created
@@ -386,9 +386,9 @@ def mirror_from(source, attributes, only_getters=True):
                 return getter, setter
             getter, setter = make_gs_etter(source, attribute)
             if only_getters:
-                setattr(cls, attribute, property(getter)) 
+                setattr(cls, attribute, property(getter))
             else:
-                setattr(cls, attribute, property(getter, setter)) 
+                setattr(cls, attribute, property(getter, setter))
         return cls
     return decorator
 
