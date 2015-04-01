@@ -6,6 +6,7 @@ import pyethereum.blocks as blocks
 import pyethereum.transactions as transactions
 import rlp
 from rlp.utils import decode_hex, encode_hex
+import pyethereum.chain as chain
 import pyethereum.trie as trie
 import pyethereum.miner as miner
 import pyethereum.utils as utils
@@ -43,9 +44,10 @@ def mkquickgenesis(initial_alloc={}, db=db):
 
 
 def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
-    m = miner.Miner(parent, uncles, coinbase or parent.coinbase)
+    c = chain.Chain(db=parent.db, genesis=parent, coinbase=coinbase or parent.coinbase)
     for t in transactions:
-        m.add_transaction(t)
+        c.add_transaction(t)
+    m = miner.Miner(c.head_candidate)
     b = m.mine()
     assert b.header.check_pow()
     return b

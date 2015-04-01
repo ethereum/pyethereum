@@ -42,17 +42,24 @@ class ChainManager(StoppableLoopThread):
         super(ChainManager, self).__init__()
 
     def configure(self, config, genesis=None, db=None):
-        config = config
+        self.config = config
         if not db:
             db_path = utils.db_path(config.get('misc', 'data_dir'))
             log.info('opening chain', db_path=db_path)
             db = DB(db_path)
-        self.chain = Chain(db, genesis, new_head_cb=self._on_new_head)
-        self.new_miner()
+        coinbase = decode_hex(config.get('wallet', 'coinbase'))
+        self.chain = Chain(db, genesis, new_head_cb=self._on_new_head, coinbase=coinbase)
         self.synchronizer = Synchronizer(self)
 
     def _on_new_head(self, block):
-        self.new_miner()  # reset mining
+        """Called when a new block is added to the chain.
+        
+        This will reset the mining and initiate firther broadcasting of the
+        new head.
+
+        :param block: the new chain head
+        """
+        self.miner = Miner(self.chain.head_candidate) # reset mining
         # if we are not syncing, forward all blocks
         if not self.synchronizer.synchronization_tasks:
             log.debug("broadcasting new head", block=block)
@@ -69,29 +76,6 @@ class ChainManager(StoppableLoopThread):
         else:
             time.sleep(.01)
 
-    def new_miner(self):
-        "new miner is initialized if HEAD is updated"
-        if not self.config:
-            return  # not configured yet
-
-        # prepare uncles
-        uncles = set(self.chain.get_uncles(self.chain.head))
-        blk = self.chain.head
-        for i in range(8):
-            for u in blk.uncles:  # assuming uncle headers
-                u = utils.sha3(rlp.encode(u))
-                if u in self:
-                    uncles.discard(self.chain.get(u))
-            if blk.has_parent():
-                blk = blk.get_parent()
-
-        coinbase = decode_hex(self.config.get('wallet', 'coinbase'))
-        miner = Miner(self.chain.head, uncles, coinbase)
-        if self.miner:
-            for tx in self.miner.get_transactions():
-                miner.add_transaction(tx)
-        self.miner = miner
-
     def mine(self):
         with self.lock:
             block = self.miner.mine()
@@ -99,7 +83,6 @@ class ChainManager(StoppableLoopThread):
                 # create new block
                 if not self.chain.add_block(block):
                     log.debug("newly mined block is invalid!?", block_hash=block)
-                    self.new_miner()
 
     def receive_chain(self, transient_blocks, peer=None):
         with self.lock:
@@ -159,21 +142,6 @@ class ChainManager(StoppableLoopThread):
                     success = self.chain.add_block(block)
                     if success:
                         log.debug('added', block_hash=block)
-
-    def add_transaction(self, transaction):
-        _log = log.bind(tx_hash=transaction)
-        _log.debug("add transaction")
-        with self.lock:
-            res = self.miner.add_transaction(transaction)
-            if res:
-                _log.debug("broadcasting valid")
-                signals.send_local_transactions.send(
-                    sender=None, transactions=[transaction])
-            return res
-
-    def get_transactions(self):
-        log.debug("get_transactions called")
-        return self.miner.get_transactions()
 
 
 chain_manager = ChainManager()
