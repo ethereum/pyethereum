@@ -690,6 +690,11 @@ class Block(rlp.Serializable):
             return False
         if len(self.uncles) > 2:
             return False
+        for uncle in self.uncles:
+            assert db is None or uncle.prevhash in self.db
+            if uncle.number == self.number:
+                log.warn("uncle at same block height", block=self)
+
         # Check uncle validity
         ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
         ineligible = []
@@ -698,12 +703,14 @@ class Block(rlp.Serializable):
         for ancestor in ancestor_chain[1:]:
             ineligible.extend(ancestor.uncles)
         ineligible.extend([b.header for b in ancestor_chain])
-        eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
+        eligible_ancestor_hashes = [x.hash for x in ancestor_chain[1:]]
         for uncle in self.uncles:
             if not uncle.check_pow(db=db):
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
-                log.error("Uncle does not have a valid ancestor", block=self)
+                log.error("Uncle does not have a valid ancestor", block=self,
+                          eligible=[x.encode('hex') for x in eligible_ancestor_hashes],
+                          uncle_prevhash=uncle.prevhash.encode('hex'))
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
