@@ -102,8 +102,8 @@ class Chain(object):
         self.db = self.blockchain = db
         self.new_head_cb = new_head_cb
         self.index = Index(db)
-        self.coinbase = coinbase
         self.head_candidate = None
+        self._coinbase = coinbase
         self.lock = threading.Lock()
         if genesis:
             self._initialize_blockchain(genesis)
@@ -123,6 +123,17 @@ class Chain(object):
         assert genesis.hash in self
 
     @property
+    def coinbase(self):
+        assert self.head_candidate.coinbase == self._coinbase
+        return self._coinbase
+
+    @coinbase.setter
+    def coinbase(self, value):
+        self._coinbase = value
+        # block reward goes to different address => redo finalization of head candidate
+        self._update_head(self.head)
+
+    @property
     def head(self):
         if self.blockchain is None or 'HEAD' not in self.blockchain:
             self._initialize_blockchain()
@@ -131,7 +142,7 @@ class Chain(object):
 
     def _update_head(self, block):
         if not block.is_genesis():
-            assert self.head.chain_difficulty() < block.chain_difficulty()
+            #assert self.head.chain_difficulty() < block.chain_difficulty()
             if block.get_parent() != self.head:
                 log.debug('New Head is on a different branch',
                           head_hash=block, old_head_hash=self.head)
@@ -141,7 +152,7 @@ class Chain(object):
         # update head candidate
         transactions = self.get_transactions()
         blk = self.head
-        uncles = set(self.get_uncles(blk))
+        uncles = set(u.header for u in self.get_brothers(self.head))
         for i in range(8):
             for u in blk.uncles:  # assuming uncle headers
                 u = utils.sha3(rlp.encode(u))
@@ -151,7 +162,7 @@ class Chain(object):
                 blk = blk.get_parent()
         uncles = list(uncles)
         ts = max(int(time.time()), block.timestamp + 1)
-        self.head_candidate = blocks.Block.init_from_parent(block, coinbase=self.coinbase,
+        self.head_candidate = blocks.Block.init_from_parent(block, coinbase=self._coinbase,
                                                             timestamp=ts, uncles=uncles)
         self.pre_finalize_state_root = self.head_candidate.state_root
         self.head_candidate.finalize()
@@ -233,18 +244,23 @@ class Chain(object):
     def get_children(self, block):
         return [self.get(c) for c in self.index.get_children(block.hash)]
 
-    def get_uncles(self, block):
-        if not block.has_parent():
-            return []
-        parent = block.get_parent()
+    def get_brothers(self, block):
+        """Return the uncles of the hypothetical child of `block`."""
         o = []
         i = 0
-        while parent.has_parent() and i < 6:
-            grandparent = parent.get_parent()
-            o.extend([u for u in self.get_children(grandparent) if u != parent])
-            parent = grandparent
+        while block.has_parent() and i < 6:
+            parent = block.get_parent()
+            o.extend([u for u in self.get_children(parent) if u != block])
+            block = parent
             i += 1
         return o
+
+    def get_uncles(self, block):
+        """Return the uncles of `block`."""
+        if not block.has_parent():
+            return []
+        else:
+            return self.get_brothers(block.get_parent())
 
     def add_transaction(self, transaction):
         """Add a transaction to the :attr:`head_candidate` block.
