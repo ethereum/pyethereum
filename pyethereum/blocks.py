@@ -1284,13 +1284,14 @@ def get_cache_memoized(db, seedhash, size):
 # Gas limit adjustment algo
 def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
-    new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM // BLKLIM_FACTOR_DEN
+    new_contribution = (parent.gas_used * BLKLIM_FACTOR_NOM) // BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) // GASLIMIT_EMA_FACTOR
+    assert check_gaslimit(parent, gl)
     return max(gl, MIN_GAS_LIMIT)
 
 def check_gaslimit(parent, gas_limit):
     #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
-    a = bool(abs(gas_limit - parent.gas_limit) >= parent.gas_limit // GASLIMIT_EMA_FACTOR)
+    a = bool(abs(gas_limit - parent.gas_limit) <= parent.gas_limit // GASLIMIT_EMA_FACTOR)
     b = bool(gas_limit >= MIN_GAS_LIMIT)
     return a and b
 
