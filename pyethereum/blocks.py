@@ -331,7 +331,7 @@ class BlockHeader(rlp.Serializable):
         :returns: `True` or `False`
         """
         nonce = nonce or self.nonce
-        if not db:
+        if db is None:
             assert self.block is not None
             db = self.block.db
         if len(self.mixhash) != 32 or len(self.nonce) != 8:
@@ -684,7 +684,7 @@ class Block(rlp.Serializable):
             txs.append(self.get_transaction(i))
         return txs
 
-    def validate_uncles(self):
+    def validate_uncles(self, db=None):
         """Validate the uncles of this block."""
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             return False
@@ -700,7 +700,7 @@ class Block(rlp.Serializable):
         ineligible.extend([b.header for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            if not uncle.check_pow():
+            if not uncle.check_pow(db=db):
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
                 log.error("Uncle does not have a valid ancestor", block=self)

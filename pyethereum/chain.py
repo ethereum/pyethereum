@@ -159,7 +159,7 @@ class Chain(object):
             _log.debug('missing parent')
             return False
 
-        if not block.validate_uncles():
+        if not block.validate_uncles(self.db):
             _log.debug('invalid uncles')
             return False
 
@@ -261,5 +261,5 @@ class Chain(object):
         log.debug("get_descendants", block_hash=block)
         assert block.hash in self
         block_numbers = list(range(block.number + 1, min(self.head.number + 1,
-                                                    block.number + count + 1)))
+                                                         block.number + count + 1)))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
