@@ -102,8 +102,8 @@ def get_packeter():
 def test_status():
     p = get_packeter()
     total_difficulty = 1000
-    head_hash = utils.sha3('head')
-    genesis_hash = utils.sha3('genesis')
+    head_hash = utils.sha3(b'head')
+    genesis_hash = utils.sha3(b'genesis')
     msg = p.dump_Status(total_difficulty, head_hash, genesis_hash)
     success, res = p.load_packet(msg)
     assert success

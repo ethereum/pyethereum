@@ -4,6 +4,7 @@ import tempfile
 import pyethereum.trie as trie
 from tests.utils import new_db
 from pyethereum.slogging import get_logger, configure_logging
+from pyethereum.testutils import fixture_to_bytes
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -29,14 +30,14 @@ def run_test(name):
 
     logger.debug('testing %s' % name)
     t = trie.Trie(new_db())
-    data = load_tests()[name]
+    data = fixture_to_bytes(load_tests()[name])
 
     for k in data['in']:
         logger.debug('updating with (%s, %s)' %(k, k))
         t.update(k, k)
     for point, prev, nxt in data['tests']:
-        assert nxt == (t.next(point) or '')
-        assert prev == (t.prev(point) or '')
+        assert nxt == (t.next(point) or b'')
+        assert prev == (t.prev(point) or b'')
 
 
 def test_basic():

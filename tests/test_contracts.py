@@ -12,7 +12,7 @@ tester.set_logging_level(2)
 
 
 # Test EVM contracts
-serpent_code = '''
+serpent_code = b'''
 def main(a,b):
     return(a ^ b)
 '''
@@ -207,11 +207,11 @@ def main(k, v):
 def test_namecoin():
     s = tester.state()
     c = s.abi_contract(namecoin_code)
-    o1 = c.main("george", 45)
+    o1 = c.main(b"george", 45)
     assert o1 == 1
-    o2 = c.main("george", 20)
+    o2 = c.main(b"george", 20)
     assert o2 == 0
-    o3 = c.main("harry", 60)
+    o3 = c.main(b"harry", 60)
     assert o3 == 1
 
     assert s.block.to_dict()
@@ -958,8 +958,8 @@ def test_saveload2():
     s = tester.state()
     c = s.contract(saveload_code2)
     s.send(tester.k0, c, 0)
-    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == '01ab' + '\x00' * 28
-    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == '01ab' + '\x00' * 28
+    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == b'01ab' + b'\x00' * 28
+    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == b'01ab' + b'\x00' * 28
 
 
 sdiv_code = """
@@ -1089,7 +1089,7 @@ def kall(a:arr, b, c:arr, d:str, e):
 def test_multiarg_code():
     s = tester.state()
     c = s.abi_contract(multiarg_code)
-    o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
+    o = c.kall([1, 2, 3], 4, [5, 6, 7], b"doge", 8)
     assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
 
 peano_code = """
@@ -1198,10 +1198,10 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
+    priv = encode_hex(utils.sha3(b'some big long brainwallet password'))
     pub = bitcoin.privtopub(priv)
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
+    msghash = encode_hex(utils.sha3(b'the quick brown fox jumps over the lazy dog'))
     V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
@@ -1356,8 +1356,9 @@ def mcopy_test(foo:str, a, b, c):
 def test_mcopy():
     s = tester.state()
     c = s.abi_contract(mcopy_code)
-    assert c.mcopy_test("123", 5, 6, 259) == \
-        '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
+    a = c.mcopy_test(b"123", 5, 6, 259)
+    b = b'\x00'*31 + b'\x05' + b'\x00'*31 + b'\x06' + b'\x00'*30 + b'\x01\x03' + b'123'
+    assert a == b
 
 
 mcopy_code_2 = """
@@ -1377,7 +1378,7 @@ def test_mcopy2():
     s = tester.state()
     c = s.abi_contract(mcopy_code_2)
     assert c.mcopy_test() == \
-        ''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
+        b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
 array_saveload_code = """
@@ -1470,7 +1471,7 @@ def test_double_array():
     s = tester.state()
     c = s.abi_contract(double_array_code)
     assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
-    assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
+    assert c.bar([1, 2, 3], b"moo", [4, 5, 6, 7]) == [123, 4567]
 
 
 abi_logging_code = """
@@ -1500,8 +1501,8 @@ def test_abi_logging():
     c.test_frog(5)
     assert o == [{"_event_type": "frog", "y": 5}]
     o.pop()
-    c.test_moose(7, "nine", 11, [13, 15, 17])
-    assert o == [{"_event_type": "moose", "a": 7, "b": "nine",
+    c.test_moose(7, b"nine", 11, [13, 15, 17])
+    assert o == [{"_event_type": "moose", "a": 7, "b": b"nine",
                  "c": 11, "d": [13, 15, 17]}]
 
 

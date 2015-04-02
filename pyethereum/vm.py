@@ -425,7 +425,7 @@ def vm_execute(ext, msg, code):
             elif op == 'MSIZE':
                 stk.append(len(mem))
             elif op == 'GAS':
-                stk.append(compustate.gas)  # AFTER subtracting cost 1
+                stk.append(int(compustate.gas))  # AFTER subtracting cost 1
         elif op[:4] == 'PUSH':
             pushnum = int(op[4:])
             compustate.pc += pushnum

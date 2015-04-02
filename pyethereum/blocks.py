@@ -18,7 +18,7 @@ if sys.version_info.major == 2:
     ETHASH_LIB = 'pyethash'
 else:
     from functools import lru_cache
-    ETHASH_LIB = 'ethash'
+    ETHASH_LIB = 'pyethash'
 
 from pyethereum.exceptions import *
 from pyethereum.slogging import get_logger
@@ -347,9 +347,10 @@ class BlockHeader(rlp.Serializable):
         mining_output = hashimoto_light(current_full_size, cache,
                                         header_hash, nonce)
         diff = self.difficulty
-        if mining_output['mix digest'] != self.mixhash:
+        if mining_output[b'mix digest'] != self.mixhash:
             return False
-        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (diff or 1)
+
+        return utils.big_endian_to_int(mining_output[b'result']) <= 2**256 / (diff or 1)
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""

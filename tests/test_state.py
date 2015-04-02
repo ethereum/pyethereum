@@ -43,12 +43,16 @@ else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'StateTests'))
 
+    # TODO: tests fail if not in correct order
     filenames = sorted(list(fixtures.keys()))
+    filenames.reverse()
     for filename in filenames:
         tests = fixtures[filename]
         if 'stQuadraticComplexityTest.json' in filename or \
                 'stMemoryStressTest.json' in filename:
             continue
-        for testname, testdata in list(tests.items()):
+        testnames = sorted(list(tests.keys()))
+        for testname in testnames:
+            testdata = tests[testname]
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = gen_func(filename, testname, testdata)
