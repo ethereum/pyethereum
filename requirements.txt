@@ -9,7 +9,7 @@ pytest
 pytest-timeout
 repoze.lru
 requests
-rlp>=0.3.2
+rlp>=0.3.6
 waitress
 structlog>=15.0.0
 pyethash
