@@ -503,7 +503,7 @@ class Block(rlp.Serializable):
                 raise ValueError("Block's prevhash and parent's hash do not match")
             if self.number != parent.header.number + 1:
                 raise ValueError("Block's number is not the successor of its parent number")
-            if self.gas_limit != calc_gaslimit(parent):
+            if not check_gaslimit(parent, self.gas_limit):
                 raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
             if self.difficulty != calc_difficulty(parent, self.timestamp):
                 raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
@@ -1287,6 +1287,12 @@ def calc_gaslimit(parent):
     new_contribution = parent.gas_used * BLKLIM_FACTOR_NOM // BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) // GASLIMIT_EMA_FACTOR
     return max(gl, MIN_GAS_LIMIT)
+
+def check_gaslimit(parent, gas_limit):
+    #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
+    a = bool(abs(gas_limit - parent.gas_limit) >= parent.gas_limit // GASLIMIT_EMA_FACTOR)
+    b = bool(gas_limit >= MIN_GAS_LIMIT)
+    return a and b
 
 
 class CachedBlock(Block):
