@@ -19,16 +19,21 @@ from pyethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging('eth.vm:trace,eth.vm.memory:info')
 
-_db = EphemDB()
+
+_db = new_db()
 blocks.peck_cache(_db, b'\x00' * 32, ethash_utils.get_cache_size(0))
 
 @pytest.fixture(scope='function')
 def db():
     """A database that contains the cache by default."""
     new_db = EphemDB()
-    new_db.db.update(_db.db)
+    class DefaultDict(dict):
+        def __missing__(self, key):
+            return _db.get(key)
+        def __contains__(self, key):
+            return super(DefaultDict, self).__contains__(key) or key in _db
+    new_db.db = DefaultDict()
     return new_db
-
 
 alt_db = db
 
@@ -58,7 +63,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None):
 
     The newly mined block will be considered to be the head of the chain,
     regardless of its total difficulty.
-    
+
     :param parent: the parent of the block to mine, or `None` to use the
                    current chain head
     :param transactions: a list of transactions to include in the new block
