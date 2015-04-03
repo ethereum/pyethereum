@@ -53,14 +53,18 @@ class Transaction(rlp.Serializable):
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
             raise Exception("Values way too high!")
-        if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
-            raise Exception("Invalid signature values!")
-        rlpdata = rlp.encode(self, UnsignedTransaction)
-        rawhash = utils.sha3(rlpdata)
-        pub = encode_pubkey(
-            ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
-            'bin')
-        self.sender = utils.sha3(pub[1:])[-20:]
+        # signed?
+        if self.v:
+            if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
+                raise Exception("Invalid signature values!")
+            rlpdata = rlp.encode(self, UnsignedTransaction)
+            rawhash = utils.sha3(rlpdata)
+            pub = encode_pubkey(
+                ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
+                'bin')
+            self.sender = utils.sha3(pub[1:])[-20:]
+        else:
+            self.sender = 0
 
     def sign(self, key):
         """Sign this transaction with a private key.
@@ -114,6 +118,5 @@ UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
 
 def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):
     """A contract is a special transaction without the `to` argument."""
-    tx = Transaction(nonce, gasprice, startgas, '', endowment, code)
-    tx.v, tx.r, tx.s = v, r, s
+    tx = Transaction(nonce, gasprice, startgas, '', endowment, code, v, r, s)
     return tx
