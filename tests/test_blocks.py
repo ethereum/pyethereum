@@ -2,7 +2,9 @@ from pyethereum import blocks, utils, db
 from pyethereum.exceptions import VerificationFailed
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
-import pytest, os, sys
+import pytest
+import os
+import sys
 import pyethereum.testutils as testutils
 
 from pyethereum.slogging import get_logger, configure_logging
@@ -109,7 +111,11 @@ if __name__ == '__main__':
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'BlockTests'))
+
+    def mk_test_func(filename, testname, testdata):
+        return lambda: do_test_block(filename, testname, testdata)
+
     for filename, tests in list(fixtures.items()):
         for testname, testdata in list(tests.items())[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = lambda: do_test_block(filename, testname, testdata)
+            globals()[func_name] = mk_test_func(filename, testname, testdata)

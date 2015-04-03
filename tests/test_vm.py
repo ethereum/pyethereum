@@ -37,8 +37,11 @@ if __name__ == '__main__':
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join('fixtures', 'VMTests'))
-    for filename, tests in list(fixtures.items()):
-        for testname, testdata in list(tests.items())[:500]:
-            func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = lambda: do_test_vm(filename, testname, testdata)
 
+    def mk_test_func(filename, testname, testdata):
+        return lambda: do_test_vm(filename, testname, testdata)
+
+    for filename, tests in list(fixtures.items()):
+        for testname, testdata in list(tests.items()):
+            func_name = 'test_%s_%s' % (filename, testname)
+            globals()[func_name] = mk_test_func(filename, testname, testdata)
