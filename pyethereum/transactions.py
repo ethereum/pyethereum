@@ -6,6 +6,7 @@ from rlp.utils import decode_hex, encode_hex
 
 from pyethereum import bloom
 from pyethereum import utils
+from pyethereum.utils import TT256
 
 
 class Transaction(rlp.Serializable):
@@ -49,16 +50,17 @@ class Transaction(rlp.Serializable):
         self.logs = []
 
         # Determine sender
-        if self.r < N and self.s < P and self.v >= 27 and self.v <= 28:
-            rlpdata = rlp.encode(self, UnsignedTransaction)
-            rawhash = utils.sha3(rlpdata)
-            pub = encode_pubkey(
-                ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
-                'bin')
-            self.sender = utils.sha3(pub[1:])[-20:]
-        # does not include signature
-        else:
-            self.sender = 0
+        if self.gasprice >= TT256 or self.startgas >= TT256 or \
+                self.value >= TT256 or self.nonce >= TT256:
+            raise Exception("Values way too high!")
+        if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
+            raise Exception("Invalid signature values!")
+        rlpdata = rlp.encode(self, UnsignedTransaction)
+        rawhash = utils.sha3(rlpdata)
+        pub = encode_pubkey(
+            ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
+            'bin')
+        self.sender = utils.sha3(pub[1:])[-20:]
 
     def sign(self, key):
         """Sign this transaction with a private key.

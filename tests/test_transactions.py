@@ -28,6 +28,7 @@ def run_test(filename, testname, testdata):
 
     try:
         rlpdata = decode_hex(testdata["rlp"][2:])
+        print rlpdata.encode('hex')
         o = {}
         tx = rlp.decode(rlpdata, transactions.Transaction)
         o["sender"] = tx.sender
