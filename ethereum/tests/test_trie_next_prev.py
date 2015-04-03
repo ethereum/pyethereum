@@ -1,6 +1,8 @@
+import os
 import json
 import ethereum.trie as trie
-from tests.utils import new_db
+from ethereum.tests.utils import new_db
+import ethereum.testutils as testutils
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 
@@ -16,7 +18,9 @@ def check_testdata(data_keys, expected_keys):
 
 def load_tests():
     try:
-        fixture = json.load(open('fixtures/TrieTests/trietestnextprev.json', 'r'))
+        fn = os.path.join(testutils.fixture_path, 'TrieTests', 'trietestnextprev.json')
+
+        fixture = json.load(open(fn, 'r'))
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
                       "Make sure you did 'git submodule init'")

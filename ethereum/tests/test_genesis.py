@@ -1,8 +1,10 @@
+import os
 import pytest
 import json
 import ethereum.blocks as blocks
+import ethereum.testutils as testutils
 from rlp.utils import encode_hex
-from tests.utils import new_db
+from ethereum.tests.utils import new_db
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging(':trace')
@@ -14,7 +16,8 @@ def genesis_fixture():
     Read genesis block from fixtures.
     """
     genesis_fixture = None
-    with open('fixtures/BasicTests/genesishashestest.json', 'r') as f:
+    fn = os.path.join(testutils.fixture_path, 'BasicTests', 'genesishashestest.json')
+    with open(fn, 'r') as f:
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
     # FIXME: assert that link is uptodate

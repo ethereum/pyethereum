@@ -2,6 +2,7 @@ import pytest
 import json
 import ethereum.processblock as pb
 import ethereum.utils as utils
+import ethereum.testutils as testutils
 import ethereum.bloom as bloom
 import os
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
@@ -20,8 +21,8 @@ def vm_tests_fixtures():
     """
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
-    filenames = os.listdir(os.path.join('fixtures', 'VMTests'))
-    files = [os.path.join('fixtures', 'VMTests', f) for f in filenames]
+    filenames = os.listdir(os.path.join(testutils.fixture_path, 'VMTests'))
+    files = [os.path.join(testutils.fixture_path, 'VMTests', f) for f in filenames]
     vm_fixtures = {}
     try:
         for f, fn in zip(files, filenames):
