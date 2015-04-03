@@ -487,6 +487,7 @@ class Block(rlp.Serializable):
             'balance': {},
             'nonce': {},
             'code': {},
+            'storage': {},
             'all': {}
         }
         self.journal = []
@@ -768,15 +769,13 @@ class Block(rlp.Serializable):
         if len(address) == 40:
             address = decode_hex(address)
         assert len(address) == 20 or len(address) == 0
-        if param != 'storage':
-            if address in self.caches[param]:
-                return self.caches[param][address]
-            else:
-                account = self._get_acct(address)
-                o = getattr(account, param)
-                self.caches[param][address] = o
-                return o
-        return getattr(self._get_acct(address), param)
+        if address in self.caches[param]:
+            return self.caches[param][address]
+        else:
+            account = self._get_acct(address)
+            o = getattr(account, param)
+            self.caches[param][address] = o
+            return o
 
     def _set_acct_item(self, address, param, value):
         """Set a specific parameter of a specific account.
@@ -950,6 +949,13 @@ class Block(rlp.Serializable):
         storage_root = self._get_acct_item(address, 'storage')
         return SecureTrie(Trie(self.db, storage_root))
 
+    def reset_storage(self, address):
+        self._set_acct_item(address, 'storage', b'')
+        CACHE_KEY = b'storage:' + address
+        if CACHE_KEY in self.caches:
+            for k in self.caches[CACHE_KEY]:
+                self.set_and_journal(CACHE_KEY, k, 0)
+
     def get_storage_data(self, address, index):
         """Get a specific item in the storage of an account.
 
@@ -1009,6 +1015,12 @@ class Block(rlp.Serializable):
             acct = self._get_acct(addr)
 
             # storage
+            for field in ('balance', 'nonce', 'code', 'storage'):
+                if addr in self.caches[field]:
+                    v = self.caches[field][addr]
+                    changes.append([field, addr, v])
+                    setattr(acct, field, v)
+
             t = SecureTrie(Trie(self.db, acct.storage))
             for k, v in self.caches.get(b'storage:' + addr, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
@@ -1019,12 +1031,6 @@ class Block(rlp.Serializable):
                 else:
                     t.delete(enckey)
             acct.storage = t.root_hash
-
-            for field in ('balance', 'nonce', 'code'):
-                if addr in self.caches[field]:
-                    v = self.caches[field][addr]
-                    changes.append([field, addr, v])
-                    setattr(acct, field, v)
             self.state.update(addr, rlp.encode(acct))
         log_state.trace('delta', changes=changes)
         self.reset_cache()
@@ -1094,6 +1100,7 @@ class Block(rlp.Serializable):
             'balance': {},
             'nonce': {},
             'code': {},
+            'storage': {},
         }
         self.journal = []
 

@@ -254,6 +254,12 @@ def create_contract(ext, msg):
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    b = ext.get_balance(msg.to)
+    if b > 0:
+        ext.set_balance(msg.to, b)
+        ext._block.set_nonce(msg.to, 0)
+        ext._block.set_code(msg.to, b'')
+        ext._block.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())
