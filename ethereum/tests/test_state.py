@@ -40,7 +40,7 @@ if __name__ == '__main__':
                 testutils.check_state_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join('fixtures', 'StateTests'))
+        os.path.join(testutils.fixture_path, 'StateTests'))
 
     filenames = sorted(list(fixtures.keys()))
     for filename in filenames:

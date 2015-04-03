@@ -38,6 +38,7 @@ fill_ethash_test = lambda params: run_ethash_test(params, FILL)
 check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
 time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
+fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 def parse_int_or_hex(s):
     if s[:2] == b'0x':

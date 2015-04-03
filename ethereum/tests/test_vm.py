@@ -34,7 +34,7 @@ if __name__ == '__main__':
                 testutils.check_vm_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join('fixtures', 'VMTests'))
+        os.path.join(testutils.fixture_path, 'VMTests'))
 
     def mk_test_func(filename, testname, testdata):
         return lambda: do_test_vm(filename, testname, testdata)
@@ -42,5 +42,4 @@ else:
     for filename, tests in list(fixtures.items()):
         for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
-
             globals()[func_name] = mk_test_func(filename, testname, testdata)

@@ -62,12 +62,12 @@ if __name__ == '__main__':
                 run_test(filename, testname, testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join('fixtures', 'TransactionTests'))
+        os.path.join(testutils.fixture_path, 'TransactionTests'))
+
+    def mk_test_func(filename, testname, testdata):
+        return lambda: run_test(filename, testname, testdata)
+
     for filename, tests in list(fixtures.items()):
-
-        def mk_test_func(filename, testname, testdata):
-            return lambda: run_test(filename, testname, testdata)
-
         for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
             globals()[func_name] = mk_test_func(filename, testname, testdata)
