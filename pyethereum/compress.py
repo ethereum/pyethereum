@@ -34,7 +34,7 @@ def decompress(data):
         if int_to_bytes(data[i]) == b'\xfe':
             if i == len(data) - 1:
                 raise Exception("Invalid encoding, \\xfe at end")
-            elif int_to_bytes(data[i + 1]) == b'':
+            elif int_to_bytes(data[i + 1]) == b'\x00':
                 o += b'\xfe'
             elif int_to_bytes(data[i + 1]) == b'\x01':
                 o += NULLSHA3
