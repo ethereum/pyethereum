@@ -1,7 +1,8 @@
 from pyethereum import blocks, utils, db
-from pyethereum.exceptions import VerificationFailed
+from pyethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from rlp import DecodingError, DeserializationError
 import pytest
 import os
 import sys
@@ -73,12 +74,14 @@ def run_block_test(params):
                 rlpdata = decode_hex(blk["rlp"][2:])
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except (ValueError, TypeError, VerificationFailed):
+            except (ValueError, TypeError, VerificationFailed,
+                    DecodingError, DeserializationError, InvalidTransaction):
                 success = False
             assert not success
         else:
             rlpdata = decode_hex(blk["rlp"][2:])
             b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
+            b = b2
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

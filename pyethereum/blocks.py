@@ -524,8 +524,9 @@ class Block(rlp.Serializable):
         self.receipts = Trie(db, trie.BLANK_ROOT)
         # replay transactions if state is unknown
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
-                 header.state_root != trie.BLANK_ROOT and
-                 (len(header.state_root) != 32 or header.state_root not in db))
+                         header.state_root != trie.BLANK_ROOT and
+                         (len(header.state_root) != 32 or
+                          'validated:'+self.hash not in db))
         if state_unknown:
             assert transaction_list is not None
             if not parent:
@@ -590,6 +591,7 @@ class Block(rlp.Serializable):
         if (not self.is_genesis() and self.nonce and
                                   not self.header.check_pow(self.db)):
             raise ValueError("PoW check failed")
+        self.db.put('validated:'+self.hash, '1')
 
     @classmethod
     def init_from_header(cls, header_rlp, db):

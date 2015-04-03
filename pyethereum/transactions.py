@@ -7,6 +7,7 @@ from rlp.utils import decode_hex, encode_hex
 from pyethereum import bloom
 from pyethereum import utils
 from pyethereum.utils import TT256
+from pyethereum.exceptions import InvalidTransaction
 
 
 class Transaction(rlp.Serializable):
@@ -52,11 +53,11 @@ class Transaction(rlp.Serializable):
         # Determine sender
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
-            raise Exception("Values way too high!")
+            raise InvalidTransaction("Values way too high!")
         # signed?
         if self.v:
             if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
-                raise Exception("Invalid signature values!")
+                raise InvalidTransaction("Invalid signature values!")
             rlpdata = rlp.encode(self, UnsignedTransaction)
             rawhash = utils.sha3(rlpdata)
             pub = encode_pubkey(
