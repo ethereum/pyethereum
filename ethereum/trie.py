@@ -2,9 +2,9 @@
 
 import os
 import rlp
-from pyethereum import utils
-from pyethereum.utils import to_string
-from pyethereum.abi import is_string
+from ethereum import utils
+from ethereum.utils import to_string
+from ethereum.abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 
@@ -215,7 +215,7 @@ class Trie(object):
     #         dbfile = os.path.abspath(dbfile)
     #         self.db = DB(dbfile)
     #     else:
-    #         self.db = dbfile  # Pass in a database object directly
+    # self.db = dbfile  # Pass in a database object directly
     #     self.set_root_hash(root_hash)
 
     # For SPV proof production/verification purposes

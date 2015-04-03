@@ -3,7 +3,7 @@ import os
 
 
 def enable_full_qualified_import():
-    ''' so pyethreum.package.module is available'''
+    ''' so ethereum.package.module is available'''
     where = os.path.join(__file__, os.path.pardir, os.path.pardir)
     where = os.path.abspath(where)
     for path in sys.path:

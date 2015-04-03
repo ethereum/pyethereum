@@ -2,7 +2,6 @@ import structlog
 import logging
 import sys
 import json
-import binascii
 """
 See test_logging.py for examples
 
@@ -23,8 +22,10 @@ eth.chain
 eth.chain.new_block
 """
 
+
 def hexprint(x):
     return repr(x)
+
 
 class KeyValueRenderer(structlog.processors.KeyValueRenderer):
 
@@ -222,7 +223,8 @@ known_loggers = set()  # know to structlog (i.e. maybe not yet initialized w/ lo
 
 def get_logger_names():
     # logging.Logger.manager.loggerDict.keys() # used ones
-    return sorted(known_loggers, key=lambda x: '' if not x else x)  # initialized at module load get_logger
+    # initialized at module load get_logger
+    return sorted(known_loggers, key=lambda x: '' if not x else x)
 
 
 def get_logger(name=None):

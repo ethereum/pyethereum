@@ -2,9 +2,9 @@ import sys
 import os
 import uuid
 
-from pyethereum.utils import default_data_dir, to_string
-from pyethereum.packeter import Packeter
-from pyethereum.utils import sha3
+from ethereum.utils import default_data_dir, to_string
+from ethereum.packeter import Packeter
+from ethereum.utils import sha3
 
 from rlp.utils import encode_hex
 
@@ -14,6 +14,7 @@ if sys.version_info.major == 3:
 else:
     import ConfigParser as configparser
     import StringIO as io
+
 
 def default_config_path():
     return os.path.join(default_data_dir, 'config.txt')

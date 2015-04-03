@@ -1,11 +1,11 @@
 import os
-from pyethereum import utils
-from pyethereum.utils import to_string, is_string
+from ethereum import utils
+from ethereum.utils import to_string, is_string
 import rlp
 from rlp.utils import encode_hex
-from pyethereum import blocks
-from pyethereum import processblock
-from pyethereum.slogging import get_logger
+from ethereum import blocks
+from ethereum import processblock
+from ethereum.slogging import get_logger
 log = get_logger('eth.chain')
 
 

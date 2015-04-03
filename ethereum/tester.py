@@ -1,25 +1,23 @@
 import shutil
 import tempfile
 import time
-import logging
-import sys
-from pyethereum import spv
-import pyethereum
-import pyethereum.db as db
-import pyethereum.opcodes as opcodes
-import pyethereum.abi as abi
-from pyethereum.slogging import get_logger, LogRecorder, configure_logging
-from pyethereum.utils import to_string
+from ethereum import spv
+import ethereum
+import ethereum.db as db
+import ethereum.opcodes as opcodes
+import ethereum.abi as abi
+from ethereum.slogging import LogRecorder, configure_logging
+from ethereum.utils import to_string
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 
 serpent = None
 
-u = pyethereum.utils
-t = pyethereum.transactions
-b = pyethereum.blocks
-pb = pyethereum.processblock
-vm = pyethereum.vm
+u = ethereum.utils
+t = ethereum.transactions
+b = ethereum.blocks
+pb = ethereum.processblock
+vm = ethereum.vm
 
 accounts = []
 keys = []

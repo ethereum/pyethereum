@@ -1,7 +1,8 @@
 import bitcoin
-from pyethereum import utils, opcodes
-from pyethereum.utils import safe_ord
+from ethereum import utils, opcodes
+from ethereum.utils import safe_ord
 from rlp.utils import ascii_chr
+
 
 def proc_ecrecover(ext, msg):
     print('ecrecover proc', msg.gas)

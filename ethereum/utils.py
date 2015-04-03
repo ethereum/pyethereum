@@ -6,7 +6,6 @@ import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr, str_to_bytes
-from pyethereum import db
 import random
 
 TT256 = 2 ** 256
@@ -42,6 +41,7 @@ else:
             return value
         return int_to_big_endian(value)
 
+
 def safe_ord(value):
     if isinstance(value, int):
         return value
@@ -49,6 +49,7 @@ def safe_ord(value):
         return ord(value)
 
 # decorator
+
 
 def debug(label):
     def deb(f):

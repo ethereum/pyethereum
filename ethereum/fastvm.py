@@ -1,6 +1,6 @@
-from pyethereum.opcodes import opcodes, reverse_opcodes
-from pyethereum import utils
-from pyethereum.utils import safe_ord
+from ethereum.opcodes import opcodes
+from ethereum import utils
+from ethereum.utils import safe_ord
 import serpent
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr

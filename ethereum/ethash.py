@@ -1,5 +1,5 @@
 import copy
-from pyethereum.ethash_utils import *
+from ethereum.ethash_utils import *
 import sys
 
 
@@ -14,7 +14,7 @@ def mkcache(cache_size, seed):
     for _ in range(CACHE_ROUNDS):
         for i in range(n):
             v = o[i][0] % n
-            o[i] = sha3_512(list(map(xor, o[(i-1+n) % n], o[v])))
+            o[i] = sha3_512(list(map(xor, o[(i - 1 + n) % n], o[v])))
 
     return o
 
@@ -57,10 +57,10 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
         mix = list(map(fnv, mix, newdata))
     cmix = []
     for i in range(0, len(mix), 4):
-        cmix.append(fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]))
+        cmix.append(fnv(fnv(fnv(mix[i], mix[i + 1]), mix[i + 2]), mix[i + 3]))
     return {
         "mix digest": serialize_hash(cmix),
-        "result": serialize_hash(sha3_256(s+cmix))
+        "result": serialize_hash(sha3_256(s + cmix))
     }
 
 

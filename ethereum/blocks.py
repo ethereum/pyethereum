@@ -1,16 +1,15 @@
 import time
 import rlp
-from rlp.sedes import BigEndianInt, big_endian_int, Binary, binary, CountableList, raw
+from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
-from pyethereum import trie
-from pyethereum.trie import Trie
-from pyethereum.securetrie import SecureTrie
-from pyethereum import utils
-from pyethereum.utils import address, int256, trie_root, hash32, to_string
-from pyethereum import processblock
-from pyethereum.transactions import Transaction
-from pyethereum import bloom
-import copy
+from ethereum import trie
+from ethereum.trie import Trie
+from ethereum.securetrie import SecureTrie
+from ethereum import utils
+from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum import processblock
+from ethereum.transactions import Transaction
+from ethereum import bloom
 import sys
 
 if sys.version_info.major == 2:
@@ -20,16 +19,16 @@ else:
     from functools import lru_cache
     ETHASH_LIB = 'ethash'
 
-from pyethereum.exceptions import *
-from pyethereum.slogging import get_logger
-from pyethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
+from ethereum.exceptions import *
+from ethereum.slogging import get_logger
+from ethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 if ETHASH_LIB == 'ethash':
-    from pyethereum import ethash, ethash_utils
+    from ethereum import ethash, ethash_utils
     mkcache = ethash.mkcache
     serialize_cache = ethash_utils.serialize_cache
     deserialize_cache = ethash_utils.deserialize_cache

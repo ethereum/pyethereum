@@ -1,11 +1,10 @@
-from rlp.utils import decode_hex, encode_hex, ascii_chr
-
+from rlp.utils import decode_hex, ascii_chr
+from ethereum.utils import safe_ord, int_to_bytes
 
 NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
 
 def compress(data):
-    from pyethereum.utils import int_to_bytes
     o = b''
     i = 0
     while i < len(data):
@@ -27,7 +26,6 @@ def compress(data):
 
 
 def decompress(data):
-    from pyethereum.utils import safe_ord, int_to_bytes
     o = b''
     i = 0
     while i < len(data):

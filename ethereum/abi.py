@@ -1,7 +1,9 @@
-import sys, re, json
-from  pyethereum import utils
+import sys
+import re
+import json
+from ethereum import utils
 from rlp.utils import decode_hex, encode_hex
-from pyethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
+from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
 
 if sys.version_info.major == 2:
     def json_decode(x):
@@ -73,7 +75,7 @@ class ContractTranslator():
     def decode(self, name, data):
         fdata = self.function_data[name]
         if fdata['is_unknown_type']:
-            o = [utils.to_signed(utils.big_endian_to_int(data[i:i+32]))
+            o = [utils.to_signed(utils.big_endian_to_int(data[i:i + 32]))
                  for i in range(0, len(data), 32)]
             return [0 if not o else o[0] if len(o) == 1 else o]
         return decode_abi(fdata['decode_types'], data)
@@ -106,6 +108,8 @@ class ContractTranslator():
         return o
 
 # Decode an integer
+
+
 def decint(n):
     if is_numeric(n) and n < 2**256 and n > -2**255:
         return n
@@ -138,7 +142,7 @@ def encode_single(arg, base, sub):
     elif base == 'int':
         sub = int(sub)
         i = decint(arg)
-        assert -2**(sub-1) <= i < 2**sub, "Value out of bounds: %r" % arg
+        assert -2**(sub - 1) <= i < 2**sub, "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
     elif base == 'ureal':
@@ -148,7 +152,7 @@ def encode_single(arg, base, sub):
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
-        assert -2**(high-1) <= arg < 2**(high-1), \
+        assert -2**(high - 1) <= arg < 2**(high - 1), \
             "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
@@ -304,7 +308,7 @@ def decode_single(data, base, sub):
         return big_endian_to_int(data)
     elif base == 'int':
         o = big_endian_to_int(data)
-        return (o - 2**int(sub)) if o >= 2**(int(sub)-1) else o
+        return (o - 2**int(sub)) if o >= 2**(int(sub) - 1) else o
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
         return big_endian_to_int(data) * 1.0 / 2**low
@@ -319,7 +323,7 @@ def decode_any(data, base, sub, arrlist):
     sz = getlen(base, sub, arrlist[:-1])
     o = []
     for i in range(0, len(data), sz):
-        o.append(decode_any(data[i: i+sz], base, sub, arrlist[:-1]))
+        o.append(decode_any(data[i: i + sz], base, sub, arrlist[:-1]))
     return o
 
 

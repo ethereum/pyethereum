@@ -1,6 +1,6 @@
-from pyethereum import utils
-from pyethereum.utils import safe_ord
-from pyethereum.abi import is_numeric
+from ethereum import utils
+from ethereum.utils import safe_ord
+from ethereum.abi import is_numeric
 """
 Blooms are the 3-point, 2048-bit (11-bits/point) Bloom filter of each
 component (except data) of each log entry of each transaction.

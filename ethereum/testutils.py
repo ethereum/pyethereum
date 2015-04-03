@@ -1,17 +1,17 @@
-from pyethereum import tester as t
-from pyethereum import blocks, utils, transactions, vm
+from ethereum import tester as t
+from ethereum import blocks, utils, transactions, vm
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes, bytes_to_str
-from pyethereum import processblock as pb
-import tempfile
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from ethereum import processblock as pb
+
 import copy
-from pyethereum.db import DB, EphemDB
-from pyethereum.utils import to_string, safe_ord, int_to_big_endian, big_endian_to_int
+from ethereum.db import EphemDB
+from ethereum.utils import to_string, safe_ord
 import json
 import os
 import time
-from pyethereum import ethash
-from pyethereum import ethash_utils
+from ethereum import ethash
+from ethereum import ethash_utils
 db = EphemDB()
 
 env = {
@@ -318,7 +318,8 @@ def run_state_test(params, mode):
             shouldbe = params1.get(k, None)
             reallyis = params2.get(k, None)
             if shouldbe != reallyis:
-                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' % (shouldbe, reallyis))
+                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
+                                (shouldbe, reallyis))
 
     elif mode == TIME:
         return time_post - time_pre
@@ -391,6 +392,7 @@ def get_tests_from_file_or_dir(dname, json_only=False):
             for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
                 o[k] = v
         return o
+
 
 def get_blocks_from_textdump(data):
     if '\n' not in data:

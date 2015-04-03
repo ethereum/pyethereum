@@ -1,22 +1,21 @@
 import time
-import struct
 import sys
-from pyethereum import blocks
-from pyethereum import processblock
-from pyethereum import utils
-import rlp
+from ethereum import blocks
+from ethereum import processblock
+from ethereum import utils
 from rlp.utils import encode_hex
-from pyethereum.slogging import get_logger
+from ethereum.slogging import get_logger
 log = get_logger('eth.miner')
 
 pyethash = None
 '''if sys.version_info.major == 2:
     import pyethash
 else:
-    from pyethereum import ethash as pyethash'''
+    from ethereum import ethash as pyethash'''
 
 
 class Miner():
+
     """
     Mines on the current head
     Stores received transactions
@@ -39,13 +38,13 @@ class Miner():
         log.debug('mining', block_number=self.block.number,
                   block_hash=encode_hex(self.block.hash),
                   block_difficulty=self.block.difficulty)
-        
+
         global pyethash
         if not pyethash:
             if sys.version_info.major == 2:
                 pyethash = __import__('pyethash')
             else:
-                pyethash = __import__('pyethereum.ethash')
+                pyethash = __import__('ethereum.ethash')
 
     def add_transaction(self, transaction):
         old_state_root = self.block.state_root
@@ -95,7 +94,7 @@ class Miner():
         cache = blocks.get_cache_memoized(b.db, b.header.seed, sz)
         fsz = blocks.get_full_size(b.number)
         nonce = utils.big_endian_to_int(b.nonce)
-        TT64M1 = 2**64-1
+        TT64M1 = 2**64 - 1
         target = utils.zpad(utils.int_to_big_endian(2**256 // (b.difficulty or 1)), 32)
         for i in range(1, steps + 1):
             b.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)

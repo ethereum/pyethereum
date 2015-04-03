@@ -1,4 +1,4 @@
-from pyethereum.utils import to_string
+from ethereum.utils import to_string
 
 GENESIS_INITIAL_ALLOC = {
     "dbdbdb2cbd23b783741e8d7fcf51e459b497e4a6": {"wei": to_string(2 ** 200)},

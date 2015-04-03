@@ -4,13 +4,14 @@ import rlp
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import decode_hex, encode_hex
 
-from pyethereum import bloom
-from pyethereum import utils
-from pyethereum.utils import TT256
-from pyethereum.exceptions import InvalidTransaction
+from ethereum import bloom
+from ethereum import utils
+from ethereum.utils import TT256
+from ethereum.exceptions import InvalidTransaction
 
 
 class Transaction(rlp.Serializable):
+
     """
     A transaction is stored as:
     [nonce, gasprice, startgas, to, value, data, v, r, s]

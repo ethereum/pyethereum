@@ -1,24 +1,18 @@
-import copy
-import json
 import sys
-import time
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, bytes_to_str, str_to_bytes
-from pyethereum import opcodes
-from pyethereum import utils
-from pyethereum import transactions
-from pyethereum import trie
-from pyethereum import fastvm
-from pyethereum import specials
-from pyethereum import bloom
-from pyethereum import vm
-from pyethereum.exceptions import *
-from pyethereum.utils import safe_ord
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from ethereum import opcodes
+from ethereum import utils
+from ethereum import specials
+from ethereum import bloom
+from ethereum import vm
+from ethereum.exceptions import *
+from ethereum.utils import safe_ord
 
 sys.setrecursionlimit(100000)
 
-from pyethereum.slogging import get_logger
+from ethereum.slogging import get_logger
 log_tx = get_logger('eth.tx')
 log_msg = get_logger('eth.msg')
 log_state = get_logger('eth.msg.state')
@@ -34,7 +28,7 @@ CREATE_CONTRACT_ADDRESS = b''
 
 
 def verify(block, parent):
-    from pyethereum import blocks
+    from ethereum import blocks
     try:
         block2 = rlp.decode(rlp.encode(block), blocks.Block,
                             db=parent.db, parent=parent)
@@ -236,7 +230,8 @@ def _apply_msg(ext, msg, code):
     gas = int(gas)
     assert utils.is_numeric(gas)
     if log_msg.is_active:
-        log_msg.debug('MSG APPLIED', result=o, gas_remained=gas, sender=msg.sender, to=msg.to, data=dat)
+        log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
+                      sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active:
         log_state.trace('MSG POST STATE', account=msg.to, state=ext.log_storage(msg.to))
 

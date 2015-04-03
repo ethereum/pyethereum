@@ -1,12 +1,11 @@
-from pyethereum import utils
-from pyethereum.abi import is_numeric
+from ethereum import utils
+from ethereum.abi import is_numeric
 import copy
-from pyethereum import opcodes
-import json
+from ethereum import opcodes
 import time
-from pyethereum.slogging import get_logger
+from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from pyethereum.utils import to_string, safe_ord
+from ethereum.utils import to_string, safe_ord
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -182,7 +181,6 @@ def vm_execute(ext, msg, code):
         if len(compustate.stack) + out_args > 1024:
             return vm_exception('STACK SIZE LIMIT EXCEEDED')
 
-
         # Apply operation
         compustate.gas -= fee
         compustate.pc += 1
@@ -232,11 +230,11 @@ def vm_execute(ext, msg, code):
             elif op == 'SDIV':
                 s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
                 stk.append(0 if s1 == 0 else (abs(s0) // abs(s1) *
-                           (-1 if s0 * s1 < 0 else 1)) & TT256M1)
+                                              (-1 if s0 * s1 < 0 else 1)) & TT256M1)
             elif op == 'SMOD':
                 s0, s1 = utils.to_signed(stk.pop()), utils.to_signed(stk.pop())
                 stk.append(0 if s1 == 0 else (abs(s0) % abs(s1) *
-                           (-1 if s0 < 0 else 1)) & TT256M1)
+                                              (-1 if s0 < 0 else 1)) & TT256M1)
             elif op == 'ADDMOD':
                 s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
                 stk.append((s0 + s1) % s2 if s2 else 0)
@@ -523,7 +521,7 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = encode_hex(((b'\x00' * (32 - len(to))) + to)[12:])
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd, 
+                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:

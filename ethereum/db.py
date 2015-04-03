@@ -1,8 +1,9 @@
 import os
 import threading
-from pyethereum.compress import compress, decompress
+from ethereum.compress import compress, decompress
 from hashlib import md5
-from pyethereum.slogging import get_logger
+from ethereum import utils
+from ethereum.slogging import get_logger
 from rlp.utils import str_to_bytes
 log = get_logger('db')
 
@@ -88,7 +89,6 @@ else:
             return isinstance(other, self.__class__) and self.db == other.db
 
         def __hash__(self):
-            from pyethereum import utils
             return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
         def __repr__(self):
@@ -158,7 +158,6 @@ else:
             return isinstance(other, self.__class__) and self.db == other.db
 
         def __hash__(self):
-            from pyethereum import utils
             return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
         def __repr__(self):
@@ -195,7 +194,6 @@ class _EphemDB(object):
         return isinstance(other, self.__class__) and self.db == other.db
 
     def __hash__(self):
-        from pyethereum import utils
         return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
 
