@@ -1,9 +1,6 @@
 bitcoin
-bottle
-docopt
 ethereum-serpent
 leveldb
-miniupnpc
 pysha3
 pytest
 pytest-timeout

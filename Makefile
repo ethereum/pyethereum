@@ -32,7 +32,7 @@ clean-test:
 	rm -fr htmlcov/
 
 lint:
-	flake8 pyethereum tests --ignore=E501
+	flake8 ethereum tests --ignore=E501
 
 test:
 	python setup.py test
@@ -41,7 +41,7 @@ test-all:
 	tox
 
 coverage:
-	coverage run --source pyethereum setup.py test
+	coverage run --source ethereum setup.py test
 	coverage report -m
 	coverage html
 	open htmlcov/index.html
@@ -49,7 +49,6 @@ coverage:
 release: clean
 	python setup.py sdist upload
 	python setup.py bdist_wheel upload
-	echo 'failed? create a clean version first, e.g.: git tag 0.6.31'
 
 dist: clean
 	python setup.py sdist
