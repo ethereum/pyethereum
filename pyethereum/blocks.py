@@ -467,7 +467,8 @@ class Block(rlp.Serializable):
     ]
 
 
-    def __init__(self, header, transaction_list=[], uncles=[], db=None, parent=None):
+    def __init__(self, header, transaction_list=[], uncles=[], db=None,
+                 parent=None, making=False):
         if db is None:
             raise TypeError("No database object given")
         self.db = db
@@ -526,14 +527,14 @@ class Block(rlp.Serializable):
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
                          header.state_root != trie.BLANK_ROOT and
                          (len(header.state_root) != 32 or
-                          'validated:'+self.hash not in db))
+                          'validated:'+self.hash not in db) and
+                         not making)
         if state_unknown:
             assert transaction_list is not None
             if not parent:
                 parent = self.get_parent()
             self.state = SecureTrie(Trie(db, parent.state_root))
             self.transaction_count = 0
-            gas_used_header = header.gas_used
             self.gas_used = 0
             # replay
             for tx in transaction_list:
@@ -625,7 +626,8 @@ class Block(rlp.Serializable):
                              timestamp=timestamp,
                              extra_data=extra_data,
                              nonce=nonce)
-        block = Block(header, [], uncles, db=parent.db, parent=parent)
+        block = Block(header, [], uncles, db=parent.db,
+                      parent=parent, making=True)
         block.ancestors += parent.ancestors
         return block
 
