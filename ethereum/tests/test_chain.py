@@ -8,7 +8,7 @@ import ethereum.miner as miner
 import ethereum.utils as utils
 import ethereum.ethash_utils as ethash_utils
 from ethereum.db import EphemDB
-from tests.utils import new_db, get_chainmanager, new_chainmanager
+from ethereum.tests.utils import new_db
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
