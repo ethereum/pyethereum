@@ -1,16 +1,20 @@
 import os
 import threading
-from pyethereum import compress
+from pyethereum.compress import compress, decompress
 from hashlib import md5
 from pyethereum.slogging import get_logger
 from rlp.utils import str_to_bytes
 log = get_logger('db')
 
+
+compress = decompress = lambda x: x  # compress is broken
+
 databases = {}
+
 
 try:
     from CodernityDB.database import Database, DatabasePathException,  \
-                                    RecordNotFound
+        RecordNotFound
     from CodernityDB.hash_index import HashIndex
 except ImportError:
     _CodernityDB = None
@@ -26,7 +30,6 @@ else:
 
         def make_key(self, key):
             return md5(key).digest()
-
 
     class _CodernityDB(object):
 
@@ -55,7 +58,7 @@ else:
                 value = self.db.get('key', key, with_doc=True)['doc']['value']
             except RecordNotFound:
                 raise KeyError("key not in db")
-            return compress.decompress(str_to_bytes(value))
+            return decompress(str_to_bytes(value))
 
         def put(self, key, value):
             with self.uncommitted_lock:
@@ -69,7 +72,7 @@ else:
                         doc = self.db.get('key', k, with_doc=True)['doc']
                         self.db.delete(doc)
                     else:
-                        self.db.insert({'key': k, 'value': compress.compress(v)})
+                        self.db.insert({'key': k, 'value': compress(v)})
                 self.uncommitted.clear()
 
         def delete(self, key):
@@ -119,7 +122,7 @@ else:
                 if self.uncommitted[key] is None:
                     raise KeyError("key not in db")
                 return self.uncommitted[key]
-            o = compress.decompress(str_to_bytes(self.db.Get(key)))
+            o = decompress(str_to_bytes(self.db.Get(key)))
             self.uncommitted[key] = o
             return o
 
@@ -135,7 +138,7 @@ else:
                     if v is None:
                         batch.Delete(k)
                     else:
-                        batch.Put(k, compress.compress(v))
+                        batch.Put(k, compress(v))
                 self.db.Write(batch, sync=False)
                 self.uncommitted.clear()
 
