@@ -1,4 +1,5 @@
 from pyethereum import compress
+import pytest
 
 
 def test_compress():
