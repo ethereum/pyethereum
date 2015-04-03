@@ -1,5 +1,4 @@
-from pyethereum import compress
-import pytest
+from ethereum import compress
 
 
 def test_compress():

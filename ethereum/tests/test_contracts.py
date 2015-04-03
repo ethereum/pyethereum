@@ -1,10 +1,10 @@
 import bitcoin
 import os
 import pytest
-from pyethereum import tester, utils, abi
+from ethereum import tester, utils, abi
 import serpent
 from rlp.utils import decode_hex, encode_hex
-from pyethereum.utils import safe_ord
+from ethereum.utils import safe_ord
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console

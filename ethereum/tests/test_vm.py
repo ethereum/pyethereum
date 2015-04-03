@@ -1,10 +1,8 @@
 import json
 import os
 import sys
-import pytest
-from rlp.utils import str_to_bytes
-import pyethereum.testutils as testutils
-from pyethereum.slogging import get_logger, configure_logging
+import ethereum.testutils as testutils
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -44,4 +42,5 @@ else:
     for filename, tests in list(fixtures.items()):
         for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
+
             globals()[func_name] = mk_test_func(filename, testname, testdata)

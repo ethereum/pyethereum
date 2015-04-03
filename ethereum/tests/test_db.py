@@ -2,8 +2,8 @@ import itertools
 import random
 import tempfile
 import pytest
-from pyethereum.db import _EphemDB, _CodernityDB, _LevelDB
-from pyethereum.utils import db_path
+from ethereum.db import _EphemDB, _CodernityDB, _LevelDB
+from ethereum.utils import db_path
 from rlp.utils import ascii_chr
 
 random.seed(0)

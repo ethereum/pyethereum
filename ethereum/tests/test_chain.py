@@ -1,20 +1,16 @@
-import os
 import pytest
-import json
-import pyethereum.processblock as processblock
-import pyethereum.blocks as blocks
-import pyethereum.transactions as transactions
+import ethereum.processblock as processblock
+import ethereum.blocks as blocks
+import ethereum.transactions as transactions
 import rlp
 from rlp.utils import decode_hex, encode_hex
-import pyethereum.trie as trie
-import pyethereum.miner as miner
-import pyethereum.utils as utils
-import pyethereum.ethash as ethash
-import pyethereum.ethash_utils as ethash_utils
-from pyethereum.db import DB, EphemDB
-from tests.utils import new_db, new_config, get_chainmanager, new_chainmanager
+import ethereum.miner as miner
+import ethereum.utils as utils
+import ethereum.ethash_utils as ethash_utils
+from ethereum.db import EphemDB
+from tests.utils import new_db, get_chainmanager, new_chainmanager
 
-from pyethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging('eth.vm:trace,eth.vm.memory:info')
 

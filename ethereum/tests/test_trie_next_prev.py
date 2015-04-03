@@ -1,9 +1,7 @@
-import pytest
 import json
-import tempfile
-import pyethereum.trie as trie
+import ethereum.trie as trie
 from tests.utils import new_db
-from pyethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -32,7 +30,7 @@ def run_test(name):
     data = load_tests()[name]
 
     for k in data['in']:
-        logger.debug('updating with (%s, %s)' %(k, k))
+        logger.debug('updating with (%s, %s)' % (k, k))
         t.update(k, k)
     for point, prev, nxt in data['tests']:
         assert nxt == (t.next(point) or '')

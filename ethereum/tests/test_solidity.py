@@ -1,5 +1,4 @@
-import pytest
-from pyethereum import tester, utils, abi
+from ethereum import tester
 
 serpent_contract = """
 extern solidity: [sub2:_:i]

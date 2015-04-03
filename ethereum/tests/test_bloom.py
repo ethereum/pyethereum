@@ -1,11 +1,11 @@
 import pytest
 import json
-import pyethereum.processblock as pb
-import pyethereum.utils as utils
-import pyethereum.bloom as bloom
+import ethereum.processblock as pb
+import ethereum.utils as utils
+import ethereum.bloom as bloom
 import os
-import sys
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
+
 
 def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
@@ -45,10 +45,10 @@ for filename, tests in list(vm_tests_fixtures().items()):
         globals()[func_name] = gen_func(testdata['logs'])
 
 
-
 def decode_int_from_hex(x):
     r = utils.decode_int(decode_hex(x).lstrip(b"\x00"))
     return r
+
 
 def encode_hex_from_int(x):
     return encode_hex(utils.zpad(utils.int_to_big_endian(x), 256))
@@ -74,4 +74,3 @@ def do_test_bloom(test_logs):
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
         assert encode_hex(log_bloom) == encode_hex_from_int(b)
         assert str_to_bytes(data['bloom']) == encode_hex(log_bloom)
-

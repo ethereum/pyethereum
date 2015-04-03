@@ -1,14 +1,13 @@
-from pyethereum import blocks, utils, db
-from pyethereum.exceptions import VerificationFailed, InvalidTransaction
+from ethereum import blocks, utils, db
+from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
-import pytest
 import os
 import sys
-import pyethereum.testutils as testutils
+import ethereum.testutils as testutils
 
-from pyethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 logger = get_logger()
 
 

@@ -1,20 +1,14 @@
-import pytest
-import pyethereum.processblock as processblock
-import pyethereum.opcodes as opcodes
-import pyethereum.blocks as blocks
-import pyethereum.transactions as transactions
-import pyethereum.utils as utils
+import ethereum.transactions as transactions
+import ethereum.utils as utils
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
-import pyethereum.testutils as testutils
-from pyethereum.testutils import fixture_to_bytes
-from tests.utils import new_db
-import serpent
+import ethereum.testutils as testutils
+from ethereum.testutils import fixture_to_bytes
 import sys
 import json
 import os
 
-from pyethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console

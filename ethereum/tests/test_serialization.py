@@ -1,6 +1,5 @@
-import pytest
 import rlp
-from pyethereum import tester, blocks
+from ethereum import tester, blocks
 
 
 mul2_code = \

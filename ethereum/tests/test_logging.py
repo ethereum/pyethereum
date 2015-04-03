@@ -1,9 +1,7 @@
-import os
-import pytest
 import json
 import logging
 import logging.handlers
-import pyethereum.slogging as slogging
+import ethereum.slogging as slogging
 
 
 class TestHandler(logging.handlers.BufferingHandler):
@@ -32,6 +30,7 @@ def get_test_handler():
     th = TestHandler()
     logging.getLogger().handlers = [th]
     return th
+
 
 def setup_logging(config_string='', log_json=False):
     # setsup default logging
@@ -70,12 +69,14 @@ def test_baseconfig():
     config_string = ':inFO,a:trace,a.b:debug'
     th = setup_logging(config_string=config_string)
 
+
 def test_lvl_trace():
     config_string = ':trace'
     th = setup_logging(config_string=config_string)
     log = slogging.get_logger()
     assert th.does_log(log.debug)
     assert th.does_log(log.trace)
+
 
 def test_incremental():
     config_string = ':trace'
@@ -89,6 +90,7 @@ def test_incremental():
     log.error('nice', a=1, b=2)
     l = th.logged
     assert 'first' in l and 'two' in l
+
 
 def test_jsonconfig():
     th = setup_logging(log_json=True)
@@ -107,6 +109,7 @@ def test_kvprinter():
     l = th.logged
     assert 'baz' in l
 
+
 def test_namespaces():
     config_string = ':inFO,a:trace,a.b:debug'
     th = setup_logging(config_string=config_string)
@@ -120,25 +123,29 @@ def test_namespaces():
     assert th.does_log(log_a_b.debug)
     assert not th.does_log(log_a_b.trace)
 
+
 def test_tracebacks():
     th = setup_logging()
     log = slogging.get_logger()
-    def div(a,b):
+
+    def div(a, b):
         try:
-            r =  a/b
+            r = a / b
             log.error('heres the stack', stack_info=True)
         except Exception as e:
             log.error('an Exception trace should preceed this msg', exc_info=True)
-    div(1,0)
+    div(1, 0)
     assert 'an Exception' in th.logged
-    div(1,1)
+    div(1, 1)
     assert 'the stack' in th.logged
+
 
 def test_listeners():
     th = setup_logging()
     log = slogging.get_logger()
 
     called = []
+
     def log_cb(event_dict):
         called.append(event_dict)
 
@@ -159,12 +166,14 @@ def test_listeners():
     assert 'nolistener' in th.logged
     assert not called
 
+
 def test_logger_names():
     th = setup_logging()
-    names = set(['a','b','c'])
+    names = set(['a', 'b', 'c'])
     for n in names:
         slogging.get_logger(n)
     assert names.issubset(set(slogging.get_logger_names()))
+
 
 def test_is_active():
     th = setup_logging()
@@ -175,7 +184,7 @@ def test_is_active():
     assert log.is_active('warn')
 
     # activate w/ listner
-    slogging.log_listeners.listeners.append(lambda x:x)
+    slogging.log_listeners.listeners.append(lambda x: x)
     assert log.is_active('trace')
     slogging.log_listeners.listeners.pop()
     assert not log.is_active('trace')
@@ -193,6 +202,7 @@ def test_lazy_log():
     called_print = []
 
     class Expensive(object):
+
         def __structlog__(self):
             called_json.append(1)
             return 'expensive data preparation'
@@ -245,7 +255,6 @@ def test_get_configuration():
     assert set(config['config_string'].split(',')) == set(config_string.split(','))
 
 
-
 def test_recorder():
     th = setup_logging()
     log = slogging.get_logger()
@@ -269,6 +278,7 @@ def test_recorder():
     assert len(slogging.log_listeners.listeners) == 0
 
 # examples
+
 
 def test_howto_use_in_tests():
     # select what you want to see.
@@ -302,5 +312,3 @@ def test_how_to_use_as_vm_logger():
         log = slogging.get_logger('eth.vm')
         for x in recorder.pop_records():
             log.info(x.pop('event'), **x)
-
-

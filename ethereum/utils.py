@@ -5,8 +5,12 @@ import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import int_to_big_endian, decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
+
+big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
+int_to_big_endian = lambda x: big_endian_int.serialize(x)
+
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
@@ -68,9 +72,6 @@ def flatten(li):
     for l in li:
         o.extend(l)
     return o
-
-big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
-int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 
 def bytearray_to_int(arr):

@@ -1,12 +1,9 @@
-import os
 import pytest
 import json
-import pyethereum.blocks as blocks
-import rlp
+import ethereum.blocks as blocks
 from rlp.utils import encode_hex
-import pyethereum.utils as utils
 from tests.utils import new_db
-from pyethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 configure_logging(':trace')
 

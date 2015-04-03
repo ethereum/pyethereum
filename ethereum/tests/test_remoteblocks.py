@@ -1,17 +1,6 @@
-from pyethereum import blocks
-from pyethereum import processblock
-import rlp
-from rlp.utils import decode_hex, encode_hex
-from pyethereum import transactions
-from pyethereum.config import get_default_config
-from pyethereum.db import DB
-import pyethereum.utils as utils
-import logging
-import pytest
-import tempfile
-from tests.utils import new_chainmanager
-from pyethereum.slogging import get_logger, configure_logging
-from pyethereum import testutils
+from ethereum.db import DB
+from ethereum.slogging import get_logger, configure_logging
+from ethereum import testutils
 import sys
 logger = get_logger()
 # customize VM log output to your needs
