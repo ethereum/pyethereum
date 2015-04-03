@@ -1293,8 +1293,10 @@ def calc_gaslimit(parent):
     prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
     new_contribution = (parent.gas_used * BLKLIM_FACTOR_NOM) // BLKLIM_FACTOR_DEN
     gl = (prior_contribution + new_contribution) // GASLIMIT_EMA_FACTOR
+    gl = parent.gas_limit  # FIXME
     assert check_gaslimit(parent, gl)
     return max(gl, MIN_GAS_LIMIT)
+
 
 def check_gaslimit(parent, gas_limit):
     #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
