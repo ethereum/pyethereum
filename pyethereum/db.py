@@ -7,8 +7,6 @@ from rlp.utils import str_to_bytes
 log = get_logger('db')
 
 
-compress = decompress = lambda x: x  # compress is broken
-
 databases = {}
 
 
