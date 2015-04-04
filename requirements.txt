@@ -1,10 +1,11 @@
 bitcoin
-ethereum-serpent
 leveldb
 pysha3
 pytest
 pytest-timeout
 repoze.lru
-rlp>=0.3.6
+rlp>=0.3.7
 structlog>=15.0.0
 pyethash
+coveralls
+ethereum-serpent>=1.7.7
