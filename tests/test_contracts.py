@@ -23,7 +23,7 @@ evm_code = serpent.compile(serpent_code)
 def test_evm():
     s = tester.state()
     c = s.evm(evm_code)
-    o = s.send(tester.k0, c, 0, funid=0, abi=[2, 5])
+    o = s.call(tester.k0, c, 0, 'main', 'ii', [2, 5])
     assert o == [32]
 
 
@@ -48,7 +48,7 @@ def test_sixten():
     s = tester.state()
     c = '1231231231231234564564564564561231231231'
     s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
-    o1 = s.send(tester.k0, c, 0, [])
+    o1 = s.send(tester.k0, c, 0)
     assert o1 == [610]
 
 # Test Serpent's import mechanism
@@ -64,9 +64,10 @@ filename = "mul2_qwertyuioplkjhgfdsa.se"
 
 returnten_code = \
     '''
-extern mul2: [double]
+extern mul2: [double:i]
 
 x = create("%s")
+log(x)
 return(x.double(5))
 ''' % filename
 
@@ -75,7 +76,7 @@ def test_returnten():
     s = tester.state()
     open(filename, 'w').write(mul2_code)
     c = s.contract(returnten_code)
-    o1 = s.send(tester.k0, c, 0, [])
+    o1 = s.send(tester.k0, c, 0)
     os.remove(filename)
     assert o1 == [10]
 
@@ -95,12 +96,12 @@ def main(k, v):
 
 def test_namecoin():
     s = tester.state()
-    c = s.contract(namecoin_code)
-    o1 = s.send(tester.k0, c, 0, funid=0, abi=['"george"', 45])
+    c = s.abi_contract(namecoin_code)
+    o1 = c.main("george", 45)
     assert o1 == [1]
-    o2 = s.send(tester.k0, c, 0, funid=0, abi=['"george"', 20])
+    o2 = c.main("george", 20)
     assert o2 == [0]
-    o3 = s.send(tester.k0, c, 0, funid=0, abi=['"harry"', 60])
+    o3 = c.main("harry", 60)
     assert o3 == [1]
 
     assert s.block.to_dict()
@@ -131,14 +132,14 @@ def send(to, value):
 
 def test_currency():
     s = tester.state()
-    c = s.contract(currency_code, sender=tester.k0)
-    o1 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 200])
+    c = s.abi_contract(currency_code, sender=tester.k0)
+    o1 = c.send(tester.a2, 200)
     assert o1 == [1]
-    o2 = s.send(tester.k0, c, 0, funid=1, abi=[tester.a2, 900])
+    o2 = c.send(tester.a2, 900)
     assert o2 == [0]
-    o3 = s.send(tester.k0, c, 0, funid=0, abi=[tester.a0])
+    o3 = c.query(tester.a0)
     assert o3 == [800]
-    o4 = s.send(tester.k0, c, 0, funid=0, abi=[tester.a2])
+    o4 = c.query(tester.a2)
     assert o4 == [200]
 
 # Test a data feed
@@ -165,16 +166,16 @@ def get(k):
 
 def test_data_feeds():
     s = tester.state()
-    c = s.contract(data_feed_code, sender=tester.k0)
-    o2 = s.send(tester.k0, c, 0, funid=1, abi=[500])
+    c = s.abi_contract(data_feed_code, sender=tester.k0)
+    o2 = c.get(500)
     assert o2 == [0]
-    o3 = s.send(tester.k0, c, 0, funid=0, abi=[500, 19])
+    o3 = c.set(500, 19)
     assert o3 == [1]
-    o4 = s.send(tester.k0, c, 0, funid=1, abi=[500])
+    o4 = c.get(500)
     assert o4 == [19]
-    o5 = s.send(tester.k1, c, 0, funid=0, abi=[500, 726])
+    o5 = c.set(500, 726, sender=tester.k1)
     assert o5 == [0]
-    o6 = s.send(tester.k0, c, 0, funid=0, abi=[500, 726])
+    o6 = c.set(500, 726)
     assert o6 == [1]
     return s, c
 
@@ -182,7 +183,7 @@ def test_data_feeds():
 # contracts calling other contracts
 
 hedge_code = '''
-extern datafeed: [set, get]
+extern datafeed: [set:ii, get:i]
 
 data partyone
 data partytwo
@@ -207,7 +208,7 @@ def main(datafeed, index):
         othervalue = ethvalue * c
         self.fiatValue = othervalue
         self.maturity = block.timestamp + 500
-        return([2, othervalue]:a)
+        return([2, othervalue]:arr)
     else:
         othervalue = self.fiatValue
         ethvalue = othervalue / self.datafeed.get(self.index)
@@ -225,33 +226,33 @@ def main(datafeed, index):
 
 def test_hedge():
     s, c = test_data_feeds()
-    c2 = s.contract(hedge_code, sender=tester.k0)
+    c2 = s.abi_contract(hedge_code, sender=tester.k0)
     # Have the first party register, sending 10^16 wei and
     # asking for a hedge using currency code 500
-    o1 = s.send(tester.k0, c2, 10**16, funid=0, abi=[c, 500])
+    o1 = c2.main(c.address, 500, value=10**16)
     assert o1 == [1]
     # Have the second party register. It should receive the
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
-    o2 = s.send(tester.k2, c2, 10**16)
+    o2 = c2.main(0, 0, value=10**16, sender=tester.k2)
     assert o2 == [2, 7260000000000000000]
     snapshot = s.snapshot()
     # Set the price of the asset down to 300 wei
-    o3 = s.send(tester.k0, c, 0, funid=0, abi=[500, 300])
+    o3 = c.set(500, 300)
     assert o3 == [1]
     # Finalize the contract. Expect code 3, meaning a margin call
-    o4 = s.send(tester.k0, c2, 0)
+    o4 = c2.main(0, 0)
     assert o4 == [3]
     s.revert(snapshot)
     # Don't change the price. Finalize, and expect code 5, meaning
     # the time has not expired yet
-    o5 = s.send(tester.k0, c2, 0)
+    o5 = c2.main(0, 0)
     assert o5 == [5]
     s.mine(100, tester.a3)
     # Mine ten blocks, and try. Expect code 4, meaning a normal execution
     # where both get their share
-    o6 = s.send(tester.k0, c2, 0)
+    o6 = c2.main(0, 0)
     assert o6 == [4]
 
 
@@ -275,10 +276,9 @@ def f3():
 
 def test_lifo():
     s = tester.state()
-    c = s.contract(arither_code)
-    s.send(tester.k0, c, 0, funid=1, abi=[])
-    o2 = s.send(tester.k0, c, 0, funid=2, abi=[])
-    assert o2 == [1010]
+    c = s.abi_contract(arither_code)
+    c.f2()
+    assert c.f3() == [1010]
 
 
 # Test suicides and suicide reverts
@@ -307,24 +307,24 @@ def ping_storage15():
 
 def test_suicider():
     s = tester.state()
-    c = s.contract(suicider_code)
+    c = s.abi_contract(suicider_code)
     prev_gas_limit = tester.gas_limit
     tester.gas_limit = 8000
     # Run normally: suicide processes, so the attempt to ping the
     # contract fails
-    s.send(tester.k0, c, 0, funid=0, abi=[1, 10])
-    o2 = s.send(tester.k0, c, 0, funid=0, abi=[2])
+    c.entry(10)
+    o2 = c.ping_ten()
     assert o2 == []
-    c = s.contract(suicider_code)
+    c = s.abi_contract(suicider_code)
     # Run the suicider in such a way that it suicides in a sub-call,
     # then runs out of gas, leading to a revert of the suicide and the
     # storage mutation
-    s.send(tester.k0, c, 0, funid=1, abi=[8000])
+    c.entry(8000)
     # Check that the suicide got reverted
-    o2 = s.send(tester.k0, c, 0, funid=2, abi=[])
+    o2 = c.ping_ten()
     assert o2 == [10]
     # Check that the storage op got reverted
-    o3 = s.send(tester.k0, c, 0, funid=4, abi=[])
+    o3 = c.ping_storage15()
     assert o3 == [20]
     tester.gas_limit = prev_gas_limit
 
@@ -352,11 +352,11 @@ def recurse():
 
 def test_reverter():
     s = tester.state()
-    c = s.contract(reverter_code, endowment=10**15)
-    s.send(tester.k0, c, 0, funid=0, abi=[0])
-    assert s.block.get_storage_data(c, 8080) == 4040
+    c = s.abi_contract(reverter_code, endowment=10**15)
+    c.entry()
+    assert s.block.get_storage_data(c.address, 8080) == 4040
     assert s.block.get_balance('0'*39+'7') == 9
-    assert s.block.get_storage_data(c, 8081) == 0
+    assert s.block.get_storage_data(c.address, 8081) == 0
     assert s.block.get_balance('0'*39+'8') == 0
 
 # Test stateless contracts
@@ -371,7 +371,7 @@ filename2 = "stateless_qwertyuioplkjhgfdsa.se"
 
 callcode_test_code = \
     '''
-extern add1: [main]
+extern add1: [main:i]
 
 x = create("%s")
 x.main(6)
@@ -395,38 +395,38 @@ def test_callcode():
 array_code = '''
 a = array(1)
 a[0] = 1
-return(a, 1)
+return(a, items=1)
 '''
 
 
 def test_array():
     s = tester.state()
     c = s.contract(array_code)
-    assert [1] == s.send(tester.k0, c, 0, [])
+    assert [1] == s.send(tester.k0, c, 0)
 
 array_code2 = '''
 a = array(1)
 something = 2
 a[0] = 1
-return(a, 1)
+return(a, items=1)
 '''
 
 
 def test_array2():
     s = tester.state()
     c = s.contract(array_code2)
-    assert [1] == s.send(tester.k0, c, 0, [])
+    assert [1] == s.send(tester.k0, c, 0)
 
 array_code3 = """
 a = array(3)
-return(a, 3)
+return(a, items=3)
 """
 
 
 def test_array3():
     s = tester.state()
     c = s.contract(array_code3)
-    assert [0, 0, 0] == s.send(tester.k0, c, 0, [])
+    assert [0, 0, 0] == s.send(tester.k0, c, 0)
 
 
 calltest_code = """
@@ -451,19 +451,19 @@ def get(k):
 
 def test_calls():
     s = tester.state()
-    c = s.contract(calltest_code)
-    s.send(tester.k0, c, 0, funid=0, abi=[])
-    assert [12345] == s.send(tester.k0, c, 0, funid=4, abi=[1])
-    assert [23456] == s.send(tester.k0, c, 0, funid=4, abi=[2])
-    assert [34567] == s.send(tester.k0, c, 0, funid=4, abi=[3])
-    s.send(tester.k0, c, 0, funid=1, abi=[4, 5, 6, 7, 8])
-    assert [45678] == s.send(tester.k0, c, 0, funid=4, abi=[1])
-    s.send(tester.k0, c, 0, funid=2, abi=[5, 6, 7, 8, 9])
-    assert [56789] == s.send(tester.k0, c, 0, funid=4, abi=[2])
+    c = s.abi_contract(calltest_code)
+    c.main()
+    assert [12345] == c.get(1)
+    assert [23456] == c.get(2)
+    assert [34567] == c.get(3)
+    c.first(4, 5, 6, 7, 8)
+    assert [45678] == c.get(1)
+    c.second(5, 6, 7, 8, 9)
+    assert [56789] == c.get(2)
 
 
 storage_object_test_code = """
-extern moo: [ping, query_chessboard, query_stats, query_items, query_person, testping, testping2]
+extern moo: [ping, query_chessboard:ii, query_items:ii, query_person, query_stats:i, testping:ii, testping2:i]
 
 data chessboard[8][8]
 data users[100](health, x, y, items[5])
@@ -494,7 +494,7 @@ def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:arr)
 
 def query_items(u, i):
     return(self.users[u].items[i])
@@ -511,10 +511,10 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a:a)
+    return(a:arr)
 
 def testping(x, y):
-    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)]:a)
+    return([self.users[80].health.testping2(x), self.users[80].items[3].testping2(y)]:arr)
 
 def testping2(x):
     return(x*x)
@@ -524,20 +524,20 @@ def testping2(x):
 
 def test_storage_objects():
     s = tester.state()
-    c = s.contract(storage_object_test_code)
-    s.send(tester.k0, c, 0, funid=0, abi=[])
-    assert [1] == s.send(tester.k0, c, 0, funid=1, abi=[0, 0])
-    assert [2] == s.send(tester.k0, c, 0, funid=1, abi=[0, 1])
-    assert [3] == s.send(tester.k0, c, 0, funid=1, abi=[3, 0])
-    assert [100, 0, 0] == s.send(tester.k0, c, 0, funid=2, abi=[0])
-    assert [0, 15, 12] == s.send(tester.k0, c, 0, funid=2, abi=[1])
-    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
-    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
-    assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
+    c = s.abi_contract(storage_object_test_code)
+    c.ping()
+    assert [1] == c.query_chessboard(0, 0)
+    assert [2] == c.query_chessboard(0, 1)
+    assert [3] == c.query_chessboard(3, 0)
+    assert [100, 0, 0] == c.query_stats(0)
+    assert [0, 15, 12] == c.query_stats(1)
+    assert [0] == c.query_items(1, 3)
+    assert [0] == c.query_items(0, 2)
+    assert [9] == c.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
-    assert [361, 441] == s.send(tester.k0, c, 0, funid=5, abi=[19, 21])
+            657, 0,   0,   0,  658] == c.query_person()
+    assert [361, 441] == c.testping(19, 21)
 
 
 infinite_storage_object_test_code = """
@@ -562,12 +562,13 @@ def ping():
     self.person.arms[1].fingers[0] = 657
     self.person.arms[1].fingers[4] = 658
     self.person.legs[1] = 659
+    self.person.legs[1] += 1000
 
 def query_chessboard(x, y):
     return(self.chessboard[x][y])
 
 def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y]:a)
+    return([self.users[u].health, self.users[u].x, self.users[u].y]:arr)
 
 def query_items(u, i):
     return(self.users[u].items[i])
@@ -584,26 +585,25 @@ def query_person():
         a[5 + i] = self.person.arms[0].fingers[i]
         a[10 + i] = self.person.arms[1].fingers[i]
         i += 1
-    return(a:a)
+    return(a:arr)
 """
 
 
 def test_infinite_storage_objects():
     s = tester.state()
-    c = s.contract(infinite_storage_object_test_code)
-    s.send(tester.k0, c, 0, funid=0, abi=[])
-    assert [1] == s.send(tester.k0, c, 0, funid=1, abi=[0, 0])
-    assert [2] == s.send(tester.k0, c, 0, funid=1, abi=[0, 1])
-    assert [3] == s.send(tester.k0, c, 0, funid=1, abi=[3, 0])
-    assert [100, 0, 0] == s.send(tester.k0, c, 0, funid=2, abi=[0])
-    assert [0, 15, 12] == s.send(tester.k0, c, 0, funid=2, abi=[1])
-    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[1, 3])
-    assert [0] == s.send(tester.k0, c, 0, funid=3, abi=[0, 2])
-    assert [9] == s.send(tester.k0, c, 0, funid=3, abi=[1, 2])
-    assert [555, 556, 656, 559, 659,
+    c = s.abi_contract(infinite_storage_object_test_code)
+    c.ping()
+    assert [1] == c.query_chessboard(0, 0)
+    assert [2] == c.query_chessboard(0, 1)
+    assert [3] == c.query_chessboard(3, 0)
+    assert [100, 0, 0] == c.query_stats(0)
+    assert [0, 15, 12] == c.query_stats(1)
+    assert [0] == c.query_items(1, 3)
+    assert [0] == c.query_items(0, 2)
+    assert [9] == c.query_items(1, 2)
+    assert [555, 556, 656, 559, 1659,
             557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == s.send(tester.k0, c, 0, funid=4, abi=[])
-
+            657, 0,   0,   0,  658] == c.query_person()
 
 fail1 = """
 data person(head, arms[2](elbow, fingers[5]), legs[2])
@@ -742,20 +742,28 @@ def clear(self, id):
 
 def test_crowdfund():
     s = tester.state()
-    c = s.contract(crowdfund_code)
-    s.send(tester.k0, c, 0, funid=0, abi=[100, 45, 100000, 2])
-    s.send(tester.k0, c, 0, funid=0, abi=[200, 48, 100000, 2])
-    s.send(tester.k1, c, 1, funid=1, abi=[100])
-    assert [1] == s.send(tester.k1, c, 2, funid=2, abi=[100])
-    s.send(tester.k2, c, 30000, funid=1, abi=[200])
-    s.send(tester.k3, c, 59049, funid=1, abi=[100])
-    assert [59050] == s.send(tester.k1, c, 2, funid=2, abi=[100])
-    s.send(tester.k4, c, 70001, funid=1, abi=[200])
+    c = s.abi_contract(crowdfund_code)
+    # Create a campaign with id 100
+    c.create_campaign(100, 45, 100000, 2)
+    # Create a campaign with id 200
+    c.create_campaign(200, 48, 100000, 2)
+    # Make some contributions
+    c.contribute(100, value=1, sender=tester.k1)
+    assert [1] == c.progress_report(100)
+    c.contribute(200, value=30000, sender=tester.k2)
+    c.contribute(100, value=59049, sender=tester.k3)
+    assert [59050] == c.progress_report(100)
+    c.contribute(200, value=70001, sender=tester.k4)
+    # Expect the 100001 units to be delivered to the destination
+    # account for campaign 2
     assert 100001 == s.block.get_balance(utils.int_to_addr(48))
     mida1 = s.block.get_balance(tester.a1)
     mida3 = s.block.get_balance(tester.a3)
+    # Mine 5 blocks to expire the campaign
     s.mine(5)
-    s.send(tester.k5, c, 1, funid=1, abi=[100])
+    # Ping the campaign after expiry
+    c.contribute(100, value=1)
+    # Expect refunds
     assert mida1 + 1 == s.block.get_balance(tester.a1)
     assert mida3 + 59049 == s.block.get_balance(tester.a3)
 
@@ -768,7 +776,7 @@ def kall():
     save(self.store[0], a, chars=60)
     b = load(self.store[0], chars=60)
     c = load(self.store[0], chars=33)
-    return([a[0], a[1], b[0], b[1], c[0], c[1]]:a)
+    return([a[0], a[1], b[0], b[1], c[0], c[1]]:arr)
 
 """
 
@@ -777,8 +785,8 @@ import bitcoin
 
 def test_saveload():
     s = tester.state()
-    c = s.contract(saveload_code)
-    o = s.send(tester.k0, c, 0, funid=0, abi=[])
+    c = s.abi_contract(saveload_code)
+    o = c.kall()
     assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
     assert o[1] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[1], 16)
     assert o[2] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[2], 16)
@@ -789,53 +797,53 @@ def test_saveload():
 
 sdiv_code = """
 def kall():
-    return([2^255 / 2^253, 2^255 % 3]:a)
+    return([2^255 / 2^253, 2^255 % 3]:arr)
 """
 
 
 def test_sdiv():
     s = tester.state()
-    c = s.contract(sdiv_code)
-    assert [-4, -2] == s.send(tester.k0, c, 0, funid=0, abi=[])
+    c = s.abi_contract(sdiv_code)
+    assert [-4, -2] == c.kall()
 
 
 basic_argcall_code = """
-def argcall(args:a):
+def argcall(args:arr):
     return(args[0] + args[1] * 10 + args[2] * 100)
 
-def argkall(args:a):
+def argkall(args:arr):
     return self.argcall(args)
 """
 
 
 def test_argcall():
     s = tester.state()
-    c = s.contract(basic_argcall_code)
-    assert [375] == s.send(tester.k0, c, 0, funid=0, abi=[[5, 7, 3]])
-    assert [376] == s.send(tester.k0, c, 0, funid=1, abi=[[6, 7, 3]])
+    c = s.abi_contract(basic_argcall_code)
+    assert [375] == c.argcall([5, 7, 3])
+    assert [376] == c.argkall([6, 7, 3])
 
 more_complex_argcall_code = """
-def argcall(args:a):
+def argcall(args:arr):
     args[0] *= 2
     args[1] *= 2
-    return(args:a)
+    return(args:arr)
 
-def argkall(args:a):
-    return(self.argcall(args, outsz=2):a)
+def argkall(args:arr):
+    return(self.argcall(args, outsz=2):arr)
 """
 
 
 def test_argcall2():
     s = tester.state()
-    c = s.contract(more_complex_argcall_code)
-    assert [4, 8] == s.send(tester.k0, c, 0, funid=0, abi=[[2, 4]])
-    assert [6, 10] == s.send(tester.k0, c, 0, funid=1, abi=[[3, 5]])
+    c = s.abi_contract(more_complex_argcall_code)
+    assert [4, 8] == c.argcall([2, 4])
+    assert [6, 10] == c.argkall([3, 5])
 
 
 sort_code = """
-def sort(args:a):
+def sort(args:arr):
     if len(args) < 2:
-        return(args:a)
+        return(args:arr)
     h = array(len(args))
     hpos = 0
     l = array(len(args))
@@ -849,10 +857,8 @@ def sort(args:a):
             h[hpos] = args[i]
             hpos += 1
         i += 1
-    shrink(h, hpos)
-    shrink(l, lpos)
-    h = self.sort(h, outsz=hpos)
-    l = self.sort(l, outsz=lpos)
+    h = self.sort(slice(h, items=0, items=hpos), outsz=hpos)
+    l = self.sort(slice(l, items=0, items=lpos), outsz=lpos)
     o = array(len(args))
     i = 0
     while i < lpos:
@@ -863,21 +869,18 @@ def sort(args:a):
     while i < hpos:
         o[lpos + 1 + i] = h[i]
         i += 1
-    return(o:a)
+    return(o:arr)
 """
 
 
+@pytest.mark.timeout(10)
 def test_sort():
     s = tester.state()
-    c = s.contract(sort_code)
-    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[9]])
-    assert a1 == [9]
-    a2 = s.send(tester.k0, c, 0, funid=0, abi=[[9, 5]])
-    assert a2 == [5, 9]
-    a3 = s.send(tester.k0, c, 0, funid=0, abi=[[9, 3, 5]])
-    assert a3 == [3, 5, 9]
-    a4 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
-    assert a4 == [24, 29, 80, 112, 112, 234]
+    c = s.abi_contract(sort_code)
+    assert c.sort([9]) == [9]
+    assert c.sort([9, 5]) == [5, 9]
+    assert c.sort([9, 3, 5]) == [3, 5, 9]
+    assert c.sort([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
 filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
@@ -889,31 +892,30 @@ data sorter
 def init():
     self.sorter = create("%s")
 
-def test(args:a):
-    return(self.sorter.sort(args, outsz=len(args)):a)
+def test(args:arr):
+    return(self.sorter.sort(args, outsz=len(args)):arr)
 ''' % filename9
 
 
+@pytest.mark.timeout(10)
 def test_indirect_sort():
     s = tester.state()
     open(filename9, 'w').write(sort_code)
-    c = s.contract(sort_tester_code)
-    a1 = s.send(tester.k0, c, 0, funid=0, abi=[[80, 24, 234, 112, 112, 29]])
-    assert a1 == [24, 29, 80, 112, 112, 234]
+    c = s.abi_contract(sort_tester_code)
+    assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
 
 multiarg_code = """
-def kall(a:a, b, c:a, d:s, e):
+def kall(a:arr, b, c:arr, d:str, e):
     x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
-    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:a)
+    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:arr)
 """
 
 
 def test_multiarg_code():
     s = tester.state()
-    c = s.contract(multiarg_code)
-    o = s.send(tester.k0, c, 0, funid=0,
-               abi=[[1, 2, 3], 4, [5, 6, 7], "\"doge\"", 8])
+    c = s.abi_contract(multiarg_code)
+    o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
     assert o == [862541, ord('d') + ord('o') + ord('g'), 4]
 
 peano_code = """
@@ -959,7 +961,7 @@ macro three():
 macro five():
     padd(three(), two())
 
-return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:a)
+return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:arr)
 
 """
 
@@ -967,7 +969,7 @@ return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:a)
 def test_macros():
     s = tester.state()
     c = s.contract(peano_code)
-    assert s.send(tester.k0, c, 0, []) == [27, 120]
+    assert s.send(tester.k0, c, 0) == [27, 120]
 
 
 type_code = """
@@ -1008,21 +1010,40 @@ return(e)
 def test_types():
     s = tester.state()
     c = s.contract(type_code)
-    assert s.send(tester.k0, c, 0, []) == [5]
+    assert s.send(tester.k0, c, 0) == [5]
 
 sha256_code = """
-return([sha256(0, 0), sha256(3), sha256(text("dog"):s), sha256([0,0,0,0,0]:a)]:a)
+return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
 """
 
 
 def test_sha256():
     s = tester.state()
     c = s.contract(sha256_code)
-    assert s.send(tester.k0, c, 0, []) == [
+    assert s.send(tester.k0, c, 0) == [
         0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
         0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
         0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256,
         0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256
+    ]
+
+sha3_code = """
+return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
+"""
+
+
+def test_sha3():
+    s = tester.state()
+    c = s.contract(sha3_code)
+    assert s.send(tester.k0, c, 0) == [
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
+        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
+        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
+        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256
     ]
 
 types_in_functions_code = """
@@ -1050,8 +1071,8 @@ def sqrdiv(a, b):
 
 def test_types_in_functions():
     s = tester.state()
-    c = s.contract(types_in_functions_code)
-    assert s.send(tester.k0, c, 0, funid=0, abi=[25, 2]) == [156]
+    c = s.abi_contract(types_in_functions_code)
+    assert c.sqrdiv(25, 2) == [156]
 
 
 more_infinites_code = """
@@ -1069,8 +1090,8 @@ def testVerifyTx():
 
 def test_more_infinites():
     s = tester.state()
-    c = s.contract(more_infinites_code)
-    assert s.send(tester.k0, c, 0, funid=0, abi=[]) == [33]
+    c = s.abi_contract(more_infinites_code)
+    assert c.testVerifyTx() == [33]
 
 
 prevhashes_code = """
@@ -1080,16 +1101,16 @@ def get_prevhashes(k):
     while i < k:
         o[i] = block.prevhash(i)
         i += 1
-    return(o:a)
+    return(o:arr)
 """
 
-
+@pytest.mark.timeout(10)
 def test_prevhashes():
     s = tester.state()
-    c = s.contract(prevhashes_code)
+    c = s.abi_contract(prevhashes_code)
     s.mine(7)
     # Hashes of last 14 blocks including existing one
-    o1 = [x % 2**256 for x in s.send(tester.k0, c, 0, funid=0, abi=[14])]
+    o1 = [x % 2**256 for x in c.get_prevhashes(14)]
     # hash of self = 0, hash of blocks back to genesis block as is, hash of
     # blocks before genesis block = 0
     t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
@@ -1097,10 +1118,100 @@ def test_prevhashes():
     assert o1 == t1
     s.mine(256)
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2**256 for x in s.send(tester.k0, c, 0, funid=0, abi=[270])]
+    o2 = [x % 2**256 for x in c.get_prevhashes(270)]
     t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
         + [0] * 13
     assert o2 == t2
+
+
+abi_contract_code = """
+def mul2(a):
+    return(a * 2)
+
+def returnten():
+    return(10)
+"""
+
+
+def test_abi_contract():
+    s = tester.state()
+    c = s.abi_contract(abi_contract_code)
+    assert c.mul2(3) == [6]
+    assert c.returnten() == [10]
+
+
+mcopy_code = """
+def mcopy_test(foo:str, a, b, c):
+    info = string(32*3 + len(foo))
+    info[0] = a
+    info[1] = b
+    info[2] = c
+    mcopy(info+(items=3), foo, len(foo))
+    return(info:str)
+"""
+
+
+def test_mcopy():
+    s = tester.state()
+    c = s.abi_contract(mcopy_code)
+    assert c.mcopy_test("123", 5, 6, 259, output='raw') == \
+        '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
+
+
+mcopy_code_2 = """
+def mcopy_test():
+    myarr = array(3)
+    myarr[0] = 99
+    myarr[1] = 111
+    myarr[2] = 119
+
+    mystr = string(96)
+    mcopy(mystr, myarr, items=3)
+    return(mystr:str)
+"""
+
+
+def test_mcopy2():
+    s = tester.state()
+    c = s.abi_contract(mcopy_code_2)
+    assert c.mcopy_test() == [99, 111, 119]
+
+
+array_saveload_code = """
+data a[5]
+
+def array_saveload():
+    a = [1,2,3,4,5]
+    save(self.a[0], a, items=5)
+    a = load(self.a[0], items=4)
+    log(len(a))
+    return(load(self.a[0], items=4):arr)
+"""
+
+
+def test_saveload2():
+    s = tester.state()
+    c = s.abi_contract(array_saveload_code)
+    assert c.array_saveload() == [1, 2, 3, 4]
+
+
+string_manipulation_code = """
+def f1(istring:str):
+    setch(istring, 0, "a")
+    setch(istring, 1, "b")
+    return(istring:str)
+
+def t1():
+    istring = text("cd")
+    res = self.f1(istring, outchars=2)
+    return([getch(res,0), getch(res,1)]:arr)  # should return [97,98]
+"""
+
+
+def test_string_manipulation():
+    s = tester.state()
+    c = s.abi_contract(string_manipulation_code)
+    assert c.t1() == [97, 98]
 
 
 # test_evm = None
@@ -1132,6 +1243,11 @@ def test_prevhashes():
 # test_macros = None
 # test_types = None
 # test_sha256 = None
+# test_sha3 = None
 # test_types_in_functions = None
 # test_more_infinites = None
 # test_prevhashes = None
+# test_abi_contract = None
+# test_mcopy = None
+# test_saveload2 = None
+# test_string_manipulation = None

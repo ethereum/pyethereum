@@ -1,6 +1,6 @@
 from pyethereum import blocks
 from pyethereum import processblock
-from pyethereum import rlp
+import rlp
 from pyethereum import transactions
 from pyethereum.config import get_default_config
 import pyethereum.utils as utils
@@ -75,7 +75,7 @@ def test_profiled():
 
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
     chain_manager = new_chainmanager()
-    
+
     fh = open(raw_blocks_fn)
     for i in range(skip):
         fh.readline()

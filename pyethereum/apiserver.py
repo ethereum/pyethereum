@@ -12,7 +12,7 @@ import pyethereum.signals as signals
 from pyethereum.transactions import Transaction
 import pyethereum.processblock as processblock
 import pyethereum.utils as utils
-import pyethereum.rlp as rlp
+import rlp
 from pyethereum.slogging import get_logger, LogRecorder
 from ._version import get_versions
 
@@ -363,7 +363,6 @@ def dump(txblkhash):
 def account(address=None):
     log.debug('accounts/%s' % address)
     data = chain_manager.head.account_to_dict(address)
-    log.debug(data)
     return data
 
 

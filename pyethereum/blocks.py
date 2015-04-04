@@ -199,7 +199,7 @@ class Block(object):
             return k
         self.encoders['hash'] = lambda v: encode_hash(v)
         self.decoders['hash'] = lambda k: self.db.get(k)
-        self.ancestors = [self]
+        self.ancestors = [self] if self.number > 0 else [self] + [None] * 256
 
         # If transaction_list is None, then it's a block header imported for
         # SPV purposes
@@ -254,7 +254,7 @@ class Block(object):
         if utils.sha3rlp(self.uncles) != self.uncles_hash:
             return False
         # Check uncle validity
-        ancestor_chain = self.get_ancestor_list(MAX_UNCLE_DEPTH + 1)
+        ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago

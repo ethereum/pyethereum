@@ -1,6 +1,6 @@
 import sys
 import signals
-from pyethereum import rlp
+import rlp
 from pyethereum.utils import big_endian_to_int as idec
 from pyethereum.utils import int_to_big_endian4 as ienc4
 from pyethereum.utils import recursive_int_to_big_endian
@@ -33,11 +33,11 @@ class Packeter(object):
     """
     NETWORK_PROTOCOL_VERSION = 2
     # IF CHANGED, DO: git tag 0.6.<ETHEREUM_PROTOCOL_VERSION>
-    ETHEREUM_PROTOCOL_VERSION = 51
+    ETHEREUM_PROTOCOL_VERSION = 52
     CLIENT_VERSION = 'Ethereum(py)/%s/%s' % (sys.platform, __version__)
     # the node s Unique Identifier and is the 512-bit hash that serves to
     # identify the node.
-    NODE_ID = sha3('')*2  # 512bit, set in config
+    NODE_ID = sha3('') * 2  # 512bit, set in config
     NETWORK_ID = 0
     SYNCHRONIZATION_TOKEN = 0x22400891
 

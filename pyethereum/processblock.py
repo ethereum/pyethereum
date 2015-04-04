@@ -122,8 +122,10 @@ def apply_transaction(block, tx):
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         result, gas_remained, data = apply_msg_send(ext, message)
+        log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
+        log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
 
     assert gas_remained >= 0
 
@@ -137,7 +139,7 @@ def apply_transaction(block, tx):
         output = ''
         success = 0
     else:
-        log_tx.debug('TX SUCCESS')
+        log_tx.debug('TX SUCCESS', data=data)
         gas_used = tx.startgas - gas_remained
         if block.refunds > 0:
             log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
@@ -197,7 +199,8 @@ class VMExt():
 def apply_msg(ext, msg, code):
     if log_msg.is_active:
         log_msg.debug("MSG APPLY", sender=msg.sender, to=msg.to,
-                      gas=msg.gas, value=msg.value, data=msg.data)
+                      gas=msg.gas, value=msg.value,
+                      data=msg.data.extract_all().encode('hex'))
     if log_state.is_active:
         log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
@@ -206,8 +209,6 @@ def apply_msg(ext, msg, code):
         log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                       want=msg.value)
         return 1, msg.gas, []
-    if msg.depth >= 1024:
-        return 0, 0, []
     snapshot = ext._block.snapshot()
 
     # Main loop
@@ -241,11 +242,12 @@ def create_contract(ext, msg):
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
     msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:].encode('hex')
+    msg.is_create = True
     assert not ext.get_code(msg.to)
     res, gas, dat = apply_msg(ext, msg, msg.data.extract_all())
     if res:
         if not len(dat):
-            return 1, gas, ''
+            return 1, gas, msg.to
         gcost = len(dat) * opcodes.GCONTRACTBYTE
         if gas >= gcost:
             gas -= gcost

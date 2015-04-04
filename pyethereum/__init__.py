@@ -1,4 +1,3 @@
-import rlp
 import utils
 import trie
 import blocks

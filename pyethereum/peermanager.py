@@ -271,15 +271,11 @@ def peer_addresses_received_handler(sender, addresses, **kwargs):
     peer_manager.save_peers()
 
 
-txfilter = SentFilter()
-
-
 @receiver(signals.send_local_transactions)
 def send_transactions(sender, transactions=[], **kwargs):
     transactions = [rlp.decode(t.serialize()) for t in transactions]
     for peer in peer_manager.connected_ethereum_peers:
-        peer.send_Transactions([tx for tx in transactions
-                                if txfilter.add(tx.hex_serialize(), peer)])
+        peer.send_Transactions(transactions)
 
 
 @receiver(signals.peer_handshake_success)

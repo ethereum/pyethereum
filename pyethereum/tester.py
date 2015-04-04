@@ -76,28 +76,23 @@ class state():
                     "Contract code empty"
                 sig = serpent.mk_signature(code)
                 sig = sig[sig.find('[')+1:sig.rfind(']')].split(',')
-                for i, s in enumerate(sig):
-                    fun = s[:s.find(':')].strip()
-                    funsig = s[s.find(':')+1:].strip()
+                for funid, s in enumerate(sig):
+                    pos = s.find(':') if s.find(':') >= 0 else len(s)
+                    fun = s[:pos].strip()
+                    funsig = s[pos+1:].strip()
 
-                    def kall_factory(fun, funsig):
+                    def kall_factory(funid, fun, funsig):
 
-                        def kall(*abi, **kwargs):
-                            if len(funsig) != len(abi):
-                                raise Exception("Wrong number of arguments!")
-                            for typ, val in zip(funsig, abi):
-                                typ2 = 'i' if isinstance(val, (int, long)) else \
-                                       's' if isinstance(val, (str, unicode)) else \
-                                       'a' if isinstance(val, list) else 'err'
-                                if typ != typ2:
-                                    raise Exception('Type mismatch!')
-                            return _state.send(kwargs.get('sender', k0),
+                        def kall(*args, **kwargs):
+                            return _state.call(kwargs.get('sender', k0),
                                                self.address,
                                                kwargs.get('value', 0),
-                                               funid=i, abi=abi)
+                                               fun, funsig, args,
+                                               output=kwargs.get('output',
+                                                                 None))
                         return kall
 
-                    vars(self)[fun] = kall_factory(fun, funsig)
+                    vars(self)[fun] = kall_factory(funid, fun, funsig)
 
         return _abi_contract(me, code, sender, endowment)
 
@@ -110,24 +105,37 @@ class state():
             raise Exception("Contract creation failed")
         return a
 
-    def send(self, sender, to, value, data=[], funid=None, abi=None):
+    def call(self, sender, to, value, fun_name, sig, args, output=None):
+        data = serpent.encode_abi(fun_name, sig, *args)
+        return self.send(sender, to, value, data, output)
+
+    def send(self, sender, to, value, evmdata='', output=None,
+             funid=None, abi=None):
+        print evmdata, evmdata.encode('hex')
+        if funid is not None or abi is not None:
+            raise Exception(
+                "Send with funid+abi is deprecated. Please use the "
+                "abi_contract mechanism or s.call(sender, to, value, "
+                "function_name, function_signature, args)")
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        if funid is not None:
-            evmdata = serpent.encode_abi(funid, *abi)
-        else:
-            evmdata = serpent.encode_datalist(*data)
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
         (s, r) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Transaction failed")
-        o = serpent.decode_datalist(r)
-        return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
+        if output == 'raw':
+            return r
+        else:
+            o = serpent.decode_datalist(r)
+            return map(lambda x: x - 2 ** 256 if x >= 2 ** 255 else x, o)
 
-    def profile(self, sender, to, value, data=[], funid=None, abi=None):
+    def profile(self, sender, to, value, fun_name, sig, args, output=None, funid=None, abi=None):
+        #instead of just calling self.call, do something similar
+        #in order to trigger send warnings about deprecated shizz
+        data = serpent.encode_abi(fun_name, sig, *args)
         tm, g = time.time(), self.block.gas_used
-        o = self.send(sender, to, value, data, funid, abi)
+        o = self.send(sender, to, value, data, output=output, funid=funid, abi=abi)
         zero_bytes = self.last_tx.data.count(chr(0))
         non_zero_bytes = len(self.last_tx.data) - zero_bytes
         intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
