@@ -600,7 +600,7 @@ class Block(rlp.Serializable):
         :param header_rlp: the RLP encoded block header
         :param db: the database for the block
         """
-        header = rlp.decode(rlpdata, BlockHeader, db=db)
+        header = rlp.decode(header_rlp, BlockHeader, db=db)
         return cls(header, None, [], db=db)
 
     @classmethod

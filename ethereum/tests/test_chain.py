@@ -394,7 +394,6 @@ def test_simple_chain():
     assert chain.index.get_transaction(tx.hash) == (tx, blk2, 0)
 
 
-@pytest.mark.xfail
 def test_add_side_chain():
     """"
     Local: L0, L1, L2
@@ -423,11 +422,13 @@ def test_add_side_chain():
     # receive serialized remote blocks, newest first
     transient_blocks = [rlp.decode(rlp.encode(R0), blocks.TransientBlock),
                         rlp.decode(rlp.encode(R1), blocks.TransientBlock)]
-    chain.receive_chain(transient_blocks=transient_blocks)
+    for t_block in transient_blocks:
+        block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles, db=chain.db)
+        chain.add_block(block)
+
     assert L2.hash in chain
 
 
-@pytest.mark.xfail
 def test_add_longer_side_chain():
     """"
     Local: L0, L1, L2
@@ -457,7 +458,11 @@ def test_add_longer_side_chain():
     # receive serialized remote blocks, newest first
     transient_blocks = [rlp.decode(rlp.encode(b), blocks.TransientBlock)
                         for b in remote_blocks]
-    chain.receive_chain(transient_blocks=transient_blocks)
+
+    for t_block in transient_blocks:
+        block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles, db=chain.db)
+        chain.add_block(block)
+
     assert chain.head == remote_blocks[-1]
 
 
