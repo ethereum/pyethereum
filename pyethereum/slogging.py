@@ -64,11 +64,11 @@ class BoundLoggerTrace(structlog.stdlib.BoundLogger):
                 and self._processors[0].listeners:
             return True
         # log level filter
-        return self._logger.isEnabledFor(structlog.stdlib._NAME_TO_LEVEL[level_name])
+        return self._logger.isEnabledFor(structlog.stdlib._nameToLevel[level_name])
 
 
 structlog.stdlib.TRACE = TRACE = 5
-structlog.stdlib._NAME_TO_LEVEL['trace'] = TRACE
+structlog.stdlib._nameToLevel['trace'] = TRACE
 logging.addLevelName(TRACE, "TRACE")
 
 
