@@ -1,4 +1,4 @@
-rlp
+rlp==0.2.2
 bitcoin
 bottle
 docopt
