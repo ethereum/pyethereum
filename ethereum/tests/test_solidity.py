@@ -1,5 +1,5 @@
 from ethereum import tester
-
+import pytest
 serpent_contract = """
 extern solidity: [sub2:_:i]
 
@@ -26,6 +26,7 @@ contract foo {
 """
 
 
+@pytest.mark.xfail  # pysol is currently broken
 def test_interop():
     s = tester.state()
     c1 = s.abi_contract(serpent_contract)
