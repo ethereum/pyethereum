@@ -4,7 +4,7 @@ pysha3
 pytest
 pytest-timeout
 repoze.lru
-rlp>=0.3.7
+https://github.com/ethereum/pyrlp/tarball/develop
 structlog>=15.0.0
 pyethash
 coveralls

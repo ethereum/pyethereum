@@ -51,6 +51,7 @@ coverage:
 	open htmlcov/index.html
 
 release: clean
+	@echo "make sure the github dependencies are updated to their respective pypi packets in setup.py"
 	python setup.py sdist upload
 	python setup.py bdist_wheel upload
 
