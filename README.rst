@@ -38,11 +38,11 @@ See LICENCE
 
 `Ethereum <https://ethereum.org/>`_ is based on a design by Vitalik Buterin.
 
-.. |Linux develop| image:: http://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20develop
+.. |Linux develop| image:: https://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20develop
    :target: https://build.ethdev.com/builders/Linux%20PyEthereum%20develop/builds/-1
 .. |OSX develop| image:: https://build.ethdev.com/buildstatusimage?builder=OSX%20PyEthereum%20develop
    :target: https://build.ethdev.com/builders/OSX%20PyEthereum%20develop/builds/-1
-.. |Linux master| image:: http://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20master
+.. |Linux master| image:: https://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20master
    :target: https://build.ethdev.com/builders/Linux%20PyEthereum%20master/builds/-1
 .. |OSX master| image:: https://build.ethdev.com/buildstatusimage?builder=OSX%20PyEthereum%20master
    :target: https://build.ethdev.com/builders/OSX%20PyEthereum%20master/builds/-1
