@@ -45,6 +45,6 @@ setup(name="ethereum",
       url='https://github.com/ethereum/pyethereum/',
       install_requires=install_requires,
       entry_points=dict(console_scripts=console_scripts),
-      version='0.9.62',
+      version='0.9.64',
       cmdclass=cmdclass
       )
