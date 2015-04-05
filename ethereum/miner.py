@@ -89,22 +89,26 @@ class Miner():
         BE(X) evaluates to the value equal to X when interpreted as a
             big-endian-encoded integer.
         """
-        b = self.block
-        sz = blocks.get_cache_size(b.number)
-        cache = blocks.get_cache_memoized(b.db, b.header.seed, sz)
-        fsz = blocks.get_full_size(b.number)
-        nonce = utils.big_endian_to_int(b.nonce)
+        #b = self.block
+        sz = blocks.get_cache_size(self.block.number)
+        cache = blocks.get_cache_memoized(self.block.db, self.block.header.seed, sz)
+        fsz = blocks.get_full_size(self.block.number)
+        nonce = utils.big_endian_to_int(self.block.nonce)
         TT64M1 = 2**64 - 1
-        target = utils.zpad(utils.int_to_big_endian(2**256 // (b.difficulty or 1)), 32)
+        target = utils.zpad(utils.int_to_big_endian(2**256 // (self.block.difficulty or 1)), 32)
+        found = False
         for i in range(1, steps + 1):
-            b.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
-            o = blocks.hashimoto_light(fsz, cache, b.mining_hash, b.nonce)
+            self.block.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
+            o = blocks.hashimoto_light(fsz, cache, self.block.mining_hash, self.block.nonce)
             if o["result"] <= target:
-                b.mixhash = o["mix digest"]
+                self.block.mixhash = o["mix digest"]
+                found = True
                 break
             steps -= 1
-        if b.header.check_pow():
-            return self.block
+        if not found:
+            return False
 
-        self.nonce = nonce
-        return False
+        assert len(self.block.nonce) == 8
+        assert len(self.block.mixhash) == 32
+        assert self.block.header.check_pow()
+        return self.block

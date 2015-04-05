@@ -45,9 +45,18 @@ def mine_next_block(parent, uncles=[], coinbase=None, transactions=[]):
     m = miner.Miner(parent, uncles, coinbase or parent.coinbase)
     for t in transactions:
         m.add_transaction(t)
-    b = m.mine()
+    while True:
+        b = m.mine()
+        if b:
+            break
     assert b.header.check_pow()
     return b
+
+
+def test_mining():
+    blk = mkgenesis()
+    for i in range(2):
+        blk = mine_next_block(blk)
 
 
 @pytest.fixture(scope="module")
