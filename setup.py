@@ -21,6 +21,9 @@ class PyTest(TestCommand):
         errno = pytest.main(self.pytest_args)
         sys.exit(errno)
 
+with open('README.rst') as readme_file:
+    readme = readme_file.read()
+
 
 console_scripts = []
 
@@ -38,6 +41,7 @@ install_requires = [install_requires_replacements.get(r, r) for r in install_req
 setup(name="ethereum",
       packages=find_packages("."),
       description='Next generation cryptocurrency network',
+      long_description=readme,
       url='https://github.com/ethereum/pyethereum/',
       install_requires=install_requires,
       entry_points=dict(console_scripts=console_scripts),
