@@ -15,9 +15,11 @@ from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # configure_logging('eth.vm:trace,eth.vm.memory:info')
 
-db = EphemDB()
 
-blocks.peck_cache(db, b'\x00' * 32, ethash_utils.get_cache_size(0))
+def mkdb():
+    db = EphemDB()
+    blocks.peck_cache(db, b'\x00' * 32, ethash_utils.get_cache_size(0))
+    return db
 
 
 @pytest.fixture(scope="module")
@@ -31,10 +33,10 @@ def accounts():
 
 @pytest.fixture(scope="module")
 def mkgenesis(initial_alloc={}):
-    return blocks.genesis(db, initial_alloc, difficulty=1)
+    return blocks.genesis(mkdb(), initial_alloc, difficulty=1)
 
 
-def mkquickgenesis(initial_alloc={}, db=db):
+def mkquickgenesis(initial_alloc={}, db=mkdb()):
     "set INITIAL_DIFFICULTY to a value that is quickly minable"
     return blocks.genesis(db, initial_alloc, difficulty=1)
 
@@ -178,16 +180,6 @@ def test_mine_block():
     assert blk2.get_parent() == blk
 
 
-def test_mine_block_with_transaction():
-    k, v, k2, v2 = accounts()
-    # mine two blocks
-    a_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
-    store_block(a_blk)
-    tx = get_transaction()
-    a_blk2 = mine_next_block(a_blk, transactions=[tx])
-    assert tx in a_blk2.get_transactions()
-
-
 def test_block_serialization_with_transaction_empty_genesis():
     k, v, k2, v2 = accounts()
     a_blk = mkquickgenesis({})
@@ -199,6 +191,16 @@ def test_block_serialization_with_transaction_empty_genesis():
 
 def test_mine_block_with_transaction():
     k, v, k2, v2 = accounts()
+    # mine two blocks
+    a_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
+    store_block(a_blk)
+    tx = get_transaction()
+    a_blk2 = mine_next_block(a_blk, transactions=[tx])
+    assert tx in a_blk2.get_transactions()
+
+
+def test_mine_block_with_transaction2():
+    k, v, k2, v2 = accounts()
     blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     tx = get_transaction()
@@ -206,7 +208,7 @@ def test_mine_block_with_transaction():
     assert tx in blk2.get_transactions()
     store_block(blk2)
     assert tx in blk2.get_transactions()
-    assert blocks.get_block(blk2.hash) == blk2
+    assert blocks.get_block(blk2.db, blk2.hash) == blk2
     assert tx.gasprice == 0
     assert blk2.get_balance(
         v) == blocks.BLOCK_REWARD + blk.get_balance(v) - tx.value
@@ -214,6 +216,17 @@ def test_mine_block_with_transaction():
     assert blk2.get_parent() == blk
     assert tx in blk2.get_transactions()
     assert tx not in blk.get_transactions()
+
+
+def test_mine_block_with_transaction3():
+    k, v, k2, v2 = accounts()
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
+    store_block(blk)
+    tx = get_transaction()
+    blk = mine_next_block(blk, transactions=[tx])
+    assert tx in blk.get_transactions()
+    assert blk.get_balance(v) == utils.denoms.finney * 990
+    assert blk.get_balance(v2) == utils.denoms.finney * 10
 
 
 def test_block_serialization_same_db():
@@ -284,7 +297,6 @@ def test_block_serialization_with_transaction_other_db():
 
 def test_transaction():
     k, v, k2, v2 = accounts()
-    db = new_db()
     blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     blk = mine_next_block(blk)
@@ -304,21 +316,8 @@ def test_transaction_serialization():
     assert tx in set([tx])
 
 
-def test_mine_block_with_transaction():
-    k, v, k2, v2 = accounts()
-    db = new_db()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}})
-    store_block(blk)
-    tx = get_transaction()
-    blk = mine_next_block(blk, transactions=[tx])
-    assert tx in blk.get_transactions()
-    assert blk.get_balance(v) == utils.denoms.finney * 990
-    assert blk.get_balance(v2) == utils.denoms.finney * 10
-
-
 def test_invalid_transaction():
     k, v, k2, v2 = accounts()
-    db = new_db()
     blk = mkquickgenesis({v2: {"balance": utils.denoms.ether * 1}})
     store_block(blk)
     tx = get_transaction()
@@ -329,7 +328,8 @@ def test_invalid_transaction():
 
 
 def test_prevhash():
-    chain = Chain(db, mkquickgenesis({}))
+    g = mkquickgenesis({})
+    chain = Chain(g.db, g)
     L1 = mine_next_block(chain.head)
     L1.get_ancestor_list(2)
 
