@@ -159,6 +159,7 @@ def test_inset():
     open(filename2, 'w').write(inset_inner_code)
     c = s.abi_contract(inset_outer_code)
     assert c.foo() == 22
+    os.remove(filename2)
 
 # Inset at the end instead
 
@@ -189,6 +190,7 @@ def test_inset2():
     open(filename25, 'w').write(inset_inner_code2)
     c = s.abi_contract(inset_outer_code2)
     assert c.foo() == 22
+    os.remove(filename25)
 
 
 # Test a simple namecoin implementation
@@ -499,7 +501,7 @@ def test_callcode():
     open(filename3, 'w').write(add1_code)
     c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0)
-    os.remove(filename2)
+    os.remove(filename3)
     assert utils.big_endian_to_int(o1) == 64
 
 
@@ -1077,7 +1079,7 @@ def test_indirect_sort():
     open(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
     assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
-
+    os.remove(filename9)
 
 multiarg_code = """
 def kall(a:arr, b, c:arr, d:str, e):
