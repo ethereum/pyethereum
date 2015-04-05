@@ -13,7 +13,7 @@ from ethereum.tests.utils import new_db
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
-configure_logging('eth.vm:trace,eth.vm.memory:info')
+# configure_logging('eth.vm:trace,eth.vm.memory:info')
 
 db = EphemDB()
 

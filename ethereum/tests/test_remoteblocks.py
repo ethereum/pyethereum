@@ -5,7 +5,6 @@ import sys
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-configure_logging(':trace')
 
 
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):

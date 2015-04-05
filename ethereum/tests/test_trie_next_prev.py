@@ -8,7 +8,7 @@ logger = get_logger()
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-configure_logging(':trace')
+# configure_logging(':trace')
 
 
 def check_testdata(data_keys, expected_keys):

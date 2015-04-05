@@ -312,3 +312,8 @@ def test_how_to_use_as_vm_logger():
         log = slogging.get_logger('eth.vm')
         for x in recorder.pop_records():
             log.info(x.pop('event'), **x)
+
+
+def test_cleanup():
+    config_string = ':debug'
+    slogging.configure(config_string=config_string)

@@ -7,10 +7,9 @@ from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-if '--notrace' not in sys.argv:
-    pass  # configure_logging(':trace')
-else:
-    sys.argv.remove('--notrace')
+if '--trace' in sys.argv:  # not default
+    configure_logging(':trace')
+    sys.argv.remove('trace')
 
 
 # SETUP TESTS IN GLOBAL NAME SPACE

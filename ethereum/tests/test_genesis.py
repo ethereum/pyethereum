@@ -7,7 +7,7 @@ from rlp.utils import encode_hex
 from ethereum.tests.utils import new_db
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
-configure_logging(':trace')
+# configure_logging(':trace')
 
 
 @pytest.fixture(scope="module")
