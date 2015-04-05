@@ -44,6 +44,12 @@ testtb:
 test-all:
 	tox
 
+fixtures-init:
+	git submodule init
+	git submodule update --recursive
+fixtures-update:
+	cd fixtures && git pull origin develop && cd ..
+
 coverage:
 	coverage run --source ethereum setup.py test
 	coverage report -m
