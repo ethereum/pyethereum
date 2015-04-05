@@ -4,8 +4,8 @@ pysha3
 pytest
 pytest-timeout
 repoze.lru
-https://github.com/ethereum/pyrlp/tarball/develop
 structlog>=15.0.0
-pyethash
 coveralls
-ethereum-serpent>=1.7.7
+https://github.com/ethereum/pyrlp/tarball/develop
+https://github.com/ethereum/serpent/tarball/develop
+https://github.com/ethereum/ethash/tarball/develop
