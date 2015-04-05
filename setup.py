@@ -31,7 +31,8 @@ install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/pyrlp/tarball/develop': 'rlp>=0.3.7',
     'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
-    'https://github.com/ethereum/ethash/tarball/develop': 'pyethash>=23'}
+    'https://github.com/ethereum/ethash/tarball/master': 'pyethash>=23'}
+
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 
 setup(name="ethereum",
