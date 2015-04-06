@@ -64,8 +64,8 @@ opcodes = {
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40],
     0xf2: ['CALLCODE', 7, 1, 40],
-    0xf3: ['RETURN', 2, 1, 0],
-    0xff: ['SUICIDE', 1, 1, 0],
+    0xf3: ['RETURN', 2, 0, 0],
+    0xff: ['SUICIDE', 1, 0, 0],
 }
 
 for i in range(1, 33):
