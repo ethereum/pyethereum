@@ -69,4 +69,4 @@ if __name__ == '__main__':
     class msg(object):
         data = 'testdata'
         gas = 500
-    proc_ripemd160(None, None, msg)
+    proc_ripemd160(None, msg)

@@ -320,9 +320,9 @@ def test_transaction():
 def test_transaction_serialization():
     k, v, k2, v2 = accounts()
     tx = get_transaction()
-    assert tx in set([tx])
+    assert tx in {tx}
     assert tx.hash == rlp.decode(rlp.encode(tx), transactions.Transaction).hash
-    assert tx in set([tx])
+    assert tx in {tx}
 
 
 def test_invalid_transaction():

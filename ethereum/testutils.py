@@ -78,9 +78,9 @@ def run_vm_test(params, mode):
     exek = params['exec']
     env = params['env']
 
-    assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
-                                   'previousHash', 'currentCoinbase',
-                                   'currentDifficulty', 'currentNumber'])
+    assert set(env.keys()) == {'currentGasLimit', 'currentTimestamp',
+                               'previousHash', 'currentCoinbase',
+                               'currentDifficulty', 'currentNumber'}
     # setup env
     header = blocks.BlockHeader(
         prevhash=decode_hex(env['previousHash']),
@@ -95,7 +95,7 @@ def run_vm_test(params, mode):
     for address, h in list(pre.items()):
         assert len(address) == 40
         address = decode_hex(address)
-        assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
+        assert set(h.keys()) == {'code', 'nonce', 'balance', 'storage'}
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, decode_hex(h['code'][2:]))
@@ -217,9 +217,9 @@ def run_state_test(params, mode):
     exek = params['transaction']
     env = params['env']
 
-    assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
-                                   'previousHash', 'currentCoinbase',
-                                   'currentDifficulty', 'currentNumber'])
+    assert set(env.keys()) == {'currentGasLimit', 'currentTimestamp',
+                               'previousHash', 'currentCoinbase',
+                               'currentDifficulty', 'currentNumber'}
     assert len(env['currentCoinbase']) == 40
 
     # setup env
@@ -236,7 +236,7 @@ def run_state_test(params, mode):
     for address, h in list(pre.items()):
         assert len(address) == 40
         address = decode_hex(address)
-        assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
+        assert set(h.keys()) == {'code', 'nonce', 'balance', 'storage'}
         blk.set_nonce(address, int(h['nonce']))
         blk.set_balance(address, int(h['balance']))
         blk.set_code(address, decode_hex(h['code'][2:]))
