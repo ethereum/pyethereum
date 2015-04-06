@@ -70,7 +70,7 @@ def hashimoto_light(full_size, cache, header, nonce):
 
 
 def hashimoto_full(dataset, header, nonce):
-    return hashimoto(header, nonce, len(datset) * HASH_BYTES,
+    return hashimoto(header, nonce, len(dataset) * HASH_BYTES,
                      lambda x: dataset[x])
 
 
