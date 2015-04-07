@@ -1,38 +1,50 @@
+import sys
 from setuptools import setup, find_packages
-import versioneer
-versioneer.VCS = 'git'
-versioneer.versionfile_source = 'pyethereum/_version.py'
-versioneer.versionfile_build = 'pyethereum/_version.py'
-versioneer.tag_prefix = '' # tags are like 1.2.0
-versioneer.parentdir_prefix = 'pyethereum-' # dirname like 'myproject-1.2.0'
-
 from setuptools.command.test import test as TestCommand
+
+
 class PyTest(TestCommand):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.pytest_args = []
+
     def finalize_options(self):
         TestCommand.finalize_options(self)
         self.test_args = []
         self.test_suite = True
+
     def run_tests(self):
-        #import here, cause outside the eggs aren't loaded
+        # import here, cause outside the eggs aren't loaded
         import pytest
-        pytest.main(self.test_args)
+        errno = pytest.main(self.pytest_args)
+        sys.exit(errno)
+
+with open('README.rst') as readme_file:
+    readme = readme_file.read()
 
 
-console_scripts = ['pyeth=pyethereum.eth:main',
-                   'pyethclient=pyethereum.ethclient:main']
+console_scripts = []
 
+cmdclass = dict(test=PyTest)
 
-cmdclass=versioneer.get_cmdclass()
-cmdclass['test'] = PyTest
+install_requires = set(x.strip() for x in open('requirements.txt'))
 
-install_requires = [x.strip() for x in open('requirements.txt')]
+install_requires_replacements = {
+    'https://github.com/ethereum/pyrlp/tarball/develop': 'rlp>=0.3.7',
+    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
+    'https://github.com/ethereum/ethash/tarball/master': 'pyethash>=23'}
 
-setup(name="pyethereum",
+install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
+
+setup(name="ethereum",
       packages=find_packages("."),
       description='Next generation cryptocurrency network',
+      long_description=readme,
       url='https://github.com/ethereum/pyethereum/',
       install_requires=install_requires,
       entry_points=dict(console_scripts=console_scripts),
-      version=versioneer.get_version(),
+      version='0.9.64',
       cmdclass=cmdclass
       )

@@ -1,3 +1,0 @@
-coveralls
-ethereum-serpent>=1.7.7
-mock

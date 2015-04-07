@@ -6,7 +6,9 @@ help:
 	@echo "clean-pyc - remove Python file artifacts"
 	@echo "clean-test - remove test and coverage artifacts"
 	@echo "lint - check style with flake8"
-	@echo "test - run tests quickly with the default Python"
+	@echo "test - run tests with the default Python"
+	@echo "testnovm - run tests except test_vm"
+	@echo "testtb - run tests with tracebacks"
 	@echo "test-all - run tests on every Python version with tox"
 	@echo "coverage - check code coverage quickly with the default Python"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
@@ -32,24 +34,36 @@ clean-test:
 	rm -fr htmlcov/
 
 lint:
-	flake8 pyethereum tests --ignore=E501
+	flake8 ethereum tests --ignore=E501
 
 test:
+	py.test --tb=no ethereum/tests/
+
+testnovm:
+	py.test --tb=no ethereum/tests/ --ignore=ethereum/tests/test_vm.py
+
+testtb:
 	python setup.py test
 
 test-all:
 	tox
 
+fixtures-init:
+	git submodule init
+	git submodule update --recursive
+fixtures-update:
+	cd fixtures && git pull origin develop && cd ..
+
 coverage:
-	coverage run --source pyethereum setup.py test
+	coverage run --source ethereum setup.py test
 	coverage report -m
 	coverage html
 	open htmlcov/index.html
 
 release: clean
+	@echo "make sure the github dependencies are updated to their respective pypi packets in setup.py"
 	python setup.py sdist upload
 	python setup.py bdist_wheel upload
-	echo 'failed? create a clean version first, e.g.: git tag 0.6.31'
 
 dist: clean
 	python setup.py sdist
