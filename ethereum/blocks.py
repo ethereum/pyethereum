@@ -1333,7 +1333,7 @@ class CachedBlock(Block):
         pass
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash())
+        return utils.big_endian_to_int(self.hash)
 
     @property
     def hash(self):
