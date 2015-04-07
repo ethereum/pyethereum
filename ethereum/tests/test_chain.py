@@ -216,6 +216,17 @@ def test_block_serialization_with_transaction_empty_genesis(db):
     assert tx not in a_blk2.get_transactions()
 
 
+def test_mine_block_with_transaction(db):
+    k, v, k2, v2 = accounts()
+    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    store_block(blk)
+    tx = get_transaction()
+    blk = mine_next_block(blk, transactions=[tx])
+    assert tx in blk.get_transactions()
+    assert blk.get_balance(v) == utils.denoms.finney * 990
+    assert blk.get_balance(v2) == utils.denoms.finney * 10
+
+
 def test_mine_block_with_transaction2(db):
     k, v, k2, v2 = accounts()
     blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db)
@@ -333,17 +344,6 @@ def test_transaction_serialization():
     assert tx in set([tx])
     assert tx.hash == rlp.decode(rlp.encode(tx), transactions.Transaction).hash
     assert tx in set([tx])
-
-
-def test_mine_block_with_transaction(db):
-    k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
-    store_block(blk)
-    tx = get_transaction()
-    blk = mine_next_block(blk, transactions=[tx])
-    assert tx in blk.get_transactions()
-    assert blk.get_balance(v) == utils.denoms.finney * 990
-    assert blk.get_balance(v2) == utils.denoms.finney * 10
 
 
 def test_invalid_transaction(db):
