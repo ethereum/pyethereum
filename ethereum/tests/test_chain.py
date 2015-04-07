@@ -214,6 +214,8 @@ def test_block_serialization_with_transaction_empty_genesis(db):
     tx = get_transaction(gasprice=10)  # must fail, as there is no balance
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     assert tx not in a_blk2.get_transactions()
+    with pytest.raises(IndexError):
+        a_blk2.get_transaction(0)
 
 
 def test_mine_block_with_transaction(db):
@@ -223,6 +225,9 @@ def test_mine_block_with_transaction(db):
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
     assert tx in blk.get_transactions()
+    assert blk.get_transaction(0) == tx
+    with pytest.raises(IndexError):
+        blk.get_transaction(1)
     assert blk.get_balance(v) == utils.denoms.finney * 990
     assert blk.get_balance(v2) == utils.denoms.finney * 10
 
