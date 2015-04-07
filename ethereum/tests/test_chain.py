@@ -45,7 +45,7 @@ def accounts():
 
 def mkgenesis(initial_alloc={}, db=None):
     assert db is not None
-    return blocks.genesis(mkdb(), initial_alloc, difficulty=1)
+    return blocks.genesis(db, initial_alloc, difficulty=1)
 
 
 def mkquickgenesis(initial_alloc={}, db=None):
@@ -84,17 +84,17 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None):
 
 def mine_next_block(parent, coinbase=None, transactions=[]):
     if coinbase:
-        c = chain.Chain(db=parent.db, genesis=parent, coinbase=coinbase)
+        c = Chain(db=parent.db, genesis=parent, coinbase=coinbase)
     else:
-        c = chain.Chain(db=parent.db, genesis=parent)
+        c = Chain(db=parent.db, genesis=parent)
     for tx in transactions:
         c.add_transaction(tx)
     block = mine_on_chain(c)
     return block
 
 
-def test_mining():
-    blk = mkgenesis()
+def test_mining(db):
+    blk = mkgenesis(db=db)
     assert blk.number == 0
     for i in range(2):
         blk = mine_next_block(blk)
