@@ -3,12 +3,12 @@ import os
 import sys
 import ethereum.testutils as testutils
 
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger, configure_logging, set_level
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 if '--trace' in sys.argv:  # not default
-    configure_logging(':trace')
+    # configure_logging(':trace')
     sys.argv.remove('trace')
 
 
@@ -18,6 +18,8 @@ def gen_func(filename, testname, testdata):
 
 
 def do_test_state(filename, testname=None, testdata=None, limit=99999999):
+    set_level(None, 'info')
+    print logger.is_active('trace')
     logger.debug('running test:%r in %r' % (testname, filename))
     testutils.check_state_test(testutils.fixture_to_bytes(testdata))
 

@@ -1,6 +1,6 @@
 import bitcoin
 from ethereum import utils, opcodes
-from ethereum.utils import safe_ord
+from ethereum.utils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
 
 
@@ -59,10 +59,13 @@ def proc_identity(ext, msg):
     return 1, msg.gas - gas_cost, o
 
 specials = {
-    '0000000000000000000000000000000000000001': proc_ecrecover,
-    '0000000000000000000000000000000000000002': proc_sha256,
-    '0000000000000000000000000000000000000003': proc_ripemd160,
-    '0000000000000000000000000000000000000004': proc_identity,
+    decode_hex(k): v for k, v in
+    {
+        '0000000000000000000000000000000000000001': proc_ecrecover,
+        '0000000000000000000000000000000000000002': proc_sha256,
+        '0000000000000000000000000000000000000003': proc_ripemd160,
+        '0000000000000000000000000000000000000004': proc_identity,
+    }.items()
 }
 
 if __name__ == '__main__':

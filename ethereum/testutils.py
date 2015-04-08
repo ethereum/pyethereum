@@ -126,7 +126,7 @@ def run_vm_test(params, mode):
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
-                                        destination=msg.to,
+                                        destination=encode_hex(msg.to),
                                         data=b'0x' + hexdata))
         return 1, msg.gas, b''
 
@@ -134,7 +134,7 @@ def run_vm_test(params, mode):
         sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
-        addr = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
+        addr = utils.sha3(rlp.encode([sender, nonce]))[12:]
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
