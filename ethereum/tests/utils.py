@@ -11,8 +11,6 @@
 import json
 import os
 import tempfile
-import ethereum.utils as utils
-import ethereum.testutils as testutils
 from ethereum.db import DB as DB
 __TESTDATADIR = "../tests"
 
@@ -24,10 +22,4 @@ def load_test_data(fname):
 
 
 def new_db():
-    return DB(utils.db_path(tempfile.mktemp()))
-
-# def set_db(name=''):
-#     if name:
-#         utils.data_dir.set(os.path.join(tempdir, name))
-#     else:
-#         utils.data_dir.set(tempfile.mktemp())
+    return DB()
