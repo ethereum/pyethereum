@@ -19,13 +19,17 @@ logger = get_logger()
 _db = new_db()
 blocks.peck_cache(_db, b'\x00' * 32, ethash_utils.get_cache_size(0))
 
+
 @pytest.fixture(scope='function')
 def db():
     """A database that contains the cache by default."""
     new_db = EphemDB()
+
     class DefaultDict(dict):
+
         def __missing__(self, key):
             return _db.get(key)
+
         def __contains__(self, key):
             return super(DefaultDict, self).__contains__(key) or key in _db
     new_db.db = DefaultDict()
@@ -140,9 +144,9 @@ def test_failing_transfer(db):
     assert blk.get_balance(v2) == b_v2
 
 
-def test_transient_block(db):
+def test_serialize_block(db):
     blk = blocks.genesis(db)
-    tb_blk = rlp.decode(rlp.encode(blk), blocks.TransientBlock)
+    tb_blk = blocks.BlockHeader.from_block_rlp(rlp.encode(blk))
     assert blk.hash == tb_blk.hash
     assert blk.number == tb_blk.number
 
@@ -455,10 +459,9 @@ def test_add_side_chain(db, alt_db):
     chain.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [rlp.decode(rlp.encode(R0), blocks.TransientBlock),
-                        rlp.decode(rlp.encode(R1), blocks.TransientBlock)]
-    for t_block in transient_blocks:
-        block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles, db=chain.db)
+    rlp_blocks = [rlp.encode(R0), rlp.encode(R1)]
+    for rlp_block in rlp_blocks:
+        block = blocks.Block.deserialize(rlp.decode(rlp_block), db=chain.db)
         chain.add_block(block)
 
     assert L2.hash in chain
@@ -490,11 +493,9 @@ def test_add_longer_side_chain(db, alt_db):
     chain.add_block(L2)
 
     # receive serialized remote blocks, newest first
-    transient_blocks = [rlp.decode(rlp.encode(b), blocks.TransientBlock)
-                        for b in remote_blocks]
-
-    for t_block in transient_blocks:
-        block = blocks.Block(t_block.header, t_block.transaction_list, t_block.uncles, db=chain.db)
+    rlp_blocks = [rlp.encode(x) for x in remote_blocks]
+    for rlp_block in rlp_blocks:
+        block = blocks.Block.deserialize(rlp.decode(rlp_block), db=chain.db)
         chain.add_block(block)
 
     assert chain.head == remote_blocks[-1]
