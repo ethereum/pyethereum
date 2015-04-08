@@ -1312,6 +1312,9 @@ def calc_gaslimit(parent):
     new_contribution = ((parent.gas_used * BLKLIM_FACTOR_NOM) //
                         BLKLIM_FACTOR_DEN // GASLIMIT_EMA_FACTOR)
     gl = max(parent.gas_limit - decay + new_contribution, MIN_GAS_LIMIT)
+    if gl < GENESIS_GAS_LIMIT:
+        gl2 = parent.gas_limit + decay
+        gl = min(GENESIS_GAS_LIMIT, gl2)
     assert check_gaslimit(parent, gl)
     return gl
 

@@ -67,6 +67,8 @@ class Miner():
         dtarget = utils.big_endian_to_int(target)
         found = False
         sys.stderr.write("Starting mining\n")
+        near_misses = 0
+        start_time = time.time()
         for i in range(1, steps + 1):
             self.block.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
             o = blocks.hashimoto_light(fsz, cache, self.block.mining_hash,
@@ -79,8 +81,12 @@ class Miner():
                     break
                 else:
                     r = utils.big_endian_to_int(o["result"])
-                    sys.stderr.write('Near miss, %f %% of threshold!\n' %
-                                     (dtarget * 100.0 / r))
+                    near_misses += 1
+                    elapsed = time.time() - start_time
+                    sys.stderr.write('Near miss, %f %% of threshold! Elapsed: '
+                                     '%f, estimated time remaining: %f\n' %
+                                     (dtarget * 100.0 / r, elapsed,
+                                      elapsed * 256. / near_misses))
             steps -= 1
         if not found:
             return False
