@@ -1,5 +1,4 @@
 import os
-import threading
 import time
 from ethereum import utils
 from ethereum.utils import to_string, is_string
@@ -104,7 +103,6 @@ class Chain(object):
         self.index = Index(db)
         self.head_candidate = None
         self._coinbase = coinbase
-        self.lock = threading.Lock()
         if genesis:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
