@@ -66,8 +66,8 @@ MIN_GAS_LIMIT = 125000
 #                   (block.gas_used * 6 / 5) / 1024
 GASLIMIT_EMA_FACTOR = 1024
 GASLIMIT_ADJMAX_FACTOR = 1024
-BLKLIM_FACTOR_NOM = 6
-BLKLIM_FACTOR_DEN = 5
+BLKLIM_FACTOR_NOM = 3
+BLKLIM_FACTOR_DEN = 2
 # Block reward
 BLOCK_REWARD = 1500 * utils.denoms.finney
 # GHOST constants
@@ -1308,12 +1308,12 @@ def get_cache_memoized(db, seedhash, size):
 
 # Gas limit adjustment algo
 def calc_gaslimit(parent):
-    prior_contribution = parent.gas_limit * (GASLIMIT_EMA_FACTOR - 1)
-    new_contribution = (parent.gas_used * BLKLIM_FACTOR_NOM) // BLKLIM_FACTOR_DEN
-    gl = (prior_contribution + new_contribution) // GASLIMIT_EMA_FACTOR
-    gl = parent.gas_limit  # FIXME
+    decay = parent.gas_limit // GASLIMIT_EMA_FACTOR
+    new_contribution = ((parent.gas_used * BLKLIM_FACTOR_NOM) //
+                        BLKLIM_FACTOR_DEN // GASLIMIT_EMA_FACTOR)
+    gl = max(parent.gas_limit - decay + new_contribution, MIN_GAS_LIMIT)
     assert check_gaslimit(parent, gl)
-    return max(gl, MIN_GAS_LIMIT)
+    return gl
 
 
 def check_gaslimit(parent, gas_limit):
