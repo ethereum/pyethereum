@@ -41,9 +41,9 @@ alt_db = db
 @pytest.fixture(scope="module")
 def accounts():
     k = utils.sha3(b'cow')
-    v = decode_hex(utils.privtoaddr(k))
+    v = utils.privtoaddr(k)
     k2 = utils.sha3(b'horse')
-    v2 = decode_hex(utils.privtoaddr(k2))
+    v2 = utils.privtoaddr(k2)
     return k, v, k2, v2
 
 
