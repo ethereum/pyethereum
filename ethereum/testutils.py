@@ -122,21 +122,12 @@ def run_vm_test(params, mode):
 
     ext = pb.VMExt(blk, tx)
 
-    def call_wrapper(msg):
+    def msg_wrapper(msg):
         ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
-                                        destination=encode_hex(msg.to),
-                                        data=b'0x' + hexdata))
-        return 1, msg.gas, b''
-
-    def sendmsg_wrapper(msg, code):
-        ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
-        hexdata = encode_hex(msg.data.extract_all())
-        apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
-                                        value=to_string(msg.value),
-                                        destination=encode_hex(msg.to),
+                                        destination=msg.to,
                                         data=b'0x' + hexdata))
         return 1, msg.gas, b''
 
@@ -152,8 +143,7 @@ def run_vm_test(params, mode):
                                         destination=b'', data=b'0x' + hexdata))
         return 1, msg.gas, addr
 
-    ext.sendmsg = sendmsg_wrapper
-    ext.call = call_wrapper
+    ext.msg = msg_wrapper
     ext.create = create_wrapper
 
     def blkhash(n):
@@ -205,8 +195,11 @@ def run_vm_test(params, mode):
                     del params2['post'][k]
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'post']:
-            assert params1.get(k, None) == params2.get(k, None), \
-                k + ': %r %r' % (params1.get(k, None), params2.get(k, None))
+            shouldbe = params1.get(k, None)
+            reallyis = params2.get(k, None)
+            if shouldbe != reallyis:
+                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
+                                (shouldbe, reallyis))
     elif mode == TIME:
         return time_post - time_pre
 

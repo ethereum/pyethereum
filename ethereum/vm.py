@@ -521,7 +521,7 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = encode_hex(((b'\x00' * (32 - len(to))) + to)[12:])
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
+                call_msg = Message(msg.to, encode_hex(msg.to), value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
