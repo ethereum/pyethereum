@@ -75,7 +75,7 @@ class Transaction(rlp.Serializable):
         """
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
-        self.sender = decode_hex(utils.privtoaddr(key))
+        self.sender = utils.privtoaddr(key)
         return self
 
     @property

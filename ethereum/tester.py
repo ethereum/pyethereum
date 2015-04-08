@@ -6,7 +6,7 @@ import ethereum
 import ethereum.db as db
 import ethereum.opcodes as opcodes
 import ethereum.abi as abi
-from ethereum.slogging import LogRecorder, configure_logging
+from ethereum.slogging import LogRecorder, configure_logging, set_level
 from ethereum.utils import to_string
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
@@ -76,7 +76,7 @@ class state():
         self.block = b.genesis(self.db, o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
-        self.block.coinbase = decode_hex(a0)
+        self.block.coinbase = a0
         self.block.gas_limit = 10 ** 9
 
     def __del__(self):
@@ -101,7 +101,7 @@ class state():
                     languages[language] = __import__(language)
                 language = languages[language]
                 evm = language.compile(code)
-                self.address = encode_hex(me.evm(evm, sender, endowment, gas))
+                self.address = me.evm(evm, sender, endowment, gas)
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
                 sig = language.mk_full_signature(code)
@@ -141,7 +141,7 @@ class state():
         return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
         tx.sign(sender)
         if gas is not None:
@@ -164,7 +164,7 @@ class state():
             raise Exception("Send with funid+abi is deprecated. Please use"
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(decode_hex(u.privtoaddr(sender)))
+        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
@@ -254,6 +254,8 @@ def set_logging_level(lvl=1):
         'eth.vm.storage:trace,eth.vm.memory:trace'
     ]
     configure_logging(config_string=trace_lvl_map[lvl])
+    if lvl == 0:
+        set_level(None, 'info')
     print('Set logging level: %d' % lvl)
 
 

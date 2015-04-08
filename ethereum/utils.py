@@ -96,7 +96,7 @@ def sha3(seed):
 def privtoaddr(x):
     if len(x) > 32:
         x = decode_hex(x)
-    return encode_hex(sha3(privtopub(x)[1:])[12:])
+    return sha3(privtopub(x)[1:])[12:]
 
 
 def zpad(x, l):
@@ -115,7 +115,7 @@ def int_to_addr(x):
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
-    return encode_hex(b''.join(o))
+    return b''.join(o)
 
 
 def coerce_addr_to_bin(x):

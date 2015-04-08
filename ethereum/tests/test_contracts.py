@@ -5,10 +5,11 @@ from ethereum import tester, utils, abi
 import serpent
 from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import safe_ord
+from ethereum.slogging import set_level
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(2)
+tester.set_logging_level(0)
 
 
 # Test EVM contracts
@@ -907,7 +908,7 @@ def test_crowdfund():
     c.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
-    assert 100001 == s.block.get_balance(decode_hex(utils.int_to_addr(48)))
+    assert 100001 == s.block.get_balance(utils.int_to_addr(48))
     mida1 = s.block.get_balance(tester.a1)
     mida3 = s.block.get_balance(tester.a3)
     # Mine 5 blocks to expire the campaign
@@ -1051,6 +1052,7 @@ def sort(args:arr):
 
 @pytest.mark.timeout(10)
 def test_sort():
+    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(sort_code)
     assert c.sort([9]) == [9]
@@ -1075,6 +1077,7 @@ def test(args:arr):
 
 @pytest.mark.timeout(10)
 def test_indirect_sort():
+    set_level(None, 'info')
     s = tester.state()
     open(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
@@ -1208,7 +1211,7 @@ def test_ecrecover():
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
-    assert int(utils.privtoaddr(priv), 16) == addr
+    assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
     result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
     assert result == addr
@@ -1310,6 +1313,7 @@ def get_prevhashes(k):
 
 @pytest.mark.timeout(10)
 def test_prevhashes():
+    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(prevhashes_code)
     s.mine(7)
