@@ -123,7 +123,6 @@ def run_vm_test(params, mode):
     ext = pb.VMExt(blk, tx)
 
     def msg_wrapper(msg):
-        ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
@@ -132,7 +131,6 @@ def run_vm_test(params, mode):
         return 1, msg.gas, b''
 
     def create_wrapper(msg):
-        ext.set_balance(msg.sender, ext.get_balance(msg.sender) - msg.value)
         sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
