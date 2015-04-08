@@ -258,6 +258,12 @@ class BlockHeader(rlp.Serializable):
         self.block = None
         super(BlockHeader, self).__init__(**fields)
 
+
+    @classmethod
+    def from_block_rlp(self, rlp_data):
+        block_data = rlp.decode_lazy(rlp_data)
+        return super(BlockHeader, self).deserialize(block_data[0])
+
     @property
     def state_root(self):
         if self.block:
@@ -390,51 +396,6 @@ def mirror_from(source, attributes, only_getters=True):
                 setattr(cls, attribute, property(getter, setter))
         return cls
     return decorator
-
-
-@mirror_from('header', [field for field, _ in BlockHeader.fields])
-class TransientBlock(rlp.Serializable):
-    """A read only, non persistent, not validated representation of a block.
-
-    All attributes from the block header are accessible via read-only
-    properties (i.e. ``transient_block.prevhash`` is equivalent to
-    ``transient_block.header.prevhash``.
-
-    :ivar header: the block's header
-    :ivar transaction_list: a list of transactions in the block
-    :ivar uncles: a list of uncle headers
-    """
-
-    fields = [
-        ('header', BlockHeader),
-        ('transaction_list', CountableList(Transaction)),
-        ('uncles', CountableList(BlockHeader))
-    ]
-
-    def __init__(self, header, transaction_list, uncles):
-        super(TransientBlock, self).__init__(header, transaction_list, uncles)
-
-    @property
-    def hash(self):
-        """The binary block hash
-
-        This is equivalent to ``header.hash``.
-        """
-        return utils.sha3(rlp.encode(self.header))
-
-    def hex_hash(self):
-        """The hex encoded block hash.
-
-        This is equivalent to ``header.hex_hash().
-        """
-        return encode_hex(self.hash)
-
-    def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.number,
-                                             encode_hex(self.hash)[:8])
-
-    def __structlog__(self):
-        return encode_hex(self.hash)
 
 
 @mirror_from('header', set(field for field, _ in BlockHeader.fields) -
