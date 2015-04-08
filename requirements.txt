@@ -1,5 +1,4 @@
 bitcoin
-leveldb
 pysha3
 pytest
 pytest-timeout
