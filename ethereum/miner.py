@@ -25,16 +25,13 @@ class Miner():
     2) validate (or, if mining, determine) transactions;
     3) apply rewards;
     4) verify (or, if mining, compute a valid) state and nonce.
+
+    :param block: the block for which to find a valid nonce
     """
 
-    def __init__(self, parent, uncles, coinbase):
+    def __init__(self, block):
         self.nonce = 0
-        self.db = parent.db
-        ts = max(int(time.time()), parent.timestamp + 1)
-        self.block = blocks.Block.init_from_parent(parent, coinbase, extra_data='', timestamp=ts,
-                                                   uncles=uncles[:2])
-        self.pre_finalize_state_root = self.block.state_root
-        self.block.finalize()
+        self.block = block
         log.debug('mining', block_number=self.block.number,
                   block_hash=encode_hex(self.block.hash),
                   block_difficulty=self.block.difficulty)
@@ -45,36 +42,6 @@ class Miner():
                 pyethash = __import__('pyethash')
             else:
                 pyethash = __import__('ethereum.ethash')
-
-    def add_transaction(self, transaction):
-        old_state_root = self.block.state_root
-        # revert finalization
-        self.block.state_root = self.pre_finalize_state_root
-        try:
-            success, output = processblock.apply_transaction(self.block, transaction)
-        except processblock.InvalidTransaction as e:
-            # if unsuccessfull the prerequistes were not fullfilled
-            # and the tx isinvalid, state must not have changed
-            log.debug('invalid tx', tx_hash=transaction, error=e)
-            success = False
-
-        # finalize
-        self.pre_finalize_state_root = self.block.state_root
-        self.block.finalize()
-
-        if not success:
-            log.debug('tx not applied', tx_hash=transaction)
-            assert old_state_root == self.block.state_root
-            return False
-        else:
-            assert transaction in self.block.get_transactions()
-            log.debug('transaction applied', tx_hash=transaction,
-                      block_hash=self.block, result=output)
-            assert old_state_root != self.block.state_root
-            return True
-
-    def get_transactions(self):
-        return self.block.get_transactions()
 
     def mine(self, steps=1000):
         """

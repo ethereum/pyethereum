@@ -837,9 +837,16 @@ class Block(rlp.Serializable):
         self.transaction_count += 1
 
     def get_transaction(self, num):
-        """Get the `num`th transaction in this block."""
+        """Get the `num`th transaction in this block.
+
+        :raises: :exc:`IndexError` if the transaction does not exist
+        """
         index = rlp.encode(num)
-        return rlp.decode(self.transactions.get(index), Transaction)
+        tx = self.transactions.get(index)
+        if tx == trie.BLANK_NODE:
+            raise IndexError('Transaction does not exist')
+        else:
+            return rlp.decode(tx, Transaction)
 
     def get_transactions(self):
         """Build a list of all transactions in this block."""
@@ -1333,7 +1340,7 @@ class CachedBlock(Block):
         pass
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash())
+        return utils.big_endian_to_int(self.hash)
 
     @property
     def hash(self):
