@@ -1,10 +1,6 @@
 bitcoin
 pysha3
-pytest
-pytest-timeout
 repoze.lru
 structlog>=15.0.0
-coveralls
 https://github.com/ethereum/pyrlp/tarball/develop
-https://github.com/ethereum/serpent/tarball/develop
 https://github.com/ethereum/ethash/tarball/master
