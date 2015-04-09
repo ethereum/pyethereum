@@ -166,30 +166,6 @@ def sha3rlp(x):
     return sha3(rlp.encode(x))
 
 
-def int_to_big_endian4(integer):
-    ''' 4 bytes big endian integer'''
-    return struct.pack('>I', integer)
-
-
-def recursive_int_to_big_endian(item):
-    ''' convert all int to int_to_big_endian recursively
-    '''
-    if is_numeric(item):
-        return big_endian_int.serialize(item)
-    elif isinstance(item, (list, tuple)):
-        res = []
-        for item in item:
-            res.append(recursive_int_to_big_endian(item))
-        return res
-    return item
-
-
-def rlp_encode(item):
-    '''
-    item can be nested string/integer/list of string/integer
-    '''
-    return rlp.encode(recursive_int_to_big_endian(item))
-
 # Format encoders/decoders for bin, addr, int
 
 
@@ -214,18 +190,6 @@ def decode_int(v):
     return big_endian_to_int(v)
 
 
-def decode_root(root):
-    if isinstance(root, list):
-        if len(rlp.encode(root)) >= 32:
-            raise Exception("Direct RLP roots must have length <32")
-    elif is_string(root):
-        if len(root) != 0 and len(root) != 32:
-            raise Exception("String roots must be empty or length-32")
-    else:
-        raise Exception("Invalid root")
-    return root
-
-
 def decode_int256(v):
     return big_endian_to_int(v)
 
@@ -238,13 +202,6 @@ def encode_bin(v):
 def encode_root(v):
     '''encodes a trie root into serialization'''
     return v
-
-
-def encode_addr(v):
-    '''encodes an address into serialization'''
-    if not is_string(v) or len(v) not in [0, 40]:
-        raise Exception("Address must be empty or 40 chars long")
-    return decode_hex(v)
 
 
 def encode_int(v):
@@ -277,14 +234,12 @@ decoders = {
     "bin": decode_bin,
     "addr": decode_addr,
     "int": decode_int,
-    "trie_root": decode_root,
     "int256b": decode_int256,
 }
 
 # Encoding to RLP serialization
 encoders = {
     "bin": encode_bin,
-    "addr": encode_addr,
     "int": encode_int,
     "trie_root": encode_root,
     "int256b": encode_int256,
@@ -359,46 +314,6 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
             return res
         return wrapper
     return inner
-
-
-class DataDir(object):
-
-    ethdirs = {
-        "linux2": "~/.pyethereum",
-        "darwin": "~/Library/Application Support/Pyethereum/",
-        "win32": "~/AppData/Roaming/Pyethereum",
-        "win64": "~/AppData/Roaming/Pyethereum",
-    }
-
-    def __init__(self):
-        self._path = None
-
-    def set(self, path):
-        path = os.path.abspath(path)
-        if not os.path.exists(path):
-            os.makedirs(path)
-        assert os.path.isdir(path)
-        self._path = path
-
-    def _set_default(self):
-        p = self.ethdirs.get(sys.platform, self.ethdirs['linux2'])
-        self.set(os.path.expanduser(os.path.normpath(p)))
-
-    @property
-    def path(self):
-        if not self._path:
-            self._set_default()
-        return self._path
-
-#data_dir = DataDir()
-
-default_data_dir = DataDir().path
-
-
-def db_path(data_dir):
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    return os.path.join(data_dir, 'statedb')
 
 
 def dump_state(trie):

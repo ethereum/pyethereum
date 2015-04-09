@@ -8,6 +8,8 @@ omit =
   */fixtures/*
   */tests/*
   */utils/*
+  */ethereum/fastvm.py
+  */ethereum/spv.py
 
 [report]
 exclude_lines =
