@@ -5,7 +5,7 @@ from rlp.utils import ascii_chr
 
 
 def proc_ecrecover(ext, msg):
-    print('ecrecover proc', msg.gas)
+    #print('ecrecover proc', msg.gas)
     OP_GAS = opcodes.GECRECOVER
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
@@ -24,7 +24,7 @@ def proc_ecrecover(ext, msg):
 
 
 def proc_sha256(ext, msg):
-    print('sha256 proc', msg.gas)
+    #print('sha256 proc', msg.gas)
     OP_GAS = opcodes.GSHA256BASE + \
         (utils.ceil32(msg.data.size) / 32) * opcodes.GSHA256WORD
     gas_cost = OP_GAS
@@ -36,7 +36,7 @@ def proc_sha256(ext, msg):
 
 
 def proc_ripemd160(ext, msg):
-    print('ripemd160 proc', msg.gas)
+    #print('ripemd160 proc', msg.gas)
     OP_GAS = opcodes.GRIPEMD160BASE + \
         (utils.ceil32(msg.data.size) / 32) * opcodes.GRIPEMD160WORD
     gas_cost = OP_GAS
@@ -48,7 +48,7 @@ def proc_ripemd160(ext, msg):
 
 
 def proc_identity(ext, msg):
-    print('identity proc', msg.gas)
+    #print('identity proc', msg.gas)
     OP_GAS = opcodes.GIDENTITYBASE + \
         opcodes.GIDENTITYWORD * (utils.ceil32(msg.data.size) / 32)
     gas_cost = OP_GAS
