@@ -4,8 +4,8 @@ env:
   - TOX_ENV=py27
 
 install:
-  - pip install tox coveralls
   - pip install -r requirements.txt
+  - pip install -r dev_requirements.txt
 
 script:
 - coverage run --source ethereum setup.py test

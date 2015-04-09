@@ -1,0 +1,5 @@
+tox
+coveralls
+pytest
+pytest-timeout
+https://github.com/ethereum/serpent/tarball/develop
