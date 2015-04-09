@@ -39,6 +39,7 @@ time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
 fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
+
 def parse_int_or_hex(s):
     if s[:2] == b'0x':
         return utils.big_endian_to_int(decode_hex(s[2:]))
@@ -134,7 +135,7 @@ def run_vm_test(params, mode):
         sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
         nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
-        addr = utils.sha3(rlp.encode([sender, nonce]))[12:]
+        addr = utils.keccak(rlp.encode([sender, nonce]))[12:]
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
@@ -148,7 +149,7 @@ def run_vm_test(params, mode):
         if n >= ext.block_number or n < ext.block_number - 256:
             return b''
         else:
-            return utils.sha3(to_string(n))
+            return utils.keccak(to_string(n))
 
     ext.block_hash = blkhash
 
@@ -262,7 +263,7 @@ def run_state_test(params, mode):
             if n >= blk.number or n < blk.number - 256:
                 return b''
             else:
-                return utils.sha3(to_string(n))
+                return utils.keccak(to_string(n))
 
         ext.block_hash = blkhash
         return orig_apply_msg(ext, msg)
@@ -330,14 +331,14 @@ def run_ethash_test(params, mode):
     full_size = ethash.get_full_size(header.number)
     seed = b'\x00' * 32
     for i in range(header.number // ethash_utils.EPOCH_LENGTH):
-        seed = utils.sha3(seed)
+        seed = utils.keccak(seed)
     nonce = header.nonce
     assert len(nonce) == 8
     assert len(seed) == 32
     t1 = time.time()
     cache = ethash.mkcache(cache_size, seed)
     t2 = time.time()
-    cache_hash = encode_hex(utils.sha3(ethash.serialize_cache(cache)))
+    cache_hash = encode_hex(utils.keccak(ethash.serialize_cache(cache)))
     t6 = time.time()
     light_verify = ethash.hashimoto_light(full_size, cache, header_hash, nonce)
     t7 = time.time()

@@ -46,7 +46,7 @@ class ContractTranslator():
                                  % (name, sig_item['name'], encode_types))
             sig = name + '(' + ','.join(encode_types) + ')'
             if sig_item['type'] == 'function':
-                prefix = big_endian_to_int(utils.sha3(sig)[:4])
+                prefix = big_endian_to_int(utils.keccak(sig)[:4])
                 decode_types = [f['type'] for f in sig_item['outputs']]
                 is_unknown_type = len(sig_item['outputs']) and \
                     sig_item['outputs'][0]['name'] == 'unknown_out'
@@ -57,7 +57,7 @@ class ContractTranslator():
                     "is_unknown_type": is_unknown_type
                 }
             elif sig_item['type'] == 'event':
-                prefix = big_endian_to_int(utils.sha3(sig))
+                prefix = big_endian_to_int(utils.keccak(sig))
                 indexed = [f['indexed'] for f in sig_item['inputs']]
                 names = [f['name'] for f in sig_item['inputs']]
                 self.event_data[prefix] = {

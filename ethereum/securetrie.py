@@ -8,15 +8,15 @@ class SecureTrie(object):
         self.db = t.db
 
     def update(self, k, v):
-        h = utils.sha3(k)
+        h = utils.keccak(k)
         self.db.put(h, k)
         self.trie.update(h, v)
 
     def get(self, k):
-        return self.trie.get(utils.sha3(k))
+        return self.trie.get(utils.keccak(k))
 
     def delete(self, k):
-        self.trie.delete(utils.sha3(k))
+        self.trie.delete(utils.keccak(k))
 
     def to_dict(self):
         o = {}

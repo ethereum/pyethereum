@@ -248,7 +248,7 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
-    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    msg.to = utils.keccak(rlp.encode([sender, nonce]))[12:]
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)

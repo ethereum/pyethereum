@@ -26,7 +26,7 @@ def bloom(val):
 
 
 def bloom_insert(bloom, val):
-    h = utils.sha3(val)
+    h = utils.keccak(val)
 #    print 'bloom_insert', bloom_bits(val), repr(val)
     for i in range(0, BUCKETS_PER_VAL * 2, 2):
         bloom |= 1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047)
@@ -34,7 +34,7 @@ def bloom_insert(bloom, val):
 
 
 def bloom_bits(val):
-    h = utils.sha3(val)
+    h = utils.keccak(val)
     return [bits_in_number(1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047)) for i in range(0, BUCKETS_PER_VAL * 2, 2)]
 
 

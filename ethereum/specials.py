@@ -19,7 +19,7 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, [0] * 32
     pub = bitcoin.encode_pubkey(bitcoin.ecdsa_raw_recover(h, (v, r, s)), 'bin')
-    o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
+    o = [0] * 12 + [safe_ord(x) for x in utils.keccak(pub[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
 
 

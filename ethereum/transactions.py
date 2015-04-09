@@ -60,11 +60,11 @@ class Transaction(rlp.Serializable):
             if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
                 raise InvalidTransaction("Invalid signature values!")
             rlpdata = rlp.encode(self, UnsignedTransaction)
-            rawhash = utils.sha3(rlpdata)
+            rawhash = utils.keccak(rlpdata)
             pub = encode_pubkey(
                 ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)),
                 'bin')
-            self.sender = utils.sha3(pub[1:])[-20:]
+            self.sender = utils.keccak(pub[1:])[-20:]
         else:
             self.sender = 0
 
@@ -73,14 +73,14 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
-        rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        rawhash = utils.keccak(rlp.encode(self, UnsignedTransaction))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
         self.sender = utils.privtoaddr(key)
         return self
 
     @property
     def hash(self):
-        return utils.sha3(rlp.encode(self))
+        return utils.keccak(rlp.encode(self))
 
     def log_bloom(self):
         "returns int"

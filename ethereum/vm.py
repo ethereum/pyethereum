@@ -300,7 +300,7 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, s0, s1):
                     return vm_exception('OOG EXTENDING MEMORY')
                 data = b''.join(map(ascii_chr, mem[s0: s0 + s1]))
-                stk.append(utils.big_endian_to_int(utils.sha3(data)))
+                stk.append(utils.big_endian_to_int(utils.keccak(data)))
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == 'BALANCE':
