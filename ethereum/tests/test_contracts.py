@@ -1050,7 +1050,7 @@ def sort(args:arr):
 """
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(100)
 def test_sort():
     set_level(None, 'info')
     s = tester.state()
@@ -1075,7 +1075,7 @@ def test(args:arr):
 ''' % filename9
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(100)
 def test_indirect_sort():
     set_level(None, 'info')
     s = tester.state()
@@ -1311,7 +1311,7 @@ def get_prevhashes(k):
     return(o:arr)
 """
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(100)
 def test_prevhashes():
     set_level(None, 'info')
     s = tester.state()
