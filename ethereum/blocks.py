@@ -347,10 +347,9 @@ class BlockHeader(rlp.Serializable):
 
         # Grab current cache
         current_cache_size = get_cache_size(self.number)
-        cache = get_cache_memoized(db, seed, current_cache_size)
+        cache = get_cache_memoized(seed, current_cache_size)
         current_full_size = get_full_size(self.number)
-        mining_output = hashimoto_light(current_full_size, cache,
-                                        header_hash, nonce)
+        mining_output = hashimoto_light(current_full_size, cache, header_hash, nonce)
         diff = self.difficulty
         if mining_output['mix digest'] != self.mixhash:
             return False
@@ -1242,30 +1241,9 @@ class Block(rlp.Serializable):
     def __structlog__(self):
         return encode_hex(self.hash)
 
-
-cache_cache = {}
-
-
-def peck_cache(db, seedhash, size):
-    key = b'cache:' + seedhash + b',' + str_to_bytes(str(size))
-    if key not in db:
-        cache = mkcache(size, seedhash)
-        cache_cache[key] = cache
-        cache_serialized = serialize_cache(cache)
-        cache_hash = utils.sha3(cache_serialized)
-        db.put(cache_hash, cache_serialized)
-        db.put(key, cache_hash)
-    elif key not in cache_cache:
-        o = db.get(db.get(key))
-        cache_cache[key] = o
-        return deserialize_cache(o)
-
-
-def get_cache_memoized(db, seedhash, size):
-    key = b'cache:' + seedhash + b',' + str_to_bytes(str(size))
-    peck_cache(db, seedhash, size)
-    return cache_cache[key]
-
+@lru_cache(5)
+def get_cache_memoized(seedhash, size):
+    return mkcache(size, seedhash)
 
 # Gas limit adjustment algo
 def calc_gaslimit(parent):

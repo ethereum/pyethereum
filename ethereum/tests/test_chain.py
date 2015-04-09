@@ -15,26 +15,12 @@ from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # configure_logging('eth.vm:trace,eth.vm.memory:info')
 
-
 _db = new_db()
-blocks.peck_cache(_db, b'\x00' * 32, ethash_utils.get_cache_size(0))
 
 
 @pytest.fixture(scope='function')
 def db():
-    """A database that contains the cache by default."""
-    new_db = EphemDB()
-
-    class DefaultDict(dict):
-
-        def __missing__(self, key):
-            return _db.get(key)
-
-        def __contains__(self, key):
-            return super(DefaultDict, self).__contains__(key) or key in _db
-    new_db.db = DefaultDict()
-    return new_db
-
+    return EphemDB()
 alt_db = db
 
 
