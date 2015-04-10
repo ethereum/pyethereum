@@ -1,4 +1,3 @@
-from ethereum.compress import compress, decompress
 from ethereum import utils
 from ethereum.slogging import get_logger
 from rlp.utils import str_to_bytes
@@ -14,10 +13,10 @@ class _EphemDB(object):
         self.db = {}
 
     def get(self, key):
-        return decompress(self.db[key])
+        return self.db[key]
 
     def put(self, key, value):
-        self.db[key] = compress(value)
+        self.db[key] = value
 
     def delete(self, key):
         del self.db[key]

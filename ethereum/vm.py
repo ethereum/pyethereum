@@ -459,7 +459,7 @@ def vm_execute(ext, msg, code):
             data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(safe_ord, data)))
-            print('LOG', msg.to, topics, list(map(safe_ord, data)))
+            # print('LOG', msg.to, topics, list(map(safe_ord, data)))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
@@ -546,7 +546,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.add_suicide(msg.to)
-            print('suiciding %s %s %d' % (msg.to, to, xfer))
+            # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
         for a in stk:
             assert is_numeric(a)

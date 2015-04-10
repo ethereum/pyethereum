@@ -58,7 +58,7 @@ class Miner():
         """
         #b = self.block
         sz = blocks.get_cache_size(self.block.number)
-        cache = blocks.get_cache_memoized(self.block.db, self.block.header.seed, sz)
+        cache = blocks.get_cache_memoized(self.block.header.seed, sz)
         fsz = blocks.get_full_size(self.block.number)
         nonce = utils.big_endian_to_int(self.block.nonce)
         TT64M1 = 2**64 - 1

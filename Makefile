@@ -8,6 +8,7 @@ help:
 	@echo "lint - check style with flake8"
 	@echo "test - run tests with the default Python"
 	@echo "testnovm - run tests except test_vm"
+	@echo "testquick - run tests except test_vm, test_state"
 	@echo "testtb - run tests with tracebacks"
 	@echo "test-all - run tests on every Python version with tox"
 	@echo "coverage - check code coverage quickly with the default Python"
@@ -41,6 +42,9 @@ test:
 
 testnovm:
 	py.test --tb=no ethereum/tests/ --ignore=ethereum/tests/test_vm.py
+
+testquick:
+	py.test --tb=no ethereum/tests/ --ignore=ethereum/tests/test_vm.py --ignore=ethereum/tests/test_state.py
 
 testtb:
 	python setup.py test

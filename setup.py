@@ -29,14 +29,19 @@ console_scripts = []
 
 cmdclass = dict(test=PyTest)
 
+# requirements
 install_requires = set(x.strip() for x in open('requirements.txt'))
-
 install_requires_replacements = {
     'https://github.com/ethereum/pyrlp/tarball/develop': 'rlp>=0.3.7',
-    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
-    'https://github.com/ethereum/ethash/tarball/master': 'pyethash>=23'}
-
+    'https://github.com/ethereum/ethash/tarball/master': 'pyethash'}
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
+
+# dev requirements
+tests_require = set(x.strip() for x in open('dev_requirements.txt'))
+tests_require_replacements = {
+    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1'}
+tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
+
 
 setup(name="ethereum",
       packages=find_packages("."),
@@ -44,6 +49,7 @@ setup(name="ethereum",
       long_description=readme,
       url='https://github.com/ethereum/pyethereum/',
       install_requires=install_requires,
+      tests_require=tests_require,
       entry_points=dict(console_scripts=console_scripts),
       version='0.9.64',
       cmdclass=cmdclass
