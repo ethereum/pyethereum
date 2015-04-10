@@ -9,7 +9,7 @@ logger = get_logger()
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 if '--trace' in sys.argv:  # not default
     # configure_logging(':trace')
-    sys.argv.remove('trace')
+    sys.argv.remove('--trace')
 
 
 # SETUP TESTS IN GLOBAL NAME SPACE

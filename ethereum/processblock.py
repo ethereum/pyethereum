@@ -214,7 +214,7 @@ def _apply_msg(ext, msg, code):
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
     if log_state.is_active:
-        log_state.trace('MSG PRE STATE', account=msg.to, state=ext.log_storage(msg.to))
+        log_state.trace('MSG PRE STATE', account=msg.to, bal=ext.get_balance(msg.to), state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
@@ -233,7 +233,7 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active:
-        log_state.trace('MSG POST STATE', account=msg.to, state=ext.log_storage(msg.to))
+        log_state.trace('MSG POST STATE', account=msg.to, bal=ext.get_balance(msg.to), state=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg.debug('REVERTING')
@@ -257,7 +257,9 @@ def create_contract(ext, msg):
         ext._block.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
-    res, gas, dat = _apply_msg(ext, msg, msg.data.extract_all())
+    code = msg.data.extract_all()
+    msg.data = vm.CallData([], 0, 0)
+    res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
 
     if res:

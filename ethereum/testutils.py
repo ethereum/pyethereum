@@ -39,11 +39,48 @@ time_ethash_test = lambda params: run_ethash_test(params, TIME)
 
 fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
+
 def parse_int_or_hex(s):
-    if s[:2] == b'0x':
+    if isinstance(s, int):
+        return s
+    elif s[:2] == b'0x':
         return utils.big_endian_to_int(decode_hex(s[2:]))
     else:
         return int(s)
+
+
+def acct_standard_form(a):
+    return {
+        "balance": parse_int_or_hex(a["balance"]),
+        "nonce": parse_int_or_hex(a["nonce"]),
+        "code": a["code"],
+        "storage": a["storage"]
+    }
+
+
+def compare_post_states(shouldbe, reallyis):
+    if shouldbe is None and reallyis is None:
+        return True
+    if shouldbe is None or reallyis is None:
+        raise Exception("Shouldbe: %r \n\nreallyis: %r" % (shouldbe, reallyis))
+    for k in shouldbe:
+        if k not in reallyis:
+            r = {"nonce": 0, "balance": 0, "code": "0x", "storage": {}}
+        else:
+            r = acct_standard_form(reallyis[k])
+        s = acct_standard_form(shouldbe[k])
+        if s != r:
+            raise Exception("Key %r\n\nshouldbe: %r \n\nreallyis: %r" %
+                            (k, s, r))
+    return True
+
+
+def callcrate_standard_form(c):
+    return {
+        "gasLimit": parse_int_or_hex(c["gasLimit"]),
+        "value": parse_int_or_hex(c["value"]),
+        "data": c["data"]
+    }
 
 
 def mktest(code, language, data=None, fun=None, args=None,
@@ -84,11 +121,11 @@ def run_vm_test(params, mode):
     # setup env
     header = blocks.BlockHeader(
         prevhash=decode_hex(env['previousHash']),
-        number=int(env['currentNumber']),
+        number=parse_int_or_hex(env['currentNumber']),
         coinbase=decode_hex(env['currentCoinbase']),
-        difficulty=int(env['currentDifficulty']),
+        difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
-        timestamp=int(env['currentTimestamp']))
+        timestamp=parse_int_or_hex(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
     # setup state
@@ -96,8 +133,8 @@ def run_vm_test(params, mode):
         assert len(address) == 40
         address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
-        blk.set_nonce(address, int(h['nonce']))
-        blk.set_balance(address, int(h['balance']))
+        blk.set_nonce(address, parse_int_or_hex(h['nonce']))
+        blk.set_balance(address, parse_int_or_hex(h['balance']))
         blk.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
@@ -109,10 +146,10 @@ def run_vm_test(params, mode):
     recvaddr = decode_hex(exek['address'])
     tx = transactions.Transaction(
         nonce=blk._get_acct_item(decode_hex(exek['caller']), 'nonce'),
-        gasprice=int(exek['gasPrice']),
-        startgas=int(exek['gas']),
+        gasprice=parse_int_or_hex(exek['gasPrice']),
+        startgas=parse_int_or_hex(exek['gas']),
         to=recvaddr,
-        value=int(exek['value']),
+        value=parse_int_or_hex(exek['value']),
         data=decode_hex(exek['data'][2:]))
     tx.sender = sender
 
@@ -183,18 +220,23 @@ def run_vm_test(params, mode):
         return params2
     elif mode == VERIFY:
         params1 = copy.deepcopy(params)
-        if 'post' in params1:
-            for k, v in list(params1['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
-                    del params1['post'][k]
-        if 'post' in params2:
-            for k, v in list(params2['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
-                    del params2['post'][k]
+        shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
+        compare_post_states(shouldbe, reallyis)
+
+        def normalize_value(k, p):
+            if k in p:
+                if k == 'gas':
+                    return parse_int_or_hex(p[k])
+                elif k == 'callcreates':
+                    return map(callcrate_standard_form, p[k])
+                else:
+                    return k
+            return None
+
         for k in ['pre', 'exec', 'env', 'callcreates',
-                  'out', 'gas', 'logs', 'post']:
-            shouldbe = params1.get(k, None)
-            reallyis = params2.get(k, None)
+                  'out', 'gas', 'logs']:
+            shouldbe = normalize_value(k, params1)
+            reallyis = normalize_value(k, params2)
             if shouldbe != reallyis:
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
                                 (shouldbe, reallyis))
@@ -216,11 +258,11 @@ def run_state_test(params, mode):
     # setup env
     header = blocks.BlockHeader(
         prevhash=decode_hex(env['previousHash']),
-        number=int(env['currentNumber']),
+        number=parse_int_or_hex(env['currentNumber']),
         coinbase=decode_hex(env['currentCoinbase']),
-        difficulty=int(env['currentDifficulty']),
+        difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
-        timestamp=int(env['currentTimestamp']))
+        timestamp=parse_int_or_hex(env['currentTimestamp']))
     blk = blocks.Block(header, db=db)
 
     # setup state
@@ -228,8 +270,8 @@ def run_state_test(params, mode):
         assert len(address) == 40
         address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
-        blk.set_nonce(address, int(h['nonce']))
-        blk.set_balance(address, int(h['balance']))
+        blk.set_nonce(address, parse_int_or_hex(h['nonce']))
+        blk.set_balance(address, parse_int_or_hex(h['balance']))
         blk.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
@@ -238,8 +280,8 @@ def run_state_test(params, mode):
 
     for address, h in list(pre.items()):
         address = decode_hex(address)
-        assert blk.get_nonce(address) == int(h['nonce'])
-        assert blk.get_balance(address) == int(h['balance'])
+        assert blk.get_nonce(address) == parse_int_or_hex(h['nonce'])
+        assert blk.get_balance(address) == parse_int_or_hex(h['balance'])
         assert blk.get_code(address) == decode_hex(h['code'][2:])
         for k, v in h['storage'].items():
             assert blk.get_storage_data(address, utils.big_endian_to_int(
@@ -247,11 +289,11 @@ def run_state_test(params, mode):
 
     # execute transactions
     tx = transactions.Transaction(
-        nonce=int(exek['nonce'] or b"0"),
-        gasprice=int(exek['gasPrice'] or b"0"),
+        nonce=parse_int_or_hex(exek['nonce'] or b"0"),
+        gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
         startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
         to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
-        value=int(exek['value'] or b"0"),
+        value=parse_int_or_hex(exek['value'] or b"0"),
         data=decode_hex(exek['data'][2:])).sign(exek['secretKey'])
 
     orig_apply_msg = pb.apply_msg
@@ -296,16 +338,10 @@ def run_state_test(params, mode):
         return params2
     elif mode == VERIFY:
         params1 = copy.deepcopy(params)
-        if 'post' in params1:
-            for k, v in list(params1['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
-                    del params1['post'][k]
-        if 'post' in params2:
-            for k, v in list(params2['post'].items()):
-                if v == {'code': b'0x', 'nonce': '0', 'balance': '0', 'storage': {}}:
-                    del params2['post'][k]
+        shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
+        compare_post_states(shouldbe, reallyis)
         for k in ['pre', 'exec', 'env', 'callcreates',
-                  'out', 'gas', 'logs', 'post', 'postStateRoot']:
+                  'out', 'gas', 'logs', 'postStateRoot']:
             shouldbe = params1.get(k, None)
             reallyis = params2.get(k, None)
             if shouldbe != reallyis:
