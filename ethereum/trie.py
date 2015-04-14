@@ -184,7 +184,7 @@ def is_key_value_type(node_type):
                          NODE_TYPE_EXTENSION]
 
 BLANK_NODE = b''
-BLANK_ROOT = utils.sha3rlp(b'')
+BLANK_ROOT = utils.keccakrlp(b'')
 
 
 def transient_trie_exception(*args):
@@ -225,9 +225,9 @@ class Trie(object):
             pass
         elif proof.get_mode() == RECORDING:
             proof.add_node(copy.copy(node))
-            # print('recording %s' % encode_hex(utils.sha3(rlp.encode(node))))
+            # print('recording %s' % encode_hex(utils.keccak(rlp.encode(node))))
         elif proof.get_mode() == VERIFYING:
-            # print('verifying %s' % encode_hex(utils.sha3(rlp.encode(node))))
+            # print('verifying %s' % encode_hex(utils.keccak(rlp.encode(node))))
             if rlp.encode(node) not in proof.get_nodes():
                 raise InvalidSPVProof("Proof invalid!")
 
@@ -253,7 +253,7 @@ class Trie(object):
             return BLANK_ROOT
         assert isinstance(self.root_node, list)
         val = rlp.encode(self.root_node)
-        key = utils.sha3(val)
+        key = utils.keccak(val)
         self.db.put(key, val)
         self.spv_grabbing(self.root_node)
         return key
@@ -298,7 +298,7 @@ class Trie(object):
         if len(rlpnode) < 32:
             return node
 
-        hashkey = utils.sha3(rlpnode)
+        hashkey = utils.keccak(rlpnode)
         self.db.put(hashkey, rlpnode)
         self.spv_storing(node)
         return hashkey
@@ -829,7 +829,7 @@ def verify_spv_proof(root, key, proof):
 
     for i, node in enumerate(proof):
         R = rlp.encode(node)
-        H = utils.sha3(R)
+        H = utils.keccak(R)
         t.db.put(H, R)
     try:
         t.root_hash = root

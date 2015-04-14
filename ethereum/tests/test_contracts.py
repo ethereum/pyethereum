@@ -1203,14 +1203,14 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
+    priv = encode_hex(utils.keccak('some big long brainwallet password'))
     pub = bitcoin.privtopub(priv)
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
+    msghash = encode_hex(utils.keccak('the quick brown fox jumps over the lazy dog'))
     V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
-    addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
+    addr = utils.big_endian_to_int(utils.keccak(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
     result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)

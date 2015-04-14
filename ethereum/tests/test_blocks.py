@@ -59,7 +59,7 @@ def run_block_test(params):
         utils.scanners['bin'](gbh["receiptTrie"])
     assert b.transactions.root_hash == \
         utils.scanners['bin'](gbh["transactionsTrie"])
-    assert utils.sha3rlp(b.uncles) == \
+    assert utils.keccakrlp(b.uncles) == \
         utils.scanners['bin'](gbh["uncleHash"])
     h = encode_hex(b.state.root_hash)
     if h != str_to_bytes(gbh["stateRoot"]):

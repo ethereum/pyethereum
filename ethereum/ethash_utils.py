@@ -40,7 +40,7 @@ def serialize_hash(h):
 
 
 def deserialize_hash(h):
-    return [decode_int(h[i:i+WORD_BYTES]) for i in range(0, len(h), WORD_BYTES)]
+    return [decode_int(h[i:i + WORD_BYTES]) for i in range(0, len(h), WORD_BYTES)]
 
 
 def hash_words(h, sz, x):
@@ -51,11 +51,11 @@ def hash_words(h, sz, x):
 
 
 # sha3 hash function, outputs 64 bytes
-def sha3_512(x):
+def keccak_512(x):
     return hash_words(lambda v: sha3.sha3_512(v).digest(), 64, x)
 
 
-def sha3_256(x):
+def keccak_256(x):
     return hash_words(lambda v: sha3.sha3_256(v).digest(), 32, x)
 
 
@@ -71,13 +71,14 @@ serialize_dataset = serialize_cache
 
 
 def deserialize_cache(ds):
-    return [deserialize_hash(ds[i:i+HASH_BYTES])
+    return [deserialize_hash(ds[i:i + HASH_BYTES])
             for i in range(0, len(ds), HASH_BYTES)]
 
 deserialize_dataset = deserialize_cache
 
 
 class ListWrapper(list):
+
     def __init__(self, data):
         self.data = data
         self.len = len(data) / HASH_BYTES
@@ -88,7 +89,7 @@ class ListWrapper(list):
     def __getitem__(self, i):
         if i >= self.len:
             raise Exception("listwrap access out of range")
-        return deserialize_hash(self.data[i*HASH_BYTES:(i+1)*HASH_BYTES])
+        return deserialize_hash(self.data[i * HASH_BYTES:(i + 1) * HASH_BYTES])
 
     def __iter__(self):
         for i in range(self.len):

@@ -153,7 +153,7 @@ class Chain(object):
         uncles = set(u.header for u in self.get_brothers(self.head))
         for i in range(8):
             for u in blk.uncles:  # assuming uncle headers
-                u = utils.sha3(rlp.encode(u))
+                u = utils.keccak(rlp.encode(u))
                 if u in self:
                     uncles.discard(self.get(u))
             if blk.has_parent():

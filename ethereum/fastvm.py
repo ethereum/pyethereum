@@ -389,7 +389,7 @@ def apply_msg(block, tx, msg, code):
             create_msg = Message(msgtop.to, '', value, gaz() - 100, data, msz)
             msgtop.compustate.gas -= gaz() - 100
             nonce = utils.encode_int(block.get_nonce(msgtop.to) - 1)
-            create_msg.to = encode_hex(utils.sha3(rlp.encode([sender, nonce]))[12:])
+            create_msg.to = encode_hex(utils.keccak(rlp.encode([sender, nonce]))[12:])
             special[0] = 'create'
             special[1] = create_msg
             special[2] = ''.join([ascii_chr(x) for x in extract_bytes(data, 0, msz)])
@@ -507,7 +507,7 @@ def apply_msg(block, tx, msg, code):
         if not mem_extend(mem, msgtop.compustate, '', s0, s1):
             return drop(OUT_OF_GAS)
         data = ''.join([ascii_chr(x) for x in mem[s0: s0 + s1]])
-        stk.append(utils.big_endian_to_int(utils.sha3(data)))
+        stk.append(utils.big_endian_to_int(utils.keccak(data)))
 
     def OP_ADDRESS():
         stk.append(utils.coerce_to_int(msg.to))

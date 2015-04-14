@@ -57,7 +57,7 @@ def verify_independent_transaction_spv_proof(db, proof):
         pre_med, pre_gas, _, _ = b.get_receipt(index - 1)
     else:
         pre_med, pre_gas = pb['state_root'], ''
-        if utils.sha3(rlp.encode(prevheader)) != b.prevhash:
+        if utils.keccak(rlp.encode(prevheader)) != b.prevhash:
             return False
     b.state_root = pre_med
     b.gas_used = utils.decode_int(pre_gas)

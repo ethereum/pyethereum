@@ -89,14 +89,14 @@ def int_to_32bytearray(i):
     return o
 
 
-def sha3(seed):
+def keccak(seed):
     return sha3_256(seed).digest()
 
 
 def privtoaddr(x):
     if len(x) > 32:
         x = decode_hex(x)
-    return sha3(privtopub(x)[1:])[12:]
+    return keccak(privtopub(x)[1:])[12:]
 
 
 def zpad(x, l):
@@ -162,8 +162,8 @@ def to_signed(i):
     return i if i < TT255 else i - TT256
 
 
-def sha3rlp(x):
-    return sha3(rlp.encode(x))
+def keccakrlp(x):
+    return keccak(rlp.encode(x))
 
 
 # Format encoders/decoders for bin, addr, int

@@ -23,7 +23,7 @@ accounts = []
 keys = []
 
 for i in range(10):
-    keys.append(u.sha3(to_string(i)))
+    keys.append(u.keccak(to_string(i)))
     accounts.append(u.privtoaddr(keys[-1]))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]

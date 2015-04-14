@@ -147,7 +147,7 @@ class Account(rlp.Serializable):
 
     @code.setter
     def code(self, value):
-        self.code_hash = utils.sha3(value)
+        self.code_hash = utils.keccak(value)
         self.db.put(self.code_hash, value)
 
     @classmethod
@@ -159,7 +159,7 @@ class Account(rlp.Serializable):
 
         :param db: the db in which the account will store its code.
         """
-        code_hash = utils.sha3(b'')
+        code_hash = utils.keccak(b'')
         db.put(code_hash, b'')
         return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
 
@@ -236,7 +236,7 @@ class BlockHeader(rlp.Serializable):
 
     def __init__(self,
                  prevhash=GENESIS_PREVHASH,
-                 uncles_hash=utils.sha3rlp([]),
+                 uncles_hash=utils.keccakrlp([]),
                  coinbase=GENESIS_COINBASE,
                  state_root=trie.BLANK_ROOT,
                  tx_list_root=trie.BLANK_ROOT,
@@ -309,7 +309,7 @@ class BlockHeader(rlp.Serializable):
     @property
     def hash(self):
         """The binary block hash"""
-        return utils.sha3(rlp.encode(self))
+        return utils.keccak(rlp.encode(self))
 
     def hex_hash(self):
         """The hex encoded block hash"""
@@ -317,14 +317,13 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def mining_hash(self):
-        return utils.sha3(rlp.encode(self,
-                          BlockHeader.exclude(['mixhash', 'nonce'])))
+        return utils.keccak(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
     @property
     def seed(self):
         seed = b'\x00' * 32
         for i in range(self.number // EPOCH_LENGTH):
-            seed = utils.sha3(seed)
+            seed = utils.keccak(seed)
         return seed
 
     def check_pow(self, db=None, nonce=None):
@@ -525,7 +524,7 @@ class Block(rlp.Serializable):
         must_equal('gas_used', original_values['gas_used'], self.gas_used)
         must_equal('timestamp', self.timestamp, original_values['timestamp'])
         must_equal('difficulty', self.difficulty, original_values['difficulty'])
-        must_equal('uncles_hash', utils.sha3(rlp.encode(uncles)), original_values['uncles_hash'])
+        must_equal('uncles_hash', utils.keccak(rlp.encode(uncles)), original_values['uncles_hash'])
         assert header.block is None
         must_equal('state_root', self.state.root_hash, header.state_root)
         must_equal('tx_list_root', self.transactions.root_hash,
@@ -571,7 +570,7 @@ class Block(rlp.Serializable):
         The block will not include any transactions and will not be finalized.
         """
         header = BlockHeader(prevhash=parent.hash,
-                             uncles_hash=utils.sha3(rlp.encode(uncles)),
+                             uncles_hash=utils.keccak(rlp.encode(uncles)),
                              coinbase=coinbase,
                              state_root=parent.state_root,
                              tx_list_root=trie.BLANK_ROOT,
@@ -602,7 +601,7 @@ class Block(rlp.Serializable):
 
         This is equivalent to ``header.hash``.
         """
-        return utils.sha3(rlp.encode(self.header))
+        return utils.keccak(rlp.encode(self.header))
 
     def hex_hash(self):
         """The hex encoded block hash.
@@ -639,7 +638,7 @@ class Block(rlp.Serializable):
 
     @property
     def uncles_hash(self):
-        return utils.sha3(rlp.encode(self.uncles))
+        return utils.keccak(rlp.encode(self.uncles))
 
     @property
     def transaction_list(self):
@@ -650,7 +649,7 @@ class Block(rlp.Serializable):
 
     def validate_uncles(self, db=None):
         """Validate the uncles of this block."""
-        if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
+        if utils.keccak(rlp.encode(self.uncles)) != self.uncles_hash:
             return False
         if len(self.uncles) > 2:
             return False
@@ -679,7 +678,7 @@ class Block(rlp.Serializable):
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
-                          uncle=encode_hex(utils.sha3(rlp.encode(uncle))))
+                          uncle=encode_hex(utils.keccak(rlp.encode(uncle))))
                 return False
             ineligible.append(uncle)
         return True
@@ -1176,7 +1175,7 @@ class Block(rlp.Serializable):
 
     @property
     def mining_hash(self):
-        return utils.sha3(rlp.encode(self.header,
+        return utils.keccak(rlp.encode(self.header,
                                      BlockHeader.exclude(['nonce', 'mixhash'])))
 
     def get_parent(self):
@@ -1315,7 +1314,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY
     # https://ethereum.etherpad.mozilla.org/11
     header = BlockHeader(
         prevhash=GENESIS_PREVHASH,
-        uncles_hash=utils.sha3(rlp.encode([])),
+        uncles_hash=utils.keccak(rlp.encode([])),
         coinbase=GENESIS_COINBASE,
         state_root=trie.BLANK_ROOT,
         tx_list_root=trie.BLANK_ROOT,
