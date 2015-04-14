@@ -315,6 +315,8 @@ def decode_single(data, base, sub):
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         return (big_endian_to_int(data) * 1.0 / 2**low) % 2**high
+    elif base == 'bool':
+        return bool(int(data.encode('hex'), 16))
 
 
 def decode_any(data, base, sub, arrlist):
