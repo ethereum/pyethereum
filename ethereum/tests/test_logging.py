@@ -70,6 +70,13 @@ def test_baseconfig():
     th = setup_logging(config_string=config_string)
 
 
+def test_is_active2():
+    setup_logging(':info')
+    tester = slogging.get_logger('tester')
+    assert tester.is_active(level_name='info')
+    assert not tester.is_active(level_name='trace')
+
+
 def test_lvl_trace():
     config_string = ':trace'
     th = setup_logging(config_string=config_string)
@@ -317,3 +324,12 @@ def test_how_to_use_as_vm_logger():
 def test_cleanup():
     config_string = ':debug'
     slogging.configure(config_string=config_string)
+
+
+if __name__ == '__main__':
+    slogging.configure(':debug')
+    tester = slogging.get_logger('tester')
+    assert tester.is_active(level_name='info')
+    slogging.set_level('tester', 'trace')
+    assert tester.is_active(level_name='trace')
+    tester.info('done')

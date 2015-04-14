@@ -209,12 +209,13 @@ def apply_msg(ext, msg):
 
 
 def _apply_msg(ext, msg, code):
-    if log_msg.is_active:
+    if log_msg.is_active('trace'):
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
-    if log_state.is_active:
-        log_state.trace('MSG PRE STATE', account=msg.to, bal=ext.get_balance(msg.to), state=ext.log_storage(msg.to))
+    if log_state.is_active('trace'):
+        log_state.trace('MSG PRE STATE', account=msg.to, bal=ext.get_balance(
+            msg.to), state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
@@ -229,11 +230,12 @@ def _apply_msg(ext, msg, code):
         res, gas, dat = vm.vm_execute(ext, msg, code)
     gas = int(gas)
     assert utils.is_numeric(gas)
-    if log_msg.is_active:
+    if log_msg.is_active('trace'):
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
-    if log_state.is_active:
-        log_state.trace('MSG POST STATE', account=msg.to, bal=ext.get_balance(msg.to), state=ext.log_storage(msg.to))
+    if log_state.is_active('trace'):
+        log_state.trace('MSG POST STATE', account=msg.to, bal=ext.get_balance(
+            msg.to), state=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg.debug('REVERTING')
