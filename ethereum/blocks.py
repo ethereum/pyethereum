@@ -258,11 +258,12 @@ class BlockHeader(rlp.Serializable):
         self.block = None
         super(BlockHeader, self).__init__(**fields)
 
-
     @classmethod
     def from_block_rlp(self, rlp_data):
         block_data = rlp.decode_lazy(rlp_data)
-        return super(BlockHeader, self).deserialize(block_data[0])
+        r = super(BlockHeader, self).deserialize(block_data[0])
+        assert isinstance(r, BlockHeader)
+        return r
 
     @property
     def state_root(self):
@@ -306,10 +307,12 @@ class BlockHeader(rlp.Serializable):
         else:
             self._receipts_root = value
 
+    _fimxe_hash = None
+
     @property
     def hash(self):
         """The binary block hash"""
-        return utils.sha3(rlp.encode(self))
+        return self._fimxe_hash or utils.sha3(rlp.encode(self))
 
     def hex_hash(self):
         """The hex encoded block hash"""
@@ -458,7 +461,7 @@ class Block(rlp.Serializable):
 
         # do some consistency checks on parent if given
         if parent:
-            if self.db != parent.db:
+            if hasattr(parent, 'db') and self.db != parent.db:
                 raise ValueError("Parent lives in different database")
             if self.prevhash != parent.header.hash:
                 raise ValueError("Block's prevhash and parent's hash do not match")
@@ -486,12 +489,12 @@ class Block(rlp.Serializable):
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
                          header.state_root != trie.BLANK_ROOT and
                          (len(header.state_root) != 32 or
-                          'validated:'+self.hash not in db) and
+                          'validated:' + self.hash not in db) and
                          not making)
         if state_unknown:
             assert transaction_list is not None
             if not parent:
-                parent = self.get_parent()
+                parent = self.get_parent_header()
             self.state = SecureTrie(Trie(db, parent.state_root))
             self.transaction_count = 0
             self.gas_used = 0
@@ -1190,6 +1193,17 @@ class Block(rlp.Serializable):
         # assert parent.state.db.db == self.state.db.db
         return parent
 
+    def get_parent_header(self):
+        """Get the parent of this block."""
+        if self.number == 0:
+            raise UnknownParentException('Genesis block has no parent')
+        try:
+            parent_header = get_block_header(self.db, self.prevhash)
+        except KeyError:
+            raise UnknownParentException(encode_hex(self.prevhash))
+        # assert parent.state.db.db == self.state.db.db
+        return parent_header
+
     def has_parent(self):
         """`True` if this block has a known parent, otherwise `False`."""
         try:
@@ -1294,6 +1308,15 @@ class CachedBlock(Block):
     def create_cached(cls, blk):
         blk.__class__ = CachedBlock
         return blk
+
+
+def get_block_header(db, blockhash):
+    bh = BlockHeader.from_block_rlp(db.get(blockhash))
+    if bh.hash != blockhash:
+        log.warn('BlockHeader.hash is broken')
+        bh._fimxe_hash = blockhash
+
+    return bh
 
 
 @lru_cache(500)
