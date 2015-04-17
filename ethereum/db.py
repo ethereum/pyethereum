@@ -38,3 +38,37 @@ class _EphemDB(object):
 
 
 DB = EphemDB = _EphemDB
+
+
+# Used for SPV proof creation
+class ListeningDB(object):
+
+    def __init__(self, db):
+        self.db = db
+        self.kv = {}
+
+    def get(self, key):
+        if key not in self.kv:
+            self.kv[key] = self.db.get(key)
+        return self.db.get(key)
+
+    def put(self, key, value):
+        self.db.put(key, value)
+
+    def commit(self):
+        pass
+
+    def delete(self, key):
+        self.db.delete(key)
+
+    def _has_key(self, key):
+        return self.db._has_key(key)
+
+    def __contains__(self, key):
+        return self.db.__contains__(key)
+
+    def __eq__(self, other):
+        return self.db == other
+
+    def __hash__(self):
+        return self.db.__hash__()
