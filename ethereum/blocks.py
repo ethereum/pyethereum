@@ -330,7 +330,7 @@ class BlockHeader(rlp.Serializable):
             seed = utils.sha3(seed)
         return seed
 
-    def check_pow(self, db=None, nonce=None):
+    def check_pow(self, nonce=None, debugmode=False):
         """Check if the proof-of-work of the block is valid.
 
         :param nonce: if given the proof of work function will be evaluated
@@ -339,9 +339,6 @@ class BlockHeader(rlp.Serializable):
         :returns: `True` or `False`
         """
         nonce = nonce or self.nonce
-        if db is None:
-            assert self.block is not None
-            db = self.block.db
         if len(self.mixhash) != 32 or len(self.nonce) != 8:
             raise ValueError("Bad mixhash or nonce length")
         # exclude mixhash and nonce
@@ -354,6 +351,11 @@ class BlockHeader(rlp.Serializable):
         current_full_size = get_full_size(self.number)
         mining_output = hashimoto_light(current_full_size, cache, header_hash, nonce)
         diff = self.difficulty
+        if debugmode:
+            print 'Mining hash: %s' % encode_hex(header_hash)
+            print 'Seed: %s' % encode_hex(seed)
+            print 'Mixhash: %s' % encode_hex(mining_output['mix digest'])
+            print 'Result: %s' % encode_hex(mining_output['result'])
         if mining_output['mix digest'] != self.mixhash:
             return False
         return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (diff or 1)
@@ -552,7 +554,7 @@ class Block(rlp.Serializable):
             raise ValueError("State Merkle root of block %r not found in "
                              "database" % self)
         if (not self.is_genesis() and self.nonce and
-                                  not self.header.check_pow(self.db)):
+                                  not self.header.check_pow()):
             raise ValueError("PoW check failed")
         self.db.put('validated:'+self.hash, '1')
 
@@ -673,7 +675,7 @@ class Block(rlp.Serializable):
         ineligible.extend([b.header for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
-            if not uncle.check_pow(db=db):
+            if not uncle.check_pow():
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
                 log.error("Uncle does not have a valid ancestor", block=self,
