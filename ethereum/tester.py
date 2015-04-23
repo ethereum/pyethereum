@@ -8,6 +8,7 @@ import ethereum.opcodes as opcodes
 import ethereum.abi as abi
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 from ethereum.utils import to_string
+from ethereum._solidity import get_solidity
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 
@@ -30,6 +31,11 @@ k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 languages = {}
+
+_solidity = get_solidity()
+if _solidity:
+    languages['solidity'] = _solidity
+
 
 seed = 3 ** 160
 
