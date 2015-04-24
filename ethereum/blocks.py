@@ -1240,7 +1240,7 @@ class Block(rlp.Serializable):
             return utils.decode_int(encoded)
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
-            o += sum([uncle.difficulty for uncle in self.uncles])
+            # o += sum([uncle.difficulty for uncle in self.uncles])
             self.state.db.put(b'difficulty:' + encode_hex(self.hash),
                               utils.encode_int(o))
             return o
