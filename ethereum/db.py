@@ -11,6 +11,7 @@ class _EphemDB(object):
 
     def __init__(self):
         self.db = {}
+        self.kv = self.db
 
     def get(self, key):
         return self.db[key]
@@ -44,31 +45,31 @@ DB = EphemDB = _EphemDB
 class ListeningDB(object):
 
     def __init__(self, db):
-        self.db = db
+        self.parent = db
         self.kv = {}
 
     def get(self, key):
         if key not in self.kv:
-            self.kv[key] = self.db.get(key)
-        return self.db.get(key)
+            self.kv[key] = self.parent.get(key)
+        return self.parent.get(key)
 
     def put(self, key, value):
-        self.db.put(key, value)
+        self.parent.put(key, value)
 
     def commit(self):
         pass
 
     def delete(self, key):
-        self.db.delete(key)
+        self.parent.delete(key)
 
     def _has_key(self, key):
-        return self.db._has_key(key)
+        return self.parent._has_key(key)
 
     def __contains__(self, key):
-        return self.db.__contains__(key)
+        return self.parent.__contains__(key)
 
     def __eq__(self, other):
-        return self.db == other
+        return self.parent == other
 
     def __hash__(self):
-        return self.db.__hash__()
+        return self.parent.__hash__()
