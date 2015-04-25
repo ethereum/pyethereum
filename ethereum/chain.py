@@ -96,18 +96,19 @@ class Chain(object):
     :ivar head_candidate: the block which if mined by our miner would become
                           the new head
     """
+    head_candidate = None
 
     def __init__(self, db, genesis=None, new_head_cb=None, coinbase='\x00' * 20):
         self.db = self.blockchain = db
         self.new_head_cb = new_head_cb
         self.index = Index(db)
-        self.head_candidate = None
         self._coinbase = coinbase
         if genesis:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
         self.genesis = blocks.genesis(db=db)
         log.debug('got genesis', genesis_hash=self.genesis)
+        self._update_head_candidate()
 
     def _initialize_blockchain(self, genesis=None):
         log.info('Initializing new chain')

@@ -100,6 +100,7 @@ def calc_difficulty(parent, timestamp):
 
 
 class Account(rlp.Serializable):
+
     """An Ethereum account.
 
     :ivar nonce: the account's nonce (the number of transactions sent by the
@@ -172,6 +173,7 @@ class Receipt(rlp.Serializable):
 
 
 class BlockHeader(rlp.Serializable):
+
     """A block header.
 
     If the block with this header exists as an instance of :class:`Block`, the
@@ -306,7 +308,7 @@ class BlockHeader(rlp.Serializable):
     @property
     def mining_hash(self):
         return utils.sha3(rlp.encode(self,
-                          BlockHeader.exclude(['mixhash', 'nonce'])))
+                                     BlockHeader.exclude(['mixhash', 'nonce'])))
 
     @property
     def seed(self):
@@ -405,6 +407,7 @@ def mirror_from(source, attributes, only_getters=True):
              set(['state_root', 'receipts_root', 'tx_list_root']),
              only_getters=False)
 class Block(rlp.Serializable):
+
     """A block.
 
     All attributes from the block header are accessible via properties
@@ -563,7 +566,7 @@ class Block(rlp.Serializable):
                              "database" % self)
         if (not self.is_genesis() and self.nonce and not self.header.check_pow()):
             raise ValueError("PoW check failed")
-        self.db.put('validated:'+self.hash, '1')
+        self.db.put('validated:' + self.hash, '1')
 
     @classmethod
     def init_from_header(cls, header_rlp, db):
@@ -1351,7 +1354,7 @@ def get_block(db, blockhash):
     return CachedBlock.create_cached(blk)
 
 
-#def has_block(blockhash):
+# def has_block(blockhash):
 #    return blockhash in db.DB(utils.get_db_path())
 
 
