@@ -279,31 +279,38 @@ class Chain(object):
                   if the transaction was invalid
         """
         assert self.head_candidate is not None
+        head_candidate = self.head_candidate
         log.debug('new tx', num_txs=len(self.get_transactions()), tx_hash=transaction)
         if transaction in self.get_transactions():
             log.debug('known tx')
             return
-        old_state_root = self.head_candidate.state_root
+        old_state_root = head_candidate.state_root
         # revert finalization
-        self.head_candidate.state_root = self.pre_finalize_state_root
+        head_candidate.state_root = self.pre_finalize_state_root
         try:
-            success, output = processblock.apply_transaction(self.head_candidate, transaction)
+            success, output = processblock.apply_transaction(head_candidate, transaction)
         except processblock.InvalidTransaction as e:
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)
             success = False
 
+        # we might have a new head_candidate (due to ctx switches in pyethapp)
+        if self.head_candidate != head_candidate:
+            log.debug('head_candidate changed during validation, trying again')
+            self.add_transaction(transaction)
+            return
+
         if success:
             assert transaction in self.get_transactions()
-            self.pre_finalize_state_root = self.head_candidate.state_root
-            self.head_candidate.finalize()
+            self.pre_finalize_state_root = head_candidate.state_root
+            head_candidate.finalize()
             log.debug('tx applied', result=output)
-            assert old_state_root != self.head_candidate.state_root
+            assert old_state_root != head_candidate.state_root
             return True
         else:
             log.debug('tx failed')
-            self.head_candidate.state_root = old_state_root  # reset
+            head_candidate.state_root = old_state_root  # reset
             return False
 
     def get_transactions(self):
