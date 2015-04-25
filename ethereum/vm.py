@@ -10,7 +10,7 @@ from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string, safe_ord
+from ethereum.utils import to_string
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -83,16 +83,16 @@ class Compustate():
 # Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
 def preprocess_code(code):
+    assert isinstance(code, str)
     i = 0
     ops = []
     while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(safe_ord(code[i]), ['INVALID', 0, 0, 0]) +
-                      [safe_ord(code[i]), 0])
+        o = copy.copy(opcodes.opcodes.get(ord(code[i]), ['INVALID', 0, 0, 0]) + [ord(code[i]), 0])
         ops.append(o)
         if o[0][:4] == 'PUSH':
             for j in range(int(o[0][4:])):
                 i += 1
-                byte = safe_ord(code[i]) if i < len(code) else 0
+                byte = ord(code[i]) if i < len(code) else 0
                 o[-1] = (o[-1] << 8) + byte
                 if i < len(code):
                     ops.append(['INVALID', 0, 0, 0, byte, 0])
@@ -350,13 +350,14 @@ def vm_execute(ext, msg, code):
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
                 extcode = ext.get_code(addr) or b''
+                assert isinstance(extcode, str)
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s2 + i < len(extcode):
-                        mem[start + i] = safe_ord(extcode[s2 + i])
+                        mem[start + i] = ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
         elif opcode < 0x50:
@@ -463,8 +464,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(safe_ord, data)))
-            # print('LOG', msg.to, topics, list(map(safe_ord, data)))
+            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(ord, data)))
+            # print('LOG', msg.to, topics, list(map(ord, data)))
 
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
