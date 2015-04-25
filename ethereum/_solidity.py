@@ -1,5 +1,6 @@
 import subprocess
 import os
+import yaml  # use yaml instead of json to get non unicode
 
 
 class CompileError(Exception):
@@ -35,7 +36,8 @@ class solc_wrapper(object):
         contracts = []
         contract = None
         for line in code.split('\n'):
-            if line.lstrip().startswith('contract '):  # FIXME
+            line = line.lstrip()
+            if line.startswith('contract '):  # FIXME
                 if contract:
                     contracts.append('\n'.join(contract))
                 contract = [line]
@@ -46,25 +48,38 @@ class solc_wrapper(object):
         return contracts
 
     @classmethod
-    def compile(cls, code):
-        p = subprocess.Popen(['solc', '--binary', 'stdout'],
-                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdoutdata, stderrdata = p.communicate(input=code)
-        if p.returncode:
-            raise CompileError('compilation failed')
+    def contract_names(cls, code):
+        names = []
+        for contract in cls.split_contracts(code):
+            keyword, name, _ = contract.split(' ', 2)
+            assert keyword == 'contract' and len(name)
+            names.append(name)
+        return names
 
-        hex_code = stdoutdata.rsplit('Binary: \n')[-1].strip()
-        return hex_code.decode('hex')
+    @classmethod
+    def compile(cls, code):
+        "returns binary of last contract in code"
+        contracts = cls.combined(code)
+        return contracts[cls.contract_names(code)[-1]]['binary'].decode('hex')
 
     @classmethod
     def mk_full_signature(cls, code):
-        p = subprocess.Popen(['solc', '--json-abi', 'stdout'],
+        "returns signature of last contract in code"
+        contracts = cls.combined(code)
+        return contracts[cls.contract_names(code)[-1]]['json-abi']
+
+    @classmethod
+    def combined(cls, code):
+        p = subprocess.Popen(['solc', '--combined-json', 'json-abi,binary'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
             raise CompileError('compilation failed')
-        jsonabi = stdoutdata.rsplit('Contract JSON ABI\n')[-1].strip()
-        return jsonabi
+        # contracts = json.loads(stdoutdata)['contracts']
+        contracts = yaml.safe_load(stdoutdata)['contracts']
+        for contract_name, data in contracts.items():
+            data['json-abi'] = yaml.safe_load(data['json-abi'])
+        return contracts
 
 
 def get_solidity():

@@ -21,11 +21,12 @@ contract zoo {
         y = 7;
     }
 }
-
 """
 
 
 def test_interop():
+    if 'solidity' not in tester.languages:
+        return
     s = tester.state()
     c1 = s.abi_contract(serpent_contract)
     c2 = s.abi_contract(solidity_contract, language='solidity')  # should be zoo

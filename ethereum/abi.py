@@ -1,26 +1,13 @@
 import sys
 import re
-import json
+import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
 from ethereum import utils
 from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string
 
-if sys.version_info.major == 2:
-    def json_decode(x):
-        return json_non_unicode(json.loads(x))
 
-    def json_non_unicode(x):
-        if isinstance(x, unicode):
-            return str(x)
-        elif isinstance(x, list):
-            return [json_non_unicode(y) for y in x]
-        elif isinstance(x, dict):
-            return {x: json_non_unicode(y) for x, y in x.items()}
-        else:
-            return x
-else:
-    def json_decode(x):
-        return json.loads(x)
+def json_decode(x):
+    return yaml.safe_load(x)
 
 
 class ContractTranslator():
@@ -38,9 +25,9 @@ class ContractTranslator():
                 name = name[:name.find('(')]
             if name in v:
                 i = 2
-                while name + to_string(i) in v:
+                while name + utils.to_string(i) in v:
                     i += 1
-                name += to_string(i)
+                name += utils.to_string(i)
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
