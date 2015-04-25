@@ -270,6 +270,10 @@ class Chain(object):
                   if the transaction was invalid
         """
         assert self.head_candidate is not None
+        log.debug('new tx', num_txs=len(self.get_transactions()), tx_hash=transaction)
+        if transaction in self.get_transactions():
+            log.debug('known tx')
+            return
         old_state_root = self.head_candidate.state_root
         # revert finalization
         self.head_candidate.state_root = self.pre_finalize_state_root
@@ -278,19 +282,18 @@ class Chain(object):
         except processblock.InvalidTransaction as e:
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
-            log.debug('invalid tx', tx_hash=transaction, errors=e)
+            log.debug('invalid tx', error=e)
             success = False
 
         if success:
             assert transaction in self.get_transactions()
             self.pre_finalize_state_root = self.head_candidate.state_root
             self.head_candidate.finalize()
-            log.debug('tx applied', tx_hash=transaction,
-                      block_hash=self.head_candidate, result=output)
+            log.debug('tx applied', result=output)
             assert old_state_root != self.head_candidate.state_root
             return True
         else:
-            log.debug('tx not applied', tx_hash=transaction)
+            log.debug('tx failed')
             self.head_candidate.state_root = old_state_root  # reset
             return False
 
