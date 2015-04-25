@@ -80,6 +80,7 @@ BLOCK_REWARD = 1500 * utils.denoms.finney
 UNCLE_DEPTH_PENALTY_FACTOR = 8
 NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
+MAX_UNCLES = 2
 # Difficulty adjustment constants
 DIFF_ADJUSTMENT_CUTOFF = 8
 BLOCK_DIFF_FACTOR = 2048
@@ -359,6 +360,19 @@ class BlockHeader(rlp.Serializable):
         d['bloom'] = encode_hex(int256.serialize(self.bloom))
         assert len(d) == len(BlockHeader.fields)
         return d
+
+    def __repr__(self):
+        return '<BlockHeader(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
+
+    def __eq__(self, other):
+        """Two blockheader are equal iff they have the same hash."""
+        return isinstance(other, BlockHeader) and self.hash == other.hash
+
+    def __hash__(self):
+        return utils.big_endian_to_int(self.hash)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 def mirror_from(source, attributes, only_getters=True):
@@ -646,14 +660,14 @@ class Block(rlp.Serializable):
             txs.append(self.get_transaction(i))
         return txs
 
-    def validate_uncles(self, db=None):
+    def validate_uncles(self):
         """Validate the uncles of this block."""
         if utils.sha3(rlp.encode(self.uncles)) != self.uncles_hash:
             return False
-        if len(self.uncles) > 2:
+        if len(self.uncles) > MAX_UNCLES:
             return False
         for uncle in self.uncles:
-            assert db is None or uncle.prevhash in self.db
+            assert uncle.prevhash in self.db
             if uncle.number == self.number:
                 log.error("uncle at same block height", block=self)
                 return False

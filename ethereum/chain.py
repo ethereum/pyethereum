@@ -146,31 +146,58 @@ class Chain(object):
                           head_hash=block, old_head_hash=self.head)
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
-
-        # update head candidate
-        transactions = self.get_transactions()
-        blk = self.head
-        uncles = set(u.header for u in self.get_brothers(self.head))
-        for i in range(8):
-            for u in blk.uncles:  # assuming uncle headers
-                u = utils.sha3(rlp.encode(u))
-                if u in self:
-                    uncles.discard(self.get(u))
-            if blk.has_parent():
-                blk = blk.get_parent()
-
-        uncles = list(uncles)
-        ts = max(int(time.time()), block.timestamp + 1)
-        self.head_candidate = blocks.Block.init_from_parent(block, coinbase=self._coinbase,
-                                                            timestamp=ts, uncles=uncles)
-        self.pre_finalize_state_root = self.head_candidate.state_root
-        self.head_candidate.finalize()
-        # add transactions from previous head candidate
-        for tx in transactions:
-            self.add_transaction(tx)
-
+        self._update_head_candidate()
         if self.new_head_cb and not block.is_genesis():
             self.new_head_cb(block)
+
+    def _update_head_candidate(self):
+        "after new head is set"
+
+        # collect uncles
+        blk = self.head  # parent of the block we are collecting uncles for
+        uncles = set(u.header for u in self.get_brothers(blk))
+        for i in range(blocks.MAX_UNCLE_DEPTH + 2):
+            for u in blk.uncles:
+                assert isinstance(u, blocks.BlockHeader)
+                uncles.discard(u)
+            if blk.has_parent():
+                blk = blk.get_parent()
+        assert not uncles or max(u.number for u in uncles) <= self.head.number
+        uncles = list(uncles)[:blocks.MAX_UNCLES]
+
+        # create block
+        ts = max(int(time.time()), self.head.timestamp + 1)
+        head_candidate = blocks.Block.init_from_parent(self.head, coinbase=self._coinbase,
+                                                       timestamp=ts, uncles=uncles)
+        assert head_candidate.validate_uncles()
+
+        self.pre_finalize_state_root = head_candidate.state_root
+        head_candidate.finalize()
+
+        # add transactions from previous head candidate
+        old_head_candidate = self.head_candidate
+        self.head_candidate = head_candidate
+        if old_head_candidate is not None:
+            for tx in old_head_candidate.get_transactions():
+                self.add_transaction(tx)
+
+    def get_uncles(self, block):
+        """Return the uncles of `block`."""
+        if not block.has_parent():
+            return []
+        else:
+            return self.get_brothers(block.get_parent())
+
+    def get_brothers(self, block):
+        """Return the uncles of the hypothetical child of `block`."""
+        o = []
+        i = 0
+        while block.has_parent() and i < blocks.MAX_UNCLE_DEPTH:
+            parent = block.get_parent()
+            o.extend([u for u in self.get_children(parent) if u != block])
+            block = block.get_parent()
+            i += 1
+        return o
 
     def get(self, blockhash):
         assert is_string(blockhash)
@@ -199,7 +226,7 @@ class Chain(object):
             _log.debug('missing parent')
             return False
 
-        if not block.validate_uncles(self.db):
+        if not block.validate_uncles():
             _log.debug('invalid uncles')
             return False
 
@@ -242,24 +269,6 @@ class Chain(object):
 
     def get_children(self, block):
         return [self.get(c) for c in self.index.get_children(block.hash)]
-
-    def get_brothers(self, block):
-        """Return the uncles of the hypothetical child of `block`."""
-        o = []
-        i = 0
-        while block.has_parent() and i < 6:
-            parent = block.get_parent()
-            o.extend([u for u in self.get_children(parent) if u != block])
-            block = parent
-            i += 1
-        return o
-
-    def get_uncles(self, block):
-        """Return the uncles of `block`."""
-        if not block.has_parent():
-            return []
-        else:
-            return self.get_brothers(block.get_parent())
 
     def add_transaction(self, transaction):
         """Add a transaction to the :attr:`head_candidate` block.
