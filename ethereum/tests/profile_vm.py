@@ -46,9 +46,12 @@ if __name__ == '__main__':
         print s.getvalue()
     else:
         # pypy version
-        from ethereum.utils import sha3_call_counter
         st = time.time()
         run()
         print
         print 'took total', time.time() - st
-        print 'took w/o sha3', time.time() - st - sha3_call_counter[3]
+        try:  # pypy branch
+            from ethereum.utils import sha3_call_counter
+            print 'took w/o sha3', time.time() - st - sha3_call_counter[3]
+        except ImportError:
+            pass
