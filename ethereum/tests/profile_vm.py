@@ -6,10 +6,9 @@ import cProfile
 import pstats
 import StringIO
 import time
-from ethereum.utils import sha3_call_counter, sha3
-from ethereum.slogging import get_logger, configure_logging, get_configuration
+from ethereum.utils import sha3
+from ethereum.slogging import get_logger
 logger = get_logger()
-import sys
 
 
 def do_test_vm(filename, testname=None, testdata=None, limit=99999999, profiler=None):
@@ -17,7 +16,8 @@ def do_test_vm(filename, testname=None, testdata=None, limit=99999999, profiler=
     testutils.run_vm_test(testutils.fixture_to_bytes(testdata), testutils.VERIFY, profiler=profiler)
 
 if __name__ == '__main__':
-    num = 5000
+    num = 1000
+    print 'profile_vm.py [no_cprofile]'
     print 'loading tests'
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join(testutils.fixture_path, 'VMTests'))
@@ -36,7 +36,7 @@ if __name__ == '__main__':
         print 'ran %d tests' % i
         print 'test key', sha3(seen).encode('hex')
 
-    if len(sys.argv) == 2:
+    if len(sys.argv) == 1:
         pr = cProfile.Profile()
         run(pr)
         s = StringIO.StringIO()
@@ -45,6 +45,8 @@ if __name__ == '__main__':
         ps.print_stats(50)
         print s.getvalue()
     else:
+        # pypy version
+        from ethereum.utils import sha3_call_counter
         st = time.time()
         run()
         print
