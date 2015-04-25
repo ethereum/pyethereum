@@ -110,7 +110,7 @@ def mktest(code, language, data=None, fun=None, args=None,
 
 
 # Fills up a vm test without post data, or runs the test
-def run_vm_test(params, mode):
+def run_vm_test(params, mode, profiler=None):
     pre = params['pre']
     exek = params['exec']
     env = params['env']
@@ -144,13 +144,14 @@ def run_vm_test(params, mode):
     # execute transactions
     sender = decode_hex(exek['caller'])  # a party that originates a call
     recvaddr = decode_hex(exek['address'])
-    tx = transactions.Transaction(
-        nonce=blk._get_acct_item(decode_hex(exek['caller']), 'nonce'),
-        gasprice=parse_int_or_hex(exek['gasPrice']),
-        startgas=parse_int_or_hex(exek['gas']),
-        to=recvaddr,
-        value=parse_int_or_hex(exek['value']),
-        data=decode_hex(exek['data'][2:]))
+    nonce = blk._get_acct_item(sender, 'nonce')
+    gasprice = parse_int_or_hex(exek['gasPrice'])
+    startgas = parse_int_or_hex(exek['gas'])
+    value = parse_int_or_hex(exek['value'])
+    data = decode_hex(exek['data'][2:])
+
+    tx = transactions.Transaction(nonce=nonce, gasprice=gasprice, startgas=startgas,
+                                  to=recvaddr, value=value, data=data)
     tx.sender = sender
 
     # capture apply_message calls
@@ -191,9 +192,13 @@ def run_vm_test(params, mode):
 
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
                      vm.CallData([safe_ord(x) for x in tx.data]))
+    code = decode_hex(exek['code'][2:])
     time_pre = time.time()
-    success, gas_remained, output = \
-        vm.vm_execute(ext, msg, decode_hex(exek['code'][2:]))
+    if profiler:
+        profiler.enable()
+    success, gas_remained, output = vm.vm_execute(ext, msg, code)
+    if profiler:
+        profiler.disable()
     pb.apply_msg = orig_apply_msg
     blk.commit_state()
     for s in blk.suicides:

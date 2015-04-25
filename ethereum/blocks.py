@@ -1,3 +1,8 @@
+#  ####### dev hack flags ###############
+
+dump_block_on_failed_verification = False
+
+#  ######################################
 import time
 from itertools import count
 import sys
@@ -91,33 +96,6 @@ def calc_difficulty(parent, timestamp):
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
     return int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
-
-
-# Auxiliary value for must_* error messages
-aux = [None]
-
-
-def set_aux(auxval):
-    aux[0] = auxval
-
-
-def must(what, f, symb, a, b):
-    if not f(a, b):
-        if aux[0]:
-            sys.stderr.write('%r' % aux[0])
-        raise VerificationFailed(what, a, symb, b)
-
-
-def must_equal(what, a, b):
-    return must(what, lambda x, y: x == y, "==", a, b)
-
-
-def must_ge(what, a, b):
-    return must(what, lambda x, y: x >= y, ">=", a, b)
-
-
-def must_le(what, a, b):
-    return must(what, lambda x, y: x <= y, "<=", a, b)
 
 
 class Account(rlp.Serializable):
@@ -523,8 +501,23 @@ class Block(rlp.Serializable):
             # (it doesn't know intermediate states), so reset it
             self.receipts = Trie(self.db, header.receipts_root)
 
-        # checks
-        set_aux(self.to_dict())
+        # checks ##############################
+
+        def must(what, f, symb, a, b):
+            if not f(a, b):
+                if dump_block_on_failed_verification:
+                    sys.stderr.write('%r' % self.to_dict())
+                raise VerificationFailed(what, a, symb, b)
+
+        def must_equal(what, a, b):
+            return must(what, lambda x, y: x == y, "==", a, b)
+
+        def must_ge(what, a, b):
+            return must(what, lambda x, y: x >= y, ">=", a, b)
+
+        def must_le(what, a, b):
+            return must(what, lambda x, y: x <= y, "<=", a, b)
+
         if parent:
             must_equal('prev_hash', self.prevhash, parent.hash)
             must_ge('gas_limit', self.gas_limit,
@@ -540,7 +533,6 @@ class Block(rlp.Serializable):
         must_equal('tx_list_root', self.transactions.root_hash, header.tx_list_root)
         must_equal('receipts_root', self.receipts.root_hash, header.receipts_root)
         must_equal('bloom', self.bloom, original_values['bloom'])
-        set_aux(None)
 
         # from now on, trie roots refer to block instead of header
         header.block = self

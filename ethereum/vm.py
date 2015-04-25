@@ -1,3 +1,8 @@
+#  ####### dev hack flags ###############
+
+verify_stack_after_op = False
+
+#  ######################################
 from ethereum import utils
 from ethereum.abi import is_numeric
 import copy
@@ -548,9 +553,12 @@ def vm_execute(ext, msg, code):
             ext.add_suicide(msg.to)
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
-        for a in stk:
-            assert is_numeric(a)
-            assert a >= 0 and a < 2**256, (a, op, stk)
+
+        # this is slow!
+        if verify_stack_after_op:
+            for a in stk:
+                assert is_numeric(a)
+                assert a >= 0 and a < 2**256, (a, op, stk)
 
 
 class VmExtBase():
