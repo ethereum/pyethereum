@@ -505,12 +505,14 @@ def test_reward_uncles(db):
     blk1 = mine_on_chain(chain, blk0, coinbase=local_coinbase)
     assert blk1.hash in chain
     assert uncle.hash in chain
+    assert uncle.hash != blk1.hash
     assert chain.head == blk1
     assert chain.head.get_balance(local_coinbase) == 1 * blocks.BLOCK_REWARD
     assert chain.head.get_balance(uncle_coinbase) == 0
     # next block should reward uncles
     blk2 = mine_on_chain(chain, coinbase=local_coinbase)
     assert blk2.get_parent().prevhash == uncle.prevhash
+    assert len(blk2.uncles) == 1
     assert blk2 == chain.head
     assert chain.head.get_balance(local_coinbase) == \
         2 * blocks.BLOCK_REWARD + blocks.NEPHEW_REWARD

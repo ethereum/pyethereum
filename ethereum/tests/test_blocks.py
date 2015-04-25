@@ -66,14 +66,14 @@ def run_block_test(params):
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
         raise Exception("header hash mismatch")
-    assert b.header.check_pow(e)
+    assert b.header.check_pow()
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             try:
                 rlpdata = decode_hex(blk["rlp"][2:])
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=b, db=e)
                 success = True
-            except (ValueError, TypeError, VerificationFailed,
+            except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction):
                 success = False
             assert not success

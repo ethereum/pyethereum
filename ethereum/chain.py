@@ -158,8 +158,8 @@ class Chain(object):
                     uncles.discard(self.get(u))
             if blk.has_parent():
                 blk = blk.get_parent()
-        # TODO: make this work
-        uncles = list(uncles)[:0]
+
+        uncles = list(uncles)
         ts = max(int(time.time()), block.timestamp + 1)
         self.head_candidate = blocks.Block.init_from_parent(block, coinbase=self._coinbase,
                                                             timestamp=ts, uncles=uncles)
