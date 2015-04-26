@@ -9,8 +9,9 @@ import ethereum.abi as abi
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 from ethereum.utils import to_string
 from ethereum._solidity import get_solidity
+from ethereum import slogging
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import ascii_chr
 
 serpent = None
 
@@ -141,8 +142,24 @@ class state():
                             return outdata
                     return kall
 
-                for f in self._translator.function_data:
-                    vars(self)[f] = kall_factory(f)
+                for fname in self._translator.function_data:
+                    func = kall_factory(fname)
+                    # create wrapper with signature
+                    # in IPython: mycontract.yeah?
+                    # Definition:  mycontract.yeah(number, peers, really, **kargs)
+                    # Docstring:   yeah(uint32 number, uint256 peers, bool really)
+                    signature = self._translator.function_data[fname]['signature']
+                    fsig = ', '.join(name for typ, name in signature)
+                    if fsig:
+                        fsig += ', '
+                    wfunc = 'def %s(%s**kargs): return func(%s**kargs)' % (fname, fsig, fsig)
+                    wfunc_code = compile(wfunc, 'na', 'exec')
+                    fakeglobals = {}
+                    eval(wfunc_code, {'func': func}, fakeglobals)  # evil, use in tester only!
+                    func = fakeglobals[fname]
+                    func.__doc__ = '%s(%s)' % (fname, ', '.join(('%s %s' % x) for x in signature))
+
+                    setattr(self, fname, func)
 
         return _abi_contract(me, code, sender, endowment, language)
 

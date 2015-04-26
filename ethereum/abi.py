@@ -20,6 +20,7 @@ class ContractTranslator():
             full_signature = json_decode(full_signature)
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
+            signature = [(f['type'], f['name']) for f in sig_item['inputs']]
             name = sig_item['name']
             if '(' in name:
                 name = name[:name.find('(')]
@@ -41,7 +42,8 @@ class ContractTranslator():
                     "prefix": prefix,
                     "encode_types": encode_types,
                     "decode_types": decode_types,
-                    "is_unknown_type": is_unknown_type
+                    "is_unknown_type": is_unknown_type,
+                    "signature": signature
                 }
             elif sig_item['type'] == 'event':
                 prefix = big_endian_to_int(utils.sha3(sig))
