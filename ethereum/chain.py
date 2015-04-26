@@ -294,7 +294,11 @@ class Chain(object):
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)
-            success = False
+            assert transaction not in self.get_transactions()
+            head_candidate.state_root = old_state_root  # reset
+            return False
+
+        log.debug('valid tx')
 
         # we might have a new head_candidate (due to ctx switches in pyethapp)
         if self.head_candidate != head_candidate:
@@ -302,23 +306,17 @@ class Chain(object):
             self.add_transaction(transaction)
             return
 
-        if success:
-            assert transaction in self.get_transactions()
-            self.pre_finalize_state_root = head_candidate.state_root
-            head_candidate.finalize()
-            log.debug('tx applied', result=output)
-            assert old_state_root != head_candidate.state_root
-            return True
-        else:
-            log.debug('tx failed')
-            head_candidate.state_root = old_state_root  # reset
-            return False
+        assert transaction in self.get_transactions()
+        self.pre_finalize_state_root = head_candidate.state_root
+        head_candidate.finalize()
+        log.debug('tx applied', result=output)
+        assert old_state_root != head_candidate.state_root
+        return True
 
     def get_transactions(self):
         """Get a list of new transactions not yet included in a mined block
         but known to the chain.
         """
-        log.debug("get_transactions called")
         if self.head_candidate:
             return self.head_candidate.get_transactions()
         else:
