@@ -27,6 +27,10 @@ OUT_OF_GAS = -1
 CREATE_CONTRACT_ADDRESS = b''
 
 
+def mk_contract_address(sender, nonce):
+    return utils.sha3(rlp.encode([sender, nonce]))[12:]
+
+
 def verify(block, parent):
     from ethereum import blocks
     try:
@@ -71,41 +75,49 @@ class Log(rlp.Serializable):
             (encode_hex(self.address), self.topics, self.data)
 
 
-def apply_transaction(block, tx):
+def intrinsic_gas_used(tx):
+    num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
+    num_non_zero_bytes = len(tx.data) - num_zero_bytes
+    return (opcodes.GTXCOST
+            + opcodes.GTXDATAZERO * num_zero_bytes
+            + opcodes.GTXDATANONZERO * num_non_zero_bytes)
 
-    def rp(actual, target):
-        return '%r, actual:%r target:%r' % (tx, actual, target)
+
+def validate_transaction(block, tx):
+
+    def rp(what, actual, target):
+        return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     # (1) The transaction signature is valid;
-    if not tx.sender:
+    if not tx.sender:  # sender is set and validated on Transaction initialization
         raise UnsignedTransaction(tx)
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
     acctnonce = block.get_nonce(tx.sender)
     if acctnonce != tx.nonce:
-        raise InvalidNonce(rp(tx.nonce, acctnonce))
+        raise InvalidNonce(rp('nonce', tx.nonce, acctnonce))
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
-    num_non_zero_bytes = len(tx.data) - num_zero_bytes
-    intrinsic_gas_used = (opcodes.GTXCOST
-                          + opcodes.GTXDATAZERO * num_zero_bytes
-                          + opcodes.GTXDATANONZERO * num_non_zero_bytes)
-    if tx.startgas < intrinsic_gas_used:
-        raise InsufficientStartGas(rp(tx.startgas, intrinsic_gas_used))
+    if tx.startgas < intrinsic_gas_used(tx):
+        raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
     # cost, v0, required in up-front payment.
     total_cost = tx.value + tx.gasprice * tx.startgas
     if block.get_balance(tx.sender) < total_cost:
-        raise InsufficientBalance(
-            rp(block.get_balance(tx.sender), total_cost))
+        raise InsufficientBalance(rp('balance', block.get_balance(tx.sender), total_cost))
 
     # check block gas limit
     if block.gas_used + tx.startgas > block.gas_limit:
-        raise BlockGasLimitReached(rp(block.gas_used + tx.startgas, block.gas_limit))
+        raise BlockGasLimitReached(rp('gaslimit', block.gas_used + tx.startgas, block.gas_limit))
+
+    return True
+
+
+def apply_transaction(block, tx):
+    validate_transaction(block, tx)
 
     log_tx.debug('TX NEW', tx=encode_hex(tx.hash), tx_dict=tx.to_dict())
     # start transacting #################
@@ -115,11 +127,9 @@ def apply_transaction(block, tx):
     # buy startgas
     assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
-
-    message_gas = tx.startgas - intrinsic_gas_used
+    message_gas = tx.startgas - intrinsic_gas_used(tx)
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
-    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data,
-                         code_address=tx.to)
+    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
     # MESSAGE
     ext = VMExt(block, tx)
@@ -250,7 +260,7 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext._block.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
-    msg.to = utils.sha3(rlp.encode([sender, nonce]))[12:]
+    msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
