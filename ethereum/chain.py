@@ -294,7 +294,7 @@ class Chain(object):
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)
-            assert transaction not in self.get_transactions()
+            assert transaction not in head_candidate.get_transactions()
             head_candidate.state_root = old_state_root  # reset
             return False
 
