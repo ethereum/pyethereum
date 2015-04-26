@@ -59,27 +59,36 @@ class solc_wrapper(object):
     @classmethod
     def compile(cls, code):
         "returns binary of last contract in code"
-        contracts = cls.combined(code)
-        return contracts[cls.contract_names(code)[-1]]['binary'].decode('hex')
+        sorted_contracts = cls.combined(code)
+        return sorted_contracts[-1][1]['binary'].decode('hex')
 
     @classmethod
     def mk_full_signature(cls, code):
         "returns signature of last contract in code"
-        contracts = cls.combined(code)
-        return contracts[cls.contract_names(code)[-1]]['json-abi']
+        sorted_contracts = cls.combined(code)
+        return sorted_contracts[-1][1]['json-abi']
 
     @classmethod
     def combined(cls, code):
-        p = subprocess.Popen(['solc', '--combined-json', 'json-abi,binary'],
+        p = subprocess.Popen(['solc', '--combined-json', 'json-abi,binary,sol-abi'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
             raise CompileError('compilation failed')
         # contracts = json.loads(stdoutdata)['contracts']
         contracts = yaml.safe_load(stdoutdata)['contracts']
+
         for contract_name, data in contracts.items():
             data['json-abi'] = yaml.safe_load(data['json-abi'])
-        return contracts
+            data['sol-abi'] = yaml.safe_load(data['sol-abi'])
+
+        names = cls.contract_names(code)
+        assert len(names) == len(contracts)
+        sorted_contracts = []
+        for name in names:
+            sorted_contracts.append((name, contracts[name]))
+
+        return sorted_contracts
 
 
 def get_solidity():
