@@ -492,7 +492,7 @@ class Block(rlp.Serializable):
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
                          header.state_root != trie.BLANK_ROOT and
                          (len(header.state_root) != 32 or
-                          'validated:' + self.hash not in db) and
+                          b'validated:' + self.hash not in db) and
                          not making)
         if state_unknown:
             assert transaction_list is not None
@@ -566,7 +566,7 @@ class Block(rlp.Serializable):
                              "database" % self)
         if (not self.is_genesis() and self.nonce and not self.header.check_pow()):
             raise ValueError("PoW check failed")
-        self.db.put('validated:' + self.hash, '1')
+        self.db.put(b'validated:' + self.hash, '1')
 
     @classmethod
     def init_from_header(cls, header_rlp, db):
