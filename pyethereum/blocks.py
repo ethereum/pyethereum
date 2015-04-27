@@ -642,10 +642,7 @@ class Block(object):
 
     def finalize(self):
         """
-        Apply rewards
-        We raise the block's coinbase account by Rb, the block reward,
-        and the coinbase of each uncle by 7 of 8 that.
-        Rb = 1500 finney
+        Apply rewards to block and uncles
         """
         self.delta_balance(self.coinbase,
                            BLOCK_REWARD + NEPHEW_REWARD * len(self.uncles))
