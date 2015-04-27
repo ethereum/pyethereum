@@ -339,10 +339,10 @@ class BlockHeader(rlp.Serializable):
         mining_output = hashimoto_light(current_full_size, cache, header_hash, nonce)
         diff = self.difficulty
         if debugmode:
-            print 'Mining hash: %s' % encode_hex(header_hash)
-            print 'Seed: %s' % encode_hex(seed)
-            print 'Mixhash: %s' % encode_hex(mining_output['mix digest'])
-            print 'Result: %s' % encode_hex(mining_output['result'])
+            print('Mining hash: {}'.format(encode_hex(header_hash)))
+            print('Seed: {}'.format(encode_hex(seed)))
+            print('Mixhash: {}'.format(encode_hex(mining_output['mix digest'])))
+            print('Result: {}'.format(encode_hex(mining_output['result'])))
         if mining_output['mix digest'] != self.mixhash:
             return False
         return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (diff or 1)
