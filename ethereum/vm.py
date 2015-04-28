@@ -85,29 +85,17 @@ class Compustate():
 # Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
 def preprocess_code(code):
-    assert isinstance(code, (str, bytes))
-
-    # python3 does not require ord() on byte strings
-    if sys.version_info.major == 2:
-        if isinstance(code, bytes):
-            code = str(code)
-
-        def t_ord(char):
-            return ord(char)
-    else:
-        assert isinstance(code, bytes)
-        def t_ord(char):
-            return char
-
-    i = 0
+    assert isinstance(code, bytes)
+    code = memoryview(code).tolist()
     ops = []
+    i = 0
     while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(t_ord(code[i]), ['INVALID', 0, 0, 0]) + [t_ord(code[i]), 0])
+        o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
         ops.append(o)
         if o[0][:4] == 'PUSH':
             for j in range(int(o[0][4:])):
                 i += 1
-                byte = t_ord(code[i]) if i < len(code) else 0
+                byte = code[i] if i < len(code) else 0
                 o[-1] = (o[-1] << 8) + byte
                 if i < len(code):
                     ops.append(['INVALID', 0, 0, 0, byte, 0])
