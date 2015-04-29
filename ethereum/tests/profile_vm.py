@@ -16,7 +16,7 @@ def do_test_vm(filename, testname=None, testdata=None, limit=99999999, profiler=
     testutils.run_vm_test(testutils.fixture_to_bytes(testdata), testutils.VERIFY, profiler=profiler)
 
 if __name__ == '__main__':
-    num = 1000
+    num = 5000
     print 'profile_vm.py [no_cprofile]'
     print 'loading tests'
     fixtures = testutils.get_tests_from_file_or_dir(

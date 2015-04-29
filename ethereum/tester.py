@@ -97,20 +97,24 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(me, code, sender=k0, endowment=0, language='serpent', gas=None):
-
+    def abi_contract(me, code, sender=k0, endowment=0, language='serpent', contract_name='',
+                     gas=None):
         class _abi_contract():
 
-            def __init__(self, _state, code, sender=k0,
-                         endowment=0, language='serpent'):
+            def __init__(self, _state, code, sender=k0, endowment=0, language='serpent'):
+                if contract_name:
+                    assert language == 'solidity'
+                    cn_args = dict(contract_name=contract_name)
+                else:
+                    cn_args = {}
                 if language not in languages:
                     languages[language] = __import__(language)
                 language = languages[language]
-                evm = language.compile(code)
+                evm = language.compile(code, **cn_args)
                 self.address = me.evm(evm, sender, endowment, gas)
                 assert len(me.block.get_code(self.address)), \
                     "Contract code empty"
-                sig = language.mk_full_signature(code)
+                sig = language.mk_full_signature(code, **cn_args)
                 self._translator = abi.ContractTranslator(sig)
 
                 def kall_factory(f):
