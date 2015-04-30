@@ -32,6 +32,7 @@ class ContractTranslator():
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
             sig = name + '(' + ','.join(encode_types) + ')'
+            sig = sig.encode('utf-8')
             if sig_item['type'] == 'function':
                 prefix = big_endian_to_int(utils.sha3(sig)[:4])
                 decode_types = [f['type'] for f in sig_item['outputs']]
@@ -118,7 +119,7 @@ def decint(n):
 
 # Encodes a base type
 def encode_single(arg, base, sub):
-    normal_args, len_args, var_args = '', '', ''
+    normal_args, len_args, var_args = b'', b'', b''
     # Unsigned integers: uint<sz>
     if base == 'uint':
         sub = int(sub)
@@ -234,12 +235,12 @@ def encode_any(arg, base, sub, arrlist):
         if base == 'string' and sub == '':
             raise Exception('Array of dynamic-sized items not allowed: %r'
                             % arg)
-        o = ''
+        o = b''
         assert isinstance(arg, list), "Expecting array: %r" % arg
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return zpad(encode_int(len(arg)), 32), '', o
+        return zpad(encode_int(len(arg)), 32), b'', o
     # Fixed-sized arrays
     else:
         if base == 'string' and sub == '':
@@ -247,18 +248,18 @@ def encode_any(arg, base, sub, arrlist):
         sz = int(arrlist[-1][1:-1])
         assert isinstance(arg, list), "Expecting array: %r" % arg
         assert sz == len(arg), "Wrong number of elements in array: %r" % arg
-        o = ''
+        o = b''
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return '', o, ''
+        return b'', o, b''
 
 
 # Encodes ABI data given a prefix, a list of types, and a list of arguments
 def encode_abi(types, args):
-    len_args = ''
-    normal_args = ''
-    var_args = ''
+    len_args = b''
+    normal_args = b''
+    var_args = b''
     if len(types) != len(args):
         raise Exception("Wrong number of arguments!")
     for typ, arg in zip(types, args):
