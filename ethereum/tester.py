@@ -122,6 +122,7 @@ class state():
                     def kall(*args, **kwargs):
                         _state.block.log_listeners.append(
                             lambda log: self._translator.listen(log))
+
                         o = _state._send(kwargs.get('sender', k0),
                                          self.address,
                                          kwargs.get('value', 0),
@@ -146,7 +147,7 @@ class state():
                     return kall
 
                 for f in self._translator.function_data:
-                    vars(self)[f] = kall_factory(f)
+                    vars(self)[f.decode('utf-8')] = kall_factory(f)
 
         return _abi_contract(me, code, sender, endowment, language)
 
@@ -175,6 +176,7 @@ class state():
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
+
         tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
