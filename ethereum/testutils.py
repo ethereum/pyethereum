@@ -220,6 +220,8 @@ def run_vm_test(params, mode, profiler=None):
         params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(True)['state']
+    else:
+        assert 'post' not in params, 'failed, but expected to succeed'
 
     if mode == FILL:
         return params2
