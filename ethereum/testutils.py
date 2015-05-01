@@ -337,16 +337,16 @@ def run_state_test(params, mode):
 
     params2 = copy.deepcopy(params)
     if success:
-        params2['out'] = b'0x' + encode_hex(output)
-        params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
         params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
-        params2['postStateRoot'] = encode_hex(blk.state.root_hash)
+
+    params2['out'] = b'0x' + encode_hex(output)
+    params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
+    params2['postStateRoot'] = encode_hex(blk.state.root_hash)
+    assert 'post' in params  # we always have a post state in the tests
 
     if mode == FILL:
         return params2
     elif mode == VERIFY:
-        if not success:
-            assert 'post' not in params, 'failed, but expected to succeed'
         params1 = copy.deepcopy(params)
         shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
         compare_post_states(shouldbe, reallyis)
