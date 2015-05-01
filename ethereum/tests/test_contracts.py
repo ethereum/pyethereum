@@ -1423,6 +1423,17 @@ def test_string_manipulation():
     assert c.t1() == [97, 98]
 
 
+append_string_code = """
+def append_str(a):
+    return(a + "a")
+"""
+
+def test_append_string():
+    s = tester.state()
+    c = s.abi_contract(append_string_code)
+    assert c.append_str(b"test") == b"testa"
+
+
 more_infinite_storage_object_code = """
 data block[2^256](_blockHeader(_prevBlock))
 
