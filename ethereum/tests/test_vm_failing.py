@@ -15,7 +15,6 @@ def do_test_vm(filename, testname=None, testdata=None, limit=99999999):
 
 failing = [
     'vmSystemOperationsTest.json_ABAcallsSuicide1',
-    'vmSystemOperationsTest.json_ABAcalls0',
     'vmSystemOperationsTest.json_ABAcallsSuicide0',
     'vmSystemOperationsTest.json_callcodeToReturn1',
     'vmEnvironmentalInfoTest.json_env1',
@@ -24,7 +23,8 @@ failing = [
     'vmSystemOperationsTest.json_CallToReturn1',
     'vmSystemOperationsTest.json_CallToPrecompiledContract',
     'vmSystemOperationsTest.json_CallToNameRegistrator0',
-    'vmSystemOperationsTest.json_callcodeToNameRegistrator0'
+    'vmSystemOperationsTest.json_callcodeToNameRegistrator0',
+    'vmSystemOperationsTest.json_ABAcalls0'
 ]
 failing = [x.split('_', 1)[-1] for x in failing]  # testnames
 
@@ -36,21 +36,26 @@ fixtures = testutils.get_tests_from_file_or_dir(
 def mk_test_func(filename, testname, testdata):
     return lambda: do_test_vm(filename, testname, testdata)
 
-
+collected = []
 for filename, tests in list(fixtures.items()):
     for testname, testdata in list(tests.items()):
         func_name = 'test_%s_%s' % (filename, testname)
         if testname not in failing:
             continue
-        globals()[func_name] = mk_test_func(filename, testname, testdata)
+        collected.append((func_name, filename, testname, testdata))
+
+collected.sort()
+for func_name, filename, testname, testdata in collected:
+    globals()[func_name] = mk_test_func(filename, testname, testdata)
 
 
 def test_testutils_check_vm_test():
+    func_name, filename, testname, testdata = collected[1]
     testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
     # manipulate post data
     storage = testdata['post'].values()[0]['storage']
-    assert storage['0x00'][-1] != 'a'
-    storage['0x00'] = storage['0x00'][:-1] + 'a'
+    assert storage['0x23'] == '0x01'
+    storage['0x23'] = '0x02'
     failed_as_expected = False
     try:
         testutils.check_vm_test(testutils.fixture_to_bytes(testdata))

@@ -219,13 +219,14 @@ def run_vm_test(params, mode, profiler=None):
         params2['out'] = b'0x' + encode_hex(''.join(map(ascii_chr, output)))
         params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
-        params2['post'] = blk.to_dict(True)['state']
-    else:
-        assert 'post' not in params, 'failed, but expected to succeed'
+        params2['post'] = blk.to_dict(with_state=True)['state']
 
     if mode == FILL:
         return params2
     elif mode == VERIFY:
+        if not success:
+            assert 'post' not in params, 'failed, but expected to succeed'
+
         params1 = copy.deepcopy(params)
         shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
         compare_post_states(shouldbe, reallyis)
@@ -344,6 +345,8 @@ def run_state_test(params, mode):
     if mode == FILL:
         return params2
     elif mode == VERIFY:
+        if not success:
+            assert 'post' not in params, 'failed, but expected to succeed'
         params1 = copy.deepcopy(params)
         shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
         compare_post_states(shouldbe, reallyis)
