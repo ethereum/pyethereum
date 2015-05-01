@@ -43,3 +43,17 @@ for filename, tests in list(fixtures.items()):
         if testname not in failing:
             continue
         globals()[func_name] = mk_test_func(filename, testname, testdata)
+
+
+def test_testutils_check_vm_test():
+    testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
+    # manipulate post data
+    storage = testdata['post'].values()[0]['storage']
+    assert storage['0x00'][-1] != 'a'
+    storage['0x00'] = storage['0x00'][:-1] + 'a'
+    failed_as_expected = False
+    try:
+        testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
+    except Exception:
+        failed_as_expected = True
+    assert failed_as_expected
