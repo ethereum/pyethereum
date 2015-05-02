@@ -49,12 +49,17 @@ def parse_int_or_hex(s):
         return int(s)
 
 
+def normalize_hex(s):
+    return s if len(s) > 2 else '0x00'
+
+
 def acct_standard_form(a):
     return {
         "balance": parse_int_or_hex(a["balance"]),
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": a["code"],
-        "storage": a["storage"]
+        "storage": {normalize_hex(k): normalize_hex(v) for
+                    k, v in a["storage"].items()}
     }
 
 
