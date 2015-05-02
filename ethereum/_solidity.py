@@ -101,7 +101,7 @@ class solc_wrapper(object):
 
 def get_solidity():
     try:
-        import solidity
+        import solidity, tester
         tester.languages['solidity'] = solidity
     except ImportError:
         if not solc_wrapper.compiler_available():
