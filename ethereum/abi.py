@@ -21,8 +21,8 @@ class ContractTranslator():
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
             name = sig_item['name']
-            if '(' in name:
-                name = name[:name.find('(')]
+            if b'(' in name:
+                name = name[:name.find(b'(')]
             if name in v:
                 i = 2
                 while name + utils.to_string(i) in v:
@@ -31,8 +31,8 @@ class ContractTranslator():
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
-            sig = name + '(' + ','.join(encode_types) + ')'
-            if sig_item['type'] == 'function':
+            sig = name + b'(' + b','.join(encode_types) + b')'
+            if sig_item['type'] == b'function':
                 prefix = big_endian_to_int(utils.sha3(sig)[:4])
                 decode_types = [f['type'] for f in sig_item['outputs']]
                 is_unknown_type = len(sig_item['outputs']) and \
@@ -43,7 +43,7 @@ class ContractTranslator():
                     "decode_types": decode_types,
                     "is_unknown_type": is_unknown_type
                 }
-            elif sig_item['type'] == 'event':
+            elif sig_item['type'] == b'event':
                 prefix = big_endian_to_int(utils.sha3(sig))
                 indexed = [f['indexed'] for f in sig_item['inputs']]
                 names = [f['name'] for f in sig_item['inputs']]
@@ -118,32 +118,32 @@ def decint(n):
 
 # Encodes a base type
 def encode_single(arg, base, sub):
-    normal_args, len_args, var_args = '', '', ''
+    normal_args, len_args, var_args = b'', b'', b''
     # Unsigned integers: uint<sz>
-    if base == 'uint':
+    if base == b'uint':
         sub = int(sub)
         i = decint(arg)
         assert 0 <= i < 2**sub, "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int(i), 32)
     # Signed integers: int<sz>
-    elif base == 'int':
+    elif base == b'int':
         sub = int(sub)
         i = decint(arg)
         assert -2**(sub - 1) <= i < 2**sub, "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
-    elif base == 'ureal':
+    elif base == b'ureal':
         high, low = [int(x) for x in sub.split('x')]
         assert 0 <= arg < 2**high, "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int(arg * 2**low), 32)
     # Signed reals: real<high>x<low>
-    elif base == 'real':
+    elif base == b'real':
         high, low = [int(x) for x in sub.split('x')]
         assert -2**(high - 1) <= arg < 2**(high - 1), \
             "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
-    elif base == 'string':
+    elif base == b'string':
         if not is_string(arg):
             raise Exception("Expecting string: %r" % arg)
         # Fixed length: string<sz>
@@ -156,7 +156,7 @@ def encode_single(arg, base, sub):
             len_args = zpad(encode_int(len(arg)), 32)
             var_args = arg
     # Hashes: hash<sz>
-    elif base == 'hash':
+    elif base == b'hash':
         assert int(sub) and int(sub) <= 32
         if isinstance(arg, int):
             normal_args = zpad(encode_int(arg), 32)
@@ -167,8 +167,8 @@ def encode_single(arg, base, sub):
         else:
             raise Exception("Could not parse hash: %r" % arg)
     # Addresses: address (== hash160)
-    elif base == 'address':
-        assert sub == ''
+    elif base == b'address':
+        assert sub == b''
         if isinstance(arg, int):
             normal_args = zpad(encode_int(arg), 32)
         elif len(arg) == 20:
@@ -183,43 +183,43 @@ def encode_single(arg, base, sub):
 def process_type(typ):
     # Crazy reg expression to separate out base type component (eg. uint),
     # size (eg. 256, 128x128, none), array component (eg. [], [45], none)
-    regexp = '([a-z]*)([0-9]*x?[0-9]*)((\[[0-9]*\])*)'
+    regexp = b'([a-z]*)([0-9]*x?[0-9]*)((\[[0-9]*\])*)'
     base, sub, arr, _ = re.match(regexp, typ).groups()
-    arrlist = re.findall('\[[0-9]*\]', arr)
-    assert len(''.join(arrlist)) == len(arr), \
+    arrlist = re.findall(b'\[[0-9]*\]', arr)
+    assert len(b''.join(arrlist)) == len(arr), \
         "Unknown characters found in array declaration"
     # Only outermost array can be var-sized
     for a in arrlist[:-1]:
         assert len(a) > 2, "Inner arrays must have fixed size"
     # Check validity of string type
-    if base == 'string':
-        assert re.match('^[0-9]*$', sub), \
+    if base == b'string':
+        assert re.match(b'^[0-9]*$', sub), \
             "String type must have no suffix or numerical suffix"
         assert len(sub) or len(arrlist) == 0, \
             "Cannot have an array of var-sized strings"
     # Check validity of integer type
-    elif base == 'uint' or base == 'int':
-        assert re.match('^[0-9]+$', sub), \
+    elif base == b'uint' or base == b'int':
+        assert re.match(b'^[0-9]+$', sub), \
             "Integer type must have numerical suffix"
         assert 8 <= int(sub) <= 256, \
             "Integer size out of bounds"
         assert int(sub) % 8 == 0, \
             "Integer size must be multiple of 8"
     # Check validity of real type
-    elif base == 'ureal' or base == 'real':
-        assert re.match('^[0-9]+x[0-9]+$', sub), \
+    elif base == b'ureal' or base == b'real':
+        assert re.match(b'^[0-9]+x[0-9]+$', sub), \
             "Real type must have suffix of form <high>x<low>, eg. 128x128"
-        high, low = [int(x) for x in sub.split('x')]
+        high, low = [int(x) for x in sub.split(b'x')]
         assert 8 <= (high + low) <= 256, \
             "Real size out of bounds (max 32 bytes)"
         assert high % 8 == 0 and low % 8 == 0, \
             "Real high/low sizes must be multiples of 8"
     # Check validity of hash type
-    elif base == 'hash':
-        assert re.match('^[0-9]+$', sub), \
+    elif base == b'hash':
+        assert re.match(b'^[0-9]+$', sub), \
             "Hash type must have numerical suffix"
     # Check validity of address type
-    elif base == 'address':
+    elif base == b'address':
         assert sub == '', "Address cannot have suffix"
     return base, sub, arrlist
 
@@ -231,34 +231,34 @@ def encode_any(arg, base, sub, arrlist):
         return encode_single(arg, base, sub)
     # Variable-sized arrays
     if arrlist[-1] == '[]':
-        if base == 'string' and sub == '':
+        if base == b'string' and sub == b'':
             raise Exception('Array of dynamic-sized items not allowed: %r'
                             % arg)
-        o = ''
+        o = b''
         assert isinstance(arg, list), "Expecting array: %r" % arg
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return zpad(encode_int(len(arg)), 32), '', o
+        return zpad(encode_int(len(arg)), 32), b'', o
     # Fixed-sized arrays
     else:
-        if base == 'string' and sub == '':
+        if base == b'string' and sub == b'':
             raise Exception('Array of dynamic-sized items not allowed')
         sz = int(arrlist[-1][1:-1])
         assert isinstance(arg, list), "Expecting array: %r" % arg
         assert sz == len(arg), "Wrong number of elements in array: %r" % arg
-        o = ''
+        o = b''
         for a in arg:
             _, n, _ = encode_any(a, base, sub, arrlist[:-1])
             o += n
-        return '', o, ''
+        return b'', o, b''
 
 
 # Encodes ABI data given a prefix, a list of types, and a list of arguments
 def encode_abi(types, args):
-    len_args = ''
-    normal_args = ''
-    var_args = ''
+    len_args = b''
+    normal_args = b''
+    var_args = b''
     if len(types) != len(args):
         raise Exception("Wrong number of arguments!")
     for typ, arg in zip(types, args):
@@ -272,11 +272,11 @@ def encode_abi(types, args):
 
 def is_varsized(base, sub, arrlist):
     return (len(arrlist) and arrlist[-1] == '[]') or \
-           (base == 'string' and sub == '')
+           (base == b'string' and sub == b'')
 
 
 def getlen(base, sub, arrlist):
-    if base == 'string' and not len(sub):
+    if base == b'string' and not len(sub):
         sz = 1
     else:
         sz = 32
@@ -287,22 +287,22 @@ def getlen(base, sub, arrlist):
 
 
 def decode_single(data, base, sub):
-    if base == 'address':
+    if base == b'address':
         return encode_hex(data[12:])
-    elif base == 'string' or base == 'hash':
+    elif base == b'string' or base == b'hash':
         return data[:int(sub)] if len(sub) else data
-    elif base == 'uint':
+    elif base == b'uint':
         return big_endian_to_int(data)
-    elif base == 'int':
+    elif base == b'int':
         o = big_endian_to_int(data)
         return (o - 2**int(sub)) if o >= 2**(int(sub) - 1) else o
-    elif base == 'ureal':
-        high, low = [int(x) for x in sub.split('x')]
+    elif base == b'ureal':
+        high, low = [int(x) for x in sub.split(b'x')]
         return big_endian_to_int(data) * 1.0 / 2**low
-    elif base == 'real':
-        high, low = [int(x) for x in sub.split('x')]
+    elif base == b'real':
+        high, low = [int(x) for x in sub.split(b'x')]
         return (big_endian_to_int(data) * 1.0 / 2**low) % 2**high
-    elif base == 'bool':
+    elif base == b'bool':
         return bool(int(data.encode('hex'), 16))
 
 
