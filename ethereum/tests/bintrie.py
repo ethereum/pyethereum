@@ -246,8 +246,9 @@ def decompress_branch(branch):
     return db
 
 
-# Test with n nodes
-def test(n):
+# Test with n nodes and k branch picks
+def test(n, m=100):
+    assert m <= n
     db = EphemDB()
     x = ''
     for i in range(n):
@@ -261,7 +262,7 @@ def test(n):
     p = 0
     q = 0
     ecks = x
-    for i in range(min(n, 100)):
+    for i in range(m):
         x = copy.deepcopy(ecks)
         k = hashfunc(str(i))
         v = hashfunc('v'+str(i))
@@ -273,15 +274,16 @@ def test(n):
         p += len(cdb)
         assert decompress_db(cdb).kv == l2.kv
         cbr = compress_branch(l2, x)
-        print rlp.decode(cbr)
         q += len(cbr)
         dbranch = decompress_branch(cbr)
         assert v == get(x, dbranch,  [int(a) for a in encode_bin(rlp.encode(k))])
         # for k in l2.kv:
             # assert k in dbranch.kv
-    print 'Total db size: %d' % sum([len(val) for key, val in l1.kv.items()])
-    print 'Avg proof size: %d' % (o / min(n, 100))
-    print 'Avg compressed proof size: %d' % (p / min(n, 100))
-    print 'Avg branch size: %d' % (q / min(n, 100))
-    print 'Compressed db size: %d' % len(compress_db(l1))
-    return db, x
+    o = {
+        'total_db_size': sum([len(val) for key, val in l1.kv.items()]),
+        'avg_proof_size': sum([len(val) for key, val in l1.kv.items()]),
+        'avg_compressed_proof_size': (p / min(n, m)),
+        'avg_branch_size': (q / min(n, m)),
+        'compressed_db_size': len(compress_db(l1))
+    }
+    return o
