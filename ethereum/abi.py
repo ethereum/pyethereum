@@ -143,7 +143,7 @@ def encode_single(arg, base, sub):
             "Value out of bounds: %r" % arg
         normal_args = zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
-    elif base == 'string' || base == 'bytes':
+    elif base == 'string' or base == 'bytes':
         if not is_string(arg):
             raise Exception("Expecting string: %r" % arg)
         # Fixed length: string<sz>
@@ -192,7 +192,7 @@ def process_type(typ):
     for a in arrlist[:-1]:
         assert len(a) > 2, "Inner arrays must have fixed size"
     # Check validity of string type
-    if base == 'string' || base == 'bytes':
+    if base == 'string' or base == 'bytes':
         assert re.match('^[0-9]*$', sub), \
             "String type must have no suffix or numerical suffix"
         assert len(sub) or len(arrlist) == 0, \
