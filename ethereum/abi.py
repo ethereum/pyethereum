@@ -169,7 +169,7 @@ def encode_single(arg, base, sub):
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
-        if isinstance(arg, int):
+        if isinstance(arg, long):
             normal_args = zpad(encode_int(arg), 32)
         elif len(arg) == 20:
             normal_args = zpad(arg, 32)
