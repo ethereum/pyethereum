@@ -3,4 +3,4 @@ pysha3
 repoze.lru
 structlog>=15.0.0
 https://github.com/ethereum/pyrlp/tarball/develop
-https://github.com/ethereum/ethash/tarball/master
+https://github.com/ethereum/ethash/tarball/ca7f84d9bbe733b8f7829bd12bbc3fb2d0bfe5bd
