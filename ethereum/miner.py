@@ -57,9 +57,7 @@ class Miner():
             big-endian-encoded integer.
         """
         #b = self.block
-        sz = blocks.get_cache_size(self.block.number)
-        cache = blocks.get_cache_memoized(self.block.header.seed, sz)
-        fsz = blocks.get_full_size(self.block.number)
+        cache = blocks.mkcache(self.block.number)
         nonce = utils.big_endian_to_int(self.block.nonce)
         TT64M1 = 2**64 - 1
         target = utils.zpad(utils.int_to_big_endian(2**256 // (self.block.difficulty or 1)), 32)
@@ -67,7 +65,7 @@ class Miner():
         sys.stderr.write("Starting mining\n")
         for i in range(1, steps + 1):
             self.block.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
-            o = blocks.hashimoto_light(fsz, cache, self.block.mining_hash,
+            o = blocks.hashimoto_light(self.block.number, cache, self.block.mining_hash,
                                        self.block.nonce)
             if o["result"] <= target:
                 sys.stderr.write("Success!\n")

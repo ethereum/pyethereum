@@ -39,8 +39,6 @@ if ETHASH_LIB == 'ethash':
     serialize_cache = ethash_utils.serialize_cache
     deserialize_cache = ethash_utils.deserialize_cache
     EPOCH_LENGTH = ethash_utils.EPOCH_LENGTH
-    get_cache_size = ethash_utils.get_cache_size
-    get_full_size = ethash_utils.get_full_size
     hashimoto_light = ethash.hashimoto_light
 elif ETHASH_LIB == 'pyethash':
     import pyethash
@@ -48,8 +46,6 @@ elif ETHASH_LIB == 'pyethash':
     serialize_cache = lambda x: x
     deserialize_cache = lambda x: x
     EPOCH_LENGTH = pyethash.EPOCH_LENGTH
-    get_cache_size = pyethash.get_cache_size
-    get_full_size = pyethash.get_full_size
     hashimoto_light = lambda s, c, h, n: \
         pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
 else:
@@ -333,10 +329,8 @@ class BlockHeader(rlp.Serializable):
         seed = self.seed
 
         # Grab current cache
-        current_cache_size = get_cache_size(self.number)
-        cache = get_cache_memoized(seed, current_cache_size)
-        current_full_size = get_full_size(self.number)
-        mining_output = hashimoto_light(current_full_size, cache, header_hash, nonce)
+        cache = mkcache(self.number)
+        mining_output = hashimoto_light(self.number, cache, header_hash, nonce)
         diff = self.difficulty
         if debugmode:
             print('Mining hash: {}'.format(encode_hex(header_hash)))
@@ -1277,11 +1271,6 @@ class Block(rlp.Serializable):
 
     def __structlog__(self):
         return encode_hex(self.hash)
-
-
-@lru_cache(5)
-def get_cache_memoized(seedhash, size):
-    return mkcache(size, seedhash)
 
 
 # Gas limit adjustment algo

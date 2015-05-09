@@ -3,9 +3,27 @@ from ethereum.ethash_utils import *
 import sys
 
 
-def mkcache(cache_size, seed):
-    n = cache_size // HASH_BYTES
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
 
+
+cache_seeds = ['\x00' * 32]
+
+
+def mkcache(block_number):
+    while len(cache_seeds) <= block.number // EPOCH_LENGTH:
+        cache_seeds.append(sha3.sha3_256(cache_seeds[-1]).digest())
+
+    seed = cache_seeds[block.number // EPOCH_LENGTH]
+
+    n = get_cache_size(block_number) // HASH_BYTES
+    return _get_cache(seed, n)
+
+
+@lru_cache(5)
+def _get_cache(seed, n):
     # Sequentially produce the initial dataset
     o = [sha3_512(seed)]
     for i in range(1, n):
@@ -64,8 +82,8 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
     }
 
 
-def hashimoto_light(full_size, cache, header, nonce):
-    return hashimoto(header, nonce, full_size,
+def hashimoto_light(block_number, cache, header, nonce):
+    return hashimoto(header, nonce, get_full_size(block_number),
                      lambda x: calc_dataset_item(cache, x))
 
 
