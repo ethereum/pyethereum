@@ -17,40 +17,19 @@ from ethereum.utils import address, int256, trie_root, hash32, to_string
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
-
-if sys.version_info.major == 2:
-    from repoze.lru import lru_cache
-    ETHASH_LIB = 'pyethash'
-else:
-    from functools import lru_cache
-    ETHASH_LIB = 'ethash'
-
 from ethereum.exceptions import *
 from ethereum.slogging import get_logger
 from ethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
+from ethpow import check_pow
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
+
 
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
 Log = processblock.Log
-
-if ETHASH_LIB == 'ethash':
-    from ethereum import ethash, ethash_utils
-    mkcache = ethash.mkcache
-    serialize_cache = ethash_utils.serialize_cache
-    deserialize_cache = ethash_utils.deserialize_cache
-    EPOCH_LENGTH = ethash_utils.EPOCH_LENGTH
-    hashimoto_light = ethash.hashimoto_light
-elif ETHASH_LIB == 'pyethash':
-    import pyethash
-    mkcache = pyethash.mkcache_bytes
-    serialize_cache = lambda x: x
-    deserialize_cache = lambda x: x
-    EPOCH_LENGTH = pyethash.EPOCH_LENGTH
-    hashimoto_light = lambda s, c, h, n: \
-        pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
-else:
-    raise Exception("invalid ethash library set")
-
 
 # Genesis block difficulty
 GENESIS_DIFFICULTY = 131072
@@ -303,15 +282,7 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def mining_hash(self):
-        return utils.sha3(rlp.encode(self,
-                                     BlockHeader.exclude(['mixhash', 'nonce'])))
-
-    @property
-    def seed(self):
-        seed = b'\x00' * 32
-        for i in range(self.number // EPOCH_LENGTH):
-            seed = utils.sha3(seed)
-        return seed
+        return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
     def check_pow(self, nonce=None, debugmode=False):
         """Check if the proof-of-work of the block is valid.
@@ -321,25 +292,8 @@ class BlockHeader(rlp.Serializable):
                       the header
         :returns: `True` or `False`
         """
-        nonce = nonce or self.nonce
-        if len(self.mixhash) != 32 or len(self.nonce) != 8:
-            raise ValueError("Bad mixhash or nonce length")
-        # exclude mixhash and nonce
-        header_hash = self.mining_hash
-        seed = self.seed
-
-        # Grab current cache
-        cache = mkcache(self.number)
-        mining_output = hashimoto_light(self.number, cache, header_hash, nonce)
-        diff = self.difficulty
-        if debugmode:
-            print('Mining hash: {}'.format(encode_hex(header_hash)))
-            print('Seed: {}'.format(encode_hex(seed)))
-            print('Mixhash: {}'.format(encode_hex(mining_output['mix digest'])))
-            print('Result: {}'.format(encode_hex(mining_output['result'])))
-        if mining_output['mix digest'] != self.mixhash:
-            return False
-        return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (diff or 1)
+        return check_pow(self.number, self.mining_hash, self.mixhash, nonce or self.nonce,
+                         self.difficulty, debugmode=debugmode)
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
