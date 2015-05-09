@@ -26,9 +26,8 @@ elif ETHASH_LIB == 'pyethash':
 else:
     raise Exception("invalid ethash library set")
 
-
+TT64M1 = 2**64 - 1
 cache_seeds = ['\x00' * 32]
-
 cache_by_seed = OrderedDict()
 cache_by_seed.max_items = 10
 
@@ -94,46 +93,28 @@ class Miner():
                   block_hash=utils.encode_hex(self.block.hash),
                   block_difficulty=self.block.difficulty)
 
-        global pyethash
-        if not pyethash:
-            if sys.version_info.major == 2:
-                pyethash = __import__('pyethash')
-            else:
-                pyethash = __import__('ethereum.ethash')
-
-    def mine(self, rounds=1000):
-        """
-        It is formally defined as PoW: PoW(H, n) = BE(SHA3(SHA3(RLP(Hn)) o n))
-        where:
-        RLP(Hn) is the RLP encoding of the block header H, not including the
-            final nonce component;
-        SHA3 is the SHA3 hash function accepting an arbitrary length series of
-            bytes and evaluating to a series of 32 bytes (i.e. 256-bit);
-        n is the nonce, a series of 32 bytes;
-        o is the series concatenation operator;
-        BE(X) evaluates to the value equal to X when interpreted as a
-            big-endian-encoded integer.
-        """
+    def mine(self, rounds=1000, start_nonce=0):
         blk = self.block
-        cache = get_cache(blk.number)
-        nonce = utils.big_endian_to_int(blk.nonce)
-        TT64M1 = 2**64 - 1
-        target = utils.zpad(utils.int_to_big_endian(2**256 // (blk.difficulty or 1)), 32)
-        found = False
-        log.debug("starting mining", rounds=rounds)
-        for i in range(1, rounds + 1):
-            blk.nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
-            o = hashimoto_light(blk.number, cache, blk.mining_hash, blk.nonce)
-            if o["result"] <= target:
-                log.debug("nonce found")
-                blk.mixhash = o["mix digest"]
-                found = True
-                break
-        if not found:
-            return False
+        bin_nonce, mixhash = mine(blk.number, blk.difficulty, blk.mining_hash,
+                                  start_nonce=start_nonce, rounds=rounds)
+        if bin_nonce:
+            blk.mixhash = mixhash
+            blk.nonce = bin_nonce
+            return blk
 
-        assert len(blk.nonce) == 8
-        assert len(blk.header.nonce) == 8
-        assert len(blk.mixhash) == 32
-        assert blk.header.check_pow()
-        return blk
+
+def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
+    assert isinstance(start_nonce, (int, long))
+    cache = get_cache(block_number)
+    nonce = start_nonce
+    target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
+    log.debug("starting mining", rounds=rounds)
+    for i in range(1, rounds + 1):
+        bin_nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
+        o = hashimoto_light(block_number, cache, mining_hash, bin_nonce)
+        if o["result"] <= target:
+            log.debug("nonce found")
+            assert len(bin_nonce) == 8
+            assert len(o["mix digest"]) == 32
+            return bin_nonce, o["mix digest"]
+    return None, None

@@ -62,10 +62,13 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None):
     for t in transactions:
         chain.add_transactions(t)
     m = ethpow.Miner(chain.head_candidate)
+    rounds = 100
+    nonce = 0
     while True:
-        b = m.mine()
+        b = m.mine(rounds=rounds, start_nonce=nonce)
         if b:
             break
+        nonce += rounds
     assert b.header.check_pow()
     chain.add_block(b)
     return b
