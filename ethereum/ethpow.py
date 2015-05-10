@@ -108,7 +108,6 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
     cache = get_cache(block_number)
     nonce = start_nonce
     target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
-    log.debug("starting mining", rounds=rounds)
     for i in range(1, rounds + 1):
         bin_nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
         o = hashimoto_light(block_number, cache, mining_hash, bin_nonce)
