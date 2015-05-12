@@ -1265,8 +1265,8 @@ macro fixedp($x) / fixedp($y):
 macro raw_unfixedp(fixedp($x)):
     $x / 2^64
 
-macro fixify($x):
-    fixedp($x * 2^64)
+macro set(fixedp($x), $y):
+    $x = 2^64 * $y
 
 macro fixedp($x) = fixedp($y):
     $x = $y

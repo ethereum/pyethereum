@@ -1,5 +1,5 @@
 from ethereum import tester as t
-from ethereum import blocks, utils, transactions, vm
+from ethereum import blocks, utils, transactions, vm, abi
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
@@ -36,6 +36,9 @@ time_state_test = lambda params: run_state_test(params, TIME)
 fill_ethash_test = lambda params: run_ethash_test(params, FILL)
 check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
 time_ethash_test = lambda params: run_ethash_test(params, TIME)
+fill_abi_test = lambda params: run_abi_test(params, FILL)
+check_abi_test = lambda params: run_abi_test(params, VERIFY)
+time_abi_test = lambda params: run_abi_test(params, TIME)
 
 fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
@@ -419,6 +422,27 @@ def run_ethash_test(params, mode):
             "cache_gen": t2 - t1,
             "verification_time": t7 - t6
         }
+
+
+def run_abi_test(params, mode):
+    types, args = params['types'], params['args']
+    out = abi.encode_abi(types, args)
+    assert abi.decode_abi(types, out) == args
+    if mode == FILL:
+        params['result'] = encode_hex(out)
+        return params
+    elif mode == VERIFY:
+        assert params['result'] == encode_hex(out)
+    elif mode == TIME:
+        x = time.time()
+        abi.encode_abi(types, args)
+        y = time.time()
+        abi.decode_abi(out, args)
+        return {
+            'encoding': y - x,
+            'decoding': time.time() - y
+        }
+       
 
 
 def get_tests_from_file_or_dir(dname, json_only=False):

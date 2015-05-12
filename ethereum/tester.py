@@ -156,7 +156,7 @@ class state():
         tx.sign(sender)
         if gas is not None:
             tx.startgas = gas
-        print('starting', tx.startgas, gas_limit)
+        # print('starting', tx.startgas, gas_limit)
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
             raise Exception("Contract creation failed")
@@ -254,7 +254,7 @@ class state():
 # logging
 
 
-def set_logging_level(lvl=1):
+def set_logging_level(lvl=0):
     trace_lvl_map = [
         ':info',
         'eth.vm.log:trace',
