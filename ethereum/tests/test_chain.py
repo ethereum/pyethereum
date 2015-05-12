@@ -4,10 +4,9 @@ import ethereum.blocks as blocks
 import ethereum.transactions as transactions
 import rlp
 from rlp.utils import decode_hex, encode_hex
-import ethereum.miner as miner
+import ethereum.ethpow as ethpow
 import ethereum.utils as utils
 from ethereum.chain import Chain
-import ethereum.ethash_utils as ethash_utils
 from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
 
@@ -62,11 +61,14 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None):
     chain._update_head(parent)
     for t in transactions:
         chain.add_transactions(t)
-    m = miner.Miner(chain.head_candidate)
+    m = ethpow.Miner(chain.head_candidate)
+    rounds = 100
+    nonce = 0
     while True:
-        b = m.mine()
+        b = m.mine(rounds=rounds, start_nonce=nonce)
         if b:
             break
+        nonce += rounds
     assert b.header.check_pow()
     chain.add_block(b)
     return b

@@ -13,10 +13,10 @@ cache_seeds = ['\x00' * 32]
 
 
 def mkcache(block_number):
-    while len(cache_seeds) <= block.number // EPOCH_LENGTH:
+    while len(cache_seeds) <= block_number // EPOCH_LENGTH:
         cache_seeds.append(sha3.sha3_256(cache_seeds[-1]).digest())
 
-    seed = cache_seeds[block.number // EPOCH_LENGTH]
+    seed = cache_seeds[block_number // EPOCH_LENGTH]
 
     n = get_cache_size(block_number) // HASH_BYTES
     return _get_cache(seed, n)

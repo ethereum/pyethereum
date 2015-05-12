@@ -33,7 +33,7 @@ cmdclass = dict(test=PyTest)
 install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/pyrlp/tarball/develop': 'rlp>=0.3.8',
-    'https://github.com/ethereum/ethash/tarball/ca7f84d9bbe733b8f7829bd12bbc3fb2d0bfe5bd': 'pyethash'}
+    'https://github.com/ethereum/ethash/tarball/master': 'pyethash'}
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 
 # dev requirements
