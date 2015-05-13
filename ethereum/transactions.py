@@ -59,8 +59,9 @@ class Transaction(rlp.Serializable):
                 raise InvalidTransaction("Invalid signature values!")
             rlpdata = rlp.encode(self, UnsignedTransaction)
             rawhash = utils.sha3(rlpdata)
-            pub = encode_pubkey(ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
-            self.sender = utils.sha3(pub[1:])[-20:]
+            Q = ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
+            self.sender_pubkey = encode_pubkey(Q, 'bin')
+            self.sender = utils.sha3(self.sender_pubkey[1:])[-20:]
         else:
             self.sender = 0
 
