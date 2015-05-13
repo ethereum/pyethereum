@@ -1,5 +1,6 @@
 bitcoin
 pysha3
+PyYAML
 repoze.lru
 structlog>=15.0.0
 https://github.com/ethereum/pyrlp/tarball/develop
