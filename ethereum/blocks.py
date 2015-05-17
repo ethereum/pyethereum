@@ -313,7 +313,8 @@ class BlockHeader(rlp.Serializable):
         return d
 
     def __repr__(self):
-        return '<BlockHeader(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
+        return '<%s(#%d %s)>' % (self.__class__.__name__, self.number,
+                                 encode_hex(self.hash)[:8])
 
     def __eq__(self, other):
         """Two blockheader are equal iff they have the same hash."""
@@ -1232,7 +1233,7 @@ class Block(rlp.Serializable):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
+        return '<%s(#%d %s)>' % (self.__class__.__name__, self.number, encode_hex(self.hash)[:8])
 
     def __structlog__(self):
         return encode_hex(self.hash)
@@ -1286,6 +1287,7 @@ class CachedBlock(Block):
     @classmethod
     def create_cached(cls, blk):
         blk.__class__ = CachedBlock
+        log.debug('created cached block', blk=blk)
         return blk
 
 
@@ -1293,7 +1295,7 @@ def get_block_header(db, blockhash):
     bh = BlockHeader.from_block_rlp(db.get(blockhash))
     if bh.hash != blockhash:
         log.warn('BlockHeader.hash is broken')
-        bh._fimxe_hash = blockhash
+        assert bh.hash == blockhash
 
     return bh
 

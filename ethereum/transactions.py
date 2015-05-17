@@ -11,7 +11,8 @@ from ethereum import bloom
 from ethereum import utils
 from ethereum.utils import TT256
 from ethereum.exceptions import InvalidTransaction
-
+from ethereum.slogging import get_logger
+log = get_logger('eth.chain.tx')
 
 class Transaction(rlp.Serializable):
 
@@ -97,6 +98,13 @@ class Transaction(rlp.Serializable):
         d['sender'] = self.sender
         d['hash'] = encode_hex(self.hash)
         return d
+
+    def log_dict(self):
+        d = self.to_dict()
+        d['sender'] = d['sender'].encode('hex')
+        d['to'] = d['to'].encode('hex')
+        return d
+
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash

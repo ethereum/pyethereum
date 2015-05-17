@@ -13,9 +13,9 @@ from ethereum.utils import safe_ord
 sys.setrecursionlimit(100000)
 
 from ethereum.slogging import get_logger
-log_tx = get_logger('eth.tx')
-log_msg = get_logger('eth.msg')
-log_state = get_logger('eth.msg.state')
+log_tx = get_logger('eth.pb.tx')
+log_msg = get_logger('eth.pb.msg')
+log_state = get_logger('eth.pb.msg.state')
 
 TT255 = 2 ** 255
 TT256 = 2 ** 256
@@ -119,7 +119,7 @@ def validate_transaction(block, tx):
 def apply_transaction(block, tx):
     validate_transaction(block, tx)
 
-    log_tx.debug('TX NEW', tx=encode_hex(tx.hash), tx_dict=tx.to_dict())
+    log_tx.debug('TX NEW', tx_dict=tx.log_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'

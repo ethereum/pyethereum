@@ -140,6 +140,7 @@ class Chain(object):
         return blocks.get_block(self.blockchain, ptr)
 
     def _update_head(self, block):
+        log.debug('updating head')
         if not block.is_genesis():
             #assert self.head.chain_difficulty() < block.chain_difficulty()
             if block.get_parent() != self.head:
@@ -153,7 +154,7 @@ class Chain(object):
 
     def _update_head_candidate(self):
         "after new head is set"
-
+        log.debug('updating head candidate')
         # collect uncles
         blk = self.head  # parent of the block we are collecting uncles for
         uncles = set(u.header for u in self.get_brothers(blk))
