@@ -773,12 +773,17 @@ class Block(rlp.Serializable):
         else:
             return rlp.decode(tx, Transaction)
 
+    _get_transactions_cache = None
+
     def get_transactions(self):
         """Build a list of all transactions in this block."""
-        txs = []
-        for i in range(self.transaction_count):
-            txs.append(self.get_transaction(i))
-        return txs
+        num = self.transaction_count
+        if not self._get_transactions_cache or len(self._get_transactions_cache) != num:
+            txs = []
+            for i in range(num):
+                txs.append(self.get_transaction(i))
+            self._get_transactions_cache = txs
+        return self._get_transactions_cache
 
     def get_transaction_hashes(self):
         "helper to check if blk contains a tx"
@@ -1106,6 +1111,7 @@ class Block(rlp.Serializable):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self._get_transactions_cache = None
         self.ether_delta = mysnapshot['ether_delta']
 
     def finalize(self):
