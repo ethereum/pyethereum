@@ -51,6 +51,6 @@ setup(name="ethereum",
       install_requires=install_requires,
       tests_require=tests_require,
       entry_points=dict(console_scripts=console_scripts),
-      version='0.9.65',
+      version='0.9.66',
       cmdclass=cmdclass
       )
