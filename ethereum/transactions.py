@@ -1,5 +1,8 @@
-from bitcoin import encode_pubkey
-from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover, N, P
+from bitcoin import encode_pubkey, N, P
+try:
+    from ecdsa_recover import ecdsa_raw_sign, ecdsa_raw_recover
+except ImportError:
+    from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
 import rlp
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import decode_hex, encode_hex
