@@ -46,6 +46,8 @@ class Transaction(rlp.Serializable):
         ('s', big_endian_int),
     ]
 
+    _sender = None
+
     def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
         if len(to) == 40:
             to = decode_hex(to)
@@ -53,20 +55,32 @@ class Transaction(rlp.Serializable):
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
         self.logs = []
 
-        # Determine sender
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
             raise InvalidTransaction("Values way too high!")
-        # signed?
-        if self.v:
-            if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
-                raise InvalidTransaction("Invalid signature values!")
-            rlpdata = rlp.encode(self, UnsignedTransaction)
-            rawhash = utils.sha3(rlpdata)
-            pub = encode_pubkey(ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
-            self.sender = utils.sha3(pub[1:])[-20:]
-        else:
-            self.sender = 0
+
+        log.debug('deserialized tx', tx=self.hash.encode('hex')[:8])
+
+    @property
+    def sender(self):
+        if not self._sender:
+            # Determine sender
+            if self.v:
+                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
+                    raise InvalidTransaction("Invalid signature values!")
+                log.debug('recovering sender')
+                rlpdata = rlp.encode(self, UnsignedTransaction)
+                rawhash = utils.sha3(rlpdata)
+                pub = encode_pubkey(ecdsa_raw_recover(rawhash, (self.v, self.r, self.s)), 'bin')
+                self._sender = utils.sha3(pub[1:])[-20:]
+                assert self.sender == self._sender
+            else:
+                self._sender = 0
+        return self._sender
+
+    @sender.setter
+    def sender(self, value):
+        self._sender = value
 
     def sign(self, key):
         """Sign this transaction with a private key.
