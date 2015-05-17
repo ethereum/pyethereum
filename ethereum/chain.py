@@ -281,8 +281,8 @@ class Chain(object):
         """
         assert self.head_candidate is not None
         head_candidate = self.head_candidate
-        log.debug('new tx', num_txs=len(self.get_transactions()), tx_hash=transaction)
-        if transaction in self.get_transactions():
+        log.debug('add tx', num_txs=self.num_transactions(), tx=transaction, on=head_candidate)
+        if self.head_candidate.includes_transaction(transaction.hash):
             log.debug('known tx')
             return
         old_state_root = head_candidate.state_root
@@ -294,7 +294,6 @@ class Chain(object):
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)
-            assert transaction not in head_candidate.get_transactions()
             head_candidate.state_root = old_state_root  # reset
             return False
 
@@ -306,7 +305,6 @@ class Chain(object):
             self.add_transaction(transaction)
             return
 
-        assert transaction in self.get_transactions()
         self.pre_finalize_state_root = head_candidate.state_root
         head_candidate.finalize()
         log.debug('tx applied', result=output)
@@ -318,9 +316,17 @@ class Chain(object):
         but known to the chain.
         """
         if self.head_candidate:
+            log.debug('get_transactions called', on=self.head_candidate)
             return self.head_candidate.get_transactions()
         else:
             return []
+
+    def num_transactions(self):
+        if self.head_candidate:
+            return self.head_candidate.transaction_count
+        else:
+            return 0
+
 
     def get_chain(self, start='', count=10):
         "return 'count' blocks starting from head or start"

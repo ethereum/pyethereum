@@ -779,6 +779,16 @@ class Block(rlp.Serializable):
             txs.append(self.get_transaction(i))
         return txs
 
+    def get_transaction_hashes(self):
+        "helper to check if blk contains a tx"
+        return [utils.sha3(self.transactions.get(rlp.encode(i)))
+                for i in range(self.transaction_count)]
+
+    def includes_transaction(self, tx_hash):
+        assert isinstance(tx_hash, bytes)
+        #assert self.get_transaction_hashes() == [tx.hash for tx in self.get_transactions()]
+        return tx_hash in self.get_transaction_hashes()
+
     def get_receipt(self, num):
         """Get the receipt of the `num`th transaction.
 
