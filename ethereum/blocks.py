@@ -284,7 +284,7 @@ class BlockHeader(rlp.Serializable):
     def mining_hash(self):
         return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
-    def check_pow(self, nonce=None, debugmode=False):
+    def check_pow(self, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
         :param nonce: if given the proof of work function will be evaluated
@@ -292,8 +292,9 @@ class BlockHeader(rlp.Serializable):
                       the header
         :returns: `True` or `False`
         """
+        log.debug('checking pow', block=self.hex_hash()[:8])
         return check_pow(self.number, self.mining_hash, self.mixhash, nonce or self.nonce,
-                         self.difficulty, debugmode=debugmode)
+                         self.difficulty)
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""

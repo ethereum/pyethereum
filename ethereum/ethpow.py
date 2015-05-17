@@ -7,11 +7,13 @@ from ethereum.slogging import get_logger
 
 log = get_logger('eth.pow')
 
-
 if sys.version_info.major == 2:
     ETHASH_LIB = 'pyethash'
+    from repoze.lru import lru_cache
 else:
     ETHASH_LIB = 'ethash'
+    from functools import lru_cache
+
 
 if ETHASH_LIB == 'ethash':
     mkcache = ethash.mkcache
@@ -46,8 +48,8 @@ def get_cache(block_number):
         cache_by_seed.pop(cache_by_seed.keys()[0])  # remove last recently accessed
     return c
 
-
-def check_pow(block_number, header_hash, mixhash, nonce, difficulty, debugmode=False):
+@lru_cache(maxsize=32)
+def check_pow(block_number, header_hash, mixhash, nonce, difficulty):
     """Check if the proof-of-work of the block is valid.
 
     :param nonce: if given the proof of work function will be evaluated
@@ -55,6 +57,7 @@ def check_pow(block_number, header_hash, mixhash, nonce, difficulty, debugmode=F
                   the header
     :returns: `True` or `False`
     """
+    log.debug('checking pow', block_number=block_number)
     assert len(mixhash) == 32
     assert len(header_hash) == 32
     assert len(nonce) == 8
@@ -62,10 +65,6 @@ def check_pow(block_number, header_hash, mixhash, nonce, difficulty, debugmode=F
     # Grab current cache
     cache = get_cache(block_number)
     mining_output = hashimoto_light(block_number, cache, header_hash, nonce)
-    if debugmode:
-        log.debug('Mining hash: {}'.format(utils.encode_hex(header_hash)))
-        log.debug('Mixhash: {}'.format(utils.encode_hex(mining_output['mix digest'])))
-        log.debug('Result: {}'.format(utils.encode_hex(mining_output['result'])))
     if mining_output['mix digest'] != mixhash:
         return False
     return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (difficulty or 1)
