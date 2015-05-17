@@ -139,7 +139,7 @@ class Chain(object):
         ptr = self.blockchain.get('HEAD')
         return blocks.get_block(self.blockchain, ptr)
 
-    def _update_head(self, block):
+    def _update_head(self, block, forward_pending_transactions=True):
         log.debug('updating head')
         if not block.is_genesis():
             #assert self.head.chain_difficulty() < block.chain_difficulty()
@@ -148,11 +148,11 @@ class Chain(object):
                           head_hash=block, old_head_hash=self.head)
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
-        self._update_head_candidate()
+        self._update_head_candidate(forward_pending_transactions)
         if self.new_head_cb and not block.is_genesis():
             self.new_head_cb(block)
 
-    def _update_head_candidate(self):
+    def _update_head_candidate(self, forward_pending_transactions=True):
         "after new head is set"
         log.debug('updating head candidate')
         # collect uncles
@@ -179,9 +179,14 @@ class Chain(object):
         # add transactions from previous head candidate
         old_head_candidate = self.head_candidate
         self.head_candidate = head_candidate
-        if old_head_candidate is not None:
+        if old_head_candidate is not None and forward_pending_transactions:
+            log.debug('forwarding pending transactions')
             for tx in old_head_candidate.get_transactions():
                 self.add_transaction(tx)
+        else:
+            log.debug('discarding pending transactions')
+
+
 
     def get_uncles(self, block):
         """Return the uncles of `block`."""
@@ -220,7 +225,7 @@ class Chain(object):
     def commit(self):
         self.blockchain.commit()
 
-    def add_block(self, block, forward=False):
+    def add_block(self, block, forward_pending_transactions=True):
         "returns True if block was added sucessfully"
         _log = log.bind(block_hash=block)
         # make sure we know the parent
@@ -232,10 +237,8 @@ class Chain(object):
             _log.debug('invalid uncles')
             return False
 
-        # check PoW and forward asap in order to avoid stale blocks
         if not len(block.nonce) == 8:
             _log.debug('nonce not set')
-            raise Exception("qwrqwr")
             return False
         elif not block.header.check_pow(nonce=block.nonce) and\
                 not block.is_genesis():
@@ -261,7 +264,7 @@ class Chain(object):
         # set to head if this makes the longest chain w/ most work for that number
         if block.chain_difficulty() > self.head.chain_difficulty():
             _log.debug('new head')
-            self._update_head(block)
+            self._update_head(block, forward_pending_transactions)
         elif block.number > self.head.number:
             _log.warn('has higher blk number than head but lower chain_difficulty',
                       head_hash=self.head, block_difficulty=block.chain_difficulty(),
