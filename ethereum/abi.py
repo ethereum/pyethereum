@@ -75,7 +75,7 @@ class ContractTranslator():
     def is_unknown_type(self, name):
         return self.function_data[name]["is_unknown_type"]
 
-    def listen(self, log):
+    def listen(self, log, noprint=False):
         if not len(log.topics) or log.topics[0] not in self.event_data:
             return
         types = self.event_data[log.topics[0]]['types']
@@ -84,7 +84,7 @@ class ContractTranslator():
         indexed = self.event_data[log.topics[0]]['indexed']
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        print('listen', log.data.encode('hex'))
+        #print('listen', log.data.encode('hex'))
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0
@@ -96,7 +96,8 @@ class ContractTranslator():
                 o[names[i]] = deserialized_args[c2]
                 c2 += 1
         o["_event_type"] = name
-        print(o)
+        if not noprint:
+            print(o)
         return o
 
 

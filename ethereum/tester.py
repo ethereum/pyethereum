@@ -64,6 +64,50 @@ def rand():
     return seed % 2 ** 256
 
 
+class ABIContract():
+
+    def __init__(self, _state, _abi, address, listen=True, log_listener=None):
+        self.address = address
+        self._translator = abi.ContractTranslator(_abi)
+        self.abi = _abi
+
+        if listen:
+            if not log_listener:
+                listener = lambda log: self._translator.listen(log, noprint=False)
+            else:
+                def listener(log):
+                    r = self._translator.listen(log, noprint=True)
+                    if r:
+                        log_listener(r)
+            _state.block.log_listeners.append(listener)
+
+        def kall_factory(f):
+
+            def kall(*args, **kwargs):
+                o = _state._send(kwargs.get('sender', k0),
+                                 self.address,
+                                 kwargs.get('value', 0),
+                                 self._translator.encode(f, args),
+                                 **dict_without(kwargs, 'sender', 'value', 'output'))
+                # Compute output data
+                if kwargs.get('output', '') == 'raw':
+                    outdata = o['output']
+                elif not o['output']:
+                    outdata = None
+                else:
+                    outdata = self._translator.decode(f, o['output'])
+                    outdata = outdata[0] if len(outdata) == 1 else outdata
+                # Format output
+                if kwargs.get('profiling', ''):
+                    return dict_with(o, output=outdata)
+                else:
+                    return outdata
+            return kall
+
+        for f in self._translator.function_data:
+            vars(self)[f] = kall_factory(f)
+
+
 class state():
 
     def __init__(self, num_accounts=len(keys)):
@@ -97,58 +141,22 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(me, code, sender=k0, endowment=0, language='serpent', contract_name='',
-                     gas=None):
-        class _abi_contract():
+    def abi_contract(self, code, sender=k0, endowment=0, language='serpent', contract_name='',
+                     gas=None, log_listener=None, listen=True):
+        if contract_name:
+            assert language == 'solidity'
+            cn_args = dict(contract_name=contract_name)
+        else:
+            cn_args = {}
+        if language not in languages:
+            languages[language] = __import__(language)
+        language = languages[language]
+        evm = language.compile(code, **cn_args)
+        address = self.evm(evm, sender, endowment, gas)
+        assert len(self.block.get_code(address)), "Contract code empty"
+        _abi = language.mk_full_signature(code, **cn_args)
+        return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
 
-            def __init__(self, _state, code, sender=k0, endowment=0, language='serpent'):
-                if contract_name:
-                    assert language == 'solidity'
-                    cn_args = dict(contract_name=contract_name)
-                else:
-                    cn_args = {}
-                if language not in languages:
-                    languages[language] = __import__(language)
-                language = languages[language]
-                evm = language.compile(code, **cn_args)
-                self.address = me.evm(evm, sender, endowment, gas)
-                assert len(me.block.get_code(self.address)), \
-                    "Contract code empty"
-                sig = language.mk_full_signature(code, **cn_args)
-                self._translator = abi.ContractTranslator(sig)
-
-                def kall_factory(f):
-
-                    def kall(*args, **kwargs):
-                        _state.block.log_listeners.append(
-                            lambda log: self._translator.listen(log))
-                        o = _state._send(kwargs.get('sender', k0),
-                                         self.address,
-                                         kwargs.get('value', 0),
-                                         self._translator.encode(f, args),
-                                         **dict_without(kwargs, 'sender',
-                                                        'value', 'output'))
-                        _state.block.log_listeners.pop()
-                        # Compute output data
-                        if kwargs.get('output', '') == 'raw':
-                            outdata = o['output']
-                        elif not o['output']:
-                            outdata = None
-                        else:
-                            outdata = self._translator.decode(f, o['output'])
-                            outdata = outdata[0] if len(outdata) == 1 \
-                                else outdata
-                        # Format output
-                        if kwargs.get('profiling', ''):
-                            return dict_with(o, output=outdata)
-                        else:
-                            return outdata
-                    return kall
-
-                for f in self._translator.function_data:
-                    vars(self)[f] = kall_factory(f)
-
-        return _abi_contract(me, code, sender, endowment, language)
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -242,6 +250,8 @@ class state():
             self.block.commit_state()
             t = self.block.timestamp + 6 + rand() % 12
             x = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
+            # copy listeners
+            x.log_listeners = self.block.log_listeners
             self.block = x
             self.blocks.append(self.block)
 
