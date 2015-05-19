@@ -284,7 +284,7 @@ class BlockHeader(rlp.Serializable):
     def mining_hash(self):
         return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
-    def check_pow(self, nonce=None, debugmode=False):
+    def check_pow(self, nonce=None):
         """Check if the proof-of-work of the block is valid.
 
         :param nonce: if given the proof of work function will be evaluated
@@ -292,8 +292,9 @@ class BlockHeader(rlp.Serializable):
                       the header
         :returns: `True` or `False`
         """
+        log.debug('checking pow', block=self.hex_hash()[:8])
         return check_pow(self.number, self.mining_hash, self.mixhash, nonce or self.nonce,
-                         self.difficulty, debugmode=debugmode)
+                         self.difficulty)
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
@@ -312,7 +313,8 @@ class BlockHeader(rlp.Serializable):
         return d
 
     def __repr__(self):
-        return '<BlockHeader(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
+        return '<%s(#%d %s)>' % (self.__class__.__name__, self.number,
+                                 encode_hex(self.hash)[:8])
 
     def __eq__(self, other):
         """Two blockheader are equal iff they have the same hash."""
@@ -771,12 +773,27 @@ class Block(rlp.Serializable):
         else:
             return rlp.decode(tx, Transaction)
 
+    _get_transactions_cache = None
+
     def get_transactions(self):
         """Build a list of all transactions in this block."""
-        txs = []
-        for i in range(self.transaction_count):
-            txs.append(self.get_transaction(i))
-        return txs
+        num = self.transaction_count
+        if not self._get_transactions_cache or len(self._get_transactions_cache) != num:
+            txs = []
+            for i in range(num):
+                txs.append(self.get_transaction(i))
+            self._get_transactions_cache = txs
+        return self._get_transactions_cache
+
+    def get_transaction_hashes(self):
+        "helper to check if blk contains a tx"
+        return [utils.sha3(self.transactions.get(rlp.encode(i)))
+                for i in range(self.transaction_count)]
+
+    def includes_transaction(self, tx_hash):
+        assert isinstance(tx_hash, bytes)
+        #assert self.get_transaction_hashes() == [tx.hash for tx in self.get_transactions()]
+        return tx_hash in self.get_transaction_hashes()
 
     def get_receipt(self, num):
         """Get the receipt of the `num`th transaction.
@@ -1094,6 +1111,7 @@ class Block(rlp.Serializable):
         self.gas_used = mysnapshot['gas']
         self.transactions = mysnapshot['txs']
         self.transaction_count = mysnapshot['txcount']
+        self._get_transactions_cache = None
         self.ether_delta = mysnapshot['ether_delta']
 
     def finalize(self):
@@ -1221,7 +1239,7 @@ class Block(rlp.Serializable):
         return self.number < other.number
 
     def __repr__(self):
-        return '<Block(#%d %s)>' % (self.number, encode_hex(self.hash)[:8])
+        return '<%s(#%d %s)>' % (self.__class__.__name__, self.number, encode_hex(self.hash)[:8])
 
     def __structlog__(self):
         return encode_hex(self.hash)
@@ -1275,6 +1293,7 @@ class CachedBlock(Block):
     @classmethod
     def create_cached(cls, blk):
         blk.__class__ = CachedBlock
+        log.debug('created cached block', blk=blk)
         return blk
 
 
@@ -1282,7 +1301,7 @@ def get_block_header(db, blockhash):
     bh = BlockHeader.from_block_rlp(db.get(blockhash))
     if bh.hash != blockhash:
         log.warn('BlockHeader.hash is broken')
-        bh._fimxe_hash = blockhash
+        assert bh.hash == blockhash
 
     return bh
 
