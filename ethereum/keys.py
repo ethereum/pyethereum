@@ -1,38 +1,112 @@
-import scrypt, os
+import os, pbkdf2, copy, sys
+try:
+    scrypt = __import__('scrypt')
+except:
+    sys.stderr.write("""
+    Failed to import scrypt. This is not a fatal error but does
+    mean that you cannot create or decrypt privkey jsons that use
+    scrypt""")
+    scrypt = None
 from ethereum import utils
 from Crypto.Cipher import AES
+from Crypto.Hash import SHA256
 
 # TODO: make it compatible!
 
 
-def aes_encrypt(text, key, IV=16 * '\x00'):
+def aes_encrypt(text, key, params):
     mode = AES.MODE_CBC
-    encryptor = AES.new(key, mode, IV=IV)
+    encryptor = AES.new(key, mode, IV=utils.decode_hex(params["iv"]))
     return encryptor.encrypt(text)
 
 
-def aes_decrypt(text, key, IV=16 * '\x00'):
+def aes_decrypt(text, key, params):
     mode = AES.MODE_CBC
-    encryptor = AES.new(key, mode, IV=IV)
+    encryptor = AES.new(key, mode, IV=utils.decode_hex(params["iv"]))
     return encryptor.decrypt(text)
 
 
-def make_keystore_json(priv, pw):
-    iv = os.urandom(16)
-    salt = os.urandom(16)
-    N, R, P, DKLEN = 262144, 8, 1, 32
-    k = utils.sha3(scrypt.hash(pw, salt, N, R, P, DKLEN)[:16])
-    c = aes_encrypt(priv, k[:16], iv)
-    mac = utils.sha3(k[16:] + c)
+def aes_mkparams():
+    return {"iv": utils.encode_hex(os.urandom(16))}
+
+
+ciphers = {
+    "aes-128-cbc": {
+        "encrypt": aes_encrypt,
+        "decrypt": aes_decrypt,
+        "mkparams": aes_mkparams
+    }
+}
+
+
+def mk_scrypt_params():
+    return {
+        "n": 262144,
+        "p": 1,
+        "r": 8,
+        "dklen": 32,
+        "salt": utils.encode_hex(os.urandom(16))
+    }
+
+
+def scrypt_hash(val, params):
+    return scrypt.hash(val, utils.decode_hex(params["salt"]), params["n"],
+                       params["r"], params["p"], params["dklen"])
+
+
+def mk_pbkdf2_params():
+    return {
+        "prf": "hmac-sha256",
+        "dklen": 32,
+        "c": 262144,
+        "salt": utils.encode_hex(os.urandom(16))
+    }
+
+
+def pbkdf2_hash(val, params):
+    assert params["prf"] == "hmac-sha256"
+    return pbkdf2.PBKDF2(val, utils.decode_hex(params["salt"]), params["c"],
+                         SHA256).read(params["dklen"])
+
+
+kdfs = {
+    "scrypt": {
+        "calc": scrypt_hash,
+        "mkparams": mk_scrypt_params
+    },
+    "pbkdf2": {
+        "calc": pbkdf2_hash,
+        "mkparams": mk_pbkdf2_params
+    }
+}
+
+
+def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-cbc"):
+    # Get the hash function and default parameters
+    if kdf not in kdfs:
+        raise Exception("Hash algo %s not supported" % kdf)
+    kdfeval = kdfs[kdf]["calc"]
+    kdfparams = kdfs[kdf]["mkparams"]()
+    # Compute derived key
+    derivedkey = kdfeval(pw, kdfparams)
+    # Get the cipher and default parameters
+    if cipher not in ciphers:
+        raise Exception("Encryption algo %s not supported" % cipher)
+    encrypt = ciphers[cipher]["encrypt"]
+    cipherparams = ciphers[cipher]["mkparams"]()
+    # Produce the encryption key and encrypt
+    k = utils.sha3(derivedkey[:16])[:16]
+    c = encrypt(priv, k, cipherparams)
+    # Compute the MAC
+    mac = utils.sha3(derivedkey[16:] + c)
+    # Return the keystore json
     return {
         "crypto": {
-            "cipher": "aes-128-cbc",
+            "cipher": cipher,
             "ciphertext": utils.encode_hex(c),
-            "cipherparams": {"iv": utils.encode_hex(iv)},
-            "kdf": "scrypt",
-            "kdfparams":
-                {"dklen": DKLEN, "n": N, "p": P,
-                 "r": R, "salt": utils.encode_hex(salt)},
+            "cipherparams": cipherparams,
+            "kdf": kdf,
+            "kdfparams": kdfparams,
             "mac": utils.encode_hex(mac),
             "version": 1
         },
@@ -42,18 +116,27 @@ def make_keystore_json(priv, pw):
 
 
 def decode_keystore_json(jsondata, pw):
-    iv = utils.decode_hex(jsondata["crypto"]["cipherparams"]["iv"])
-    salt = utils.decode_hex(jsondata["crypto"]["kdfparams"]["salt"])
-    assert jsondata["crypto"]["kdf"] == "scrypt", \
-        "Only scrypt supported"
-    assert jsondata["crypto"]["cipher"] == "aes-128-cbc", \
-        "Only aes-128-cbc supported"
-    N, R, P, DKLEN = 262144, 8, 1, 32
-    k = utils.sha3(scrypt.hash(pw, salt, N,
-                   R, P, DKLEN)[:16])
+    # Get KDF function and parameters
+    kdfparams = jsondata["crypto"]["kdfparams"]
+    kdf = jsondata["crypto"]["kdf"]
+    if jsondata["crypto"]["kdf"] not in kdfs:
+        raise Exception("Hash algo %s not supported" % kdf)
+    kdfeval = kdfs[kdf]["calc"]
+    # Get cipher and parameters
+    cipherparams = jsondata["crypto"]["cipherparams"]
+    cipher = jsondata["crypto"]["cipher"]
+    if jsondata["crypto"]["cipher"] not in ciphers:
+        raise Exception("Encryption algo %s not supported" % cipher)
+    decrypt = ciphers[cipher]["decrypt"]
+    # Compute the derived key
+    derivedkey = kdfeval(pw, kdfparams)
+    k = utils.sha3(derivedkey[:16])[:16]
     ctext = utils.decode_hex(jsondata["crypto"]["ciphertext"])
-    o = aes_decrypt(ctext, k[:16], iv)
-    mac1 = utils.sha3(k[16:] + ctext)
+    # Decrypt the ciphertext
+    o = decrypt(ctext, k, cipherparams)
+    print repr(o)
+    # Compare the provided MAC with a locally computed MAC
+    mac1 = utils.sha3(derivedkey[16:] + ctext)
     mac2 = utils.decode_hex(jsondata["crypto"]["mac"])
-    assert mac1 == mac2
+    assert mac1 == mac2, (mac1, mac2)
     return o
