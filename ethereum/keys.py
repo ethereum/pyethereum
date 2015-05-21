@@ -130,13 +130,12 @@ def decode_keystore_json(jsondata, pw):
     decrypt = ciphers[cipher]["decrypt"]
     # Compute the derived key
     derivedkey = kdfeval(pw, kdfparams)
-    k = utils.sha3(derivedkey[:16])[:16]
+    k = derivedkey
     ctext = utils.decode_hex(jsondata["crypto"]["ciphertext"])
     # Decrypt the ciphertext
     o = decrypt(ctext, k, cipherparams)
-    print repr(o)
     # Compare the provided MAC with a locally computed MAC
-    mac1 = utils.sha3(derivedkey[16:] + ctext)
+    mac1 = utils.sha3(derivedkey[-16:] + ctext)
     mac2 = utils.decode_hex(jsondata["crypto"]["mac"])
     assert mac1 == mac2, (mac1, mac2)
     return o
