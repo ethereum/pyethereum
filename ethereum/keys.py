@@ -130,7 +130,9 @@ def decode_keystore_json(jsondata, pw):
     decrypt = ciphers[cipher]["decrypt"]
     # Compute the derived key
     derivedkey = kdfeval(pw, kdfparams)
-    k = derivedkey
+    print derivedkey.encode('hex')
+    k = utils.sha3(derivedkey[:16])[:16]
+    print k.encode('hex')
     ctext = utils.decode_hex(jsondata["crypto"]["ciphertext"])
     # Decrypt the ciphertext
     o = decrypt(ctext, k, cipherparams)

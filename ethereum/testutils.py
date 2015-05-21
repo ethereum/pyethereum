@@ -47,7 +47,8 @@ def parse_int_or_hex(s):
     if isinstance(s, int):
         return s
     elif s[:2] == b'0x':
-        return utils.big_endian_to_int(decode_hex(s[2:]))
+        tail = (b'0' if len(s) % 2 else b'') + s[2:]
+        return utils.big_endian_to_int(decode_hex(tail))
     else:
         return int(s)
 
