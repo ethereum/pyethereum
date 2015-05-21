@@ -344,3 +344,17 @@ int32 = BigEndianInt(32)
 int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[91m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def DEBUG(*args, **kargs):
+    print bcolors.FAIL + repr(args) + repr(kargs) + bcolors.ENDC
