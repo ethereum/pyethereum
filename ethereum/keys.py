@@ -15,14 +15,28 @@ from Crypto.Hash import SHA256
 
 
 def aes_encrypt(text, key, params):
-    mode = AES.MODE_CBC
-    encryptor = AES.new(key, mode, IV=utils.decode_hex(params["iv"]))
+    o = [utils.big_endian_to_int(utils.decode_hex(params["iv"]))]
+
+    def ctr():
+        o[0] += 1
+        if o[0] > 2**128:
+            o[0] -= 2**128
+        return utils.zpad(utils.int_to_big_endian(o[0] - 1), 16)
+    mode = AES.MODE_CTR
+    encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
 
 
 def aes_decrypt(text, key, params):
-    mode = AES.MODE_CBC
-    encryptor = AES.new(key, mode, IV=utils.decode_hex(params["iv"]))
+    o = [utils.big_endian_to_int(utils.decode_hex(params["iv"]))]
+
+    def ctr():
+        o[0] += 1
+        if o[0] > 2**128:
+            o[0] -= 2**128
+        return utils.zpad(utils.int_to_big_endian(o[0] - 1), 16)
+    mode = AES.MODE_CTR
+    encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
 
 
@@ -31,7 +45,7 @@ def aes_mkparams():
 
 
 ciphers = {
-    "aes-128-cbc": {
+    "aes-128-ctr": {
         "encrypt": aes_encrypt,
         "decrypt": aes_decrypt,
         "mkparams": aes_mkparams
@@ -42,15 +56,15 @@ ciphers = {
 def mk_scrypt_params():
     return {
         "n": 262144,
-        "p": 1,
-        "r": 8,
+        "r": 1,
+        "p": 8,
         "dklen": 32,
         "salt": utils.encode_hex(os.urandom(16))
     }
 
 
 def scrypt_hash(val, params):
-    return scrypt.hash(val, utils.decode_hex(params["salt"]), params["n"],
+    return scrypt.hash(str(val), utils.decode_hex(params["salt"]), params["n"],
                        params["r"], params["p"], params["dklen"])
 
 
@@ -81,7 +95,7 @@ kdfs = {
 }
 
 
-def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-cbc"):
+def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     # Get the hash function and default parameters
     if kdf not in kdfs:
         raise Exception("Hash algo %s not supported" % kdf)
@@ -95,10 +109,10 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-cbc"):
     encrypt = ciphers[cipher]["encrypt"]
     cipherparams = ciphers[cipher]["mkparams"]()
     # Produce the encryption key and encrypt
-    k = utils.sha3(derivedkey[:16])[:16]
-    c = encrypt(priv, k, cipherparams)
+    enckey = derivedkey[:16]
+    c = encrypt(priv, enckey, cipherparams)
     # Compute the MAC
-    mac = utils.sha3(derivedkey[16:] + c)
+    mac = utils.sha3(derivedkey[16:32] + c)
     # Return the keystore json
     return {
         "crypto": {
@@ -130,13 +144,16 @@ def decode_keystore_json(jsondata, pw):
     decrypt = ciphers[cipher]["decrypt"]
     # Compute the derived key
     derivedkey = kdfeval(pw, kdfparams)
-    print derivedkey.encode('hex')
-    k = utils.sha3(derivedkey[:16])[:16]
-    print k.encode('hex')
+    assert len(derivedkey) >= 32, \
+        "Derived key must be at least 32 bytes long"
+    # print 'derivedkey: ' + derivedkey.encode('hex')
+    enckey = derivedkey[:16]
+    # print 'enckey: ' + enckey.encode('hex')
     ctext = utils.decode_hex(jsondata["crypto"]["ciphertext"])
     # Decrypt the ciphertext
-    o = decrypt(ctext, k, cipherparams)
+    o = decrypt(ctext, enckey, cipherparams)
     # Compare the provided MAC with a locally computed MAC
+    # print 'macdata: ' + (derivedkey[16:32] + ctext).encode('hex')
     mac1 = utils.sha3(derivedkey[-16:] + ctext)
     mac2 = utils.decode_hex(jsondata["crypto"]["mac"])
     assert mac1 == mac2, (mac1, mac2)
