@@ -626,7 +626,8 @@ class Block(rlp.Serializable):
                 return False
 
         # Check uncle validity
-        ancestor_chain = [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
+        ancestor_chain = [self] + [a for a in self.get_ancestor_list(MAX_UNCLE_DEPTH + 1) if a]
+        assert len(ancestor_chain) == min(self.header.number + 1, MAX_UNCLE_DEPTH + 2)
         ineligible = []
         # Uncles of this block cannot be direct ancestors and cannot also
         # be uncles included 1-6 blocks ago
@@ -652,21 +653,12 @@ class Block(rlp.Serializable):
     def get_ancestor_list(self, n):
         """Return `n` ancestors of this block.
 
-        The result will also be memoized in :attr:`ancestor_list`.
-
-        :returns: a list [self, p(self), p(p(self)), ..., p^n(self)]
+        :returns: a list [p(self), p(p(self)), ..., p^n(self)]
         """
-        if self.number == 0:
-            self.ancestors = [self] + [None] * 256
-        elif len(self.ancestors) <= n:
-            first_unknown = self.ancestors[-1].get_parent()
-            missing = first_unknown.get_ancestor_list(n - len(self.ancestors))
-            self.ancestors += missing
-        return self.ancestors[:n + 1]
-
-    def get_ancestor(self, n):
-        """Get the `n`th ancestor of this block."""
-        return self.get_ancestor_list(n)[-1]
+        if n == 0 or self.header.number == 0:
+            return []
+        p = self.get_parent()
+        return [p] + p.get_ancestor_list(n-1)
 
     def is_genesis(self):
         """`True` if this block is the genesis block, otherwise `False`."""
@@ -1306,7 +1298,7 @@ def get_block_header(db, blockhash):
     return bh
 
 
-@lru_cache(500)
+@lru_cache(32)
 def get_block(db, blockhash):
     """
     Assumption: blocks loaded from the db are not manipulated
