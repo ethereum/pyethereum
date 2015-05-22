@@ -1298,7 +1298,7 @@ def get_block_header(db, blockhash):
     return bh
 
 
-@lru_cache(500)
+@lru_cache(32)
 def get_block(db, blockhash):
     """
     Assumption: blocks loaded from the db are not manipulated
