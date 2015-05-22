@@ -19,27 +19,25 @@ from Crypto.Hash import SHA256
 # TODO: make it compatible!
 
 
-def aes_encrypt(text, key, params):
-    o = [big_endian_to_int(decode_hex(params["iv"]))]
+def aes_ctr_encrypt(text, key, params):
+    iv = big_endian_to_int(decode_hex(params["iv"]))
+    o = [0]
 
     def ctr():
         o[0] += 1
-        if o[0] > 2**128:
-            o[0] -= 2**128
-        return zpad(int_to_big_endian(o[0] - 1), 16)
+        return zpad(int_to_big_endian((o[0] - 1) ^ iv), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
 
 
-def aes_decrypt(text, key, params):
-    o = [big_endian_to_int(decode_hex(params["iv"]))]
+def aes_ctr_decrypt(text, key, params):
+    iv = big_endian_to_int(decode_hex(params["iv"]))
+    o = [0]
 
     def ctr():
         o[0] += 1
-        if o[0] > 2**128:
-            o[0] -= 2**128
-        return zpad(int_to_big_endian(o[0] - 1), 16)
+        return zpad(int_to_big_endian((o[0] - 1) ^ iv), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
@@ -51,8 +49,8 @@ def aes_mkparams():
 
 ciphers = {
     "aes-128-ctr": {
-        "encrypt": aes_encrypt,
-        "decrypt": aes_decrypt,
+        "encrypt": aes_ctr_encrypt,
+        "decrypt": aes_ctr_decrypt,
         "mkparams": aes_mkparams
     }
 }
