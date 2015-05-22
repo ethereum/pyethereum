@@ -129,7 +129,7 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
             "mac": encode_hex(mac),
             "version": 1
         },
-        "id": "",
+        "id": b"py-wallet-"+encode_hex(os.urandom(10)),
         "version": 2
     }
 
@@ -161,7 +161,7 @@ def decode_keystore_json(jsondata, pw):
     # print(b'macdata: ' + encode_hex(derivedkey[16:32] + ctext))
     mac1 = sha3(derivedkey[16:32] + ctext)
     mac2 = decode_hex(jsondata["crypto"]["mac"])
-    assert mac1 == mac2, (mac1, mac2)
+    assert mac1 == mac2, "MAC mismatch. Password incorrect?"
     return o
 
 
