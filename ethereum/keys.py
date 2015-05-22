@@ -3,11 +3,16 @@ try:
     scrypt = __import__('scrypt')
 except:
     sys.stderr.write("""
-    Failed to import scrypt. This is not a fatal error but does
-    mean that you cannot create or decrypt privkey jsons that use
-    scrypt""")
+Failed to import scrypt. This is not a fatal error but does
+mean that you cannot create or decrypt privkey jsons that use
+scrypt
+
+""")
     scrypt = None
-from ethereum import utils
+import binascii
+import struct
+from math import ceil
+from sha3 import sha3_256
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 
@@ -15,33 +20,33 @@ from Crypto.Hash import SHA256
 
 
 def aes_encrypt(text, key, params):
-    o = [utils.big_endian_to_int(utils.decode_hex(params["iv"]))]
+    o = [big_endian_to_int(decode_hex(params["iv"]))]
 
     def ctr():
         o[0] += 1
         if o[0] > 2**128:
             o[0] -= 2**128
-        return utils.zpad(utils.int_to_big_endian(o[0] - 1), 16)
+        return zpad(int_to_big_endian(o[0] - 1), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
 
 
 def aes_decrypt(text, key, params):
-    o = [utils.big_endian_to_int(utils.decode_hex(params["iv"]))]
+    o = [big_endian_to_int(decode_hex(params["iv"]))]
 
     def ctr():
         o[0] += 1
         if o[0] > 2**128:
             o[0] -= 2**128
-        return utils.zpad(utils.int_to_big_endian(o[0] - 1), 16)
+        return zpad(int_to_big_endian(o[0] - 1), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
 
 
 def aes_mkparams():
-    return {"iv": utils.encode_hex(os.urandom(16))}
+    return {"iv": encode_hex(os.urandom(16))}
 
 
 ciphers = {
@@ -59,12 +64,12 @@ def mk_scrypt_params():
         "r": 1,
         "p": 8,
         "dklen": 32,
-        "salt": utils.encode_hex(os.urandom(16))
+        "salt": encode_hex(os.urandom(16))
     }
 
 
 def scrypt_hash(val, params):
-    return scrypt.hash(str(val), utils.decode_hex(params["salt"]), params["n"],
+    return scrypt.hash(str(val), decode_hex(params["salt"]), params["n"],
                        params["r"], params["p"], params["dklen"])
 
 
@@ -73,13 +78,13 @@ def mk_pbkdf2_params():
         "prf": "hmac-sha256",
         "dklen": 32,
         "c": 262144,
-        "salt": utils.encode_hex(os.urandom(16))
+        "salt": encode_hex(os.urandom(16))
     }
 
 
 def pbkdf2_hash(val, params):
     assert params["prf"] == "hmac-sha256"
-    return pbkdf2.PBKDF2(val, utils.decode_hex(params["salt"]), params["c"],
+    return pbkdf2.PBKDF2(val, decode_hex(params["salt"]), params["c"],
                          SHA256).read(params["dklen"])
 
 
@@ -112,16 +117,16 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     enckey = derivedkey[:16]
     c = encrypt(priv, enckey, cipherparams)
     # Compute the MAC
-    mac = utils.sha3(derivedkey[16:32] + c)
+    mac = sha3(derivedkey[16:32] + c)
     # Return the keystore json
     return {
         "crypto": {
             "cipher": cipher,
-            "ciphertext": utils.encode_hex(c),
+            "ciphertext": encode_hex(c),
             "cipherparams": cipherparams,
             "kdf": kdf,
             "kdfparams": kdfparams,
-            "mac": utils.encode_hex(mac),
+            "mac": encode_hex(mac),
             "version": 1
         },
         "id": "",
@@ -146,15 +151,78 @@ def decode_keystore_json(jsondata, pw):
     derivedkey = kdfeval(pw, kdfparams)
     assert len(derivedkey) >= 32, \
         "Derived key must be at least 32 bytes long"
-    # print 'derivedkey: ' + derivedkey.encode('hex')
+    # print(b'derivedkey: ' + encode_hex(derivedkey))
     enckey = derivedkey[:16]
-    # print 'enckey: ' + enckey.encode('hex')
-    ctext = utils.decode_hex(jsondata["crypto"]["ciphertext"])
+    # print(b'enckey: ' + encode_hex(enckey))
+    ctext = decode_hex(jsondata["crypto"]["ciphertext"])
     # Decrypt the ciphertext
     o = decrypt(ctext, enckey, cipherparams)
     # Compare the provided MAC with a locally computed MAC
-    # print 'macdata: ' + (derivedkey[16:32] + ctext).encode('hex')
-    mac1 = utils.sha3(derivedkey[-16:] + ctext)
-    mac2 = utils.decode_hex(jsondata["crypto"]["mac"])
+    # print(b'macdata: ' + encode_hex(derivedkey[16:32] + ctext))
+    mac1 = sha3(derivedkey[16:32] + ctext)
+    mac2 = decode_hex(jsondata["crypto"]["mac"])
     assert mac1 == mac2, (mac1, mac2)
     return o
+
+
+# Utility functions (done separately from utils so as to make this a standalone file)
+
+def sha3(seed):
+    return sha3_256(seed).digest()
+
+
+def zpad(x, l):
+    return b'\x00' * max(0, l - len(x)) + x
+
+
+if sys.version_info.major == 2:
+
+    def decode_hex(s):
+        if not isinstance(s, (str, unicode)):
+            raise TypeError('Value must be an instance of str or unicode')
+        return s.decode('hex')
+
+    def encode_hex(s):
+        if not isinstance(s, (str, unicode)):
+            raise TypeError('Value must be an instance of str or unicode')
+        return s.encode('hex')
+
+    def int_to_big_endian(value):
+        cs = []
+        while value > 0:
+            cs.append(chr(value % 256))
+            value /= 256
+        s = ''.join(reversed(cs))
+        return s
+
+    def big_endian_to_int(value):
+        if len(value) == 1:
+            return ord(value)
+        elif len(value) <= 8:
+            return struct.unpack('>Q', value.rjust(8, '\x00'))[0]
+        else:
+            return int(encode_hex(value), 16)
+
+
+if sys.version_info.major == 3:
+
+    def decode_hex(s):
+        if isinstance(s, str):
+            return bytes.fromhex(s)
+        if isinstance(s, bytes):
+            return binascii.unhexlify(s)
+        raise TypeError('Value must be an instance of str or bytes')
+
+    def encode_hex(b):
+        if isinstance(b, str):
+            b = bytes(b, 'utf-8')
+        if isinstance(b, bytes):
+            return binascii.hexlify(b)
+        raise TypeError('Value must be an instance of str or bytes')
+
+    def int_to_big_endian(value):
+        byte_length = ceil(value.bit_length() / 8)
+        return (value).to_bytes(byte_length, byteorder='big')
+    
+    def big_endian_to_int(value):
+        return int.from_bytes(value, byteorder='big')
