@@ -187,7 +187,9 @@ def vm_execute(ext, msg, code):
                                 available=to_string(len(compustate.stack)))
 
         if len(compustate.stack) + out_args > 1024:
-            return vm_exception('STACK SIZE LIMIT EXCEEDED')
+            return vm_exception('STACK SIZE LIMIT EXCEEDED',
+                                op=op,
+                                pre_height=to_string(len(compustate.stack)))
 
         # Apply operation
         compustate.gas -= fee

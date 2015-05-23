@@ -224,8 +224,12 @@ def _apply_msg(ext, msg, code):
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
     if log_state.is_active('trace'):
-        log_state.trace('MSG PRE STATE', account=msg.to, bal=ext.get_balance(
-            msg.to), state=ext.log_storage(msg.to))
+        log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+                        bal=ext.get_balance(msg.sender),
+                        state=ext.log_storage(msg.sender))
+        log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+                        bal=ext.get_balance(msg.to),
+                        state=ext.log_storage(msg.to))
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
@@ -244,8 +248,12 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
     if log_state.is_active('trace'):
-        log_state.trace('MSG POST STATE', account=msg.to, bal=ext.get_balance(
-            msg.to), state=ext.log_storage(msg.to))
+        log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+                        bal=ext.get_balance(msg.sender),
+                        state=ext.log_storage(msg.sender))
+        log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+                        bal=ext.get_balance(msg.to),
+                        state=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg.debug('REVERTING')
