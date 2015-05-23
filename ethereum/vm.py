@@ -186,7 +186,7 @@ def vm_execute(ext, msg, code):
                                 op=op, needed=to_string(in_args),
                                 available=to_string(len(compustate.stack)))
 
-        if len(compustate.stack) + out_args > 1024:
+        if len(compustate.stack) - in_args + out_args > 1024:
             return vm_exception('STACK SIZE LIMIT EXCEEDED',
                                 op=op,
                                 pre_height=to_string(len(compustate.stack)))
