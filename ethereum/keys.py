@@ -116,6 +116,9 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     c = encrypt(priv, enckey, cipherparams)
     # Compute the MAC
     mac = sha3(derivedkey[16:32] + c)
+    # Make a UUID
+    u = encode_hex(os.urandom(16))
+    uuid = b'-'.join((u[:8], u[8:12], u[12:16], u[16:20], u[20:]))
     # Return the keystore json
     return {
         "crypto": {
@@ -127,8 +130,8 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
             "mac": encode_hex(mac),
             "version": 1
         },
-        "id": b"py-wallet-"+encode_hex(os.urandom(10)),
-        "version": 2
+        "id": uuid,
+        "version": 3
     }
 
 
