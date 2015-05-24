@@ -407,10 +407,11 @@ class Block(rlp.Serializable):
             'all': {}
         }
         self.journal = []
+
         if self.number > 0:
-            self.ancestors = [self]
+            self.ancestor_hashes = [self.prevhash]
         else:
-            self.ancestors = [self] + [None] * 256
+            self.ancestor_hashes = [None] * 256
 
         # do some consistency checks on parent if given
         if parent:
@@ -552,7 +553,7 @@ class Block(rlp.Serializable):
                              nonce=nonce)
         block = Block(header, [], uncles, db=parent.db,
                       parent=parent, making=True)
-        block.ancestors += parent.ancestors
+        block.ancestor_hashes = [parent.hash] + parent.ancestor_hashes
         return block
 
     def check_fields(self):
@@ -659,6 +660,19 @@ class Block(rlp.Serializable):
             return []
         p = self.get_parent()
         return [p] + p.get_ancestor_list(n-1)
+
+    def get_ancestor_hash(self, n):
+        assert n > 0
+        while len(self.ancestor_hashes) < n:
+            if self.number == len(self.ancestor_hashes) - 1:
+                self.ancestor_hashes.append(None)
+            else:
+                self.ancestor_hashes.append(
+                    self.get_block(self.ancestor_hashes[-1]).get_parent().hash)
+        return self.ancestor_hashes[n-1]
+
+    def get_ancestor(self, n):
+        return self.get_block(self.get_ancestor_hash(n))
 
     def is_genesis(self):
         """`True` if this block is the genesis block, otherwise `False`."""
@@ -990,6 +1004,7 @@ class Block(rlp.Serializable):
             self.state.update(addr, rlp.encode(acct))
         log_state.trace('delta', changes=changes)
         self.reset_cache()
+        self.db.put(b'validated:' + self.hash, '1')
 
     def del_account(self, address):
         """Delete an account.
@@ -1312,25 +1327,27 @@ def get_block(db, blockhash):
 #    return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC, difficulty=GENESIS_DIFFICULTY):
+def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC,
+            difficulty=GENESIS_DIFFICULTY,
+            **kwargs):
     """Build the genesis block."""
     # https://ethereum.etherpad.mozilla.org/11
     header = BlockHeader(
-        prevhash=GENESIS_PREVHASH,
+        prevhash=kwargs.get('prevhash', GENESIS_PREVHASH),
         uncles_hash=utils.sha3(rlp.encode([])),
-        coinbase=GENESIS_COINBASE,
+        coinbase=kwargs.get('coinbase', GENESIS_COINBASE),
         state_root=trie.BLANK_ROOT,
         tx_list_root=trie.BLANK_ROOT,
         receipts_root=trie.BLANK_ROOT,
         bloom=0,
-        difficulty=difficulty,
-        number=0,
-        gas_limit=GENESIS_GAS_LIMIT,
+        difficulty=kwargs.get('difficulty', GENESIS_DIFFICULTY),
+        number=kwargs.get('number', 0),
+        gas_limit=kwargs.get('gas_limit', GENESIS_GAS_LIMIT),
         gas_used=0,
-        timestamp=0,
-        extra_data='',
-        mixhash=GENESIS_MIXHASH,
-        nonce=GENESIS_NONCE,
+        timestamp=kwargs.get('timestamp', 0),
+        extra_data=kwargs.get('extra_data', ''),
+        mixhash=kwargs.get('mixhash', GENESIS_MIXHASH),
+        nonce=kwargs.get('nonce', GENESIS_NONCE),
     )
     block = Block(header, [], [], db=db)
     for addr, data in start_alloc.items():

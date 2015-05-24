@@ -59,11 +59,11 @@ class ContractTranslator():
         fdata = self.function_data[name]
         o = zpad(encode_int(fdata['prefix']), 4) + \
             encode_abi(fdata['encode_types'], args)
-        print 'in', o.encode('hex')
+        # print 'in', o.encode('hex')
         return o
 
     def decode(self, name, data):
-        print 'out', data.encode('hex')
+        # print 'out', data.encode('hex')
         fdata = self.function_data[name]
         if fdata['is_unknown_type']:
             o = [utils.to_signed(utils.big_endian_to_int(data[i:i + 32]))
@@ -84,7 +84,7 @@ class ContractTranslator():
         indexed = self.event_data[log.topics[0]]['indexed']
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        #print('listen', log.data.encode('hex'))
+        # print('listen', log.data.encode('hex'))
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0

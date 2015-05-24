@@ -198,7 +198,7 @@ class VMExt():
         self.add_suicide = lambda x: block.suicides.append(x)
         self.add_refund = lambda x: \
             setattr(block, 'refunds', block.refunds + x)
-        self.block_hash = lambda x: block.get_ancestor(block.number - x).hash \
+        self.block_hash = lambda x: block.get_ancestor_hash(block.number - x) \
             if (1 <= block.number - x <= 256 and x <= block.number) else b''
         self.block_coinbase = block.coinbase
         self.block_timestamp = block.timestamp

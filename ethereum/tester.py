@@ -248,6 +248,7 @@ class state():
         for i in range(n):
             self.block.finalize()
             self.block.commit_state()
+            self.db.put(self.block.hash, rlp.encode(self.block))
             t = self.block.timestamp + 6 + rand() % 12
             x = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
             # copy listeners
