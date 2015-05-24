@@ -25,7 +25,7 @@ def aes_ctr_encrypt(text, key, params):
 
     def ctr():
         o[0] += 1
-        return zpad(int_to_big_endian((o[0] - 1) ^ iv), 16)
+        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
@@ -37,7 +37,7 @@ def aes_ctr_decrypt(text, key, params):
 
     def ctr():
         o[0] += 1
-        return zpad(int_to_big_endian((o[0] - 1) ^ iv), 16)
+        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
