@@ -6,7 +6,7 @@ except ImportError:
 import rlp
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import decode_hex, encode_hex
-
+from ethereum.processblock import mk_contract_address
 from ethereum import bloom
 from ethereum import utils
 from ethereum.utils import TT256
@@ -118,6 +118,12 @@ class Transaction(rlp.Serializable):
         d['sender'] = d['sender'].encode('hex')
         d['to'] = d['to'].encode('hex')
         return d
+
+    @property
+    def creates(self):
+        "returns the address of a contract created by this tx"
+        if self.to == '':
+            return mk_contract_address(self.sender, self.nonce)
 
 
     def __eq__(self, other):

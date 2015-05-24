@@ -21,6 +21,7 @@ class ContractTranslator():
             full_signature = json_decode(full_signature)
         for sig_item in full_signature:
             encode_types = [f['type'] for f in sig_item['inputs']]
+            signature = [(f['type'], f['name']) for f in sig_item['inputs']]
             name = sig_item['name']
             if '(' in name:
                 name = name[:name.find('(')]
@@ -42,7 +43,9 @@ class ContractTranslator():
                     "prefix": prefix,
                     "encode_types": encode_types,
                     "decode_types": decode_types,
-                    "is_unknown_type": is_unknown_type
+                    "is_unknown_type": is_unknown_type,
+                    "is_constant": sig_item.get('constant', False),
+                    "signature": signature
                 }
             elif sig_item['type'] == 'event':
                 prefix = big_endian_to_int(utils.sha3(sig))
@@ -59,7 +62,6 @@ class ContractTranslator():
         fdata = self.function_data[name]
         o = zpad(encode_int(fdata['prefix']), 4) + \
             encode_abi(fdata['encode_types'], args)
-        # print 'in', o.encode('hex')
         return o
 
     def decode(self, name, data):
@@ -137,6 +139,10 @@ def encode_single(typ, arg):
         i = decint(arg)
         assert 0 <= i < 2**sub, "Value out of bounds: %r" % arg
         return zpad(encode_int(i), 32)
+    # bool: int<sz>
+    elif base == 'bool':
+        assert isinstance(arg, bool)
+        return zpad(encode_int(int(arg)), 32)
     # Signed integers: int<sz>
     elif base == 'int':
         sub = int(sub)
@@ -191,7 +197,6 @@ def encode_single(typ, arg):
         else:
             raise Exception("Could not parse address: %r" % arg)
     raise Exception("Unhandled type: %r %r" % (base, sub))
-
 
 def process_type(typ):
     # Crazy reg expression to separate out base type component (eg. uint),
