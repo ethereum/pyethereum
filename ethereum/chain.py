@@ -103,11 +103,12 @@ class Chain(object):
         self.new_head_cb = new_head_cb
         self.index = Index(db)
         self._coinbase = coinbase
-        if genesis:
+        if genesis and 'HEAD' not in self.db:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
         self.genesis = self.get(self.index.get_block_by_number(0))
-        log.debug('got genesis', genesis_hash=self.genesis, difficulty=self.genesis.difficulty)
+        log.debug('got genesis', nonce=self.genesis.nonce.encode('hex'),
+                  difficulty=self.genesis.difficulty)
         self._update_head_candidate()
 
     def _initialize_blockchain(self, genesis=None):
@@ -120,6 +121,7 @@ class Chain(object):
         assert genesis == blocks.get_block(self.blockchain, genesis.hash)
         self._update_head(genesis)
         assert genesis.hash in self
+        self.commit()
 
     @property
     def coinbase(self):

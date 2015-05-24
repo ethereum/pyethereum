@@ -677,8 +677,7 @@ class Block(rlp.Serializable):
 
     def is_genesis(self):
         """`True` if this block is the genesis block, otherwise `False`."""
-        return all((self.prevhash == GENESIS_PREVHASH,
-                    self.nonce == GENESIS_NONCE))
+        return self.header.number == 0
 
     def _get_acct(self, address):
         """Get the account with the given address.
