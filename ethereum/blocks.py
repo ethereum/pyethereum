@@ -668,7 +668,8 @@ class Block(rlp.Serializable):
                 self.ancestor_hashes.append(None)
             else:
                 self.ancestor_hashes.append(
-                    self.get_block(self.ancestor_hashes[-1]).get_parent().hash)
+                    get_block(self.db,
+                              self.ancestor_hashes[-1]).get_parent().hash)
         return self.ancestor_hashes[n-1]
 
     def get_ancestor(self, n):
