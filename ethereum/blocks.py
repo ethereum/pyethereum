@@ -677,8 +677,7 @@ class Block(rlp.Serializable):
 
     def is_genesis(self):
         """`True` if this block is the genesis block, otherwise `False`."""
-        return all((self.prevhash == GENESIS_PREVHASH,
-                    self.nonce == GENESIS_NONCE))
+        return self.number == 0
 
     def _get_acct(self, address):
         """Get the account with the given address.
@@ -1342,7 +1341,7 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC,
         receipts_root=trie.BLANK_ROOT,
         bloom=0,
         difficulty=kwargs.get('difficulty', GENESIS_DIFFICULTY),
-        number=kwargs.get('number', 0),
+        number=0,
         gas_limit=kwargs.get('gas_limit', GENESIS_GAS_LIMIT),
         gas_used=0,
         timestamp=kwargs.get('timestamp', 0),
