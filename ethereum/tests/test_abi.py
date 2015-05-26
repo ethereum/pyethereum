@@ -10,6 +10,10 @@ def test_abi_encode_var_sized_array():
 def test_abi_encode_fixed_size_array():
     abi.encode_abi(['uint16[2]'], [[5, 6]])
 
+def test_abi_encode_signed_int():
+    assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [1]))[0] == 1
+    assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [-1]))[0] == -1
+
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
