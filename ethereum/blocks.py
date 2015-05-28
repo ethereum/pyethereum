@@ -20,7 +20,7 @@ from ethereum import bloom
 from ethereum.exceptions import *
 from ethereum.slogging import get_logger
 from ethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
-from ethpow import check_pow
+from ethereum.ethpow import check_pow
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
 else:
@@ -489,10 +489,6 @@ class Block(rlp.Serializable):
 
         if parent:
             must_equal('prev_hash', self.prevhash, parent.hash)
-            must_ge('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR - 1) // GASLIMIT_ADJMAX_FACTOR)
-            must_le('gas_limit', self.gas_limit,
-                    parent.gas_limit * (GASLIMIT_ADJMAX_FACTOR + 1) // GASLIMIT_ADJMAX_FACTOR)
         must_equal('gas_used', original_values['gas_used'], self.gas_used)
         must_equal('timestamp', self.timestamp, original_values['timestamp'])
         must_equal('difficulty', self.difficulty, original_values['difficulty'])
@@ -1267,7 +1263,7 @@ def calc_gaslimit(parent):
 
 def check_gaslimit(parent, gas_limit):
     #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
-    a = bool(abs(gas_limit - parent.gas_limit) <= parent.gas_limit // GASLIMIT_EMA_FACTOR)
+    a = bool(abs(gas_limit - parent.gas_limit) <= parent.gas_limit // GASLIMIT_ADJMAX_FACTOR)
     b = bool(gas_limit >= MIN_GAS_LIMIT)
     return a and b
 

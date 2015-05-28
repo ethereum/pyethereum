@@ -230,6 +230,7 @@ def _apply_msg(ext, msg, code):
         log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
                         bal=ext.get_balance(msg.to),
                         state=ext.log_storage(msg.to))
+        # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
     o = ext._block.transfer_value(msg.sender, msg.to, msg.value)

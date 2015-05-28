@@ -46,8 +46,8 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 def parse_int_or_hex(s):
     if isinstance(s, int):
         return s
-    elif s[:2] == b'0x':
-        tail = (b'0' if len(s) % 2 else b'') + s[2:]
+    elif s[:2] == '0x':
+        tail = ('0' if len(s) % 2 else '') + s[2:]
         return utils.big_endian_to_int(decode_hex(tail))
     else:
         return int(s)
@@ -55,6 +55,10 @@ def parse_int_or_hex(s):
 
 def normalize_hex(s):
     return s if len(s) > 2 else '0x00'
+
+
+def remove_0x_head(s):
+    return s[2:] if s[:2] == '0x' else s
 
 
 def acct_standard_form(a):
@@ -311,7 +315,7 @@ def run_state_test(params, mode):
         startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
         to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
         value=parse_int_or_hex(exek['value'] or b"0"),
-        data=decode_hex(exek['data'][2:])).sign(exek['secretKey'])
+        data=decode_hex(remove_0x_head(exek['data']))).sign(exek['secretKey'])
 
     orig_apply_msg = pb.apply_msg
 
