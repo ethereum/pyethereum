@@ -1,7 +1,9 @@
-from sha3 import sha3_256
+try:
+    import Crypto.Hash.SHA3_256 as _SHA3_256  # from pycryptodome
+    sha3_256 = _SHA3_256.new
+except ImportError:
+    from sha3 import sha3_256
 from bitcoin import privtopub
-import struct
-import os
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
