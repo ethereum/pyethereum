@@ -315,7 +315,16 @@ def run_state_test(params, mode):
         startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
         to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
         value=parse_int_or_hex(exek['value'] or b"0"),
-        data=decode_hex(remove_0x_head(exek['data']))).sign(exek['secretKey'])
+        data=decode_hex(remove_0x_head(exek['data'])))
+    if 'secretKey' in exek:
+        tx.sign(exek['secretKey'])
+    elif all(key in exek for key in ['v', 'r', 's']):
+        assert False
+        tx.v = decode_hex(remove_0x_head(exek['v']))
+        tx.r = decode_hex(remove_0x_head(exek['r']))
+        tx.s = decode_hex(remove_0x_head(exek['s']))
+    else:
+        assert False
 
     orig_apply_msg = pb.apply_msg
 
