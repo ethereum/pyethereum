@@ -319,7 +319,6 @@ def run_state_test(params, mode):
     if 'secretKey' in exek:
         tx.sign(exek['secretKey'])
     elif all(key in exek for key in ['v', 'r', 's']):
-        assert False
         tx.v = decode_hex(remove_0x_head(exek['v']))
         tx.r = decode_hex(remove_0x_head(exek['r']))
         tx.s = decode_hex(remove_0x_head(exek['s']))
