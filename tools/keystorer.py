@@ -45,4 +45,4 @@ elif sys.argv[1] in ('getprivkey', 'getaddress'):
     if sys.argv[1] == 'getprivkey':
         print(keys.encode_hex(k))
     else:
-        print(keys.encode_hex(privtoaddr(k)))
+        print(keys.encode_hex(keys.privtoaddr(k)))

@@ -9,6 +9,14 @@ scrypt
 
 """)
     scrypt = None
+try:
+    import bitcoin
+except:
+    sys.stderr.write("""
+Failed to import bitcoin. This is not a fatal error but does
+mean that you will not be able to determine the address from
+your wallet file.
+""")
 import binascii
 import struct
 from math import ceil
@@ -227,3 +235,9 @@ if sys.version_info.major == 3:
     
     def big_endian_to_int(value):
         return int.from_bytes(value, byteorder='big')
+
+
+def privtoaddr(x):
+    if len(x) > 32:
+        x = decode_hex(x)
+    return sha3(bitcoin.privtopub(x)[1:])[12:]
