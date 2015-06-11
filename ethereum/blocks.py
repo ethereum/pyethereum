@@ -426,6 +426,10 @@ class Block(rlp.Serializable):
                 raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
             if self.difficulty != calc_difficulty(parent, self.timestamp):
                 raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
+            if self.gas_used > self.gas_limit:
+                raise ValueError("Gas used exceeds gas limit")
+            if self.timestamp <= parent.header.timestamp:
+                raise ValueError("Timestamp equal to or before parent")
 
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
