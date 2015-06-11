@@ -165,6 +165,8 @@ def vm_execute(ext, msg, code):
 
     s = time.time()
     op = None
+    steps = 0
+    _prevop = None  # for trace only
 
     while 1:
         # print 'op: ', op, time.time() - s
@@ -199,23 +201,37 @@ def vm_execute(ext, msg, code):
             """
             This diverges from normal logging, as we use the logging namespace
             only to decide which features get logged in 'eth.vm.op'
-            i.e. tracing can not be activated by activating a sub like 'eth.vm.op.stack'
+            i.e. tracing can not be activated by activating a sub
+            like 'eth.vm.op.stack'
             """
             trace_data = {}
-            if log_vm_op_stack.is_active():
-                trace_data['stack'] = list(map(to_string, list(compustate.stack)))
-            if log_vm_op_memory.is_active():
-                trace_data['memory'] = \
-                    b''.join([encode_hex(ascii_chr(x)) for x in compustate.memory])
-            if log_vm_op_storage.is_active():
+            trace_data['stack'] = list(map(to_string, list(compustate.stack)))
+            if _prevop in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
+                           'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
+                           'EXTCODECOPY'):
+                if len(compustate.memory) < 1024:
+                    trace_data['memory'] = \
+                        b''.join([encode_hex(ascii_chr(x)) for x
+                                  in compustate.memory])
+                else:
+                    trace_data['sha3memory'] = \
+                        encode_hex(utils.sha3(''.join([ascii_chr(x) for
+                                              x in compustate.memory])))
+            if _prevop in ('SSTORE', 'SLOAD') or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = to_string(compustate.gas + fee)
+            trace_data['inst'] = opcode
             trace_data['pc'] = to_string(compustate.pc - 1)
+            if steps == 0:
+                trace_data['depth'] = msg.depth
+                trace_data['address'] = msg.to
             trace_data['op'] = op
+            trace_data['steps'] = steps
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval
-
             log_vm_op.trace('vm', **trace_data)
+            steps += 1
+            _prevop = op
 
         # Invalid operation
         if op == 'INVALID':

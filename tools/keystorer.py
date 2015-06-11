@@ -1,7 +1,6 @@
 #!/usr/bin/python2.7
 
 import sys, json, os
-from bitcoin import privtopub
 try:
     import keys
 except:
@@ -9,12 +8,6 @@ except:
         import ethereum.keys as keys
     except:
         raise Exception("keys module not found")
-
-
-def privtoaddr(x):
-    if len(x) > 32:
-        x = keys.decode_hex(x)
-    return keys.sha3(privtopub(x)[1:])[12:]
 
 
 # Help
