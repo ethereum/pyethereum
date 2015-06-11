@@ -3,6 +3,7 @@ import pytest
 import json
 import ethereum.blocks as blocks
 import ethereum.testutils as testutils
+import ethereum.utils as utils
 from rlp.utils import encode_hex
 from ethereum.tests.utils import new_db
 from ethereum.slogging import get_logger, configure_logging
@@ -28,7 +29,7 @@ def genesis_fixture():
 
 def test_genesis_state_root(genesis_fixture):
     genesis = blocks.genesis(new_db())
-    assert encode_hex(genesis.state_root) == genesis_fixture['genesis_state_root']
+    assert encode_hex(genesis.state_root) == utils.to_string(genesis_fixture['genesis_state_root'])
 
 
 def test_genesis_initial_alloc(genesis_fixture):
@@ -39,7 +40,7 @@ def test_genesis_initial_alloc(genesis_fixture):
 
 def test_genesis_hash(genesis_fixture):
     genesis = blocks.genesis(new_db())
-    assert genesis.hex_hash() == genesis_fixture['genesis_hash']
+    assert genesis.hex_hash() == utils.to_string(genesis_fixture['genesis_hash'])
 
 
 if __name__ == '__main__':

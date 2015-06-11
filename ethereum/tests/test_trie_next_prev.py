@@ -1,6 +1,7 @@
 import os
 import json
 import ethereum.trie as trie
+from ethereum.utils import to_string
 from ethereum.tests.utils import new_db
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger, configure_logging
@@ -34,10 +35,11 @@ def run_test(name):
 
     for k in data['in']:
         logger.debug('updating with (%s, %s)' % (k, k))
+        k = to_string(k)
         t.update(k, k)
     for point, prev, nxt in data['tests']:
-        assert nxt == (t.next(point) or '')
-        assert prev == (t.prev(point) or '')
+        assert to_string(nxt) == (t.next(point) or b'')
+        assert to_string(prev) == (t.prev(point) or b'')
 
 
 def test_basic():

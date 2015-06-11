@@ -12,7 +12,7 @@ def proc_ecrecover(ext, msg):
         return 0, 0, []
     b = [0] * 32
     msg.data.extract_copy(b, 0, 0, 32)
-    h = ''.join([ascii_chr(x) for x in b])
+    h = b''.join([ascii_chr(x) for x in b])
     v = msg.data.extract32(32)
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)

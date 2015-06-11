@@ -5,7 +5,7 @@ import ethereum.abi as abi
 logger = get_logger()
 
 def test_abi_encode_var_sized_array():
-    abi.encode_abi(['address[]'], [['\x00' * 20] * 3])
+    abi.encode_abi(['address[]'], [[b'\x00' * 20] * 3])
 
 def test_abi_encode_fixed_size_array():
     abi.encode_abi(['uint16[2]'], [[5, 6]])

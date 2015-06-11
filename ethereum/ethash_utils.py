@@ -1,5 +1,6 @@
 import sha3
 from rlp.utils import decode_hex, encode_hex
+import sys
 
 WORD_BYTES = 4                    # bytes in word
 DATASET_BYTES_INIT = 2**30        # bytes in dataset at genesis
@@ -50,13 +51,19 @@ def hash_words(h, sz, x):
     return deserialize_hash(y)
 
 
+def to_bytes(x):
+    if sys.version_info.major > 2 and isinstance(x, str):
+        x = bytes(x, 'utf-8')
+    return x
+
+
 # sha3 hash function, outputs 64 bytes
 def sha3_512(x):
-    return hash_words(lambda v: sha3.sha3_512(v).digest(), 64, x)
+    return hash_words(lambda v: sha3.sha3_512(to_bytes(v)).digest(), 64, x)
 
 
 def sha3_256(x):
-    return hash_words(lambda v: sha3.sha3_256(v).digest(), 32, x)
+    return hash_words(lambda v: sha3.sha3_256(to_bytes(v)).digest(), 32, x)
 
 
 def xor(a, b):

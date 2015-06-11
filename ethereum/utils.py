@@ -30,6 +30,10 @@ if sys.version_info.major == 2:
             return value
         return int_to_big_endian(value)
 
+    def to_string_for_regexp(value):
+        return str(value)
+    unicode = unicode
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -46,6 +50,10 @@ else:
         if isinstance(value, bytes):
             return value
         return int_to_big_endian(value)
+
+    def to_string_for_regexp(value):
+        return str(to_string(value), 'utf-8')
+    unicode = str
 
 
 def safe_ord(value):
@@ -92,7 +100,7 @@ def int_to_32bytearray(i):
 
 
 def sha3(seed):
-    return sha3_256(seed).digest()
+    return sha3_256(to_string(seed)).digest()
 
 
 def privtoaddr(x):
@@ -154,6 +162,17 @@ def coerce_to_bytes(x):
         return decode_hex(x)
     else:
         return x
+
+
+def parse_int_or_hex(s):
+    if is_numeric(s):
+        return s
+    elif s[:2] in (b'0x', '0x'):
+        s = to_string(s)
+        tail = (b'0' if len(s) % 2 else b'') + s[2:]
+        return big_endian_to_int(decode_hex(tail))
+    else:
+        return int(s)
 
 
 def ceil32(x):

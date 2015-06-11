@@ -126,7 +126,7 @@ def mem_extend(mem, compustate, op, start, sz):
 
 def data_copy(compustate, size):
     if size:
-        copyfee = opcodes.GCOPY * utils.ceil32(size) / 32
+        copyfee = opcodes.GCOPY * utils.ceil32(size) // 32
         if compustate.gas < copyfee:
             compustate.gas = 0
             return False
@@ -371,14 +371,14 @@ def vm_execute(ext, msg, code):
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
                 extcode = ext.get_code(addr) or b''
-                assert isinstance(extcode, str)
+                assert utils.is_string(extcode)
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s2 + i < len(extcode):
-                        mem[start + i] = ord(extcode[s2 + i])
+                        mem[start + i] = utils.safe_ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
         elif opcode < 0x50:
@@ -485,7 +485,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
-            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(ord, data)))
+            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(utils.safe_ord, data)))
             # print('LOG', msg.to, topics, list(map(ord, data)))
 
         elif op == 'CREATE':
@@ -579,7 +579,7 @@ def vm_execute(ext, msg, code):
         # this is slow!
         if verify_stack_after_op:
             for a in stk:
-                assert is_numeric(a)
+                assert is_numeric(a), (op, stk)
                 assert a >= 0 and a < 2**256, (a, op, stk)
 
 

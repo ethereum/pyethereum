@@ -8,7 +8,7 @@ random.seed(0)
 
 
 def random_string(length):
-    return ''.join([ascii_chr(random.randint(0, 255)) for _ in range(length)])
+    return b''.join([ascii_chr(random.randint(0, 255)) for _ in range(length)])
 
 
 content = {random_string(lk): random_string(lv)

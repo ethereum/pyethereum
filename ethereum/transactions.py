@@ -59,14 +59,14 @@ class Transaction(rlp.Serializable):
                 self.value >= TT256 or self.nonce >= TT256:
             raise InvalidTransaction("Values way too high!")
 
-        log.debug('deserialized tx', tx=self.hash.encode('hex')[:8])
+        log.debug('deserialized tx', tx=encode_hex(self.hash)[:8])
 
     @property
     def sender(self):
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28:
+                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28 or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
@@ -115,8 +115,8 @@ class Transaction(rlp.Serializable):
 
     def log_dict(self):
         d = self.to_dict()
-        d['sender'] = (d['sender'] or '').encode('hex')
-        d['to'] = d['to'].encode('hex')
+        d['sender'] = encode_hex(d['sender'] or '')
+        d['to'] = encode_hex(d['to'])
         return d
 
     @property

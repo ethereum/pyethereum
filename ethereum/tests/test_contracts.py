@@ -961,8 +961,8 @@ def test_saveload2():
     s = tester.state()
     c = s.contract(saveload_code2)
     s.send(tester.k0, c, 0)
-    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == '01ab' + '\x00' * 28
-    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == '01ab' + '\x00' * 28
+    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == b'01ab' + b'\x00' * 28
+    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == b'01ab' + b'\x00' * 28
 
 
 sdiv_code = """
@@ -1363,7 +1363,7 @@ def test_mcopy():
     s = tester.state()
     c = s.abi_contract(mcopy_code)
     assert c.mcopy_test("123", 5, 6, 259) == \
-        '\x00'*31+'\x05'+'\x00'*31+'\x06'+'\x00'*30+'\x01\x03'+'123'
+        b'\x00'*31+b'\x05'+b'\x00'*31+b'\x06'+b'\x00'*30+b'\x01\x03'+b'123'
 
 
 mcopy_code_2 = """
@@ -1383,7 +1383,7 @@ def test_mcopy2():
     s = tester.state()
     c = s.abi_contract(mcopy_code_2)
     assert c.mcopy_test() == \
-        ''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
+        b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
 array_saveload_code = """
@@ -1501,13 +1501,13 @@ def test_abi_logging():
     o = []
     s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     c.test_rabbit(3)
-    assert o == [{"_event_type": "rabbit", "x": 3}]
+    assert o == [{"_event_type": b"rabbit", "x": 3}]
     o.pop()
     c.test_frog(5)
-    assert o == [{"_event_type": "frog", "y": 5}]
+    assert o == [{"_event_type": b"frog", "y": 5}]
     o.pop()
     c.test_moose(7, "nine", 11, [13, 15, 17])
-    assert o == [{"_event_type": "moose", "a": 7, "b": "nine",
+    assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
                  "c": 11, "d": [13, 15, 17]}]
 
 

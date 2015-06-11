@@ -5,7 +5,7 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
-from ethereum.utils import to_string, safe_ord
+from ethereum.utils import to_string, safe_ord, parse_int_or_hex
 import json
 import os
 import time
@@ -43,29 +43,19 @@ time_abi_test = lambda params: run_abi_test(params, TIME)
 fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
-def parse_int_or_hex(s):
-    if isinstance(s, int):
-        return s
-    elif s[:2] == '0x':
-        tail = ('0' if len(s) % 2 else '') + s[2:]
-        return utils.big_endian_to_int(decode_hex(tail))
-    else:
-        return int(s)
-
-
 def normalize_hex(s):
-    return s if len(s) > 2 else '0x00'
+    return s if len(s) > 2 else b'0x00'
 
 
 def remove_0x_head(s):
-    return s[2:] if s[:2] == '0x' else s
+    return s[2:] if s[:2] == b'0x' else s
 
 
 def acct_standard_form(a):
     return {
         "balance": parse_int_or_hex(a["balance"]),
         "nonce": parse_int_or_hex(a["nonce"]),
-        "code": a["code"],
+        "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
                     k, v in a["storage"].items()}
     }
@@ -78,7 +68,7 @@ def compare_post_states(shouldbe, reallyis):
         raise Exception("Shouldbe: %r \n\nreallyis: %r" % (shouldbe, reallyis))
     for k in shouldbe:
         if k not in reallyis:
-            r = {"nonce": 0, "balance": 0, "code": "0x", "storage": {}}
+            r = {"nonce": 0, "balance": 0, "code": b"0x", "storage": {}}
         else:
             r = acct_standard_form(reallyis[k])
         s = acct_standard_form(shouldbe[k])
@@ -88,11 +78,11 @@ def compare_post_states(shouldbe, reallyis):
     return True
 
 
-def callcrate_standard_form(c):
+def callcreate_standard_form(c):
     return {
         "gasLimit": parse_int_or_hex(c["gasLimit"]),
         "value": parse_int_or_hex(c["value"]),
-        "data": c["data"]
+        "data": to_string(c["data"])
     }
 
 
@@ -105,7 +95,7 @@ def mktest(code, language, data=None, fun=None, args=None,
         d = data or b''
     else:
         c = s.abi_contract(code, language=language)
-        d = c._translator.encode(fun, args) if fun else (data or '')
+        d = c._translator.encode(fun, args) if fun else (data or b'')
         ca = c.address
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
@@ -229,7 +219,7 @@ def run_vm_test(params, mode, profiler=None):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = b'0x' + encode_hex(''.join(map(ascii_chr, output)))
+        params2['out'] = b'0x' + encode_hex(b''.join(map(ascii_chr, output)))
         params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in blk.logs]
         params2['post'] = blk.to_dict(with_state=True)['state']
@@ -249,9 +239,9 @@ def run_vm_test(params, mode, profiler=None):
                 if k == 'gas':
                     return parse_int_or_hex(p[k])
                 elif k == 'callcreates':
-                    return map(callcrate_standard_form, p[k])
+                    return list(map(callcreate_standard_form, p[k]))
                 else:
-                    return k
+                    return utils.to_string(k)
             return None
 
         for k in ['pre', 'exec', 'env', 'callcreates',

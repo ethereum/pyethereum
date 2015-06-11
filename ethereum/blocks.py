@@ -1355,13 +1355,13 @@ def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC,
             addr = decode_hex(addr)
         assert len(addr) == 20
         if 'wei' in data:
-            block.set_balance(addr, int(data['wei']))
+            block.set_balance(addr, utils.parse_int_or_hex(data['wei']))
         if 'balance' in data:
-            block.set_balance(addr, int(data['balance']))
+            block.set_balance(addr, utils.parse_int_or_hex(data['balance']))
         if 'code' in data:
             block.set_code(addr, utils.scanners['bin'](data['code']))
         if 'nonce' in data:
-            block.set_nonce(addr, int(data['nonce']))
+            block.set_nonce(addr, utils.parse_int_or_hex(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
                 block.set_storage_data(addr, utils.big_endian_to_int(decode_hex(k[2:])),

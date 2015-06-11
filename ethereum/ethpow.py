@@ -58,9 +58,8 @@ def check_pow(block_number, header_hash, mixhash, nonce, difficulty):
     :returns: `True` or `False`
     """
     log.debug('checking pow', block_number=block_number)
-    assert len(mixhash) == 32
-    assert len(header_hash) == 32
-    assert len(nonce) == 8
+    if len(mixhash) != 32 or len(header_hash) != 32 or len(nonce) != 8:
+        return False
 
     # Grab current cache
     cache = get_cache(block_number)

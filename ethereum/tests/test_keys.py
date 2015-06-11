@@ -14,7 +14,7 @@ def gen_func(filename, testname, testdata):
 def do_test_key(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
     privkey = keys.decode_keystore_json(testdata["json"], testdata["password"])
-    assert utils.encode_hex(privkey) == testdata["priv"]
+    assert utils.encode_hex(privkey) == utils.to_string(testdata["priv"])
 
 fixtures = testutils.get_tests_from_file_or_dir(
     os.path.join(testutils.fixture_path, 'KeyStoreTests'))
