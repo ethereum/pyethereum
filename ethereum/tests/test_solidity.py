@@ -76,8 +76,8 @@ def test_constructor():
     a1 = s.contract(constructor_contract, language='solidity')
     a2 = s.contract(
         constructor_contract, constructor_args=[
-            {'type': 'address', 'val': tester.a1
-        }], language='solidity'
+            {'type': 'address', 'val': tester.a1}
+        ], language='solidity'
     )
     _abi = tester.languages['solidity'].mk_full_signature(constructor_contract)
     c1 = tester.ABIContract(s, _abi, a1)
