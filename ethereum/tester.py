@@ -138,6 +138,11 @@ class state():
             languages[language] = __import__(language)
         language = languages[language]
         evm = language.compile(code)
+        if len(constructor_args) > 0:
+            evm += abi.encode_abi(
+                [a['type'] for a in constructor_args],
+                [a['val'] for a  in constructor_args])
+
         o = self.evm(evm, sender, endowment)
         assert len(self.block.get_code(o)), "Contract code empty"
         return o

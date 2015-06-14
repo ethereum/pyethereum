@@ -57,7 +57,7 @@ contract gondor {
 """
 
 @needs_solidity
-def test_constructor():
+def test_abi_constructor():
     s = tester.state()
     c1 = s.abi_contract(
         constructor_contract, language='solidity',
@@ -67,5 +67,20 @@ def test_constructor():
         constructor_contract, constructor_args=[tester.a1],
         language='solidity', contract_name='gondor'
     )
+    assert c1.ruler() != c2.ruler()
+    assert c2.ruler() == encode_hex(tester.a1)
+
+@needs_solidity
+def test_constructor():
+    s = tester.state()
+    a1 = s.contract(constructor_contract, language='solidity')
+    a2 = s.contract(
+        constructor_contract, constructor_args=[
+            {'type': 'address', 'val': tester.a1
+        }], language='solidity'
+    )
+    _abi = tester.languages['solidity'].mk_full_signature(constructor_contract)
+    c1 = tester.ABIContract(s, _abi, a1)
+    c2 = tester.ABIContract(s, _abi, a2)
     assert c1.ruler() != c2.ruler()
     assert c2.ruler() == encode_hex(tester.a1)
