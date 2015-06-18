@@ -1511,6 +1511,78 @@ def test_abi_logging():
                  "c": 11, "d": [13, 15, 17]}]
 
 
+new_format_inner_test_code = """
+def foo(a, b:arr, c:str):
+    return a * 10 + b[1]
+"""
+
+filename4 = "nfitc2635987162498621846198246.se"
+
+new_format_outer_test_code = """
+extern blah: [foo:[int256,int256[],bytes]:int256]
+
+def bar():
+    x = create("%s")
+    return x.foo(17, [3, 5, 7], text("dog"))
+""" % filename4
+
+
+def test_new_format():
+    s = tester.state()
+    open(filename4, 'w').write(new_format_inner_test_code)
+    c = s.abi_contract(new_format_outer_test_code)
+    assert c.bar() == 175
+
+
+abi_address_output_test_code = """
+data addrs[]
+
+def get_address(key):
+    return(self.addrs[key]:address)
+
+def register(key, addr:address):
+    if not self.addrs[key]:
+        self.addrs[key] = addr
+"""
+
+
+def test_abi_address_output():
+    s = tester.state()
+    c = s.abi_contract(abi_address_output_test_code)
+    c.register(123, '1212121212121212121212121212121212121212')
+    c.register(123, '3434343434343434343434343434343434343434')
+    c.register(125, '5656565656565656565656565656565656565656')
+    assert c.get_address(123) == '1212121212121212121212121212121212121212'
+    assert c.get_address(125) == '5656565656565656565656565656565656565656'
+
+filename5 = 'abi_output_tester_1264876521746198724124'
+
+abi_address_caller_code = """
+extern foo: [get_address:[int256]:address, register:[int256,address]:_]
+data sub
+
+def init():
+    self.sub = create("%s")
+
+def get_address(key):
+    return(self.sub.get_address(key):address)
+
+def register(key, addr:address):
+    self.sub.register(key, addr)
+""" % filename5
+
+
+def test_inner_abi_address_output():
+    s = tester.state()
+    open(filename5, 'w').write(abi_address_output_test_code)
+    c = s.abi_contract(abi_address_caller_code)
+    c.register(123, '1212121212121212121212121212121212121212')
+    c.register(123, '3434343434343434343434343434343434343434')
+    c.register(125, '5656565656565656565656565656565656565656')
+    assert c.get_address(123) == '1212121212121212121212121212121212121212'
+    assert c.get_address(125) == '5656565656565656565656565656565656565656'
+
+
 # test_evm = None
 # test_sixten = None
 # test_with = None
@@ -1556,3 +1628,5 @@ def test_abi_logging():
 # test_more_infinite_storage = None
 # test_double_array = None
 # test_abi_logging = None
+# test_new_format = None
+# test_abi_address_output = None

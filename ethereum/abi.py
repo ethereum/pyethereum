@@ -65,7 +65,7 @@ class ContractTranslator():
         return o
 
     def decode(self, name, data):
-        # print 'out', data.encode('hex')
+        # print 'out', utils.encode_hex(data)
         fdata = self.function_data[name]
         if fdata['is_unknown_type']:
             o = [utils.to_signed(utils.big_endian_to_int(data[i:i + 32]))
