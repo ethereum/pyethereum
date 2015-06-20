@@ -99,14 +99,16 @@ class solc_wrapper(object):
         return sorted_contracts
 
 
-def get_solidity():
-    try:
-        import solidity, tester
-        tester.languages['solidity'] = solidity
-    except ImportError:
-        if not solc_wrapper.compiler_available():
-            return None
-        return solc_wrapper
+def get_solidity(try_import=False):
+    if try_import:
+        try:
+            import solidity, tester
+            tester.languages['solidity'] = solidity
+        except ImportError:
+            pass
+    if not solc_wrapper.compiler_available():
+        return None
+    return solc_wrapper
 
 
 if __name__ == '__main__':
