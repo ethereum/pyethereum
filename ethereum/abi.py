@@ -20,6 +20,8 @@ class ContractTranslator():
         if is_string(full_signature):
             full_signature = json_decode(full_signature)
         for sig_item in full_signature:
+            if sig_item['type'] == 'constructor':
+                continue
             encode_types = [f['type'] for f in sig_item['inputs']]
             signature = [(f['type'], f['name']) for f in sig_item['inputs']]
             name = sig_item['name']
