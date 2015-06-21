@@ -170,7 +170,8 @@ def decode_keystore_json(jsondata, pw):
     # print(b'macdata: ' + encode_hex(derivedkey[16:32] + ctext))
     mac1 = sha3(derivedkey[16:32] + ctext)
     mac2 = decode_hex(jsondata["crypto"]["mac"])
-    assert mac1 == mac2, "MAC mismatch. Password incorrect?"
+    if mac1 != mac2:
+        raise ValueError("MAC mismatch. Password incorrect?")
     return o
 
 
