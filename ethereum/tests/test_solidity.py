@@ -320,7 +320,7 @@ contract exchange {
     uint256 nextOrderId = 1;
     namereg currencyReg = namereg(0x%s);
 
-    function mkOrder(bytes32 offer_currency, uint256 offer_value, bytes32 want_currency, uint256 want_value) returns (uint256 offer_id) {
+    function placeOrder(bytes32 offer_currency, uint256 offer_value, bytes32 want_currency, uint256 want_value) returns (uint256 offer_id) {
         address currencyAddr = currencyReg.addr(offer_currency);
         if (currency(currencyAddr).sendCoinFrom(msg.sender, offer_value, this)) {
             offer_id = nextOrderId;
@@ -334,7 +334,7 @@ contract exchange {
         else offer_id = 0;
     }
 
-    function claim(uint256 offer_id) returns (bool _success) {
+    function claimOrder(uint256 offer_id) returns (bool _success) {
         address currencyAddr = currencyReg.addr(orders[offer_id].want_currency);
         if (currency(currencyAddr).sendCoinFrom(msg.sender, orders[offer_id].want_value, orders[offer_id].creator)) {
             address offerCurrencyAddr = currencyReg.addr(orders[offer_id].offer_currency);
@@ -349,7 +349,7 @@ contract exchange {
         else _success = false;
     }
 
-    function del(uint256 offer_id) {
+    function deleteOrder(uint256 offer_id) {
         address currencyAddr = currencyReg.addr(orders[offer_id].offer_currency);
         currency(currencyAddr).sendCoin(orders[offer_id].offer_value, orders[offer_id].creator);
         orders[offer_id].creator = 0;
@@ -373,7 +373,7 @@ def init():
     self.nextOrderId = 1
     self.currencyReg = 0x%s
 
-def mkOrder(offer_currency:bytes32, offer_value:uint256, want_currency:bytes32, want_value:uint256):
+def placeOrder(offer_currency:bytes32, offer_value:uint256, want_currency:bytes32, want_value:uint256):
     if self.currencyReg.addr(offer_currency).sendCoinFrom(msg.sender, offer_value, self):
         offer_id = self.nextOrderId
         self.nextOrderId += 1
@@ -385,7 +385,7 @@ def mkOrder(offer_currency:bytes32, offer_value:uint256, want_currency:bytes32, 
         return(offer_id:uint256)
     return(0:uint256)
 
-def claim(offer_id:uint256):
+def claimOrder(offer_id:uint256):
     if self.currencyReg.addr(self.orders[offer_id].want_currency).sendCoinFrom(msg.sender, self.orders[offer_id].want_value, self.orders[offer_id].creator):
         self.currencyReg.addr(self.orders[offer_id].offer_currency).sendCoin(self.orders[offer_id].offer_value, msg.sender)
         self.orders[offer_id].creator = 0
@@ -396,7 +396,7 @@ def claim(offer_id:uint256):
         return(1:bool)
     return(0:bool)
 
-def del(offer_id:uint256):
+def deleteOrder(offer_id:uint256):
     self.currencyReg.addr(self.orders[offer_id].offer_currency).sendCoin(self.orders[offer_id].offer_value, self.orders[offer_id].creator)
     self.orders[offer_id].creator = 0
     self.orders[offer_id].offer_currency = 0
@@ -427,22 +427,146 @@ def test_exchange_apis():
         assert wc.coinBalanceOf(tester.a0) == 0
         assert wc.coinBalanceOf(tester.a1) == 1000000
         # Offer fails because not approved to withdraw
-        assert e.mkOrder('moose', 1000, 'bear', 5000, sender=tester.k0) == 0
+        assert e.placeOrder('moose', 1000, 'bear', 5000, sender=tester.k0) == 0
         # Approve to withdraw
         oc.approveOnce(e.address, 1000, sender=tester.k0)
         # Offer succeeds
-        oid = e.mkOrder('moose', 1000, 'bear', 5000, sender=tester.k0)
+        oid = e.placeOrder('moose', 1000, 'bear', 5000, sender=tester.k0)
         assert oid > 0
         # Offer fails because withdrawal approval was one-time
-        assert e.mkOrder('moose', 1000, 'bear', 5000, sender=tester.k0) == 0
+        assert e.placeOrder('moose', 1000, 'bear', 5000, sender=tester.k0) == 0
         # Claim fails because not approved to withdraw
-        assert e.claim(oid, sender=tester.k1) is False
+        assert e.claimOrder(oid, sender=tester.k1) is False
         # Approve to withdraw
         wc.approveOnce(e.address, 5000, sender=tester.k1)
         # Claim succeeds
-        assert e.claim(oid, sender=tester.k1) is True
+        assert e.claimOrder(oid, sender=tester.k1) is True
         # Check balances
         assert oc.coinBalanceOf(tester.a0) == 999000
         assert oc.coinBalanceOf(tester.a1) == 1000
         assert wc.coinBalanceOf(tester.a0) == 5000
         assert wc.coinBalanceOf(tester.a1) == 995000
+
+
+
+serpent_datafeed = """
+data data[]
+data owner
+
+def init():
+    self.owner = msg.sender
+
+def set(k:bytes32, v):
+    if msg.sender == self.owner:
+        self.data[k] = v
+
+def get(k:bytes32):
+    return(self.data[k])
+"""
+
+
+solidity_datafeed = """
+contract datafeed {
+    mapping ( bytes32 => int256 ) data;
+    address owner;
+
+    function datafeed() {
+        owner = msg.sender;
+    }
+
+    function set(bytes32 k, int256 v) {
+        if (owner == msg.sender)
+            data[k] = v;
+    }
+
+    function get(bytes32 k) returns (int256 v) {
+        v = data[k];
+    }
+}
+"""
+
+def test_datafeeds():
+    s = tester.state()
+    c1 = s.abi_contract(serpent_datafeed, sender=tester.k0)
+    c2 = s.abi_contract(solidity_datafeed, language='solidity', sender=tester.k0)
+    for c in (c1, c2):
+        c.set('moose', 110, sender=tester.k0)
+        c.set('moose', 125, sender=tester.k1)
+        assert c.get('moose') == 110
+
+
+serpent_ether_charging_datafeed = """
+data data[]
+data owner
+data fee
+
+def init():
+    self.owner = msg.sender
+
+def set(k:bytes32, v):
+    if msg.sender == self.owner:
+        self.data[k] = v
+
+def setFee(f:uint256):
+    if msg.sender == self.owner:
+        self.fee = f
+
+def get(k:bytes32):
+    if msg.value >= self.fee:
+        return(self.data[k])
+    else:
+        return(0)
+
+def getFee():
+    return(self.fee:uint256)
+"""
+
+
+solidity_ether_charging_datafeed = """
+contract datafeed {
+    mapping ( bytes32 => int256 ) data;
+    address owner;
+    uint256 fee;
+
+    function datafeed() {
+        owner = msg.sender;
+    }
+
+    function set(bytes32 k, int256 v) {
+        if (owner == msg.sender)
+            data[k] = v;
+    }
+
+    function setFee(uint256 f) {
+        if (owner == msg.sender)
+            fee = f;
+    }
+
+    function get(bytes32 k) returns (int256 v) {
+        if (msg.value >= fee)
+            v = data[k];
+        else
+            v = 0;
+    }
+
+    function getFee() returns (uint256 f) {
+        f = fee;
+    }
+}
+"""
+
+
+def test_ether_charging_datafeeds():
+    s = tester.state()
+    c1 = s.abi_contract(serpent_ether_charging_datafeed, sender=tester.k0)
+    c2 = s.abi_contract(solidity_ether_charging_datafeed, language='solidity', sender=tester.k0)
+    for c in (c1, c2):
+        c.set('moose', 110, sender=tester.k0)
+        c.set('moose', 125, sender=tester.k1)
+        assert c.get('moose') == 110
+        c.setFee(70, sender=tester.k0)
+        c.setFee(110, sender=tester.k1)
+        assert c.getFee() == 70
+        assert c.get('moose') == 0
+        assert c.get('moose', value=69) == 0
+        assert c.get('moose', value=70) == 110
