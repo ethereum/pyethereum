@@ -354,7 +354,7 @@ contract exchange {
         uint256 wantValue;
     }
 
-    event Traded(address indexed currencyXor, address indexed seller, uint256 offerValue, address indexed buyer, uint256 wantValue);
+    event Traded(bytes32 indexed currencyPair, address indexed seller, uint256 offerValue, address indexed buyer, uint256 wantValue);
 
     mapping ( uint256 => Order ) orders;
     uint256 nextOrderId = 1;
@@ -375,8 +375,8 @@ contract exchange {
     function claimOrder(uint256 offer_id) returns (bool _success) {
         if (currency(orders[offer_id].wantCurrency).sendCoinFrom(msg.sender, orders[offer_id].wantValue, orders[offer_id].creator)) {
             currency(orders[offer_id].offerCurrency).sendCoin(orders[offer_id].offerValue, msg.sender);
-            address currencyXor = address(uint256(orders[offer_id].offerCurrency) ^ uint256(orders[offer_id].wantCurrency));
-            Traded(currencyXor, orders[offer_id].creator, orders[offer_id].offerValue, msg.sender, orders[offer_id].wantValue);
+            bytes32 currencyPair = bytes32(((uint256(orders[offer_id].offerCurrency) / 2**32) * 2**128) + (uint256(orders[offer_id].wantCurrency) / 2**32));
+            Traded(currencyPair, orders[offer_id].creator, orders[offer_id].offerValue, msg.sender, orders[offer_id].wantValue);
             orders[offer_id].creator = 0;
             orders[offer_id].offerCurrency = 0;
             orders[offer_id].offerValue = 0;
@@ -404,7 +404,7 @@ extern currency: [sendCoinFrom:[address,uint256,address]:bool, sendCoin:[uint256
 data orders[](creator, offerCurrency, offerValue, wantCurrency, wantValue)
 data nextOrderId
 
-event Traded(currencyXor:address:indexed, seller:address:indexed, offerValue:uint256, buyer:address:indexed, wantValue:uint256)
+event Traded(currencyPair:bytes32:indexed, seller:address:indexed, offerValue:uint256, buyer:address:indexed, wantValue:uint256)
 
 def init():
     self.nextOrderId = 1
@@ -424,8 +424,8 @@ def placeOrder(offerCurrency:address, offerValue:uint256, wantCurrency:address, 
 def claimOrder(offer_id:uint256):
     if self.orders[offer_id].wantCurrency.sendCoinFrom(msg.sender, self.orders[offer_id].wantValue, self.orders[offer_id].creator):
         self.orders[offer_id].offerCurrency.sendCoin(self.orders[offer_id].offerValue, msg.sender)
-        currencyXor = ~xor(self.orders[offer_id].offerCurrency, self.orders[offer_id].wantCurrency)
-        log(type=Traded, currencyXor, self.orders[offer_id].creator, self.orders[offer_id].offerValue, msg.sender, self.orders[offer_id].wantValue)
+        currencyPair = (self.orders[offer_id].offerCurrency / 2**32) * 2**128 + (self.orders[offer_id].wantCurrency / 2**32)
+        log(type=Traded, currencyPair, self.orders[offer_id].creator, self.orders[offer_id].offerValue, msg.sender, self.orders[offer_id].wantValue)
         self.orders[offer_id].creator = 0
         self.orders[offer_id].offerCurrency = 0
         self.orders[offer_id].offerValue = 0
@@ -483,7 +483,7 @@ def test_exchange_apis():
         assert wc.coinBalanceOf(tester.a1) == 995000
         cxor = utils.big_endian_to_int(oc.address) ^ utils.big_endian_to_int(wc.address)
         assert {"_event_type": b"Traded",
-                "currencyXor": utils.encode_hex(utils.int_to_addr(cxor)),
+                "currencyPair": oc.address[:16] + wc.address[:16],
                 "seller": utils.encode_hex(tester.a0), "offerValue": 1000,
                 "buyer": utils.encode_hex(tester.a1), "wantValue": 5000} in o
 
