@@ -1483,6 +1483,7 @@ abi_logging_code = """
 event rabbit(x)
 event frog(y:indexed)
 event moose(a, b:str, c:indexed, d:arr)
+event chicken(m:address:indexed)
 
 def test_rabbit(eks):
     log(type=rabbit, eks)
@@ -1492,6 +1493,9 @@ def test_frog(why):
 
 def test_moose(eh, bee:str, see, dee:arr):
     log(type=moose, eh, bee, see, dee)
+
+def test_chicken(em:address):
+    log(type=chicken, em)
 """
 
 
@@ -1509,6 +1513,11 @@ def test_abi_logging():
     c.test_moose(7, "nine", 11, [13, 15, 17])
     assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
                  "c": 11, "d": [13, 15, 17]}]
+    o.pop()
+    c.test_chicken(tester.a0)
+    assert o == [{"_event_type": b"chicken",
+                  "m": utils.encode_hex(tester.a0)}]
+    o.pop()
 
 
 new_format_inner_test_code = """

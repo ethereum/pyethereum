@@ -51,6 +51,8 @@ contract currency {
 
     mapping ( address => Account ) accounts;
 
+    event CoinSent(address indexed from, uint256 value, address indexed to);
+
     function currency() {
         accounts[msg.sender].balance = 1000000;
     }
@@ -59,6 +61,7 @@ contract currency {
         if (accounts[msg.sender].balance >= _val && _val < 340282366920938463463374607431768211456) {
             accounts[msg.sender].balance -= _val;
             accounts[_to].balance += _val;
+            CoinSent(msg.sender, _val, _to);
             _success = true;
         }
         else _success = false;
@@ -70,6 +73,8 @@ contract currency {
             accounts[_from].withdrawers[msg.sender] -= _val;
             accounts[_from].balance -= _val;
             accounts[_to].balance += _val;
+            CoinSent(_from, _val, _to);
+            _success = true;
             _success = true;
         }
         else _success = false;
@@ -104,6 +109,8 @@ contract currency {
 serpent_currency = """
 data accounts[](balance, withdrawers[])
 
+event CoinSent(from:address:indexed, value:uint256, to:address:indexed)
+
 def init():
     self.accounts[msg.sender].balance = 1000000
 
@@ -111,6 +118,7 @@ def sendCoin(_val:uint256, _to:address):
     if self.accounts[msg.sender].balance >= _val and _val >= 0 and _val < 340282366920938463463374607431768211456:
         self.accounts[msg.sender].balance -= _val
         self.accounts[_to].balance += _val
+        log(type=CoinSent, msg.sender, _val, _to)
         return(1:bool)
     return(0:bool)
 
@@ -120,6 +128,7 @@ def sendCoinFrom(_from:address, _val:uint256, _to:address):
         self.accounts[_from].withdrawers[msg.sender] -= _val
         self.accounts[_from].balance -= _val
         self.accounts[_to].balance += _val
+        log(type=CoinSent, _from, _val, _to)
         return(1:bool)
     return(0:bool)
 
@@ -127,7 +136,6 @@ def coinBalance():
     return(self.accounts[msg.sender].balance)
 
 def coinBalanceOf(_a:address):
-    log(_a)
     return(self.accounts[_a].balance)
 
 def approve(_a:address):
@@ -148,7 +156,10 @@ def test_currency_apis():
     s = tester.state()
     c1 = s.abi_contract(serpent_currency, sender=tester.k0)
     c2 = s.abi_contract(solidity_currency, language='solidity', sender=tester.k0)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     for c in (c1, c2):
+        o = []
         assert c.coinBalanceOf(tester.a0) == 1000000
         assert c.sendCoin(1000, tester.a2, sender=tester.k0) is True
         assert c.sendCoin(999001, tester.a2, sender=tester.k0) is False
@@ -165,14 +176,26 @@ def test_currency_apis():
         assert c.coinBalance(sender=tester.k0) == 999000
         assert c.coinBalanceOf(tester.a2) == 400
         assert c.coinBalanceOf(tester.a3) == 600
+        print 'barricade', o
+        assert o == [{"_event_type": b"CoinSent", "from": utils.encode_hex(tester.a0),
+                      "value": 1000, "to": utils.encode_hex(tester.a2)},
+                     {"_event_type": b"CoinSent", "from": utils.encode_hex(tester.a2),
+                      "value": 400, "to": utils.encode_hex(tester.a3)},
+                     {"_event_type": b"CoinSent", "from": utils.encode_hex(tester.a2),
+                      "value": 100, "to": utils.encode_hex(tester.a3)},
+                     {"_event_type": b"CoinSent", "from": utils.encode_hex(tester.a2),
+                      "value": 100, "to": utils.encode_hex(tester.a3)}]
 
 
 serpent_namereg = """
 data records[](owner, address, content, sub)
 
+event Changed(name:bytes32:indexed)
+
 def reserve(_name:bytes32):
     if not self.records[_name].owner:
         self.records[_name].owner = msg.sender
+        log(type=Changed, _name)
         return(1:bool)
     return(0:bool)
 
@@ -181,10 +204,12 @@ def owner(_name:bytes32):
 
 def transfer(_name:bytes32, _newOwner:address):
     if self.records[_name].owner == msg.sender:
+        log(type=Changed, _name)
         self.records[_name].owner = _newOwner
 
 def setAddr(_name:bytes32, _a:address):
     if self.records[_name].owner == msg.sender:
+        log(type=Changed, _name)
         self.records[_name].address = _a
 
 def addr(_name:bytes32):
@@ -192,6 +217,7 @@ def addr(_name:bytes32):
 
 def setContent(_name:bytes32, _content:bytes32):
     if self.records[_name].owner == msg.sender:
+        log(type=Changed, _name)
         self.records[_name].content = _content
 
 def content(_name:bytes32):
@@ -199,6 +225,7 @@ def content(_name:bytes32):
 
 def setSubRegistrar(_name:bytes32, _registrar:address):
     if self.records[_name].owner == msg.sender:
+        log(type=Changed, _name)
         self.records[_name].sub = _registrar
 
 def subRegistrar(_name:bytes32):
@@ -206,6 +233,7 @@ def subRegistrar(_name:bytes32):
 
 def disown(_name:bytes32):
     if self.records[_name].owner == msg.sender:
+        log(type=Changed, _name)
         self.records[_name].owner = 0
 """
 
@@ -220,9 +248,12 @@ contract namereg {
 
     mapping ( bytes32 => RegistryEntry ) records;
 
+    event Changed(bytes32 indexed name);
+
     function reserve(bytes32 _name) returns (bool _success) {
         if (records[_name].owner == 0) {
             records[_name].owner = msg.sender;
+            Changed(_name);
             _success = true;
         }
         else _success = false;
@@ -235,12 +266,14 @@ contract namereg {
     function transfer(bytes32 _name, address _newOwner) {
         if (records[_name].owner == msg.sender) {
             records[_name].owner = _newOwner;
+            Changed(_name);
         }
     }
 
     function setAddr(bytes32 _name, address _a) {
         if (records[_name].owner == msg.sender) {
             records[_name].addr = _a;
+            Changed(_name);
         }
     }
 
@@ -251,6 +284,7 @@ contract namereg {
     function setContent(bytes32 _name, bytes32 _content) {
         if (records[_name].owner == msg.sender) {
             records[_name].content = _content;
+            Changed(_name);
         }
     }
 
@@ -261,6 +295,7 @@ contract namereg {
     function setSubRegistrar(bytes32 _name, address _registrar) {
         if (records[_name].owner == msg.sender) {
             records[_name].sub = _registrar;
+            Changed(_name);
         }
     }
 
@@ -271,6 +306,7 @@ contract namereg {
     function disown(bytes32 _name) {
         if (records[_name].owner == msg.sender) {
             records[_name].owner = 0;
+            Changed(_name);
         }
     }
 }
@@ -281,7 +317,10 @@ def test_registrar_apis():
     s = tester.state()
     c1 = s.abi_contract(serpent_namereg, sender=tester.k0)
     c2 = s.abi_contract(solidity_namereg, language='solidity', sender=tester.k0)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     for c in (c1, c2):
+        o = []
         assert c.reserve('moose', sender=tester.k0) is True
         assert c.reserve('moose', sender=tester.k0) is False
         assert c.owner('moose') == utils.encode_hex(tester.a0)
@@ -297,6 +336,7 @@ def test_registrar_apis():
         c.setSubRegistrar('moose', tester.a7, sender=tester.k1)
         c.setSubRegistrar('moose', tester.a8, sender=tester.k2)
         assert c.subRegistrar('moose') == utils.encode_hex(tester.a7)
+        assert o == [{"_event_type": b"Changed", "name": b'moose' + b'\x00' * 27}] * 5
 
 
 solidity_exchange = """
@@ -308,48 +348,52 @@ contract currency {
 contract exchange {
     struct Order {
         address creator;
-        address offer_currency;
-        uint256 offer_value;
-        address want_currency;
-        uint256 want_value;
+        address offerCurrency;
+        uint256 offerValue;
+        address wantCurrency;
+        uint256 wantValue;
     }
+
+    event Traded(address indexed currencyXor, address indexed seller, uint256 offerValue, address indexed buyer, uint256 wantValue);
 
     mapping ( uint256 => Order ) orders;
     uint256 nextOrderId = 1;
 
-    function placeOrder(address offer_currency, uint256 offer_value, address want_currency, uint256 want_value) returns (uint256 offer_id) {
-        if (currency(offer_currency).sendCoinFrom(msg.sender, offer_value, this)) {
+    function placeOrder(address offerCurrency, uint256 offerValue, address wantCurrency, uint256 wantValue) returns (uint256 offer_id) {
+        if (currency(offerCurrency).sendCoinFrom(msg.sender, offerValue, this)) {
             offer_id = nextOrderId;
             nextOrderId += 1;
             orders[offer_id].creator = msg.sender;
-            orders[offer_id].offer_currency = offer_currency;
-            orders[offer_id].offer_value = offer_value;
-            orders[offer_id].want_currency = want_currency;
-            orders[offer_id].want_value = want_value;
+            orders[offer_id].offerCurrency = offerCurrency;
+            orders[offer_id].offerValue = offerValue;
+            orders[offer_id].wantCurrency = wantCurrency;
+            orders[offer_id].wantValue = wantValue;
         }
         else offer_id = 0;
     }
 
     function claimOrder(uint256 offer_id) returns (bool _success) {
-        if (currency(orders[offer_id].want_currency).sendCoinFrom(msg.sender, orders[offer_id].want_value, orders[offer_id].creator)) {
-            currency(orders[offer_id].offer_currency).sendCoin(orders[offer_id].offer_value, msg.sender);
+        if (currency(orders[offer_id].wantCurrency).sendCoinFrom(msg.sender, orders[offer_id].wantValue, orders[offer_id].creator)) {
+            currency(orders[offer_id].offerCurrency).sendCoin(orders[offer_id].offerValue, msg.sender);
+            address currencyXor = address(uint256(orders[offer_id].offerCurrency) ^ uint256(orders[offer_id].wantCurrency));
+            Traded(currencyXor, orders[offer_id].creator, orders[offer_id].offerValue, msg.sender, orders[offer_id].wantValue);
             orders[offer_id].creator = 0;
-            orders[offer_id].offer_currency = 0;
-            orders[offer_id].offer_value = 0;
-            orders[offer_id].want_currency = 0;
-            orders[offer_id].want_value = 0;
+            orders[offer_id].offerCurrency = 0;
+            orders[offer_id].offerValue = 0;
+            orders[offer_id].wantCurrency = 0;
+            orders[offer_id].wantValue = 0;
             _success = true;
         }
         else _success = false;
     }
 
     function deleteOrder(uint256 offer_id) {
-        currency(orders[offer_id].offer_currency).sendCoin(orders[offer_id].offer_value, orders[offer_id].creator);
+        currency(orders[offer_id].offerCurrency).sendCoin(orders[offer_id].offerValue, orders[offer_id].creator);
         orders[offer_id].creator = 0;
-        orders[offer_id].offer_currency = 0;
-        orders[offer_id].offer_value = 0;
-        orders[offer_id].want_currency = 0;
-        orders[offer_id].want_value = 0;
+        orders[offer_id].offerCurrency = 0;
+        orders[offer_id].offerValue = 0;
+        orders[offer_id].wantCurrency = 0;
+        orders[offer_id].wantValue = 0;
     }
 }
 """
@@ -357,42 +401,46 @@ contract exchange {
 serpent_exchange = """
 extern currency: [sendCoinFrom:[address,uint256,address]:bool, sendCoin:[uint256,address]:bool]
 
-data orders[](creator, offer_currency, offer_value, want_currency, want_value)
+data orders[](creator, offerCurrency, offerValue, wantCurrency, wantValue)
 data nextOrderId
+
+event Traded(currencyXor:address:indexed, seller:address:indexed, offerValue:uint256, buyer:address:indexed, wantValue:uint256)
 
 def init():
     self.nextOrderId = 1
 
-def placeOrder(offer_currency:address, offer_value:uint256, want_currency:address, want_value:uint256):
-    if offer_currency.sendCoinFrom(msg.sender, offer_value, self):
+def placeOrder(offerCurrency:address, offerValue:uint256, wantCurrency:address, wantValue:uint256):
+    if offerCurrency.sendCoinFrom(msg.sender, offerValue, self):
         offer_id = self.nextOrderId
         self.nextOrderId += 1
         self.orders[offer_id].creator = msg.sender
-        self.orders[offer_id].offer_currency = offer_currency
-        self.orders[offer_id].offer_value = offer_value
-        self.orders[offer_id].want_currency = want_currency
-        self.orders[offer_id].want_value = want_value
+        self.orders[offer_id].offerCurrency = offerCurrency
+        self.orders[offer_id].offerValue = offerValue
+        self.orders[offer_id].wantCurrency = wantCurrency
+        self.orders[offer_id].wantValue = wantValue
         return(offer_id:uint256)
     return(0:uint256)
 
 def claimOrder(offer_id:uint256):
-    if self.orders[offer_id].want_currency.sendCoinFrom(msg.sender, self.orders[offer_id].want_value, self.orders[offer_id].creator):
-        self.orders[offer_id].offer_currency.sendCoin(self.orders[offer_id].offer_value, msg.sender)
+    if self.orders[offer_id].wantCurrency.sendCoinFrom(msg.sender, self.orders[offer_id].wantValue, self.orders[offer_id].creator):
+        self.orders[offer_id].offerCurrency.sendCoin(self.orders[offer_id].offerValue, msg.sender)
+        currencyXor = ~xor(self.orders[offer_id].offerCurrency, self.orders[offer_id].wantCurrency)
+        log(type=Traded, currencyXor, self.orders[offer_id].creator, self.orders[offer_id].offerValue, msg.sender, self.orders[offer_id].wantValue)
         self.orders[offer_id].creator = 0
-        self.orders[offer_id].offer_currency = 0
-        self.orders[offer_id].offer_value = 0
-        self.orders[offer_id].want_currency = 0
-        self.orders[offer_id].want_value = 0
+        self.orders[offer_id].offerCurrency = 0
+        self.orders[offer_id].offerValue = 0
+        self.orders[offer_id].wantCurrency = 0
+        self.orders[offer_id].wantValue = 0
         return(1:bool)
     return(0:bool)
 
 def deleteOrder(offer_id:uint256):
-    self.orders[offer_id].offer_currency.sendCoin(self.orders[offer_id].offer_value, self.orders[offer_id].creator)
+    self.orders[offer_id].offerCurrency.sendCoin(self.orders[offer_id].offerValue, self.orders[offer_id].creator)
     self.orders[offer_id].creator = 0
-    self.orders[offer_id].offer_currency = 0
-    self.orders[offer_id].offer_value = 0
-    self.orders[offer_id].want_currency = 0
-    self.orders[offer_id].want_value = 0
+    self.orders[offer_id].offerCurrency = 0
+    self.orders[offer_id].offerValue = 0
+    self.orders[offer_id].wantCurrency = 0
+    self.orders[offer_id].wantValue = 0
 """
 
 
@@ -404,8 +452,11 @@ def test_exchange_apis():
     wc2 = s.abi_contract(solidity_currency, language='solidity', sender=tester.k1)
     e1 = s.abi_contract(serpent_exchange, sender=tester.k0)
     e2 = s.abi_contract(solidity_exchange, language='solidity', sender=tester.k0)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(e1._translator.listen(x)))
     # Test serpent-solidity, solidity-serpent interop
     for (oc, wc, e) in ((oc1, wc1, e2), (oc2, wc2, e1)):
+        o = []
         assert oc.coinBalanceOf(tester.a0) == 1000000
         assert oc.coinBalanceOf(tester.a1) == 0
         assert wc.coinBalanceOf(tester.a0) == 0
@@ -430,7 +481,11 @@ def test_exchange_apis():
         assert oc.coinBalanceOf(tester.a1) == 1000
         assert wc.coinBalanceOf(tester.a0) == 5000
         assert wc.coinBalanceOf(tester.a1) == 995000
-
+        cxor = utils.big_endian_to_int(oc.address) ^ utils.big_endian_to_int(wc.address)
+        assert {"_event_type": b"Traded",
+                "currencyXor": utils.encode_hex(utils.int_to_addr(cxor)),
+                "seller": utils.encode_hex(tester.a0), "offerValue": 1000,
+                "buyer": utils.encode_hex(tester.a1), "wantValue": 5000} in o
 
 
 serpent_datafeed = """

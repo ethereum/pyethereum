@@ -86,15 +86,19 @@ class ContractTranslator():
         name = self.event_data[log.topics[0]]['name']
         names = self.event_data[log.topics[0]]['names']
         indexed = self.event_data[log.topics[0]]['indexed']
+        indexed_types = [types[i] for i in range(len(types))
+                         if indexed[i]]
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        # print('listen', log.data.encode('hex'))
+        # print('listen', log.data.encode('hex'), log.topics)
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0
         for i in range(len(names)):
             if indexed[i]:
-                o[names[i]] = log.topics[c1 + 1]
+                topic_bytes = utils.zpad(utils.encode_int(log.topics[c1 + 1]), 32)
+                o[names[i]] = decode_single(process_type(indexed_types[c1]),
+                                            topic_bytes)
                 c1 += 1
             else:
                 o[names[i]] = deserialized_args[c2]
