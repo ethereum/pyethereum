@@ -47,6 +47,7 @@ NIBBLE_TERMINATOR = 16
 RECORDING = 1
 NONE = 0
 VERIFYING = -1
+ZERO_ENCODED = utils.encode_int(0)
 
 proving = False
 
@@ -185,6 +186,7 @@ def is_key_value_type(node_type):
 
 BLANK_NODE = b''
 BLANK_ROOT = utils.sha3rlp(b'')
+DEATH_ROW_OFFSET = 2**62
 
 
 def transient_trie_exception(*args):
@@ -204,8 +206,8 @@ class Trie(object):
         if self.transient:
             self.update = self.get = self.delete = transient_trie_exception
         self.set_root_hash(root_hash)
-        self.epoch = 0
         self.death_row_timeout = 50000
+        self.nodes_for_death_row = []
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
     #     '''it also present a dictionary like interface
@@ -219,6 +221,39 @@ class Trie(object):
     #     else:
     # self.db = dbfile  # Pass in a database object directly
     #     self.set_root_hash(root_hash)
+
+    def process_epoch(self, epoch):
+        try:
+            death_row_nodes = rlp.decode(self.db.get('deathrow:'+str(epoch)))
+            for nodekey in death_row_nodes:
+                refcount, val = rlp.decode(self.db.get(nodekey))
+                if utils.decode_int(refcount) == DEATH_ROW_OFFSET + epoch:
+                    self.db.delete(nodekey)
+            self.db.delete('deathrow:'+str(epoch))
+        except:
+            pass
+
+    def commit_death_row(self, epoch):
+        timeout_epoch = epoch + self.death_row_timeout
+        try:
+            death_row_nodes = rlp.decode(self.db.get('deathrow:'+str(timeout_epoch)))
+        except:
+            death_row_nodes = []
+        for nodekey in self.nodes_for_death_row:
+            refcount, val = rlp.decode(self.db.get(nodekey))
+            if refcount == ZERO_ENCODED:
+                new_refcount = utils.encode_int(DEATH_ROW_OFFSET + timeout_epoch)
+                self.db.put(nodekey, rlp.encode([new_refcount, val]))
+        death_row_nodes.extend(self.nodes_for_death_row)
+        self.nodes_for_death_row = []
+        self.db.put('deathrow:'+str(timeout_epoch), rlp.encode(death_row_nodes))
+
+    def revert_epoch(self, epoch):
+        timeout_epoch = epoch + self.death_row_timeout
+        try:
+            self.db.delete('deathrow:'+str(timeout_epoch))
+        except:
+            pass
 
     # For SPV proof production/verification purposes
     def spv_grabbing(self, node):
@@ -328,6 +363,8 @@ class Trie(object):
         try:
             node_object = rlp.decode(self.db.get(hashkey))
             refcount = utils.decode_int(node_object[0])
+            if refcount >= DEATH_ROW_OFFSET:
+                refcount = 0
             new_refcount = utils.encode_int(refcount + 1)
             self.db.put(hashkey, rlp.encode([new_refcount, node_object[1]]))
         except:
@@ -588,13 +625,10 @@ class Trie(object):
         try:
             node_object = rlp.decode(self.db.get(hashkey))
             refcount = utils.decode_int(node_object[0])
-            if refcount > 1:
-                new_refcount = utils.encode_int(refcount - 1)
-                self.db.put(hashkey, rlp.encode([new_refcount, node_object[1]]))
-            else:
-                self.db.delete(hashkey)
-                # for item in node:
-                #     self._delete_node_storage(self._decode_to_node(item))
+            new_refcount = utils.encode_int(refcount - 1)
+            self.db.put(hashkey, rlp.encode([new_refcount, node_object[1]]))
+            if new_refcount == ZERO_ENCODED:
+                self.nodes_for_death_row.append(hashkey)
         except:
             pass
 
