@@ -7,6 +7,7 @@ from ethereum.utils import to_string
 from ethereum.abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+import sys
 
 bin_to_nibbles_cache = {}
 
@@ -206,8 +207,9 @@ class Trie(object):
         if self.transient:
             self.update = self.get = self.delete = transient_trie_exception
         self.set_root_hash(root_hash)
-        self.death_row_timeout = 50000
+        self.death_row_timeout = 5000
         self.nodes_for_death_row = []
+        self.journal = []
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
     #     '''it also present a dictionary like interface
@@ -224,36 +226,75 @@ class Trie(object):
 
     def process_epoch(self, epoch):
         try:
-            death_row_nodes = rlp.decode(self.db.get('deathrow:'+str(epoch)))
-            for nodekey in death_row_nodes:
-                refcount, val = rlp.decode(self.db.get(nodekey))
+            death_row_node = self.db.get('deathrow:'+str(epoch))
+        except:
+            death_row_node = rlp.encode([])
+        death_row_nodes = rlp.decode(death_row_node)
+        pruned = 0
+        for nodekey in death_row_nodes:
+            try:
+                refcount, val = rlp.decode(self.db.get('node:'+nodekey))
                 if utils.decode_int(refcount) == DEATH_ROW_OFFSET + epoch:
-                    self.db.delete(nodekey)
+                    self.db.delete('node:'+nodekey)
+                    pruned += 1
+            except:
+                pass
+        sys.stderr.write('%d nodes successfully pruned\n' % pruned)
+        # Delete the deathrow after processing it
+        try:
             self.db.delete('deathrow:'+str(epoch))
+        except:
+            pass
+        # Delete journals that are too old
+        try:
+            self.db.delete('journal:'+str(epoch - self.death_row_timeout))
         except:
             pass
 
     def commit_death_row(self, epoch):
+        # Save death row nodes
         timeout_epoch = epoch + self.death_row_timeout
         try:
             death_row_nodes = rlp.decode(self.db.get('deathrow:'+str(timeout_epoch)))
         except:
             death_row_nodes = []
         for nodekey in self.nodes_for_death_row:
-            refcount, val = rlp.decode(self.db.get(nodekey))
+            refcount, val = rlp.decode(self.db.get('node:'+nodekey))
             if refcount == ZERO_ENCODED:
                 new_refcount = utils.encode_int(DEATH_ROW_OFFSET + timeout_epoch)
-                self.db.put(nodekey, rlp.encode([new_refcount, val]))
+                self.db.put('node:'+nodekey, rlp.encode([new_refcount, val]))
+        if len(self.nodes_for_death_row) > 0:
+            sys.stderr.write('%d nodes marked for pruning during block %d\n' %
+                             (len(self.nodes_for_death_row), timeout_epoch))
         death_row_nodes.extend(self.nodes_for_death_row)
         self.nodes_for_death_row = []
-        self.db.put('deathrow:'+str(timeout_epoch), rlp.encode(death_row_nodes))
+        self.db.put('deathrow:'+str(timeout_epoch),
+                    rlp.encode(death_row_nodes))
+        # Save journal
+        try:
+            journal = rlp.decode(self.db.get('journal:'+str(epoch)))
+        except:
+            journal = []
+        journal.extend(self.journal)
+        self.journal = []
+        self.db.put('journal:'+str(epoch), rlp.encode(journal))
 
     def revert_epoch(self, epoch):
         timeout_epoch = epoch + self.death_row_timeout
+        # Delete death row additions
         try:
             self.db.delete('deathrow:'+str(timeout_epoch))
         except:
             pass
+        # Revert journal changes
+        try:
+            journal = rlp.decode(self.db.get('journal:'+str(epoch)))
+            for new_refcount, hashkey in journal[::-1]:
+                node_object = rlp.decode(self.db.get('node:'+hashkey))
+                self.db.put('node:'+hashkey, rlp.encode([new_refcount, node_object[1]]))
+        except:
+            pass
+        
 
     # For SPV proof production/verification purposes
     def spv_grabbing(self, node):
@@ -361,14 +402,16 @@ class Trie(object):
 
         hashkey = utils.sha3(rlpnode)
         try:
-            node_object = rlp.decode(self.db.get(hashkey))
+            node_object = rlp.decode(self.db.get('node:'+hashkey))
             refcount = utils.decode_int(node_object[0])
+            self.journal.append([node_object[0], hashkey])
             if refcount >= DEATH_ROW_OFFSET:
                 refcount = 0
             new_refcount = utils.encode_int(refcount + 1)
-            self.db.put(hashkey, rlp.encode([new_refcount, node_object[1]]))
+            self.db.put('node:'+hashkey, rlp.encode([new_refcount, node_object[1]]))
         except:
-            self.db.put(hashkey, rlp.encode([utils.encode_int(1), rlpnode]))
+            self.db.put('node:'+hashkey, rlp.encode([utils.encode_int(1), rlpnode]))
+            self.journal.append([ZERO_ENCODED, hashkey])
         self.spv_storing(node)
         return hashkey
 
@@ -377,7 +420,7 @@ class Trie(object):
             return BLANK_NODE
         if isinstance(encoded, list):
             return encoded
-        o = rlp.decode(rlp.decode(self.db.get(encoded))[1])
+        o = rlp.decode(rlp.decode(self.db.get('node:'+encoded))[1])
         self.spv_grabbing(o)
         return o
 
@@ -623,10 +666,11 @@ class Trie(object):
         """
         hashkey = utils.sha3(encoded)
         try:
-            node_object = rlp.decode(self.db.get(hashkey))
+            node_object = rlp.decode(self.db.get('node:'+hashkey))
             refcount = utils.decode_int(node_object[0])
+            self.journal.append([node_object[0], hashkey])
             new_refcount = utils.encode_int(refcount - 1)
-            self.db.put(hashkey, rlp.encode([new_refcount, node_object[1]]))
+            self.db.put('node:'+hashkey, rlp.encode([new_refcount, node_object[1]]))
             if new_refcount == ZERO_ENCODED:
                 self.nodes_for_death_row.append(hashkey)
         except:
@@ -892,7 +936,7 @@ class Trie(object):
     def root_hash_valid(self):
         if self.root_hash == BLANK_ROOT:
             return True
-        return self.root_hash in self.db
+        return 'node:'+self.root_hash in self.db
 
     def produce_spv_proof(self, key):
         proof.push(RECORDING)
@@ -922,7 +966,6 @@ def verify_spv_proof(root, key, proof):
 
 
 if __name__ == "__main__":
-    import sys
     from . import db
 
     _db = db.DB(sys.argv[2])

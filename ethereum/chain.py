@@ -7,6 +7,7 @@ from rlp.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
 from ethereum.slogging import get_logger
+import sys
 log = get_logger('eth.chain')
 
 
@@ -148,6 +149,26 @@ class Chain(object):
             if block.get_parent() != self.head:
                 log.debug('New Head is on a different branch',
                           head_hash=block, old_head_hash=self.head)
+        # Fork detected, revert death row and change logs
+        if block.number > 0:
+            b = block.get_parent()
+            h = self.head
+            b_children = []
+            if b.hash != h.hash:
+                sys.stderr.write('REVERTING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+                while h.number > b.number:
+                    h.state.revert_epoch(h.number)
+                    h = h.get_parent()
+                while b.number > h.number:
+                    b_children.append(b)
+                    b = b.get_parent()
+                while b.hash != h.hash:
+                    h.state.revert_epoch(h.number)
+                    h = h.get_parent()
+                    b_children.append(b)
+                    b = b.get_parent()
+                for bc in b_children:
+                    processblock.verify(bc, bc.get_parent())
         self.blockchain.put('HEAD', block.hash)
         self.index.update_blocknumbers(self.head)
         self._update_head_candidate(forward_pending_transactions)
@@ -271,6 +292,10 @@ class Chain(object):
             _log.warn('has higher blk number than head but lower chain_difficulty',
                       head_hash=self.head, block_difficulty=block.chain_difficulty(),
                       head_difficulty=self.head.chain_difficulty())
+        block.state.commit_death_row(block.number)
+        block.transactions.commit_death_row(block.number)
+        block.receipts.commit_death_row(block.number)
+        block.state.process_epoch(block.number)
         self.commit()  # batch commits all changes that came with the new block
         return True
 
@@ -332,7 +357,6 @@ class Chain(object):
             return self.head_candidate.transaction_count
         else:
             return 0
-
 
     def get_chain(self, start='', count=10):
         "return 'count' blocks starting from head or start"

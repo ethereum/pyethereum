@@ -35,3 +35,12 @@ class SecureTrie(object):
     @root_hash.setter
     def root_hash(self, value):
         self.trie.root_hash = value
+
+    def process_epoch(self, epoch):
+        self.trie.process_epoch(epoch)
+
+    def commit_death_row(self, epoch):
+        self.trie.commit_death_row(epoch)
+
+    def revert_epoch(self, epoch):
+        self.trie.revert_epoch(epoch)
