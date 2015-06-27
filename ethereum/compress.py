@@ -15,7 +15,7 @@ def compress(data):
             i += 31
         elif data[i:i + 2] == b'\x00\x00':
             p = 2
-            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'':
+            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'\x00':
                 p += 1
             o += b'\xfe' + ascii_chr(p)
             i += p - 1
