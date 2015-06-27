@@ -296,6 +296,7 @@ class Chain(object):
         block.transactions.commit_death_row(block.number)
         block.receipts.commit_death_row(block.number)
         block.state.process_epoch(block.number)
+        block.state.db.delete(self.index.get_block_by_number(block.number - block.state.death_row_timeout))
         self.commit()  # batch commits all changes that came with the new block
         return True
 

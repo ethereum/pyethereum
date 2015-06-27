@@ -812,6 +812,25 @@ class Trie(object):
             bin_to_nibbles(to_string(key)))
         self.replace_root_hash(old_root, self.root_node)
 
+    def clear_all(self, node=None):
+        if node is None:
+            node = self.root_node
+        if node == BLANK_NODE:
+            return
+
+        node_type = self._get_node_type(node)
+
+        self._delete_node_storage(node)
+
+        if is_key_value_type(node_type):
+            value_is_node = node_type == NODE_TYPE_EXTENSION
+            if value_is_node:
+                self.clear_all(self._decode_to_node(node[1]))
+
+        elif node_type == NODE_TYPE_BRANCH:
+            for i in range(16):
+                self.clear_all(self._decode_to_node(node[i]))
+
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
 
