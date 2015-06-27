@@ -516,7 +516,7 @@ def vm_execute(ext, msg, code):
                 (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
-                return vm_exception('OUT OF GAS')
+                return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
@@ -542,7 +542,7 @@ def vm_execute(ext, msg, code):
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
-                return vm_exception('OUT OF GAS')
+                return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
@@ -577,10 +577,9 @@ def vm_execute(ext, msg, code):
             return 1, compustate.gas, []
 
         # this is slow!
-        if verify_stack_after_op:
-            for a in stk:
-                assert is_numeric(a), (op, stk)
-                assert a >= 0 and a < 2**256, (a, op, stk)
+        # for a in stk:
+        #     assert is_numeric(a), (op, stk)
+        #     assert a >= 0 and a < 2**256, (a, op, stk)
 
 
 class VmExtBase():
