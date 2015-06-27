@@ -293,7 +293,9 @@ class Chain(object):
                       head_hash=self.head, block_difficulty=block.chain_difficulty(),
                       head_difficulty=self.head.chain_difficulty())
         block.state.commit_death_row(block.number)
+        block.transactions.clear_all()
         block.transactions.commit_death_row(block.number)
+        block.receipts.clear_all()
         block.receipts.commit_death_row(block.number)
         block.state.process_epoch(block.number)
         block.state.db.delete(self.index.get_block_by_number(block.number - block.state.death_row_timeout))
