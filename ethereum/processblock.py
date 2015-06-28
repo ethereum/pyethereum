@@ -6,7 +6,7 @@ from ethereum import opcodes
 from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
-from ethereum import vm
+from ethereum import vm as vm
 from ethereum.exceptions import *
 from ethereum.utils import safe_ord
 
@@ -210,7 +210,7 @@ class VMExt():
         self.tx_origin = tx.sender
         self.tx_gasprice = tx.gasprice
         self.create = lambda msg: create_contract(self, msg)
-        self.msg = lambda msg: apply_msg(self, msg)
+        self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = block.account_exists
 
 
@@ -219,22 +219,22 @@ def apply_msg(ext, msg):
 
 
 def _apply_msg(ext, msg, code):
-    if log_msg.is_active('trace'):
+    trace_msg = log_msg.is_active('trace')
+    if trace_msg:
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
-    if log_state.is_active('trace'):
-        log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
-                        bal=ext.get_balance(msg.sender),
-                        state=ext.log_storage(msg.sender))
-        log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
-                        bal=ext.get_balance(msg.to),
-                        state=ext.log_storage(msg.to))
+        if log_state.is_active('trace'):
+            log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+                            bal=ext.get_balance(msg.sender),
+                            state=ext.log_storage(msg.sender))
+            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+                            bal=ext.get_balance(msg.to),
+                            state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
-    o = ext._block.transfer_value(msg.sender, msg.to, msg.value)
-    if not o:
+    if not ext._block.transfer_value(msg.sender, msg.to, msg.value):
         log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                       want=msg.value)
         return 1, msg.gas, []
@@ -243,18 +243,18 @@ def _apply_msg(ext, msg, code):
         res, gas, dat = specials.specials[msg.code_address](ext, msg)
     else:
         res, gas, dat = vm.vm_execute(ext, msg, code)
-    gas = int(gas)
-    assert utils.is_numeric(gas)
-    if log_msg.is_active('trace'):
+    # gas = int(gas)
+    # assert utils.is_numeric(gas)
+    if trace_msg:
         log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
-    if log_state.is_active('trace'):
-        log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
-                        bal=ext.get_balance(msg.sender),
-                        state=ext.log_storage(msg.sender))
-        log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
-                        bal=ext.get_balance(msg.to),
-                        state=ext.log_storage(msg.to))
+        if log_state.is_active('trace'):
+            log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+                            bal=ext.get_balance(msg.sender),
+                            state=ext.log_storage(msg.sender))
+            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+                            bal=ext.get_balance(msg.to),
+                            state=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg.debug('REVERTING')

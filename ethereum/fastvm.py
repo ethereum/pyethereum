@@ -48,11 +48,10 @@ class CallData(object):
         return utils.bytearray_to_int(o + [0] * (32 - len(o)))
 
     def extract_copy(self, mem, memstart, datastart, size):
-        for i in range(size):
-            if datastart + i < self.size:
-                mem[memstart + i] = self.data[self.offset + datastart + i]
-            else:
-                mem[memstart + i] = 0
+        for i in range(min(size, self.size - datastart)):
+            mem[memstart + i] = self.data[self.offset + datastart + i]
+        for i in range(min(size, self.size - datastart), size):
+            mem[memstart + i] = 0
 
 
 class Message(object):
@@ -136,12 +135,11 @@ def preprocess_code(code):
             cc_min_req_stack = 0
             cc_max_req_stack = 1024
     ops[i] = (0, 0, 1024, [('STOP', 0, 0)], 0)
-    print repr(code), ops
     return ops
 
 
 def mem_extend(mem, compustate, op, start, sz):
-    if sz:
+    if sz and utils.ceil32(start + sz) > len(mem):
         oldsize = len(mem) // 32
         old_totalfee = oldsize * opcodes.GMEMORY + \
             oldsize**2 // opcodes.GQUADRATICMEMDENOM
@@ -208,7 +206,6 @@ def vm_execute(ext, msg, code):
       # s = time.time()
       # stack size limit error
       if compustate.pc not in processed_code:
-          print processed_code, compustate.pc, 'invsp'
           return vm_exception('INVALID START POINT')
 
       gas, min_stack, max_stack, ops, compustate.pc = \
@@ -432,8 +429,10 @@ def vm_execute(ext, msg, code):
                 s0 = stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = b''.join(map(ascii_chr, mem[s0: s0 + 32]))
-                stk.append(utils.big_endian_to_int(data))
+                data = 0
+                for c in mem[s0: s0 + 32]:
+                    data = (data << 8) + c
+                stk.append(data)
             elif op == 'MSTORE':
                 s0, s1 = stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):

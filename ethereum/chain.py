@@ -1,7 +1,7 @@
 import os
 import time
 from ethereum import utils
-from ethereum import trie
+from ethereum import pruning_trie as trie
 from ethereum.utils import to_string, is_string
 import rlp
 from rlp.utils import encode_hex
@@ -61,16 +61,16 @@ class Index(object):
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i, tx in enumerate(blk.get_transactions()):
-            timeout_block = blk.number + blk.state.death_row_timeout
+            timeout_block = blk.number + blk.state.trie.death_row_timeout
             timeout_bytes = utils.encode_int(trie.DEATH_ROW_OFFSET + timeout_block)
-            self.db.put(tx.hash, rlp.encode([timeout_bytes, rlp.encode([blk.hash, i])]))
-            blk.state.nodes_for_death_row.extend(tx.hash)
+            self.db.put('node:'+tx.hash, rlp.encode([timeout_bytes, rlp.encode([blk.hash, i])]))
+            blk.state.trie.nodes_for_death_row.append(tx.hash)
         blk.state.commit_death_row(blk.number)
 
     def get_transaction(self, txhash):
         "return (tx, block, index)"
         blockhash, tx_num_enc = rlp.decode(rlp.decode(self.db.get(txhash))[1])
-        blk = rlp.decode(self.db.get(blockhash), blocks.Block, db=self.db)
+        blk = rlp.decode(self.db.get('node:'+blockhash), blocks.Block, db=self.db)
         num = utils.decode_int(tx_num_enc)
         tx_data = blk.get_transaction(num)
         return tx_data, blk, num
@@ -303,7 +303,7 @@ class Chain(object):
         block.receipts.clear_all()
         block.receipts.commit_death_row(block.number)
         block.state.process_epoch(block.number)
-        block_number_to_delete = block.number - block.state.death_row_timeout
+        block_number_to_delete = block.number - block.state.trie.death_row_timeout
         block.state.db.delete(self.index.get_block_by_number(block_number_to_delete))
         block.state.db.delete('blocknumber:'+str(block_number_to_delete))
         self.commit()  # batch commits all changes that came with the new block
