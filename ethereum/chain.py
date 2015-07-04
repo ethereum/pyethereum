@@ -159,13 +159,13 @@ class Chain(object):
                 log.debug('New Head is on a different branch',
                           head_hash=block, old_head_hash=self.head)
         log.debug('updating head2')
-        # sys.stderr.write('rc: %d\n' % self.head.state.db.get_refcount('\xd6\x05\xbd\x1f}\xae&f\xf4$\xa3sK\xb7\xdaW\xdb_\x92\xd8{|8\xc4\xab\x9b\x15\xf98\xe7#\xbb'))
-        if block.number > 0 and block.number % 500 == 0:
+        # Some temporary auditing to make sure pruning is working well
+        if block.number > 0 and block.number % 500 == 0 and isinstance(db, RefcountDB):
             trie.proof.push(trie.RECORDING)
             block.to_dict(with_state=True)
             n = trie.proof.get_nodelist()
             trie.proof.pop()
-            sys.stderr.write('State size: %d\n' % sum([(len(a) + 32) for a in n]))
+            sys.stderr.write('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
         log.debug('updating head3')
         # Fork detected, revert death row and change logs
         if block.number > 0:
