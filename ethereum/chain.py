@@ -2,6 +2,8 @@ import os
 import time
 from ethereum import utils
 from ethereum import pruning_trie as trie
+from ethereum.refcount_db import RefcountDB
+import ethereum.db as db
 from ethereum.utils import to_string, is_string
 import rlp
 from rlp.utils import encode_hex
@@ -42,7 +44,12 @@ class Index(object):
     def update_blocknumbers(self, blk):
         "start from head and update until the existing indices match the block"
         while True:
-            self.db.put(self._block_by_number_key(blk.number), blk.hash)
+            if blk.number > 0:
+                self.db.put_temporarily(self._block_by_number_key(blk.number), blk.hash)
+            else:
+                self.db.put(self._block_by_number_key(blk.number), blk.hash)
+            self.db.commit_refcount_changes(blk.number)
+            assert len(self.db.death_row) == 0
             if blk.number == 0:
                 break
             blk = blk.get_parent()
@@ -61,16 +68,13 @@ class Index(object):
     def _add_transactions(self, blk):
         "'tx_hash' -> 'rlp([blockhash,tx_number])"
         for i, tx in enumerate(blk.get_transactions()):
-            timeout_block = blk.number + blk.state.trie.death_row_timeout
-            timeout_bytes = utils.encode_int(trie.DEATH_ROW_OFFSET + timeout_block)
-            self.db.put('node:'+tx.hash, rlp.encode([timeout_bytes, rlp.encode([blk.hash, i])]))
-            blk.state.trie.nodes_for_death_row.append(tx.hash)
-        blk.state.commit_death_row(blk.number)
+            self.db.put_temporarily(tx.hash, rlp.encode([blk.hash, i]))
+        self.db.commit_refcount_changes(blk.number)
 
     def get_transaction(self, txhash):
         "return (tx, block, index)"
-        blockhash, tx_num_enc = rlp.decode(rlp.decode(self.db.get(txhash))[1])
-        blk = rlp.decode(self.db.get('node:'+blockhash), blocks.Block, db=self.db)
+        blockhash, tx_num_enc = rlp.decode(self.db.get(txhash))
+        blk = rlp.decode(self.db.get(blockhash), blocks.Block, db=self.db)
         num = utils.decode_int(tx_num_enc)
         tx_data = blk.get_transaction(num)
         return tx_data, blk, num
@@ -84,7 +88,7 @@ class Index(object):
         # only efficient for few children per block
         children = list(set(self.get_children(parent_hash) + [child_hash]))
         assert children.count(child_hash) == 1
-        self.db.put(self._child_db_key(parent_hash), rlp.encode(children))
+        self.db.put_temporarily(self._child_db_key(parent_hash), rlp.encode(children))
 
     def get_children(self, blk_hash):
         "returns block hashes"
@@ -154,6 +158,15 @@ class Chain(object):
             if block.get_parent() != self.head:
                 log.debug('New Head is on a different branch',
                           head_hash=block, old_head_hash=self.head)
+        log.debug('updating head2')
+        # sys.stderr.write('rc: %d\n' % self.head.state.db.get_refcount('\xd6\x05\xbd\x1f}\xae&f\xf4$\xa3sK\xb7\xdaW\xdb_\x92\xd8{|8\xc4\xab\x9b\x15\xf98\xe7#\xbb'))
+        if block.number > 0 and block.number % 500 == 0:
+            trie.proof.push(trie.RECORDING)
+            block.to_dict(with_state=True)
+            n = trie.proof.get_nodelist()
+            trie.proof.pop()
+            sys.stderr.write('State size: %d\n' % sum([(len(a) + 32) for a in n]))
+        log.debug('updating head3')
         # Fork detected, revert death row and change logs
         if block.number > 0:
             b = block.get_parent()
@@ -162,19 +175,21 @@ class Chain(object):
             if b.hash != h.hash:
                 sys.stderr.write('REVERTING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
                 while h.number > b.number:
-                    h.state.revert_epoch(h.number)
+                    h.state.db.revert_refcount_changes(h.number)
                     h = h.get_parent()
                 while b.number > h.number:
                     b_children.append(b)
                     b = b.get_parent()
                 while b.hash != h.hash:
-                    h.state.revert_epoch(h.number)
+                    h.state.db.revert_refcount_changes(h.number)
                     h = h.get_parent()
                     b_children.append(b)
                     b = b.get_parent()
                 for bc in b_children:
                     processblock.verify(bc, bc.get_parent())
         self.blockchain.put('HEAD', block.hash)
+        assert self.blockchain.get('HEAD') == block.hash
+        sys.stderr.write('New head: %s %d\n' % (utils.encode_hex(block.hash), block.number))
         self.index.update_blocknumbers(self.head)
         self._update_head_candidate(forward_pending_transactions)
         if self.new_head_cb and not block.is_genesis():
@@ -197,8 +212,9 @@ class Chain(object):
 
         # create block
         ts = max(int(time.time()), self.head.timestamp + 1)
+        d = db.OverlayDB(self.head.db)
         head_candidate = blocks.Block.init_from_parent(self.head, coinbase=self._coinbase,
-                                                       timestamp=ts, uncles=uncles)
+                                                       timestamp=ts, uncles=uncles, db=d)
         assert head_candidate.validate_uncles()
 
         self.pre_finalize_state_root = head_candidate.state_root
@@ -248,7 +264,10 @@ class Chain(object):
         return self.has_block(blockhash)
 
     def _store_block(self, block):
-        self.blockchain.put(block.hash, rlp.encode(block))
+        if block.number > 0:
+            self.blockchain.put_temporarily(block.hash, rlp.encode(block))
+        else:
+            self.blockchain.put(block.hash, rlp.encode(block))
 
     def commit(self):
         self.blockchain.commit()
@@ -297,15 +316,10 @@ class Chain(object):
             _log.warn('has higher blk number than head but lower chain_difficulty',
                       head_hash=self.head, block_difficulty=block.chain_difficulty(),
                       head_difficulty=self.head.chain_difficulty())
-        block.state.commit_death_row(block.number)
         block.transactions.clear_all()
-        block.transactions.commit_death_row(block.number)
         block.receipts.clear_all()
-        block.receipts.commit_death_row(block.number)
-        block.state.process_epoch(block.number)
-        block_number_to_delete = block.number - block.state.trie.death_row_timeout
-        block.state.db.delete(self.index.get_block_by_number(block_number_to_delete))
-        block.state.db.delete('blocknumber:'+str(block_number_to_delete))
+        block.state.db.commit_refcount_changes(block.number)
+        block.state.db.cleanup(block.number)
         self.commit()  # batch commits all changes that came with the new block
         return True
 

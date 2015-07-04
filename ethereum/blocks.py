@@ -109,7 +109,10 @@ class Account(rlp.Serializable):
     @code.setter
     def code(self, value):
         self.code_hash = utils.sha3(value)
-        self.db.put(self.code_hash, value)
+        # Technically a db storage leak, but doesn't really matter; the only
+        # thing that fails to get garbage collected is when code disappears due
+        # to a suicide
+        self.db.inc_refcount(self.code_hash, value)
 
     @classmethod
     def blank_account(cls, db):
@@ -416,7 +419,7 @@ class Block(rlp.Serializable):
 
         # do some consistency checks on parent if given
         if parent:
-            if hasattr(parent, 'db') and self.db != parent.db:
+            if hasattr(parent, 'db') and self.db != parent.db and self.db.db != parent.db:
                 raise ValueError("Parent lives in different database")
             if self.prevhash != parent.header.hash:
                 raise ValueError("Block's prevhash and parent's hash do not match")
@@ -518,7 +521,11 @@ class Block(rlp.Serializable):
                              "database" % self)
         if (not self.is_genesis() and self.nonce and not self.header.check_pow()):
             raise ValueError("PoW check failed")
-        self.db.put(b'validated:' + self.hash, '1')
+        if b'validated:' + self.hash not in self.db:
+            if self.number == 0:
+                self.db.put(b'validated:' + self.hash, '1')
+            else:
+                self.db.put_temporarily(b'validated:' + self.hash, '1')
 
     @classmethod
     def init_from_header(cls, header_rlp, db):
@@ -532,7 +539,7 @@ class Block(rlp.Serializable):
 
     @classmethod
     def init_from_parent(cls, parent, coinbase, nonce=b'', extra_data=b'',
-                         timestamp=int(time.time()), uncles=[]):
+                         timestamp=int(time.time()), uncles=[], db=None):
         """Create a new block based on a parent block.
 
         The block will not include any transactions and will not be finalized.
@@ -552,7 +559,7 @@ class Block(rlp.Serializable):
                              timestamp=timestamp,
                              extra_data=extra_data,
                              nonce=nonce)
-        block = Block(header, [], uncles, db=parent.db,
+        block = Block(header, [], uncles, db=db or parent.db,
                       parent=parent, making=True)
         block.ancestor_hashes = [parent.hash] + parent.ancestor_hashes
         return block
@@ -996,6 +1003,14 @@ class Block(rlp.Serializable):
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
                 changes.append(['storage', addr, k, v])
+                # if self.number > 18280 and False:
+                #     try:
+                #         self.db.logging = True
+                #     except:
+                #         pass
+                #     sys.stderr.write("pre: %r\n" % self.account_to_dict(addr)['storage'])
+                #     sys.stderr.write("pre: %r\n" % self.get_storage(addr).root_hash.encode('hex'))
+                #     sys.stderr.write("changed: %s %s %s\n" % (encode_hex(addr), encode_hex(enckey), encode_hex(val)))
                 if v:
                     t.update(enckey, val)
                 else:
@@ -1004,7 +1019,7 @@ class Block(rlp.Serializable):
             self.state.update(addr, rlp.encode(acct))
         log_state.trace('delta', changes=changes)
         self.reset_cache()
-        self.db.put(b'validated:' + self.hash, '1')
+        self.db.put_temporarily(b'validated:' + self.hash, '1')
 
     def del_account(self, address):
         """Delete an account.
@@ -1223,8 +1238,8 @@ class Block(rlp.Serializable):
         else:
             o = self.difficulty + self.get_parent().chain_difficulty()
             # o += sum([uncle.difficulty for uncle in self.uncles])
-            self.state.db.put(b'difficulty:' + encode_hex(self.hash),
-                              utils.encode_int(o))
+            self.state.db.put_temporarily(
+                b'difficulty:' + encode_hex(self.hash), utils.encode_int(o))
             return o
 
             return rlp.decode(rlp.encode(l)) == l

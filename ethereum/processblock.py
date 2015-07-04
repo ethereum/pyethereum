@@ -246,7 +246,7 @@ def _apply_msg(ext, msg, code):
     # gas = int(gas)
     # assert utils.is_numeric(gas)
     if trace_msg:
-        log_msg.debug('MSG APPLIED', result=o, gas_remained=gas,
+        log_msg.debug('MSG APPLIED', gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
         if log_state.is_active('trace'):
             log_state.trace('MSG PRE STATE SENDER', account=msg.sender,

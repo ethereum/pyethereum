@@ -12,11 +12,16 @@ class RefcountDB(object):
         self.db = db
         self.journal = []
         self.death_row = []
-        self.kv = self.db.kv
-        self.ttl = 5000
+        try:
+            self.kv = self.db.kv
+        except:
+            self.kv = None
+        self.ttl = 500
+        self.logging = False
 
     # Increase the reference count associated with a key
     def inc_refcount(self, k, v):
+        # raise Exception("WHY AM I CHANGING A REFCOUNT?!:?")
         try:
             node_object = rlp.decode(self.db.get('r:'+k))
             refcount = utils.decode_int(node_object[0])
@@ -24,27 +29,41 @@ class RefcountDB(object):
             if refcount >= DEATH_ROW_OFFSET:
                 refcount = 0
             new_refcount = utils.encode_int(refcount + 1)
-            self.db.put('r:'+k, rlp.encode([new_refcount, node_object[1]]))
+            self.db.put('r:'+k, rlp.encode([new_refcount, v]))
+            if self.logging:
+                sys.stderr.write('increasing %s %r to: %d\n' % (utils.encode_hex(k), v, refcount + 1))
         except:
             self.db.put('r:'+k, rlp.encode([ONE_ENCODED, v]))
             self.journal.append([ZERO_ENCODED, k])
+            if self.logging:
+                sys.stderr.write('increasing %s %r to: %d\n' % (utils.encode_hex(k), v, 1))
 
     put = inc_refcount
 
     # Decrease the reference count associated with a key
     def dec_refcount(self, k):
-        try:
-            node_object = rlp.decode(self.db.get('r:'+k))
-            refcount = utils.decode_int(node_object[0])
-            self.journal.append([node_object[0], k])
-            new_refcount = utils.encode_int(refcount - 1)
-            self.db.put('r:'+k, rlp.encode([new_refcount, node_object[1]]))
-            if new_refcount == ZERO_ENCODED:
-                self.death_row.append(k)
-        except:
-            pass
+        # raise Exception("WHY AM I CHANGING A REFCOUNT?!:?")
+        node_object = rlp.decode(self.db.get('r:'+k))
+        refcount = utils.decode_int(node_object[0])
+        if self.logging:
+            sys.stderr.write('decreasing %s to: %d\n' % (utils.encode_hex(k), refcount - 1))
+        assert refcount > 0
+        self.journal.append([node_object[0], k])
+        new_refcount = utils.encode_int(refcount - 1)
+        self.db.put('r:'+k, rlp.encode([new_refcount, node_object[1]]))
+        if new_refcount == ZERO_ENCODED:
+            self.death_row.append(k)
 
     delete = dec_refcount
+
+    def get_refcount(self, k):
+        try:
+            o = utils.decode_int(self.db.get('r:'+k))[0]
+            if o >= DEATH_ROW_OFFSET:
+                return 0
+            return o
+        except:
+            return 0
 
     # Get the value associated with a key
     def get(self, k):
@@ -87,16 +106,16 @@ class RefcountDB(object):
             death_row_nodes = rlp.decode(self.db.get('deathrow:'+str(timeout_epoch)))
         except:
             death_row_nodes = []
-        for nodekey in self.nodes_for_death_row:
-            refcount, val = rlp.decode(self.db.get('node:'+nodekey))
+        for nodekey in self.death_row:
+            refcount, val = rlp.decode(self.db.get('r:'+nodekey))
             if refcount == ZERO_ENCODED:
                 new_refcount = utils.encode_int(DEATH_ROW_OFFSET + timeout_epoch)
-                self.db.put('node:'+nodekey, rlp.encode([new_refcount, val]))
-        if len(self.nodes_for_death_row) > 0:
+                self.db.put('r:'+nodekey, rlp.encode([new_refcount, val]))
+        if len(self.death_row) > 0:
             sys.stderr.write('%d nodes marked for pruning during block %d\n' %
-                             (len(self.nodes_for_death_row), timeout_epoch))
-        death_row_nodes.extend(self.nodes_for_death_row)
-        self.nodes_for_death_row = []
+                             (len(self.death_row), timeout_epoch))
+        death_row_nodes.extend(self.death_row)
+        self.death_row = []
         self.db.put('deathrow:'+str(timeout_epoch),
                     rlp.encode(death_row_nodes))
         # Save journal
@@ -109,7 +128,7 @@ class RefcountDB(object):
         self.db.put('journal:'+str(epoch), rlp.encode(journal))
 
     # Revert changes made during an epoch
-    def revert_changes(self, epoch):
+    def revert_refcount_changes(self, epoch):
         timeout_epoch = epoch + self.ttl
         # Delete death row additions
         try:
@@ -125,3 +144,16 @@ class RefcountDB(object):
                             rlp.encode([new_refcount, node_object[1]]))
         except:
             pass
+
+    def _has_key(self, key):
+        return 'r:'+key in self.db
+
+    def __contains__(self, key):
+        return self._has_key(key)
+
+    def put_temporarily(self, key, value):
+        self.inc_refcount(key, value)
+        self.dec_refcount(key)
+
+    def commit(self):
+        self.db.commit()
