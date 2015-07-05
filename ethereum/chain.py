@@ -49,7 +49,6 @@ class Index(object):
             else:
                 self.db.put(self._block_by_number_key(blk.number), blk.hash)
             self.db.commit_refcount_changes(blk.number)
-            assert len(self.db.death_row) == 0
             if blk.number == 0:
                 break
             blk = blk.get_parent()

@@ -3,6 +3,7 @@ from ethereum.db import EphemDB
 from ethereum.refcount_db import RefcountDB
 import rlp
 import ethereum.utils as utils
+from ethereum.utils import to_string
 import sys
 import itertools
 import ethereum.testutils as testutils
@@ -20,7 +21,7 @@ def check_db_tightness(trees, db):
     if len(db.kv) != len(all_nodes):
         for k, v in db.kv.items():
             if rlp.decode(rlp.decode(v)[1]) not in all_nodes:
-                print utils.encode_hex(k[2:]), rlp.decode(rlp.decode(v)[1])
+                print(utils.encode_hex(k[2:]), rlp.decode(rlp.decode(v)[1]))
         raise Exception("unpruned key leak: %d %d" % (len(db.kv), len(all_nodes)))
 
 
@@ -33,17 +34,17 @@ def test_basic_pruning():
     db.logging = True
 
     for i in range(NODES):
-        t.update(str(i), str(i))
+        t.update(to_string(i), to_string(i))
         db.commit_refcount_changes(0)
         db.cleanup(0)
         check_db_tightness([t], db)
     for i in range(NODES):
-        t.update(str(i), str(i ** 3))
+        t.update(to_string(i), to_string(i ** 3))
         db.commit_refcount_changes(0)
         db.cleanup(0)
         check_db_tightness([t], db)
     for i in range(NODES):
-        t.delete(str(i))
+        t.delete(to_string(i))
         db.commit_refcount_changes(0)
         db.cleanup(0)
         check_db_tightness([t], db)
@@ -57,15 +58,15 @@ def test_delayed_pruning():
     t = pruning_trie.Trie(db)
     db.ttl = NODES // 4
     for i in range(NODES):
-        t.update(str(i), str(i))
+        t.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     for i in range(NODES):
-        t.update(str(i), str(i ** 3))
+        t.update(to_string(i), to_string(i ** 3))
         db.commit_refcount_changes(i + NODES)
         db.cleanup(i + NODES)
     for i in range(NODES):
-        t.delete(str(i))
+        t.delete(to_string(i))
         db.commit_refcount_changes(i + NODES * 2)
         db.cleanup(i + NODES * 2)
     for i in range(NODES // 4):
@@ -80,7 +81,7 @@ def test_clear():
     t = pruning_trie.Trie(db)
     db.ttl = 0
     for i in range(NODES):
-        t.update(str(i), str(i))
+        t.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     t.clear_all()
@@ -95,7 +96,7 @@ def test_delayed_clear():
     t = pruning_trie.Trie(db)
     db.ttl = NODES // 4
     for i in range(NODES):
-        t.update(str(i), str(i))
+        t.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     t.clear_all()
@@ -114,12 +115,12 @@ def test_insert_delete():
         db.ttl = 0
         db.logging = True
         for i in range(NODES):
-            t1.update(str(i), str(i))
+            t1.update(to_string(i), to_string(i))
             db.commit_refcount_changes(i)
             db.cleanup(i)
             check_db_tightness([t1], db)
         for i in range(NODES):
-            t1.delete(str(NODES - 1 - i))
+            t1.delete(to_string(NODES - 1 - i))
             db.commit_refcount_changes(NODES + i)
             db.cleanup(NODES + i)
             check_db_tightness([t1], db)
@@ -133,21 +134,21 @@ def test_two_trees():
     t2 = pruning_trie.Trie(db)
     db.ttl = 0
     for i in range(NODES):
-        t1.update(str(i), str(i))
+        t1.update(to_string(i), to_string(i))
         if i < NODES // 2:
-            t2.update(str(i), str(i))
+            t2.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
         check_db_tightness([t1, t2], db)
     for i in range(NODES):
         sys.stderr.write('clearing: %d\n' % i)
-        t1.delete(str(NODES - 1 - i))
+        t1.delete(to_string(NODES - 1 - i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
         check_db_tightness([t1, t2], db)
-    assert t2.to_dict() == {str(i): str(i) for i in range(NODES // 2)}
+    assert t2.to_dict() == {to_string(i): to_string(i) for i in range(NODES // 2)}
     for i in range(NODES // 2):
-        t2.delete(str(i))
+        t2.delete(to_string(i))
         db.commit_refcount_changes(NODES * 2 + i)
         db.cleanup(NODES * 2 + i)
         check_db_tightness([t1, t2], db)
@@ -161,16 +162,16 @@ def test_two_trees_with_clear():
     t2 = pruning_trie.Trie(db)
     db.ttl = NODES // 4
     for i in range(NODES):
-        t1.update(str(i), str(i))
+        t1.update(to_string(i), to_string(i))
         if i < NODES // 2:
-            t2.update(str(i), str(i))
+            t2.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     t1.clear_all()
     db.cleanup(NODES)
-    assert t2.to_dict() == {str(i): str(i) for i in range(NODES // 2)}
+    assert t2.to_dict() == {to_string(i): to_string(i) for i in range(NODES // 2)}
     for i in range(NODES // 2):
-        t2.delete(str(i))
+        t2.delete(to_string(i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
     for i in range(NODES // 4):
@@ -185,17 +186,17 @@ def test_revert_adds():
     t2 = pruning_trie.Trie(db)
     db.ttl = NODES * 2
     for i in range(NODES):
-        t1.update(str(i), str(i))
+        t1.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     for i in range(NODES):
-        t2.update(str(i), str(i))
+        t2.update(to_string(i), to_string(i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
     for i in range(NODES * 2 - 1, NODES - 1, -1):
         db.revert_refcount_changes(i)
     for i in range(NODES):
-        t1.delete(str(i))
+        t1.delete(to_string(i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
     for i in range(NODES * 2):
@@ -209,12 +210,12 @@ def test_revert_deletes():
     t1 = pruning_trie.Trie(db)
     db.ttl = NODES * 2
     for i in range(NODES):
-        t1.update(str(i), str(i))
+        t1.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     x = t1.root_hash
     for i in range(NODES):
-        t1.delete(str(i))
+        t1.delete(to_string(i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
     for i in range(NODES * 2 - 1, NODES - 1, -1):
@@ -223,7 +224,7 @@ def test_revert_deletes():
         db.cleanup(NODES + i)
         db.revert_refcount_changes(i)
     t1.root_hash = x
-    assert t1.to_dict() == {str(i): str(i) for i in range(NODES)}
+    assert t1.to_dict() == {to_string(i): to_string(i) for i in range(NODES)}
 
 
 def test_trie_transfer():
@@ -232,14 +233,14 @@ def test_trie_transfer():
     t1 = pruning_trie.Trie(db)
     db.ttl = NODES * 2
     for i in range(NODES):
-        t1.update(str(i), str(i))
+        t1.update(to_string(i), to_string(i))
         db.commit_refcount_changes(i)
         db.cleanup(i)
     t2 = pruning_trie.Trie(db)
     t2.root_hash = t1.root_hash
-    assert t2.to_dict() == {str(i): str(i) for i in range(NODES)}
+    assert t2.to_dict() == {to_string(i): to_string(i) for i in range(NODES)}
     for i in range(NODES):
-        t2.delete(str(i))
+        t2.delete(to_string(i))
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
     for i in range(NODES * 2):
@@ -253,15 +254,15 @@ def test_two_tries_with_small_root_node():
     db.ttl = 1
     t1 = pruning_trie.Trie(db)
     t2 = pruning_trie.Trie(db)
-    t1.update('3', '5')
-    t2.update('3', '5')
-    t1.delete('3')
+    t1.update(b'3', b'5')
+    t2.update(b'3', b'5')
+    t1.delete(b'3')
     db.commit_refcount_changes(0)
     db.cleanup(0)
     db.cleanup(1)
     db.cleanup(2)
-    print db.kv
-    print t2.to_dict()
+    print(db.kv)
+    print(t2.to_dict())
 
 
 def test_block_18503_changes():
@@ -277,20 +278,20 @@ def test_block_18503_changes():
     db.ttl = NODES * 2
     c = 0
     for k, v in pre.items():
-        triekey = utils.sha3(utils.zpad(k[2:].decode('hex'), 32))
-        t1.update(triekey, rlp.encode(v[2:].decode('hex')))
-        t2.update(triekey, rlp.encode(v[2:].decode('hex')))
+        triekey = utils.sha3(utils.zpad(utils.decode_hex(k[2:]), 32))
+        t1.update(triekey, rlp.encode(utils.decode_hex(v[2:])))
+        t2.update(triekey, rlp.encode(utils.decode_hex(v[2:])))
         db.commit_refcount_changes(c)
         db.cleanup(c)
         c += 1
-    print t1.root_hash.encode('hex')
+    print(utils.encode_hex(t1.root_hash))
     for k, v in toadd:
         sys.stderr.write('kv: %s %s\n' % (k, v))
-        triekey = utils.sha3(utils.zpad(k[2:].decode('hex'), 32))
+        triekey = utils.sha3(utils.zpad(utils.decode_hex(k[2:]), 32))
         if v == '0x':
             t1.delete(triekey)
         else:
-            t1.update(triekey, rlp.encode(v[2:].decode('hex')))
+            t1.update(triekey, rlp.encode(utils.decode_hex(v[2:])))
         db.commit_refcount_changes(c)
         db.cleanup(c)
         c += 1
@@ -301,7 +302,7 @@ def test_block_18503_changes():
         c += 1
     t3 = pruning_trie.Trie(db)
     t3.root_hash = t2.root_hash
-    print t3.to_dict()
+    print(t3.to_dict())
 
 
 def test_shared_prefix():
@@ -310,20 +311,20 @@ def test_shared_prefix():
     db.ttl = 1
     t1 = pruning_trie.Trie(db)
     t2 = pruning_trie.Trie(db)
-    t1.update('dogecoin', '\x33' * 50)
-    t1.update('dogelot', '\x44' * 50)
-    t2.update('dogecoin', '\x33' * 50)
-    t2.update('dogelot', '\x44' * 50)
-    print db.kv
-    t1.delete('dogecoin')
-    t1.delete('dogelot')
-    print db.kv
+    t1.update(b'dogecoin', b'\x33' * 50)
+    t1.update(b'dogelot', b'\x44' * 50)
+    t2.update(b'dogecoin', b'\x33' * 50)
+    t2.update(b'dogelot', b'\x44' * 50)
+    print(db.kv)
+    t1.delete(b'dogecoin')
+    t1.delete(b'dogelot')
+    print(db.kv)
     db.commit_refcount_changes(0)
     db.cleanup(0)
     db.cleanup(1)
     db.cleanup(2)
-    print db.kv
-    print t2.to_dict()
+    print(db.kv)
+    print(t2.to_dict())
 
 
 def test_deep_inner_branch_deletion():
@@ -331,12 +332,12 @@ def test_deep_inner_branch_deletion():
     db.logging = True
     db.ttl = 1
     t1 = pruning_trie.Trie(db)
-    t1.update('etherdogecoin', '\x33' * 50)
-    t1.update('etherdogelot', '\x44' * 50)
-    t1.delete('etherhouse')
-    t1.delete('etherhouse')
-    t1.delete('etherhouse')
-    t1.delete('etherhouse')
+    t1.update(b'etherdogecoin', b'\x33' * 50)
+    t1.update(b'etherdogelot', b'\x44' * 50)
+    t1.delete(b'etherhouse')
+    t1.delete(b'etherhouse')
+    t1.delete(b'etherhouse')
+    t1.delete(b'etherhouse')
 
 
 def test_block_18315_changes():
@@ -361,15 +362,15 @@ def test_block_18315_changes():
         db.cleanup(c)
         c += 1
     sys.stderr.write('##############################\n')
-    print t1.root_hash.encode('hex')
-    print t1.to_dict()
+    print(utils.encode_hex(t1.root_hash))
+    print(t1.to_dict())
     for k, v in toadd:
         sys.stderr.write('kv: %s %s\n' % (k, v))
-        triekey = utils.sha3(utils.zpad(k[2:].decode('hex'), 32))
+        triekey = utils.sha3(utils.zpad(utils.decode_hex(k[2:]), 32))
         if v == '0x':
             t1.delete(triekey)
         else:
-            t1.update(triekey, rlp.encode(v[2:].decode('hex')))
+            t1.update(triekey, rlp.encode(utils.decode_hex(v[2:])))
         db.commit_refcount_changes(c)
         db.cleanup(c)
         c += 1
@@ -380,7 +381,7 @@ def test_block_18315_changes():
         c += 1
     t3 = pruning_trie.Trie(db)
     t3.root_hash = t2.root_hash
-    print t3.to_dict()
+    print(t3.to_dict())
 
 
 def check_testdata(data_keys, expected_keys):

@@ -237,14 +237,14 @@ def encode_int256(v):
 
 
 def scan_bin(v):
-    if v[:2] == '0x':
+    if v[:2] in ('0x', b'0x'):
         return decode_hex(v[2:])
     else:
         return decode_hex(v)
 
 
 def scan_int(v):
-    if v[:2] == '0x':
+    if v[:2] in ('0x', b'0x'):
         return big_endian_to_int(decode_hex(v[2:]))
     else:
         return int(v)

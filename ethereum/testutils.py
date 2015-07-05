@@ -39,6 +39,9 @@ time_ethash_test = lambda params: run_ethash_test(params, TIME)
 fill_abi_test = lambda params: run_abi_test(params, FILL)
 check_abi_test = lambda params: run_abi_test(params, VERIFY)
 time_abi_test = lambda params: run_abi_test(params, TIME)
+fill_genesis_test = lambda params: run_genesis_test(params, FILL)
+check_genesis_test = lambda params: run_genesis_test(params, VERIFY)
+time_genesis_test = lambda params: run_genesis_test(params, TIME)
 
 fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
@@ -445,7 +448,27 @@ def run_abi_test(params, mode):
             'encoding': y - x,
             'decoding': time.time() - y
         }
-       
+
+
+def run_genesis_test(params, mode):
+    params = copy.deepcopy(params)
+    if 'difficulty' not in params:
+        params['difficulty'] = str(2**34)
+    if 'nonce' not in params:
+        params['nonce'] = '0x0000000000000042'
+    x = time.time()
+    b = blocks.genesis(EphemDB(), start_alloc=params['alloc'],
+                       difficulty=int(params['difficulty']),
+                       nonce=decode_hex(remove_0x_head(params['nonce'])))
+    if mode == FILL:
+        params['result'] = encode_hex(rlp.encode(b))
+        return params
+    elif mode == VERIFY:
+        assert params['result'] == encode_hex(rlp.encode(b))
+    elif mode == TIME:
+        return {
+            'creation': time.time() - x
+        }
 
 
 def get_tests_from_file_or_dir(dname, json_only=False):

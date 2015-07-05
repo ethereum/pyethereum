@@ -4,7 +4,7 @@ import os
 import rlp
 from ethereum import utils
 from ethereum.utils import to_string
-from ethereum.abi import is_string
+from ethereum.utils import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import sys

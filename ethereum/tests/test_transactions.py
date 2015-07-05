@@ -36,8 +36,9 @@ def run_test(filename, testname, testdata):
             "value": str_to_bytes(str(tx.value)),
             "to": encode_hex(tx.to),
         }
-    except:
+    except Exception, e:
         tx = None
+        sys.stderr.write(str(e))
     if 'transaction' not in testdata:  # expected to fail
         assert tx is None
     else:

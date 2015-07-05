@@ -117,7 +117,7 @@ if __name__ == '__main__':
                 run_block_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join(testutils.fixture_path, 'BlockTests'))
+        os.path.join(testutils.fixture_path, 'BlockchainTests'))
 
     def mk_test_func(filename, testname, testdata):
         return lambda: do_test_block(filename, testname, testdata)
