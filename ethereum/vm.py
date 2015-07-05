@@ -577,9 +577,9 @@ def vm_execute(ext, msg, code):
             return 1, compustate.gas, []
 
         # this is slow!
-        for a in stk:
-            assert is_numeric(a), (op, stk)
-            assert a >= 0 and a < 2**256, (a, op, stk)
+        # for a in stk:
+        #     assert is_numeric(a), (op, stk)
+        #     assert a >= 0 and a < 2**256, (a, op, stk)
 
 
 class VmExtBase():
