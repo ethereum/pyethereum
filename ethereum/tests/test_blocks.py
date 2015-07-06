@@ -68,22 +68,25 @@ def run_block_test(params):
         raise Exception("header hash mismatch")
     assert b.header.check_pow()
     blockmap = {b.hash: b}
+    e.put(b.hash, rlp.encode(b))
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             try:
                 rlpdata = decode_hex(blk["rlp"][2:])
                 blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
-                success = True
+                success = b2.validate_uncles()
             except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, KeyError):
+                    DecodingError, DeserializationError, InvalidTransaction, KeyError), err:
                 success = False
             assert not success
         else:
             rlpdata = decode_hex(blk["rlp"][2:])
             blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
             b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
+            assert b2.validate_uncles()
             blockmap[b2.hash] = b2
+            e.put(b2.hash, rlp.encode(b2))
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

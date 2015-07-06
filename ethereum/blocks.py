@@ -449,6 +449,7 @@ class Block(rlp.Serializable):
         self.receipts = Trie(db, trie.BLANK_ROOT)
         # replay transactions if state is unknown
         state_unknown = (header.prevhash != GENESIS_PREVHASH and
+                         header.number != 0 and
                          header.state_root != trie.BLANK_ROOT and
                          (len(header.state_root) != 32 or
                           b'validated:' + self.hash not in db) and
