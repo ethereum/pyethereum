@@ -77,7 +77,7 @@ def run_block_test(params):
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
                 success = b2.validate_uncles()
             except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, KeyError), err:
+                    DecodingError, DeserializationError, InvalidTransaction, KeyError):
                 success = False
             assert not success
         else:
