@@ -46,7 +46,8 @@ else:
     for filename in filenames:
         tests = fixtures[filename]
         if 'stQuadraticComplexityTest.json' in filename or \
-                'stMemoryStressTest.json' in filename:
+                'stMemoryStressTest.json' in filename or \
+                'stPreCompiledContractsTransaction.json' in filename:
             continue
         for testname, testdata in list(tests.items()):
             func_name = 'test_%s_%s' % (filename, testname)
