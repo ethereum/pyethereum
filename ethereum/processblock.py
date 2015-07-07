@@ -161,13 +161,11 @@ def apply_transaction(block, tx):
             log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
             gas_remained += min(block.refunds, gas_used // 2)
             gas_used -= min(block.refunds, gas_used // 2)
+            block.refunds = 0
         # sell remaining gas
         block.delta_balance(tx.sender, tx.gasprice * gas_remained)
         block.delta_balance(block.coinbase, tx.gasprice * gas_used)
         block.gas_used += gas_used
-        if block.number >= 830000:
-            block.gas_used += block.refunds
-        block.refunds = 0
         if tx.to:
             output = b''.join(map(ascii_chr, data))
         else:
