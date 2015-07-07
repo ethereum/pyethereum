@@ -90,6 +90,8 @@ def preprocess_code(code):
     ops = []
     i = 0
     while i < len(code):
+        if i % 100 == 0:
+            print i, len(code)
         o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
         ops.append(o)
         if o[0][:4] == 'PUSH':
