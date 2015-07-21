@@ -804,6 +804,8 @@ class Block(rlp.Serializable):
         else:
             return rlp.decode(tx, Transaction)
 
+    def num_transactions(self):
+        return self.transaction_count
 
     def get_transactions(self):
         """Build a list of all transactions in this block."""
