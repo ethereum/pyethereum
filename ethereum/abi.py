@@ -430,7 +430,7 @@ def dec(typ, arg):
                     for i in range(L)]
     # Static-sized arrays: decode piece-by-piece
     elif len(arrlist):
-        L = arrlist[-1]
+        L = arrlist[-1][0]
         subtyp = base, sub, arrlist[:-1]
         subsize = get_size(subtyp)
         return [dec(subtyp, arg[subsize * i:subsize * (i+1)])

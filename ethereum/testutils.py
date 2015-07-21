@@ -64,6 +64,11 @@ def acct_standard_form(a):
     }
 
 
+def int_to_hex(x):
+    o = encode_hex(utils.encode_int(x))
+    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
+
+
 def compare_post_states(shouldbe, reallyis):
     if shouldbe is None and reallyis is None:
         return True
@@ -453,13 +458,39 @@ def run_abi_test(params, mode):
 def run_genesis_test(params, mode):
     params = copy.deepcopy(params)
     if 'difficulty' not in params:
-        params['difficulty'] = str(2**34)
+        params['difficulty'] = int_to_hex(2**34)
+    if 'mixhash' not in params:
+        params['mixhash'] = '0x'+'0'*64
     if 'nonce' not in params:
         params['nonce'] = '0x0000000000000042'
+    if 'timestamp' not in params:
+        params['timestamp'] = int_to_hex(5000)
+    if 'parentHash' not in params:
+        params['parentHash'] = '0x'+'0'*64
+    if 'gasLimit' not in params:
+        params['gasLimit'] = int_to_hex(5000)
+    if 'extraData' not in params:
+        params['extraData'] = '0x'
+    if 'coinbase' not in params:
+        params['coinbase'] = '0x'+'3'*40
     x = time.time()
     b = blocks.genesis(EphemDB(), start_alloc=params['alloc'],
-                       difficulty=int(params['difficulty']),
+                       difficulty=parse_int_or_hex(params['difficulty']),
+                       timestamp=parse_int_or_hex(params['timestamp']),
+                       extra_data=decode_hex(remove_0x_head(params['extraData'])),
+                       gas_limit=parse_int_or_hex(params['gasLimit']),
+                       mixhash=decode_hex(remove_0x_head(params['mixhash'])),
+                       prevhash=decode_hex(remove_0x_head(params['parentHash'])),
+                       coinbase=decode_hex(remove_0x_head(params['coinbase'])),
                        nonce=decode_hex(remove_0x_head(params['nonce'])))
+    assert b.difficulty == parse_int_or_hex(params['difficulty'])
+    assert b.timestamp == parse_int_or_hex(params['timestamp'])
+    assert b.extra_data == decode_hex(remove_0x_head(params['extraData']))
+    assert b.gas_limit == parse_int_or_hex(params['gasLimit'])
+    assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
+    assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
+    assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
+    print 9
     if mode == FILL:
         params['result'] = encode_hex(rlp.encode(b))
         return params
