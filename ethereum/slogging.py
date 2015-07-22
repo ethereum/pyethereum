@@ -21,7 +21,7 @@ eth.vm.mem
 eth.chain
 eth.chain.new_block
 """
-
+#!---------------
 
 def hexprint(x):
     return repr(x)
@@ -80,13 +80,88 @@ structlog.stdlib.TRACE = TRACE = 5
 structlog.stdlib._NAME_TO_LEVEL['trace'] = TRACE
 logging.addLevelName(TRACE, "TRACE")
 
+formatter_list = [ 'name', 'levelno', 'levelname', 'pathname', 'filename', 'module',
+    'lineno', 'funcName', 'created', 'asctime', 'msecs', 'relativeCreated', 'thread',
+    'threadName', 'process', 'message', 'exc_info', 'extra']
 
-def _trace(self, message, *args, **kws):
+def help_make_kws(kws):
+    new_kws = {}
+    message = ""
+    for i in kws:
+        if i not in formatter_list:
+            print i, "=", kws[i]
+            s = " {i}={kwsi}".format(i=i, kwsi=str(kws[i]))
+            message += s
+        else:
+            new_kws[i] = kws[i]
+    return new_kws, message
+
+# this function extends standart logging module
+def _trace(self, msg, *args, **kwargs):
     # Yes, logger takes its '*args' as 'args'.
+    new_kws, new_message = help_make_kws(kwargs)
+    msg += new_message
+
     if self.isEnabledFor(TRACE):
-        self._log(TRACE, message, args, **kws)
+        self._log(TRACE, msg, args, **new_kws)
+
+# this function extends standart logging module
+def _info(self, msg, *args, **kwargs):
+    # Yes, logger takes its '*args' as 'args'.
+    new_kws, new_message = help_make_kws(kwargs)
+    msg += new_message
+
+    if self.isEnabledFor(logging.INFO):
+        self._log(logging.INFO, msg, args, **new_kws)
+
+def _debug(self, msg, *args, **kwargs):
+    new_message = ""
+    new_kws, new_message = help_make_kws(kwargs)
+    msg += new_message
+
+    if self.isEnabledFor(logging.DEBUG):
+        self._log(logging.DEBUG, msg, args, **new_kws)
+
+def _warning(self, msg, *args, **kwargs):
+    new_message = ""
+    new_kws, new_message = help_make_kws(kwargs)
+
+    if self.isEnabledFor(logging.WARNING):
+        self._log(logging.WARNING, msg, args, **new_kws)
+
+def _error(self, msg, *args, **kwargs):
+    new_message = ""
+    new_kws, new_message = help_make_kws(kwargs)
+
+    if self.isEnabledFor(logging.ERROR):
+        self._log(logging.ERROR, msg, args, **new_kws)
+
+def _exception(self, msg, *args, **kwargs):
+    """
+    Convenience method for logging an ERROR with exception information.
+    """
+    kwargs['exc_info'] = 1
+    _error(msg, *args, **kwargs)
+
+def _critical(self, msg, *args, **kwargs):
+    new_message = ""
+    new_kws, new_message = help_make_kws(kwargs)
+
+    if self.isEnabledFor(logging.CRITICAL):
+        self._log(logging.CRITICAL, msg, args, **new_kws)
+
 logging.Logger.trace = _trace
 logging.TRACE = TRACE
+logging.Logger.info = _info
+logging.Logger.debug = _debug
+logging.Logger.warning = _warning
+logging.Logger.warn = _warning
+logging.Logger.error = _error
+logging.Logger.exception = _exception
+logging.Logger.critical = _critical
+logging.Logger.fatal = _critical
+
+
 
 ######### listeners ###############
 
@@ -199,8 +274,14 @@ def configure(config_string='', log_json=False):
 
 configure_logging = configure  # for unambigious imports
 # setup default config
-configure()
+#configure()
 
+def configure1(config_string='', log_json=False):
+    FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
+    logging.basicConfig(level=logging.TRACE, format=FORMAT)
+    logging.info('It is configure logging function')
+
+configure1()
 
 def get_configuration():
     """
@@ -226,15 +307,78 @@ def get_logger_names():
     # initialized at module load get_logger
     return sorted(known_loggers, key=lambda x: '' if not x else x)
 
+#----------------------------- from standart logging module width some modifications ----------------------------
+class ethLogger(logging.Logger):
+    def __init__(self, name, level=logging.NOTSET):
+        super(ethLogger, self).__init__(name, level=level)
 
+    def is_active(self, level_name='trace'):
+        #self.setLevel(getattr(logging, level_name.upper()))
+        return True
+
+
+class RootLogger(ethLogger):
+    """
+    A root logger is not that different to any other logger, except that
+    it must have a logging level and there is only one instance of it in
+    the hierarchy.
+    """
+    def __init__(self, level):
+        """
+        Initialize the logger with the name "root".
+        """
+        ethLogger.__init__(self, "root", level)
+
+class ethManager(logging.Manager):
+    def __init__(self, rootnode):
+        self.loggerClass = ethLogger
+        super(ethManager, self).__init__(rootnode)
+
+    def getLogger(self, name):
+        logging.setLoggerClass(ethLogger)
+        return super(ethManager, self).getLogger(name)
+
+root = RootLogger(logging.WARNING)
+ethLogger.root = root
+ethLogger.manager = ethManager(ethLogger.root)
+
+
+
+def getLogger(name=None):
+    """
+    Return a logger with the specified name, creating it if necessary.
+
+    If no name is specified, return the root logger.
+    """
+
+    if name:
+        ethlogger = ethLogger.manager.getLogger(name)
+        ethlogger.setLevel(logging.TRACE)
+        FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
+        logging.basicConfig(format=FORMAT)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.TRACE)
+        formatter = logging.Formatter(FORMAT)
+        ch.setFormatter(formatter)
+        ethlogger.addHandler(ch)
+        return ethlogger
+    else:
+        return root
+#----------------------------- / from standart logging module width some modifications ----------------------------
 def get_logger(name=None):
     known_loggers.add(name)
-    return structlog.get_logger(name)
+    return getLogger(name)
+    #return structlog.get_logger(name)
 
 
 # quick debug
 def DEBUG(msg, **kargs):
     "temporary logger during development that is always on"
-    log = structlog.get_logger('DEBUG')
-    log.critical('-' * 20)
-    log.critical(msg, **kargs)
+    #log = structlog.get_logger('DEBUG')
+    #log.critical('-' * 20)
+    #log.critical(msg, **kargs)
+    logger = logging.getLogger('DEBUG')
+    logging.basicConfig(level=logging.DEBUG, format="%(module)s: %(message)s")
+    logger.setLevel(logging.DEBUG)
+    logger.debug(msg)
+

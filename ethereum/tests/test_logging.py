@@ -327,9 +327,37 @@ def test_cleanup():
 
 
 if __name__ == '__main__':
+    """
+    slogging.configure(':trace', log_json=False)
+    #-------------
+    #logger = logging.getLogger(":myloger")
+    #fh = logging.FileHandler('mytest1.log')
+    #fh.setLevel(logging.DEBUG)
+    #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    #fh.setFormatter(formatter)
+    #logger.addHandler(fh)
+
+    #---------------------
+    trace = slogging.get_logger('trace')
+    trace.trace('mytrace', p=121)
+    tester = slogging.get_logger('tester')
+    assert tester.is_active(level_name='info')
+    slogging.set_level('tester', 'trace')
+    assert tester.is_active(level_name='trace')
+    tester.info('done')
+    test_how_to_use_as_vm_logger()
+    test_testhandler()
+
+    slogging.DEBUG("this is DEBUG msg")
+    """
+
     slogging.configure(':debug')
     tester = slogging.get_logger('tester')
     assert tester.is_active(level_name='info')
     slogging.set_level('tester', 'trace')
     assert tester.is_active(level_name='trace')
     tester.info('done')
+
+    logger_trace = slogging.get_logger("mytrace")
+    logger_trace.trace("this is trace")
+
