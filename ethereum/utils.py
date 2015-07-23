@@ -103,10 +103,26 @@ def sha3(seed):
     return sha3_256(to_string(seed)).digest()
 
 
-def privtoaddr(x):
+def privtoaddr(x, extended=False):
     if len(x) > 32:
         x = decode_hex(x)
-    return sha3(privtopub(x)[1:])[12:]
+    o = sha3(privtopub(x)[1:])[12:]
+    return add_checksum(o) if extended else o
+
+
+def add_checksum(x):
+    if len(x) in (40, 48):
+        x = decode_hex(x)
+    if len(x) == 24:
+        return x
+    return x + sha3(x)[:4]
+
+
+def check_and_strip_checksum(x):
+    if len(x) in (40, 48):
+        x = decode_hex(x)
+    assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
+    return x[:20]
 
 
 def zpad(x, l):
