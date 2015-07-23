@@ -285,6 +285,10 @@ scanners = {
 }
 
 
+def remove_0x_head(s):
+    return s[2:] if s[:2] == b'0x' else s
+
+
 def print_func_call(ignore_first_arg=False, max_call_number=100):
     ''' utility function to facilitate debug, it will print input args before
     function call, and print return value after function call

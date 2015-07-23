@@ -13,7 +13,8 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum.utils import address, int256, trie_root, hash32, to_string, \
+    remove_0x_head, parse_int_or_hex
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -1343,10 +1344,21 @@ def get_block(db, blockhash):
 #    return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(db, start_alloc=GENESIS_INITIAL_ALLOC,
+def genesis(db, json=None,
+            start_alloc=GENESIS_INITIAL_ALLOC,
             difficulty=GENESIS_DIFFICULTY,
             **kwargs):
     """Build the genesis block."""
+    if json is not None:
+        start_alloc = json["alloc"]
+        difficulty = parse_int_or_hex(json['difficulty'])
+        kwargs['timestamp'] = parse_int_or_hex(json['timestamp'])
+        kwargs['extra_data'] = decode_hex(remove_0x_head(json['extraData']))
+        kwargs['gas_limit'] = parse_int_or_hex(json['gasLimit'])
+        kwargs['mixhash'] = decode_hex(remove_0x_head(json['mixhash']))
+        kwargs['prevhash'] = decode_hex(remove_0x_head(json['parentHash']))
+        kwargs['coinbase'] = decode_hex(remove_0x_head(json['coinbase']))
+        kwargs['nonce'] = decode_hex(remove_0x_head(json['nonce']))
     # https://ethereum.etherpad.mozilla.org/11
     header = BlockHeader(
         prevhash=kwargs.get('prevhash', GENESIS_PREVHASH),

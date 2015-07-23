@@ -5,7 +5,8 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
-from ethereum.utils import to_string, safe_ord, parse_int_or_hex
+from ethereum.utils import to_string, safe_ord, parse_int_or_hex, \
+    remove_0x_head
 import json
 import os
 import time
@@ -48,10 +49,6 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 def normalize_hex(s):
     return s if len(s) > 2 else b'0x00'
-
-
-def remove_0x_head(s):
-    return s[2:] if s[:2] == b'0x' else s
 
 
 def acct_standard_form(a):
