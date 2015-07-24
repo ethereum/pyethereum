@@ -123,7 +123,7 @@ class state():
             o[accounts[i]] = {"wei": 10 ** 24}
         for i in range(1, 5):
             o[u.int_to_addr(i)] = {"wei": 1}
-        self.block = b.genesis(self.db, o)
+        self.block = b.genesis(self.db, start_alloc=o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
