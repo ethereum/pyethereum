@@ -64,18 +64,20 @@ GASLIMIT_ADJMAX_FACTOR = 1024
 BLKLIM_FACTOR_NOM = 3
 BLKLIM_FACTOR_DEN = 2
 # Block reward
-BLOCK_REWARD = 1500 * utils.denoms.finney
+BLOCK_REWARD = 5000 * utils.denoms.finney
 # GHOST constants
 UNCLE_DEPTH_PENALTY_FACTOR = 8
 NEPHEW_REWARD = BLOCK_REWARD / 32
 MAX_UNCLE_DEPTH = 6  # max (block.number - uncle.number)
 MAX_UNCLES = 2
 # Difficulty adjustment constants
-DIFF_ADJUSTMENT_CUTOFF = 8
+DIFF_ADJUSTMENT_CUTOFF = 13
 BLOCK_DIFF_FACTOR = 2048
 MIN_DIFF = 131072
 # PoW info
 POW_EPOCH_LENGTH = 30000
+# Maximum extra data length
+MAX_EXTRADATA_LENGTH = 32
 
 
 # Difficulty adjustment algo
@@ -527,8 +529,8 @@ class Block(rlp.Serializable):
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
-        if len(self.header.extra_data) > 1024:
-            raise ValueError("Extra data cannot exceed 1024 bytes")
+        if len(self.header.extra_data) > MAX_EXTRADATA_LENGTH:
+            raise ValueError("Extra data cannot exceed %d bytes" % MAX_EXTRADATA_LENGTH)
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
         if not self.state.root_hash_valid():
