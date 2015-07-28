@@ -14,13 +14,12 @@ from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
 from ethereum.utils import address, int256, trie_root, hash32, to_string, \
-    remove_0x_head, parse_int_or_hex
+    remove_0x_head, parse_int_or_hex, int_to_hex
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
 from ethereum.exceptions import *
 from ethereum.slogging import get_logger
-from ethereum.genesis_allocation import GENESIS_INITIAL_ALLOC
 from ethereum.ethpow import check_pow
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -41,6 +40,20 @@ GENESIS_PREVHASH = b'\x00' * 32
 GENESIS_COINBASE = b'\x00' * 20
 GENESIS_NONCE = utils.zpad(utils.encode_int(42), 8)
 GENESIS_MIXHASH = b'\x00' * 32
+GENESIS_TIMESTAMP = 0
+GENESIS_EXTRA_DATA = b''
+GENESIS_INITIAL_ALLOC = {}
+GENESIS_JSON = {
+    "alloc": GENESIS_INITIAL_ALLOC,
+    "difficulty": int_to_hex(GENESIS_DIFFICULTY),
+    "timestamp": int_to_hex(GENESIS_TIMESTAMP),
+    "extraData": b'0x'+encode_hex(GENESIS_EXTRA_DATA),
+    "gasLimit": int_to_hex(GENESIS_GAS_LIMIT),
+    "mixhash": b'0x'+encode_hex(GENESIS_MIXHASH),
+    "parentHash": b'0x'+encode_hex(GENESIS_PREVHASH),
+    "coinbase": b'0x'+encode_hex(GENESIS_COINBASE),
+    "nonce": b'0x'+encode_hex(GENESIS_NONCE)
+}
 # Minimum gas limit
 MIN_GAS_LIMIT = 125000
 # Gas limit adjustment algo:

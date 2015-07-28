@@ -6,7 +6,7 @@ from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex, \
-    remove_0x_head
+    remove_0x_head, int_to_hex
 import json
 import os
 import time
@@ -59,11 +59,6 @@ def acct_standard_form(a):
         "storage": {normalize_hex(k): normalize_hex(v) for
                     k, v in a["storage"].items()}
     }
-
-
-def int_to_hex(x):
-    o = encode_hex(utils.encode_int(x))
-    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
 
 
 def compare_post_states(shouldbe, reallyis):

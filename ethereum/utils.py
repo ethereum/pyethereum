@@ -301,6 +301,11 @@ scanners = {
 }
 
 
+def int_to_hex(x):
+    o = encode_hex(encode_int(x))
+    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
+
+
 def remove_0x_head(s):
     return s[2:] if s[:2] == b'0x' else s
 
