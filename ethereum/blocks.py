@@ -55,7 +55,7 @@ GENESIS_JSON = {
     "nonce": b'0x'+encode_hex(GENESIS_NONCE)
 }
 # Minimum gas limit
-MIN_GAS_LIMIT = 125000
+MIN_GAS_LIMIT = 5000
 # Gas limit adjustment algo:
 # block.gas_limit = block.parent.gas_limit * 1023/1024 +
 #                   (block.gas_used * 6 / 5) / 1024
