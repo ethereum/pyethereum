@@ -2,6 +2,7 @@ import structlog
 import logging
 import sys
 import json
+from logging.handlers import MemoryHandler
 """
 See test_logging.py for examples
 
@@ -23,6 +24,8 @@ eth.chain.new_block
 """
 #!---------------
 
+FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
+
 def hexprint(x):
     return repr(x)
 
@@ -40,9 +43,12 @@ class KeyValueRenderer(structlog.processors.KeyValueRenderer):
         return "%s\t%s" % (msg, kvs)
 
 
-class JSONRenderer(structlog.processors.JSONRenderer):
+class JSONRenderer():
 
     "JSON Render which prefixes namespace"
+
+    def __init__(self, **dumps_kw):
+        self._dumps_kw = dumps_kw
 
     def __call__(self, logger, name, event_dict):
         event_dict = dict(event_dict)
@@ -83,85 +89,6 @@ logging.addLevelName(TRACE, "TRACE")
 formatter_list = [ 'name', 'levelno', 'levelname', 'pathname', 'filename', 'module',
     'lineno', 'funcName', 'created', 'asctime', 'msecs', 'relativeCreated', 'thread',
     'threadName', 'process', 'message', 'exc_info', 'extra']
-
-def help_make_kws(kws):
-    new_kws = {}
-    message = ""
-    for i in kws:
-        if i not in formatter_list:
-            print i, "=", kws[i]
-            s = " {i}={kwsi}".format(i=i, kwsi=str(kws[i]))
-            message += s
-        else:
-            new_kws[i] = kws[i]
-    return new_kws, message
-
-# this function extends standart logging module
-def _trace(self, msg, *args, **kwargs):
-    # Yes, logger takes its '*args' as 'args'.
-    new_kws, new_message = help_make_kws(kwargs)
-    msg += new_message
-
-    if self.isEnabledFor(TRACE):
-        self._log(TRACE, msg, args, **new_kws)
-
-# this function extends standart logging module
-def _info(self, msg, *args, **kwargs):
-    # Yes, logger takes its '*args' as 'args'.
-    new_kws, new_message = help_make_kws(kwargs)
-    msg += new_message
-
-    if self.isEnabledFor(logging.INFO):
-        self._log(logging.INFO, msg, args, **new_kws)
-
-def _debug(self, msg, *args, **kwargs):
-    new_message = ""
-    new_kws, new_message = help_make_kws(kwargs)
-    msg += new_message
-
-    if self.isEnabledFor(logging.DEBUG):
-        self._log(logging.DEBUG, msg, args, **new_kws)
-
-def _warning(self, msg, *args, **kwargs):
-    new_message = ""
-    new_kws, new_message = help_make_kws(kwargs)
-
-    if self.isEnabledFor(logging.WARNING):
-        self._log(logging.WARNING, msg, args, **new_kws)
-
-def _error(self, msg, *args, **kwargs):
-    new_message = ""
-    new_kws, new_message = help_make_kws(kwargs)
-
-    if self.isEnabledFor(logging.ERROR):
-        self._log(logging.ERROR, msg, args, **new_kws)
-
-def _exception(self, msg, *args, **kwargs):
-    """
-    Convenience method for logging an ERROR with exception information.
-    """
-    kwargs['exc_info'] = 1
-    _error(msg, *args, **kwargs)
-
-def _critical(self, msg, *args, **kwargs):
-    new_message = ""
-    new_kws, new_message = help_make_kws(kwargs)
-
-    if self.isEnabledFor(logging.CRITICAL):
-        self._log(logging.CRITICAL, msg, args, **new_kws)
-
-logging.Logger.trace = _trace
-logging.TRACE = TRACE
-logging.Logger.info = _info
-logging.Logger.debug = _debug
-logging.Logger.warning = _warning
-logging.Logger.warn = _warning
-logging.Logger.error = _error
-logging.Logger.exception = _exception
-logging.Logger.critical = _critical
-logging.Logger.fatal = _critical
-
-
 
 ######### listeners ###############
 
@@ -213,21 +140,7 @@ class LogRecorder(object):
 DEFAULT_LOGLEVEL = logging.INFO
 JSON_FORMAT = '%(message)s'
 PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
-
-
-def set_level(name, level):
-    assert not isinstance(level, int)
-    logging.getLogger(name).setLevel(getattr(logging, level.upper()))
-
-
-def configure_loglevels(config_string):
-    """
-    config_string = ':debug,p2p:info,vm.op:trace'
-    """
-    assert ':' in config_string
-    for name_levels in config_string.split(','):
-        name, level = name_levels.split(':')
-        set_level(name, level)
+#FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
 
 
 def setup_stdlib_logging(level, fmt):
@@ -241,7 +154,7 @@ def setup_stdlib_logging(level, fmt):
     logging.root.addHandler(hdlr)
 
 
-def configure(config_string='', log_json=False):
+def configure_old(config_string='', log_json=False):
     # configure structlog
     processors = [
         log_listeners,  # before level filtering
@@ -272,16 +185,9 @@ def configure(config_string='', log_json=False):
     if config_string:
         configure_loglevels(config_string)
 
-configure_logging = configure  # for unambigious imports
+configure_logging = configure_old  # for unambigious imports
 # setup default config
 #configure()
-
-def configure1(config_string='', log_json=False):
-    FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
-    logging.basicConfig(level=logging.TRACE, format=FORMAT)
-    logging.info('It is configure logging function')
-
-configure1()
 
 def get_configuration():
     """
@@ -309,13 +215,49 @@ def get_logger_names():
 
 #----------------------------- from standart logging module width some modifications ----------------------------
 class ethLogger(logging.Logger):
-    def __init__(self, name, level=logging.NOTSET):
+    def __init__(self, name, level=DEFAULT_LOGLEVEL):
         super(ethLogger, self).__init__(name, level=level)
 
     def is_active(self, level_name='trace'):
+        return self.isEnabledFor(logging._checkLevel(level_name.upper()))
+        #getLogger()
         #self.setLevel(getattr(logging, level_name.upper()))
-        return True
 
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, dict_val=None):
+        """
+        A factory method which can be overridden in subclasses to create
+        specialized LogRecords.
+        """
+        rv = logging.LogRecord(name, level, fn, lno, msg, args, exc_info, func)
+        if extra is not None:
+            for key in extra:
+                if (key in ["message", "asctime"]) or (key in rv.__dict__):
+                    raise KeyError("Attempt to overwrite %r in LogRecord" % key)
+                rv.__dict__[key] = extra[key]
+        if dict_val:
+            rv.dict_val = dict_val
+        return rv
+
+    def _log(self, level, msg, args, exc_info=None, extra=None, dict_val=None):
+        """
+        Low-level logging routine which creates a LogRecord and then calls
+        all the handlers of this logger to handle the record.
+        """
+        if logging._srcfile:
+            #IronPython doesn't track Python frames, so findCaller raises an
+            #exception on some versions of IronPython. We trap it here so that
+            #IronPython can use logging.
+            try:
+                fn, lno, func = self.findCaller()
+            except ValueError:
+                fn, lno, func = "(unknown file)", 0, "(unknown function)"
+        else:
+            fn, lno, func = "(unknown file)", 0, "(unknown function)"
+        if exc_info:
+            if not isinstance(exc_info, tuple):
+                exc_info = sys.exc_info()
+        record = self.makeRecord(self.name, level, fn, lno, msg, args, exc_info, func, extra, dict_val)
+        self.handle(record)
 
 class RootLogger(ethLogger):
     """
@@ -323,11 +265,12 @@ class RootLogger(ethLogger):
     it must have a logging level and there is only one instance of it in
     the hierarchy.
     """
-    def __init__(self, level):
+    def __init__(self, level, log_json=False):
         """
         Initialize the logger with the name "root".
         """
         ethLogger.__init__(self, "root", level)
+        self.log_json = False
 
 class ethManager(logging.Manager):
     def __init__(self, rootnode):
@@ -338,10 +281,144 @@ class ethManager(logging.Manager):
         logging.setLoggerClass(ethLogger)
         return super(ethManager, self).getLogger(name)
 
-root = RootLogger(logging.WARNING)
-ethLogger.root = root
+rootLogger = RootLogger(DEFAULT_LOGLEVEL)
+ethLogger.root = rootLogger
 ethLogger.manager = ethManager(ethLogger.root)
 
+def help_make_kws(kws, name, msg, log_json=False):
+    new_kws = {}
+    message = ""
+    dict_val = {}
+
+    if log_json == True:
+        message = {}
+        for i in kws:
+            if i not in formatter_list:
+                print i, "=", kws[i]
+                #s = " {i}={kwsi}".format(i=i, kwsi=str(kws[i]))
+                #message += s
+                message[i]=kws[i]
+            else:
+                new_kws[i] = kws[i]
+    else:
+        message = ""
+        for i in kws:
+            if i not in formatter_list:
+                print i, "=", kws[i]
+                s = " {i}={kwsi}".format(i=i, kwsi=str(kws[i]))
+                message += s
+            else:
+                new_kws[i] = kws[i]
+
+    for i in kws:
+        if i not in formatter_list:
+            dict_val[i] = kws[i]
+    if name != rootLogger.name:
+        msg1 = {'event': "{}.{}".format(name, msg)}
+    else:
+        msg1 = {'event': "{}".format(msg)}
+    dict_val.update(msg1)
+
+    if log_json == True:
+        if name != rootLogger.name:
+            message1 = {'event': "{}.{}".format(name, msg)}
+        else:
+            message1 = {'event': "{}".format(msg)}
+        message.update(message1)
+        msg = json.dumps(message)
+    else:
+        msg += message
+
+    return new_kws, dict_val, msg
+
+# this function extends standart logging module
+def _trace(self, msg, *args, **kwargs):
+    # Yes, logger takes its '*args' as 'args'.
+
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, new_message, args, dict_val=dict_val, **new_kws)
+
+# this function extends standart logging module
+def _info(self, msg, *args, **kwargs):
+    # Yes, logger takes its '*args' as 'args'.
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+    if self.isEnabledFor(logging.INFO):
+        self._log(logging.INFO, new_message, args, dict_val=dict_val, **new_kws)
+
+def _debug(self, msg, *args, **kwargs):
+    new_message = ""
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
+    if self.isEnabledFor(logging.DEBUG):
+        self._log(logging.DEBUG, new_message, args, dict_val=dict_val, **new_kws)
+
+def _warning(self, msg, *args, **kwargs):
+    new_message = ""
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
+    if self.isEnabledFor(logging.WARNING):
+        self._log(logging.WARNING, new_message, args, dict_val=dict_val, **new_kws)
+
+def _error(self, msg, *args, **kwargs):
+    new_message = ""
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
+    if self.isEnabledFor(logging.ERROR):
+        self._log(logging.ERROR, new_message, args, dict_val=dict_val, **new_kws)
+
+def _exception(self, msg, *args, **kwargs):
+    """
+    Convenience method for logging an ERROR with exception information.
+    """
+    kwargs['exc_info'] = 1
+    _error(msg, *args, **kwargs)
+
+def _critical(self, msg, *args, **kwargs):
+    new_message = ""
+    if hasattr(self, "log_json"):
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+    else:
+        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
+    if self.isEnabledFor(logging.CRITICAL):
+        self._log(logging.CRITICAL, new_message, args, dict_val=dict_val, **new_kws)
+
+logging.Logger.trace = _trace
+logging.TRACE = TRACE
+logging.Logger.info = _info
+logging.Logger.debug = _debug
+logging.Logger.warning = _warning
+logging.Logger.warn = _warning
+logging.Logger.error = _error
+logging.Logger.exception = _exception
+logging.Logger.critical = _critical
+logging.Logger.fatal = _critical
+
+
+class ExecHandler(logging.Handler):
+    def __init__(self):
+        super(ExecHandler, self).__init__()
+
+    def emit(self, record):
+        for i in log_listeners.listeners:
+            i(record.dict_val)
 
 
 def getLogger(name=None):
@@ -353,17 +430,75 @@ def getLogger(name=None):
 
     if name:
         ethlogger = ethLogger.manager.getLogger(name)
-        ethlogger.setLevel(logging.TRACE)
-        FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
-        logging.basicConfig(format=FORMAT)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.TRACE)
-        formatter = logging.Formatter(FORMAT)
-        ch.setFormatter(formatter)
-        ethlogger.addHandler(ch)
+        ethlogger.log_json = rootLogger.log_json
+        #ethlogger.setLevel(DEFAULT_LOGLEVEL)
+        #FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
+        #logging.basicConfig(format=FORMAT)
+        # add stream handler
+
+        #ch = logging.StreamHandler()
+        #ch.setLevel(DEFAULT_LOGLEVEL)
+        #formatter = logging.Formatter(FORMAT)
+        #ch.setFormatter(formatter)
+        #ethlogger.addHandler(ch)
+
+        #mh = MemoryHandler(10000)
+        #mh.setLevel(DEFAULT_LOGLEVEL)
+        #mh.setFormatter(FORMAT)
+        #ethlogger.addHandler(mh)
+
+        #for h in logging.getLogger().handlers: # add root handlers into
+            #for i in ethLogger.getLogger(name).handlers:
+        #    ethlogger.addHandler(h)
         return ethlogger
     else:
-        return root
+        return rootLogger
+
+def set_level(name, level):
+    assert not isinstance(level, int)
+    #logging.getLogger(name).setLevel(getattr(logging, level.upper()))
+    logger = getLogger(name)
+    logger.handlers = []
+    logger.setLevel(getattr(logging, level.upper()))
+    ch = logging.StreamHandler()
+    #if ch not in ethlogger.root.handlers:
+    ch.setLevel(getattr(logging, level.upper()))
+    formatter = logging.Formatter(PRINT_FORMAT)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    eh = ExecHandler()
+    eh.setLevel(getattr(logging, level.upper()))
+    logger.addHandler(eh)
+
+
+def configure_loglevels(config_string):
+    """
+    config_string = ':debug,p2p:info,vm.op:trace'
+    """
+    assert ':' in config_string
+    for name_levels in config_string.split(','):
+        name, level = name_levels.split(':')
+        set_level(name, level)
+
+def configure(config_string='', log_json=False):
+    if log_json:
+        format = JSON_FORMAT
+        rootLogger.log_json = True
+    else:
+        format = PRINT_FORMAT
+        rootLogger.log_json = False
+    #setup_stdlib_logging(DEFAULT_LOGLEVEL, format)
+
+    logging.basicConfig(format=format, level=DEFAULT_LOGLEVEL) # work only first time
+    ethlogger = getLogger()
+    #ethlogger.setLevel(DEFAULT_LOGLEVEL)
+
+    if config_string:
+        configure_loglevels(config_string)
+
+configure()
+
 #----------------------------- / from standart logging module width some modifications ----------------------------
 def get_logger(name=None):
     known_loggers.add(name)
@@ -378,7 +513,6 @@ def DEBUG(msg, **kargs):
     #log.critical('-' * 20)
     #log.critical(msg, **kargs)
     logger = logging.getLogger('DEBUG')
-    logging.basicConfig(level=logging.DEBUG, format="%(module)s: %(message)s")
     logger.setLevel(logging.DEBUG)
     logger.debug(msg)
 
