@@ -3,6 +3,8 @@ from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
 
+ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
+
 
 def proc_ecrecover(ext, msg):
     # print('ecrecover proc', msg.gas)
@@ -19,7 +21,7 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, [0] * 32
     recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
-    if recovered_addr is False:
+    if recovered_addr in (False, ZERO_PRIVKEY_ADDR):
         return 1, msg.gas - gas_cost, []
     pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
