@@ -2,6 +2,7 @@ import structlog
 import logging
 import sys
 import json
+import types
 from logging.handlers import MemoryHandler
 """
 See test_logging.py for examples
@@ -293,11 +294,21 @@ def help_make_kws(kws, name, msg, log_json=False):
     if log_json == True:
         message = {}
         for i in kws:
-            if i not in formatter_list:
+            if i not in formatter_list:  # levelno, asctime......
                 print i, "=", kws[i]
                 #s = " {i}={kwsi}".format(i=i, kwsi=str(kws[i]))
                 #message += s
-                message[i]=kws[i]
+                #message[i] = repr(kws[i]) if type(kws[i]).__name__=='instance'   else kws[i]
+                #if type(kws[i]) == (types.IntType or types.LongType or types.FloatType or types.ComplexType or types.DictionaryType):
+                #    message[i] = kws[i] # for json dumps
+                #else:
+                #    message[i] = repr(kws[i]) # for json dumps
+                kws_i_d = getattr(kws[i], "__dict__", False)
+                if kws_i_d != False:
+                    #message[i] = "{} {}".format(repr(kws[i]), kws[i].__dict__)
+                    message[i] = "{}".format(kws[i].__dict__)
+                else:
+                    message[i] = kws[i]
             else:
                 new_kws[i] = kws[i]
     else:
@@ -312,7 +323,12 @@ def help_make_kws(kws, name, msg, log_json=False):
 
     for i in kws:
         if i not in formatter_list:
-            dict_val[i] = kws[i]
+            kws_i_d = getattr(kws[i], "__dict__", False)
+            if kws_i_d != False:
+                dict_val[i] = "{}".format(kws[i].__dict__)
+            else:
+                dict_val[i] = kws[i]
+
     if name != rootLogger.name:
         msg1 = {'event': "{}.{}".format(name, msg)}
     else:
@@ -335,52 +351,53 @@ def help_make_kws(kws, name, msg, log_json=False):
 def _trace(self, msg, *args, **kwargs):
     # Yes, logger takes its '*args' as 'args'.
 
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
-
     if self.isEnabledFor(TRACE):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(TRACE, new_message, args, dict_val=dict_val, **new_kws)
 
 # this function extends standart logging module
 def _info(self, msg, *args, **kwargs):
     # Yes, logger takes its '*args' as 'args'.
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
     if self.isEnabledFor(logging.INFO):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(logging.INFO, new_message, args, dict_val=dict_val, **new_kws)
 
 def _debug(self, msg, *args, **kwargs):
     new_message = ""
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
-
     if self.isEnabledFor(logging.DEBUG):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(logging.DEBUG, new_message, args, dict_val=dict_val, **new_kws)
 
 def _warning(self, msg, *args, **kwargs):
     new_message = ""
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
-
     if self.isEnabledFor(logging.WARNING):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(logging.WARNING, new_message, args, dict_val=dict_val, **new_kws)
 
 def _error(self, msg, *args, **kwargs):
     new_message = ""
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
-
     if self.isEnabledFor(logging.ERROR):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(logging.ERROR, new_message, args, dict_val=dict_val, **new_kws)
 
 def _exception(self, msg, *args, **kwargs):
@@ -392,16 +409,18 @@ def _exception(self, msg, *args, **kwargs):
 
 def _critical(self, msg, *args, **kwargs):
     new_message = ""
-    if hasattr(self, "log_json"):
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-    else:
-        new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
-
     if self.isEnabledFor(logging.CRITICAL):
+        if hasattr(self, "log_json"):
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
+        else:
+            new_kws, dict_val, new_message = help_make_kws(kwargs, self.name, msg)
+
         self._log(logging.CRITICAL, new_message, args, dict_val=dict_val, **new_kws)
 
 logging.Logger.trace = _trace
 logging.TRACE = TRACE
+logging._levelNames[TRACE] = 'TRACE',
+logging._levelNames['TRACE'] = TRACE
 logging.Logger.info = _info
 logging.Logger.debug = _debug
 logging.Logger.warning = _warning
@@ -458,7 +477,7 @@ def set_level(name, level):
     assert not isinstance(level, int)
     #logging.getLogger(name).setLevel(getattr(logging, level.upper()))
     logger = getLogger(name)
-    logger.handlers = []
+    #logger.handlers = []
     logger.setLevel(getattr(logging, level.upper()))
     ch = logging.StreamHandler()
     #if ch not in ethlogger.root.handlers:
@@ -467,9 +486,10 @@ def set_level(name, level):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    eh = ExecHandler()
-    eh.setLevel(getattr(logging, level.upper()))
-    logger.addHandler(eh)
+    #exec_handler = ExecHandler()
+    #exec_handler.setLevel(getattr(logging, level.upper()))
+    #exec_handler.setLevel(TRACE)
+    #logger.addHandler(exec_handler)
 
 
 def configure_loglevels(config_string):
@@ -506,6 +526,9 @@ def get_logger(name=None):
     #return structlog.get_logger(name)
 
 
+def checkLevel(loghandler, level):
+    if logging._checkLevel(loghandler.level) == logging._checkLevel(level.upper()):
+        return True
 # quick debug
 def DEBUG(msg, **kargs):
     "temporary logger during development that is always on"
@@ -515,4 +538,3 @@ def DEBUG(msg, **kargs):
     logger = logging.getLogger('DEBUG')
     logger.setLevel(logging.DEBUG)
     logger.debug(msg)
-
