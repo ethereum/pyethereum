@@ -25,6 +25,11 @@ class SecureTrie(object):
             o[k] = v
         return o
 
+    def iter_branch(self):
+        for h, v in self.trie.iter_branch():
+            k = self.db.get(h)
+            yield (k, v)
+
     def root_hash_valid(self):
         return self.trie.root_hash_valid()
 
