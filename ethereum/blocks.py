@@ -95,6 +95,7 @@ def calc_difficulty(parent, timestamp):
     if period_count >= EXPDIFF_FREE_PERIODS:
         o = max(o - 65**(period_count - EXPDIFF_FREE_PERIODS) //
                 64**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
+    return o
         
 
 
