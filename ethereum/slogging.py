@@ -204,52 +204,31 @@ def _trace(self, msg, *args, **kwargs):
     # Yes, logger takes its '*args' as 'args'.
 
     if self.isEnabledFor(TRACE):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False )
         self._log(TRACE, new_message, args, **new_kws)
 
 # this function extends standart logging module
 def _info(self, msg, *args, **kwargs):
     # Yes, logger takes its '*args' as 'args'.
     if self.isEnabledFor(logging.INFO):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False )
         self._log(logging.INFO, new_message, args, **new_kws)
 
 def _debug(self, msg, *args, **kwargs):
-    new_message = ""
     if self.isEnabledFor(logging.DEBUG):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False )
         self._log(logging.DEBUG, new_message, args, **new_kws)
 
 def _warning(self, msg, *args, **kwargs):
     new_message = ""
     if self.isEnabledFor(logging.WARNING):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False)
         self._log(logging.WARNING, new_message, args, **new_kws)
 
 def _error(self, msg, *args, **kwargs):
     new_message = ""
     if self.isEnabledFor(logging.ERROR):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False)
         self._log(logging.ERROR, new_message, args, **new_kws)
 
 def _exception(self, msg, *args, **kwargs):
@@ -262,11 +241,7 @@ def _exception(self, msg, *args, **kwargs):
 def _critical(self, msg, *args, **kwargs):
     new_message = ""
     if self.isEnabledFor(logging.CRITICAL):
-        if hasattr(self, "log_json"):
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json)
-        else:
-            new_kws, new_message = help_make_kws(kwargs, self.name, msg)
-
+        new_kws, new_message = help_make_kws(kwargs, self.name, msg, self.log_json if hasattr(self, "log_json") else False)
         self._log(logging.CRITICAL, new_message, args, **new_kws)
 
 logging.Logger.trace = _trace
