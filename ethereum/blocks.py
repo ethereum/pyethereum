@@ -78,6 +78,8 @@ MIN_DIFF = 131072
 POW_EPOCH_LENGTH = 30000
 # Maximum extra data length
 MAX_EXTRADATA_LENGTH = 32
+# Exponential difficulty timebomb period
+EXPDIFF_PERIOD = 100000
 
 
 # Difficulty adjustment algo
@@ -87,7 +89,12 @@ def calc_difficulty(parent, timestamp):
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
-    return int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
+    o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
+    period_count = (parent.number + 1) // EXPDIFF_PERIOD
+    if period_count > 0:
+        o = max(o - 2**(period_count - 1), MIN_DIFF)
+    return o
+        
 
 
 class Account(rlp.Serializable):
