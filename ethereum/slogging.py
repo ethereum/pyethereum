@@ -259,18 +259,22 @@ logging.Logger.fatal = _critical
 
 
 class ExecHandler(logging.Handler):
-    def __init__(self):
+    def __init__(self, log_json=False):
         super(ExecHandler, self).__init__()
+        self.log_json = log_json
 
     def emit(self, record):
         msg = record.msg
         d_keys_val = {}
         for lstn in log_listeners.listeners:
-            for i in re.findall(r'(\w+=\w+)', record.msg):
-                k,v = i.split("=")
-                d_keys_val[k] = v
-                msg=msg.replace(i, "")
-            d_keys_val['event'] = msg[:-1]
+            if self.log_json:
+                d_keys_val = json.loads(record.msg)
+            else:
+                for i in re.findall(r'(\w+=\w+)', record.msg):
+                    k,v = i.split("=")
+                    d_keys_val[k] = v
+                    msg=msg.replace(i, "")
+                d_keys_val['event'] = msg[:-1]
             lstn(d_keys_val)
 
 

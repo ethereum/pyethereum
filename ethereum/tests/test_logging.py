@@ -296,10 +296,10 @@ def test_get_configuration():
 
 
 def test_recorder():
-    th = setup_logging()
+    th = setup_logging(log_json=True)
     log = slogging.get_logger()
 
-    exec_handler = slogging.ExecHandler()
+    exec_handler = slogging.ExecHandler(log_json=log.log_json)
     exec_handler.setLevel(logging.TRACE)
     #exec_handler.setLevel(TRACE)
     log.addHandler(exec_handler)
@@ -314,10 +314,11 @@ def test_recorder():
     assert len(slogging.log_listeners.listeners) == 0
 
     # test trace
+    log.setLevel(logging.TRACE)
     recorder = slogging.LogRecorder()
     assert len(slogging.log_listeners.listeners) == 1
     log.trace('a', v=1)
-    assert not th.logged
+    assert th.logged
     r = recorder.pop_records()
     assert r[0] == dict(event='a', v=1)
     assert len(slogging.log_listeners.listeners) == 0
@@ -363,6 +364,28 @@ def test_cleanup():
     config_string = ':debug'
     slogging.configure(config_string=config_string)
 
+def test_logger_filter():
+    th = setup_logging()
+    log_a = slogging.get_logger("a")
+    log_a.info("log_a", v=1)
+    assert "log_a" in th.logged
+
+    log_a_a = slogging.get_logger("a.a")
+    log_a_a.info("log_a_a", v=1)
+    assert "log_a_a" in th.logged
+
+    log_a.addFilter(logging.Filter("log_a"))
+    log_a.info("log", v=1)
+    assert not th.logged
+    log_a_a.info("log_a_a", v=1)
+    assert th.logged
+
+    log_a.removeFilter("log_a")
+    log_a.addFilter("log_a_a")
+    log_a.info("log_a mes", v=1)
+    assert not th.logged
+    log_a_a.info("log_a_a mes", v=1)
+    assert "log_a_a mes" in th.logged
 
 if __name__ == '__main__':
     """
@@ -394,11 +417,12 @@ if __name__ == '__main__':
     #test_namespaces()
     #test_is_active2()
     #test_jsonconfig()
-    test_listeners()
+    #test_listeners()
     #test_is_active()
     #test_lazy_log()
-    test_get_configuration()
-    test_recorder()
+    #test_get_configuration()
+    #test_recorder()
+    test_logger_filter()
 
     #slogging.configure(':debug')
     #tester = slogging.get_logger('tester')
