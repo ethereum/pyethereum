@@ -269,6 +269,8 @@ def test_lazy_log():
 
 
 def test_get_configuration():
+    root_logger = slogging.getLogger()
+    root_logger.manager.loggerDict = {} # clear old loggers
     config_string = ':INFO,a:TRACE,a.b:DEBUG'
     log_json = False
     slogging.configure(config_string=config_string, log_json=log_json)
@@ -296,6 +298,11 @@ def test_get_configuration():
 def test_recorder():
     th = setup_logging()
     log = slogging.get_logger()
+
+    exec_handler = slogging.ExecHandler()
+    exec_handler.setLevel(logging.TRACE)
+    #exec_handler.setLevel(TRACE)
+    log.addHandler(exec_handler)
 
     # test info
     recorder = slogging.LogRecorder()
@@ -381,15 +388,17 @@ if __name__ == '__main__':
 
     slogging.DEBUG("this is DEBUG msg")
     """
-    test_testhandler()
-    test_baseconfig()
+    #test_testhandler()
+    #test_baseconfig()
     #test_incremental()
     #test_namespaces()
-    test_is_active2()
-    test_jsonconfig()
+    #test_is_active2()
+    #test_jsonconfig()
     test_listeners()
-    test_is_active()
-    test_lazy_log()
+    #test_is_active()
+    #test_lazy_log()
+    test_get_configuration()
+    test_recorder()
 
     #slogging.configure(':debug')
     #tester = slogging.get_logger('tester')
