@@ -387,6 +387,44 @@ def test_logger_filter():
     log_a_a.info("log_a_a mes", v=1)
     assert "log_a_a mes" in th.logged
 
+class TestFilter(logging.Filter):
+    """
+    This is test class for filter record in logger
+    """
+    def filter(self, record):
+        if "not filter!" in record.msg:
+            return True
+        else:
+            return False
+
+
+def test_logger_filter_records():
+    """
+    message has record if add TestFilter and record have msg "not filter!"
+    """
+    th = setup_logging()
+    log_a = slogging.get_logger("a")
+
+    # add exechandler
+    exec_handler = slogging.ExecHandler()
+    #formater = logging.Formatter("%(asctime)-15s %(name)s %(a)s %(b)s")
+    #exec_handler.setFormatter(formater)
+    log_a.addHandler(exec_handler)
+
+    #add filter
+    f = TestFilter()
+    log_a.addFilter(f)
+
+    called = []
+    def log_cb(event_dict):
+        called.append(event_dict)
+
+    slogging.log_listeners.listeners.append(log_cb)
+    log_a.info("log_a", a=1, b=2)
+    assert not called
+    log_a.info("log_a not filter! ", a=1, b=2)
+    assert called[0]
+
 if __name__ == '__main__':
     """
     slogging.configure(':trace', log_json=False)
@@ -422,7 +460,8 @@ if __name__ == '__main__':
     #test_lazy_log()
     #test_get_configuration()
     #test_recorder()
-    test_logger_filter()
+    #test_logger_filter()
+    test_logger_filter_records()
 
     #slogging.configure(':debug')
     #tester = slogging.get_logger('tester')

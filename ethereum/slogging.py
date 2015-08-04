@@ -1,9 +1,7 @@
-import structlog
 import logging
-import sys
 import json
 import re
-from logging.handlers import MemoryHandler
+
 """
 See test_logging.py for examples
 
