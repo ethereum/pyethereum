@@ -392,7 +392,8 @@ class TestFilter(logging.Filter):
     This is test class for filter record in logger
     """
     def filter(self, record):
-        if "not filter!" in record.msg:
+        print "record.msg = ", record.msg
+        if "filtering!" in record.msg:
             return True
         else:
             return False
@@ -402,13 +403,13 @@ def test_logger_filter_records():
     """
     message has record if add TestFilter and record have msg "not filter!"
     """
+
     th = setup_logging()
     log_a = slogging.get_logger("a")
+    log_a.filters = []
 
     # add exechandler
     exec_handler = slogging.ExecHandler()
-    #formater = logging.Formatter("%(asctime)-15s %(name)s %(a)s %(b)s")
-    #exec_handler.setFormatter(formater)
     log_a.addHandler(exec_handler)
 
     #add filter
@@ -420,12 +421,88 @@ def test_logger_filter_records():
         called.append(event_dict)
 
     slogging.log_listeners.listeners.append(log_cb)
-    log_a.info("log_a", a=1, b=2)
+    log_a.info("log_a", a=11, b=22)
     assert not called
-    log_a.info("log_a not filter! ", a=1, b=2)
-    assert called[0]
+    log_a.info("log_a filtering! ", a=1, b=2)
+    assert called.pop()
+
+
+try:
+    unicode
+    _unicode = True
+except NameError:
+    _unicode = False
+records = []
+def helper_emit_stream_handler(self, record):
+    """
+    Emit a record.
+
+    If a formatter is specified, it is used to format the record.
+    The record is then written to the stream with a trailing newline.  If
+    exception information is present, it is formatted using
+    traceback.print_exception and appended to the stream.  If the stream
+    has an 'encoding' attribute, it is used to determine how to do the
+    output to the stream.
+    """
+
+    records.append(record)
+
+    try:
+        msg = self.format(record)
+        stream = self.stream
+        fs = "%s\n"
+        if not _unicode: #if no unicode support...
+            stream.write(fs % msg)
+        else:
+            try:
+                if (isinstance(msg, unicode) and
+                    getattr(stream, 'encoding', None)):
+                    ufs = u'%s\n'
+                    try:
+                        stream.write(ufs % msg)
+                    except UnicodeEncodeError:
+                        #Printing to terminals sometimes fails. For example,
+                        #with an encoding of 'cp1251', the above write will
+                        #work if written to a stream opened or wrapped by
+                        #the codecs module, but fail when writing to a
+                        #terminal even when the codepage is set to cp1251.
+                        #An extra encoding step seems to be needed.
+                        stream.write((ufs % msg).encode(stream.encoding))
+                else:
+                    stream.write(fs % msg)
+            except UnicodeError:
+                stream.write(fs % msg.encode("UTF-8"))
+        self.flush()
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except:
+        self.handleError(record)
+
+def standart_logging():
+    """
+    Test stndart loggin
+    2 handlers: basic and stream handler
+    """
+    root_logger = logging.getLogger()
+    root_logger.handlers = [] # clear handlers
+    stream_handler = logging.StreamHandler()
+    logging.StreamHandler.emit = helper_emit_stream_handler # Substitute function for test handlers with formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    stream_handler.setFormatter(formatter)
+    root_logger.addHandler(stream_handler)
+
+    test_handler = TestHandler()
+    root_logger.addHandler(test_handler)
+    root_logger.info("standart logging")
+    record = records.pop()
+    assert 'root' in record.name
+    assert 'INFO' in record.levelname
+    assert 'standart logging' in record.msg
+
+
 
 if __name__ == '__main__':
+    test_logger_filter_records()
     """
     slogging.configure(':trace', log_json=False)
     #-------------
@@ -461,7 +538,7 @@ if __name__ == '__main__':
     #test_get_configuration()
     #test_recorder()
     #test_logger_filter()
-    test_logger_filter_records()
+    #test_logger_filter_records()
 
     #slogging.configure(':debug')
     #tester = slogging.get_logger('tester')
