@@ -78,6 +78,9 @@ MIN_DIFF = 131072
 POW_EPOCH_LENGTH = 30000
 # Maximum extra data length
 MAX_EXTRADATA_LENGTH = 32
+# Exponential difficulty timebomb period
+EXPDIFF_PERIOD = 100000
+EXPDIFF_FREE_PERIODS = 2
 
 
 # Difficulty adjustment algo
@@ -87,7 +90,12 @@ def calc_difficulty(parent, timestamp):
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
-    return int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
+    o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
+    period_count = (parent.number + 1) // EXPDIFF_PERIOD
+    if period_count >= EXPDIFF_FREE_PERIODS:
+        o = max(o - 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
+    return o
+        
 
 
 class Account(rlp.Serializable):
@@ -529,7 +537,7 @@ class Block(rlp.Serializable):
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
-        if len(self.header.extra_data) > MAX_EXTRADATA_LENGTH:
+        if len(to_string(self.header.extra_data)) > MAX_EXTRADATA_LENGTH:
             raise ValueError("Extra data cannot exceed %d bytes" % MAX_EXTRADATA_LENGTH)
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
