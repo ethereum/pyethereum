@@ -529,7 +529,7 @@ class Block(rlp.Serializable):
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
-        if len(self.header.extra_data) > MAX_EXTRADATA_LENGTH:
+        if len(self.header.extra_data.encode('utf-8')) > MAX_EXTRADATA_LENGTH:
             raise ValueError("Extra data cannot exceed %d bytes" % MAX_EXTRADATA_LENGTH)
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
