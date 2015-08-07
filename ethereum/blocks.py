@@ -79,8 +79,8 @@ POW_EPOCH_LENGTH = 30000
 # Maximum extra data length
 MAX_EXTRADATA_LENGTH = 32
 # Exponential difficulty timebomb period
-EXPDIFF_PERIOD = 2250
-EXPDIFF_FREE_PERIODS = 50
+EXPDIFF_PERIOD = 100000
+EXPDIFF_FREE_PERIODS = 2
 
 
 # Difficulty adjustment algo
@@ -93,8 +93,7 @@ def calc_difficulty(parent, timestamp):
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
     period_count = (parent.number + 1) // EXPDIFF_PERIOD
     if period_count >= EXPDIFF_FREE_PERIODS:
-        o = max(o - 65**(period_count - EXPDIFF_FREE_PERIODS) //
-                64**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
+        o = max(o - 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
     return o
         
 
