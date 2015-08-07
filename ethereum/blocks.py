@@ -1269,8 +1269,6 @@ class Block(rlp.Serializable):
                 b'difficulty:' + encode_hex(self.hash), utils.encode_int(o))
             return o
 
-            return rlp.decode(rlp.encode(l)) == l
-
     def __eq__(self, other):
         """Two blocks are equal iff they have the same hash."""
         return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
