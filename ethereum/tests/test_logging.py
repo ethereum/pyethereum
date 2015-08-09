@@ -88,33 +88,10 @@ def test_lvl_trace():
     assert th.does_log(log.debug)
     assert th.does_log(log.trace)
 
-
-def test_incremental():
-    """
-    This is not standart functional for logging
-    The function "bind" removed from tests
-    """
-    """
-    config_string = ':trace'
-    th = setup_logging(config_string=config_string)
-    log = slogging.get_logger()
-    # incremental context
-    log = log.bind(first='one')
-    log.error('nice', a=1, b=2)
-    assert 'first' in th.logged
-    log = log.bind(second='two')
-    log.error('nice', a=1, b=2)
-    l = th.logged
-    assert 'first' in l and 'two' in l
-    """
-    pass
-
-
 def test_jsonconfig():
     th = setup_logging(log_json=True)
     log = slogging.get_logger('prefix')
     log.warn('abc', a=1)
-    #print "th.logged=", th.logged
     assert json.loads(th.logged) == dict(event='prefix.abc', a=1)
 
 
@@ -238,10 +215,6 @@ def test_lazy_log():
 
     class Expensive(object):
 
-        #def __structlog__(self):
-        #    called_json.append(1)
-        #    return 'expensive data preparation'
-
         def __repr__(self):
             called_print.append(1)
             return 'expensive data preparation'
@@ -250,22 +223,8 @@ def test_lazy_log():
     log = slogging.get_logger()
     log.trace('no', data=Expensive())
     assert not called_print
-    #assert not called_json
     log.info('yes', data=Expensive()) # !!!!!!!!!!!!!
-    #assert called_json.pop()
-    #assert not called_print
-    assert  called_print.pop()
-
-    """
-    th = setup_logging()
-    log = slogging.get_logger()
-    log.trace('no', data=Expensive())
-    assert not called_print
-    assert not called_json
-    log.info('yes', data=Expensive())
-    assert not called_json
     assert called_print.pop()
-    """
 
 
 def test_get_configuration():
@@ -301,7 +260,6 @@ def test_recorder():
 
     exec_handler = slogging.ExecHandler(log_json=log.log_json)
     exec_handler.setLevel(logging.TRACE)
-    #exec_handler.setLevel(TRACE)
     log.addHandler(exec_handler)
 
     # test info
@@ -392,7 +350,6 @@ class TestFilter(logging.Filter):
     This is test class for filter record in logger
     """
     def filter(self, record):
-        print "record.msg = ", record.msg
         if "filtering!" in record.msg:
             return True
         else:
@@ -502,66 +459,4 @@ def standart_logging():
 
 
 if __name__ == '__main__':
-    test_logger_filter_records()
-    """
-    slogging.configure(':trace', log_json=False)
-    #-------------
-    #logger = logging.getLogger(":myloger")
-    #fh = logging.FileHandler('mytest1.log')
-    #fh.setLevel(logging.DEBUG)
-    #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    #fh.setFormatter(formatter)
-    #logger.addHandler(fh)
-
-    #---------------------
-    trace = slogging.get_logger('trace')
-    trace.trace('mytrace', p=121)
-    tester = slogging.get_logger('tester')
-    assert tester.is_active(level_name='info')
-    slogging.set_level('tester', 'trace')
-    assert tester.is_active(level_name='trace')
-    tester.info('done')
-    test_how_to_use_as_vm_logger()
-    test_testhandler()
-
-    slogging.DEBUG("this is DEBUG msg")
-    """
-    #test_testhandler()
-    #test_baseconfig()
-    #test_incremental()
-    #test_namespaces()
-    #test_is_active2()
-    #test_jsonconfig()
-    #test_listeners()
-    #test_is_active()
-    #test_lazy_log()
-    #test_get_configuration()
-    #test_recorder()
-    #test_logger_filter()
-    #test_logger_filter_records()
-
-    #slogging.configure(':debug')
-    #tester = slogging.get_logger('tester')
-    ##assert tester.is_active(level_name='info')
-    #slogging.set_level('tester', 'trace')
-    #assert tester.is_active(level_name='trace')
-    #tester.info('done')
-    """
-    slogging.configure(config_string='mytrace.vm:TRACE')
-    logger_trace = slogging.get_logger("mytrace.vm")
-    logger_trace.trace("this is trace")
-    logger_trace.debug("this is debug")
-    logger_trace.info("this is info")
-
-    my=logging.getLogger("my")
-    my.setLevel(logging.DEBUG)
-    my.debug("123")
-
-    my.setLevel(logging.INFO)
-    my.debug("123456")
-
-    config_string = 'eth.vm:INFO'
-    slogging.configure(config_string=config_string)
-    log = slogging.get_logger('eth.vm')
-    log.info("log!! INFO")
-    """
+    test_lazy_log()
