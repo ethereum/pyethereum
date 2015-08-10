@@ -153,7 +153,6 @@ def test_listeners():
     # activate listener
     slogging.log_listeners.listeners.append(log_cb) # Add handlers
     log.error('test listener', abc='thislistener')
-    #print "th.logged=", th.logged
     assert 'thislistener' in th.logged
     r = called.pop()
     assert r == dict(event='test listener', abc='thislistener')
@@ -210,7 +209,6 @@ def test_lazy_log():
     class LogMemory
     """
 
-    called_json = []
     called_print = []
 
     class Expensive(object):
@@ -459,4 +457,4 @@ def standart_logging():
 
 
 if __name__ == '__main__':
-    test_lazy_log()
+    pass
