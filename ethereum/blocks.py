@@ -93,9 +93,9 @@ def calc_difficulty(parent, timestamp):
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
     period_count = (parent.number + 1) // EXPDIFF_PERIOD
     if period_count >= EXPDIFF_FREE_PERIODS:
-        o = max(o - 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
+        o = max(o + 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
     return o
-        
+
 
 
 class Account(rlp.Serializable):
