@@ -157,7 +157,6 @@ class Chain(object):
             if block.get_parent() != self.head:
                 log.debug('New Head is on a different branch',
                           head_hash=block, old_head_hash=self.head)
-        log.debug('updating head2')
         # Some temporary auditing to make sure pruning is working well
         if block.number > 0 and block.number % 500 == 0 and isinstance(db, RefcountDB):
             trie.proof.push(trie.RECORDING)
@@ -165,14 +164,13 @@ class Chain(object):
             n = trie.proof.get_nodelist()
             trie.proof.pop()
             sys.stderr.write('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
-        log.debug('updating head3')
         # Fork detected, revert death row and change logs
         if block.number > 0:
             b = block.get_parent()
             h = self.head
             b_children = []
             if b.hash != h.hash:
-                sys.stderr.write('REVERTING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+                log.warn('reverting')
                 while h.number > b.number:
                     h.state.db.revert_refcount_changes(h.number)
                     h = h.get_parent()
