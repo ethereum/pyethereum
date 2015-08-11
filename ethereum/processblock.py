@@ -156,7 +156,7 @@ def apply_transaction(block, tx):
     else:
         log_tx.debug('TX SUCCESS', data=data)
         gas_used = tx.startgas - gas_remained
-        block.refunds += len(block.suicides) * opcodes.GSUICIDEREFUND
+        block.refunds += len(set(block.suicides)) * opcodes.GSUICIDEREFUND
         if block.refunds > 0:
             log_tx.debug('Refunding', gas_refunded=min(block.refunds, gas_used // 2))
             gas_remained += min(block.refunds, gas_used // 2)
