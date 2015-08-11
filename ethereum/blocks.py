@@ -93,9 +93,9 @@ def calc_difficulty(parent, timestamp):
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, MIN_DIFF)))
     period_count = (parent.number + 1) // EXPDIFF_PERIOD
     if period_count >= EXPDIFF_FREE_PERIODS:
-        o = max(o - 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
+        o = max(o + 2**(period_count - EXPDIFF_FREE_PERIODS), MIN_DIFF)
     return o
-        
+
 
 
 class Account(rlp.Serializable):
@@ -1269,8 +1269,6 @@ class Block(rlp.Serializable):
                 b'difficulty:' + encode_hex(self.hash), utils.encode_int(o))
             return o
 
-            return rlp.decode(rlp.encode(l)) == l
-
     def __eq__(self, other):
         """Two blocks are equal iff they have the same hash."""
         return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
@@ -1355,7 +1353,7 @@ def get_block_header(db, blockhash):
     return bh
 
 
-@lru_cache(32)
+@lru_cache(1024)
 def get_block(db, blockhash):
     """
     Assumption: blocks loaded from the db are not manipulated
