@@ -1,5 +1,8 @@
+from rlp.utils import encode_hex
 from ethereum import tester
 from ethereum import utils
+
+
 serpent_contract = """
 extern solidity: [sub2:[]:i]
 
@@ -29,8 +32,6 @@ contract zoo {
 
 
 def test_interop():
-    if 'solidity' not in tester.languages:
-        return
     s = tester.state()
     c1 = s.abi_contract(serpent_contract)
     c2 = s.abi_contract(solidity_contract, language='solidity')  # should be zoo
@@ -39,6 +40,50 @@ def test_interop():
     assert c2.sub3(utils.encode_hex(c2.address)) == utils.encode_hex(c2.address)
     assert c1.main(c2.address) == 14
     assert c2.main(c1.address) == 10
+
+
+constructor_contract = """
+contract gondor {
+    address public ruler;
+
+    function gondor(address steward) {
+        if (steward == 0x0) {
+            ruler = msg.sender;
+        } else {
+            ruler = steward;
+        }
+    }
+}
+"""
+
+
+def test_abi_constructor():
+    s = tester.state()
+    c1 = s.abi_contract(
+        constructor_contract, language='solidity',
+        contract_name='gondor'
+    )
+    c2 = s.abi_contract(
+        constructor_contract, constructor_args=[tester.a1],
+        language='solidity', contract_name='gondor'
+    )
+    assert c1.ruler() != c2.ruler()
+    assert c2.ruler() == utils.encode_hex(tester.a1)
+
+
+def test_constructor():
+    s = tester.state()
+    a1 = s.contract(constructor_contract, language='solidity')
+    a2 = s.contract(
+        constructor_contract, constructor_args=[
+            {'type': 'address', 'val': tester.a1}
+        ], language='solidity'
+    )
+    _abi = tester.languages['solidity'].mk_full_signature(constructor_contract)
+    c1 = tester.ABIContract(s, _abi, a1)
+    c2 = tester.ABIContract(s, _abi, a2)
+    assert c1.ruler() != c2.ruler()
+    assert c2.ruler() == utils.encode_hex(tester.a1)
 
 
 solidity_currency = """

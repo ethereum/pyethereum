@@ -7,7 +7,7 @@ import ethereum.db as db
 import ethereum.opcodes as opcodes
 import ethereum.abi as abi
 from ethereum.slogging import LogRecorder, configure_logging, set_level
-from ethereum.utils import to_string
+from ethereum.utils import to_string, is_string
 from ethereum._solidity import get_solidity
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
@@ -132,17 +132,24 @@ class state():
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
 
-    def contract(self, code, sender=k0, endowment=0, language='serpent', gas=None):
+    def contract(self, code, sender=k0, endowment=0, language='serpent',
+                 gas=None, constructor_args=[]):
         if language not in languages:
             languages[language] = __import__(language)
         language = languages[language]
         evm = language.compile(code)
+        if len(constructor_args) > 0:
+            evm += abi.encode_abi(
+                [a['type'] for a in constructor_args],
+                [a['val'] for a  in constructor_args])
+
         o = self.evm(evm, sender, endowment)
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(self, code, sender=k0, endowment=0, language='serpent', contract_name='',
-                     gas=None, log_listener=None, listen=True):
+    def abi_contract(self, code, sender=k0, endowment=0, language='serpent',
+                     contract_name='', gas=None, log_listener=None, listen=True,
+                     constructor_args=[]):
         if contract_name:
             assert language == 'solidity'
             cn_args = dict(contract_name=contract_name)
@@ -151,10 +158,20 @@ class state():
         if language not in languages:
             languages[language] = __import__(language)
         language = languages[language]
+        _abi = language.mk_full_signature(code, **cn_args)
+        if is_string(_abi):
+            _abi = abi.json_decode(_abi)
+
         evm = language.compile(code, **cn_args)
+
+        if len([i for i in _abi if i['type'] == 'constructor']) > 0 \
+            and len(constructor_args) > 0:
+            cname = contract_name or '__contract__'
+            translator = abi.ContractTranslator(_abi, contract_name=cname)
+            evm += translator.encode(cname, constructor_args)
+
         address = self.evm(evm, sender, endowment, gas)
         assert len(self.block.get_code(address)), "Contract code empty"
-        _abi = language.mk_full_signature(code, **cn_args)
         return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
 
 

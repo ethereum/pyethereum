@@ -13,7 +13,7 @@ def json_decode(x):
 
 class ContractTranslator():
 
-    def __init__(self, full_signature):
+    def __init__(self, full_signature, contract_name='__contract__'):
         self.function_data = {}
         self.event_data = {}
         v = vars(self)
@@ -24,7 +24,7 @@ class ContractTranslator():
                 continue
             encode_types = [f['type'] for f in sig_item['inputs']]
             signature = [(f['type'], f['name']) for f in sig_item['inputs']]
-            name = sig_item['name']
+            name = sig_item.get('name', contract_name)
             if '(' in name:
                 name = name[:name.find('(')]
             if name in v:
@@ -36,19 +36,23 @@ class ContractTranslator():
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
             sig = name + '(' + ','.join(encode_types) + ')'
-            if sig_item['type'] == 'function':
-                prefix = big_endian_to_int(utils.sha3(sig)[:4])
-                decode_types = [f['type'] for f in sig_item['outputs']]
-                is_unknown_type = len(sig_item['outputs']) and \
+            if sig_item['type'] in ('function', 'constructor'):
+                decode_types = [f['type'] for f in sig_item.get('outputs', [])]
+                is_unknown_type = len(decode_types) > 0 and \
                     sig_item['outputs'][0]['name'] == 'unknown_out'
-                self.function_data[name] = {
-                    "prefix": prefix,
+                func = {
                     "encode_types": encode_types,
                     "decode_types": decode_types,
                     "is_unknown_type": is_unknown_type,
                     "is_constant": sig_item.get('constant', False),
                     "signature": signature
                 }
+
+                if sig_item['type'] == 'function':
+                    func['prefix'] = big_endian_to_int(utils.sha3(sig)[:4])
+
+                self.function_data[name] = func
+
             elif sig_item['type'] == 'event':
                 prefix = big_endian_to_int(utils.sha3(sig))
                 indexed = [f['indexed'] for f in sig_item['inputs']]
@@ -62,9 +66,10 @@ class ContractTranslator():
 
     def encode(self, name, args):
         fdata = self.function_data[name]
-        o = zpad(encode_int(fdata['prefix']), 4) + \
-            encode_abi(fdata['encode_types'], args)
-        return o
+        prefix = ''
+        if 'prefix' in fdata:
+            prefix = zpad(encode_int(fdata['prefix']), 4)
+        return prefix + encode_abi(fdata['encode_types'], args)
 
     def decode(self, name, data):
         # print 'out', utils.encode_hex(data)
