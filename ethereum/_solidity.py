@@ -99,6 +99,25 @@ class solc_wrapper(object):
         return sorted_contracts
 
 
+    @classmethod
+    def compile_rich(cls, code):
+        "full format as returned by jsonrpc"  # FIXME multiple contracts
+        bc = cls.compile(code)
+        abi = cls.mk_full_signature(code)
+        r = dict(code='0x' + bc.encode('hex'),
+                info=dict(source=code,
+                language='Solidity',
+                languageVersion='0',
+                compilerVersion='0',
+                abiDefinition=abi,
+                userDoc=dict(methods=dict()),
+                developerDoc=dict(methods=dict()),
+                )
+                )
+        return r
+
+
+
 def get_solidity(try_import=False):
     if try_import:
         try:
