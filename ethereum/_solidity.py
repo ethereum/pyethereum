@@ -1,3 +1,4 @@
+import re
 import subprocess
 import os
 import yaml  # use yaml instead of json to get non unicode
@@ -78,7 +79,7 @@ class solc_wrapper(object):
 
     @classmethod
     def combined(cls, code):
-        p = subprocess.Popen(['solc', '--add-std=1', '--combined-json', 'json-abi,binary,sol-abi'],
+        p = subprocess.Popen(['solc', '--add-std=1', '--combined-json', 'json-abi,binary,sol-abi,natspec-dev,natspec-user'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
@@ -89,6 +90,8 @@ class solc_wrapper(object):
         for contract_name, data in contracts.items():
             data['json-abi'] = yaml.safe_load(data['json-abi'])
             data['sol-abi'] = yaml.safe_load(data['sol-abi'])
+            data['natspec-dev'] = yaml.safe_load(data['natspec-dev'])
+            data['natspec-user'] = yaml.safe_load(data['natspec-user'])
 
         names = cls.contract_names(code)
         assert len(names) <= len(contracts)  # imported contracts are not returned
@@ -98,24 +101,33 @@ class solc_wrapper(object):
 
         return sorted_contracts
 
+    @classmethod
+    def compiler_version(cls):
+        version_info = subprocess.check_output(['solc', '--version'])
+        match = re.search("^Version: ([0-9a-z.-]+)/", version_info, re.MULTILINE)
+        if match:
+            return match.group(1)
 
     @classmethod
     def compile_rich(cls, code):
-        "full format as returned by jsonrpc"  # FIXME multiple contracts
-        bc = cls.compile(code)
-        abi = cls.mk_full_signature(code)
-        r = dict(code='0x' + bc.encode('hex'),
-                info=dict(source=code,
-                language='Solidity',
-                languageVersion='0',
-                compilerVersion='0',
-                abiDefinition=abi,
-                userDoc=dict(methods=dict()),
-                developerDoc=dict(methods=dict()),
-                )
-                )
-        return r
+        """full format as returned by jsonrpc"""
 
+        return {
+            contract_name: {
+                'code': "0x" + contract.get('binary'),
+                'info': {
+                    'abiDefinition': contract.get('json-abi'),
+                    'compilerVersion': cls.compiler_version(),
+                    'developerDoc': contract.get('natspec-dev'),
+                    'language': 'Solidity',
+                    'languageVersion': '0',
+                    'source': code,
+                    'userDoc': contract.get('natspec-user')
+                },
+            }
+            for contract_name, contract
+            in cls.combined(code)
+        }
 
 
 def get_solidity(try_import=False):
