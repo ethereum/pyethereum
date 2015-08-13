@@ -9,8 +9,9 @@ install:
   - pip install -r dev_requirements.txt
 
 script:
-- coverage run --source ethereum setup.py test
-#- tox -e $TOX_ENV
+- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
+- coverage run --append --source ethereum -m py.test ethereum/tests/test_vm.py
+- coverage run --append --source ethereum -m py.test ethereum/tests/test_state.py
 
 after_success:
 - coveralls
