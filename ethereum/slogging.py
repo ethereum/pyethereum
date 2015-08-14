@@ -257,18 +257,6 @@ rootLogger = RootLogger(DEFAULT_LOGLEVEL)
 EthLogger.root = rootLogger
 EthLogger.manager = EthManager(EthLogger.root)
 
-"""
-logging.Logger.trace = _trace
-logging.Logger.info = _info
-logging.Logger.debug = _debug
-logging.Logger.warning = _warning
-logging.Logger.warn = _warning
-logging.Logger.error = _error
-logging.Logger.exception = _exception
-logging.Logger.critical = _critical
-logging.Logger.fatal = _critical
-"""
-
 class ExecHandler(logging.Handler):
     def __init__(self, log_json=False):
         super(ExecHandler, self).__init__()
@@ -306,21 +294,13 @@ def getLogger(name=None):
 
 def set_level(name, level):
     assert not isinstance(level, int)
-    #logging.getLogger(name).setLevel(getattr(logging, level.upper()))
     logger = getLogger(name)
-    #logger.handlers = []
     logger.setLevel(getattr(logging, level.upper()))
     ch = logging.StreamHandler()
-    #if ch not in ethlogger.root.handlers:
     ch.setLevel(getattr(logging, level.upper()))
     formatter = logging.Formatter(PRINT_FORMAT)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
-
-    #exec_handler = ExecHandler()
-    #exec_handler.setLevel(getattr(logging, level.upper()))
-    #exec_handler.setLevel(TRACE)
-    #logger.addHandler(exec_handler)
 
 
 def configure_loglevels(config_string):
@@ -352,7 +332,6 @@ configure()
 def get_logger(name=None):
     known_loggers.add(name)
     return getLogger(name)
-    #return structlog.get_logger(name)
 
 
 def checkLevel(loghandler, level):
