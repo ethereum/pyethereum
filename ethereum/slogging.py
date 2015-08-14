@@ -115,15 +115,119 @@ def get_logger_names():
     return sorted(known_loggers, key=lambda x: '' if not x else x)
 
 #----------------------------- from standart logging module with some modifications ----------------------------
+def bind_decorator(fun):
+    def wrapper(self, msg, *args, **kwargs):
+        if kwargs:
+            kwargs.update(**self.context_head)
+            kwargs.update(**self.context_bind)
+        fun(self, msg, *args, **kwargs)
+    return wrapper
+
 class EthLogger(logging.Logger):
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
+        self.context_head = {}
+        self.context_bind = {}
+        self.warn = self.warning
         super(EthLogger, self).__init__(name, level=level)
 
     def is_active(self, level_name='trace'):
         return self.isEnabledFor(logging._checkLevel(level_name.upper()))
-        #getLogger()
-        #self.setLevel(getattr(logging, level_name.upper()))
 
+    def help_make_kws(self, kws, name, msg, log_json=False):
+        """
+        The function separate standart logging from  arbitrary log parameters
+        """
+        new_kws = {}
+        message = None
+
+        if log_json:
+            message = {}
+            for i in kws:
+                if i not in formatter_set:  # levelno, asctime......
+                    if type(kws[i]) not in (int, long, float, complex):
+                        message[i] = repr(kws[i])
+                    else:
+                        message[i] = kws[i]
+                else:
+                    new_kws[i] = kws[i]
+
+            if name != rootLogger.name:
+                message1 = {'event': "{}.{}".format(name, msg)}
+            else:
+                message1 = {'event': "{}".format(msg)}
+            message.update(message1)
+            msg = json.dumps(message)
+        else:
+            chunks = []
+            for i in kws:
+                if i not in formatter_set:
+                    chunks.append(" {i}={kwsi}".format(i=i, kwsi=str(kws[i])))
+                else:
+                    new_kws[i] = kws[i]
+            message = ''.join(chunks)
+            msg += message
+
+        return new_kws, msg
+
+    def bind(self, **kwargs):
+        for i in kwargs:
+            if not len(self.context_head):
+                self.context_head[i] = kwargs[i]
+            else:
+                self.context_bind[i] = kwargs[i]
+        return self
+
+    # this function extends standart logging module
+    @bind_decorator
+    def trace(self, msg, *args, **kwargs):
+        # Yes, logger takes its '*args' as 'args'.
+
+        if self.isEnabledFor(TRACE):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
+            self._log(TRACE, new_message, args, **new_kws)
+
+    # this function extends standart logging module
+    @bind_decorator
+    def info(self, msg, *args, **kwargs):
+        # Yes, logger takes its '*args' as 'args'.
+        if self.isEnabledFor(logging.INFO):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
+            self._log(logging.INFO, new_message, args, **new_kws)
+
+    @bind_decorator
+    def debug(self, msg, *args, **kwargs):
+        if self.isEnabledFor(logging.DEBUG):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
+            self._log(logging.DEBUG, new_message, args, **new_kws)
+
+    @bind_decorator
+    def warning(self, msg, *args, **kwargs):
+        new_message = ""
+        if self.isEnabledFor(logging.WARNING):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
+            self._log(logging.WARNING, new_message, args, **new_kws)
+
+    @bind_decorator
+    def error(self, msg, *args, **kwargs):
+        new_message = ""
+        if self.isEnabledFor(logging.ERROR):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
+            self._log(logging.ERROR, new_message, args, **new_kws)
+
+    @bind_decorator
+    def exception(self, msg, *args, **kwargs):
+        """
+        Convenience method for logging an ERROR with exception information.
+        """
+        kwargs['exc_info'] = 1
+        self.error(msg, *args, **kwargs)
+
+    @bind_decorator
+    def critical(self, msg, *args, **kwargs):
+        new_message = ""
+        if self.isEnabledFor(logging.CRITICAL):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
+            self._log(logging.CRITICAL, new_message, args, **new_kws)
 
 class RootLogger(EthLogger):
     """
@@ -140,6 +244,8 @@ class RootLogger(EthLogger):
 
 class EthManager(logging.Manager):
     def __init__(self, rootnode):
+        self.context_head_key = None # head key for bind decorator
+        self.context_bind = {} # dict for bind decorator
         self.loggerClass = EthLogger
         super(EthManager, self).__init__(rootnode)
 
@@ -151,87 +257,7 @@ rootLogger = RootLogger(DEFAULT_LOGLEVEL)
 EthLogger.root = rootLogger
 EthLogger.manager = EthManager(EthLogger.root)
 
-def help_make_kws(kws, name, msg, log_json=False):
-    """
-    The function separate standart logging from  arbitrary log parameters
-    """
-    new_kws = {}
-    message = None
-
-    if log_json:
-        message = {}
-        for i in kws:
-            if i not in formatter_set:  # levelno, asctime......
-                if type(kws[i]) not in (int, long, float, complex):
-                    message[i] = repr(kws[i])
-                else:
-                    message[i] = kws[i]
-            else:
-                new_kws[i] = kws[i]
-
-        if name != rootLogger.name:
-            message1 = {'event': "{}.{}".format(name, msg)}
-        else:
-            message1 = {'event': "{}".format(msg)}
-        message.update(message1)
-        msg = json.dumps(message)
-    else:
-        chunks = []
-        for i in kws:
-            if i not in formatter_set:
-                chunks.append(" {i}={kwsi}".format(i=i, kwsi=str(kws[i])))
-            else:
-                new_kws[i] = kws[i]
-        message = ''.join(chunks)
-        msg += message
-
-    return new_kws, msg
-
-# this function extends standart logging module
-def _trace(self, msg, *args, **kwargs):
-    # Yes, logger takes its '*args' as 'args'.
-
-    if self.isEnabledFor(TRACE):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-        self._log(TRACE, new_message, args, **new_kws)
-
-# this function extends standart logging module
-def _info(self, msg, *args, **kwargs):
-    # Yes, logger takes its '*args' as 'args'.
-    if self.isEnabledFor(logging.INFO):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
-        self._log(logging.INFO, new_message, args, **new_kws)
-
-def _debug(self, msg, *args, **kwargs):
-    if self.isEnabledFor(logging.DEBUG):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
-        self._log(logging.DEBUG, new_message, args, **new_kws)
-
-def _warning(self, msg, *args, **kwargs):
-    new_message = ""
-    if self.isEnabledFor(logging.WARNING):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-        self._log(logging.WARNING, new_message, args, **new_kws)
-
-def _error(self, msg, *args, **kwargs):
-    new_message = ""
-    if self.isEnabledFor(logging.ERROR):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-        self._log(logging.ERROR, new_message, args, **new_kws)
-
-def _exception(self, msg, *args, **kwargs):
-    """
-    Convenience method for logging an ERROR with exception information.
-    """
-    kwargs['exc_info'] = 1
-    _error(msg, *args, **kwargs)
-
-def _critical(self, msg, *args, **kwargs):
-    new_message = ""
-    if self.isEnabledFor(logging.CRITICAL):
-        new_kws, new_message = help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-        self._log(logging.CRITICAL, new_message, args, **new_kws)
-
+"""
 logging.Logger.trace = _trace
 logging.Logger.info = _info
 logging.Logger.debug = _debug
@@ -241,7 +267,7 @@ logging.Logger.error = _error
 logging.Logger.exception = _exception
 logging.Logger.critical = _critical
 logging.Logger.fatal = _critical
-
+"""
 
 class ExecHandler(logging.Handler):
     def __init__(self, log_json=False):

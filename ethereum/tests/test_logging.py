@@ -16,7 +16,6 @@ class TestHandler(logging.handlers.BufferingHandler):
         # returns just the message part (no formatting)
         if len(self.buffer):
             msg = self.buffer.pop().getMessage()
-            print "logged=", msg
             return msg
         return None
 
@@ -159,8 +158,6 @@ def test_listeners():
 
     log.trace('trace is usually filtered', abc='thislistener') # this handler for function log_cb does not work
     assert th.logged is None
-    ### assert 'abc' in called.pop()
-
 
     # deactivate listener
     slogging.log_listeners.listeners.remove(log_cb)
@@ -279,8 +276,6 @@ def test_recorder():
     assert r[0] == dict(event='a', v=1)
     assert len(slogging.log_listeners.listeners) == 0
 
-# examples
-
 
 def test_howto_use_in_tests():
     # select what you want to see.
@@ -295,7 +290,6 @@ def test_how_to_use_as_vm_logger():
     """
     don't log until there was an error
     """
-
     config_string = ':DEBUG,eth.vm:INFO'
     slogging.configure(config_string=config_string)
     log = slogging.get_logger('eth.vm')
@@ -454,7 +448,22 @@ def standart_logging():
     assert 'INFO' in record.levelname
     assert 'standart logging' in record.msg
 
+def test_incremental():
+    config_string = ':trace'
+    th = setup_logging(config_string=config_string)
+    log = slogging.get_logger()
+    # incremental context
+    log = log.bind(first='one')
+    log.error('nice', a=1, b=2)
+    assert 'first' in th.logged
+    log = log.bind(second='two')
+    log.error('nice', a=1, b=2)
+    l = th.logged
+    assert 'first' in l and 'two' in l
+    log.error('nice', a=3, b=2)
+    l = th.logged
+    assert 'a=3' in l and 'b=2' in l
 
 
 if __name__ == '__main__':
-    pass
+    test_incremental()
