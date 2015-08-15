@@ -160,7 +160,7 @@ class state():
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        tx = t.contract(sendnonce, 1, gas_limit, endowment, evm)
+        tx = t.contract(sendnonce, gas_price, gas_limit, endowment, evm)
         tx.sign(sender)
         if gas is not None:
             tx.startgas = gas
@@ -299,3 +299,4 @@ def disable_logging():
 
 
 gas_limit = 1000000
+gas_price = 1
