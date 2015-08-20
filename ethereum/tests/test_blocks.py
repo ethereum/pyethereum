@@ -43,7 +43,7 @@ def valueconv(k, v):
 
 
 def run_block_test(params):
-    b = blocks.genesis(e, params["pre"])
+    b = blocks.genesis(e, start_alloc=params["pre"])
     gbh = params["genesisBlockHeader"]
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
     b.timestamp = utils.scanners['int'](gbh["timestamp"])
