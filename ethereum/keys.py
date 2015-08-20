@@ -1,7 +1,10 @@
-import os, pbkdf2, copy, sys
+import os
+import pbkdf2
+import sys
+
 try:
     scrypt = __import__('scrypt')
-except:
+except ImportError:
     sys.stderr.write("""
 Failed to import scrypt. This is not a fatal error but does
 mean that you cannot create or decrypt privkey jsons that use
@@ -11,7 +14,7 @@ scrypt
     scrypt = None
 try:
     import bitcoin
-except:
+except ImportError:
     sys.stderr.write("""
 Failed to import bitcoin. This is not a fatal error but does
 mean that you will not be able to determine the address from
@@ -95,15 +98,17 @@ def pbkdf2_hash(val, params):
 
 
 kdfs = {
-    "scrypt": {
-        "calc": scrypt_hash,
-        "mkparams": mk_scrypt_params
-    },
     "pbkdf2": {
         "calc": pbkdf2_hash,
         "mkparams": mk_pbkdf2_params
     }
 }
+
+if scrypt is not None:
+    kdfs["scrypt"] = {
+        "calc": scrypt_hash,
+        "mkparams": mk_scrypt_params
+    }
 
 
 def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
@@ -233,7 +238,7 @@ if sys.version_info.major == 3:
     def int_to_big_endian(value):
         byte_length = ceil(value.bit_length() / 8)
         return (value).to_bytes(byte_length, byteorder='big')
-    
+
     def big_endian_to_int(value):
         return int.from_bytes(value, byteorder='big')
 
