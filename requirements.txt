@@ -2,5 +2,8 @@ bitcoin
 pysha3
 PyYAML
 repoze.lru
+pbkdf2
+pycrypto
+scrypt
 https://github.com/ethereum/pyrlp/tarball/develop
 https://github.com/ethereum/ethash/tarball/master
