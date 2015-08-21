@@ -670,6 +670,9 @@ class Block(rlp.Serializable):
         ineligible.extend([b.header for b in ancestor_chain])
         eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
         for uncle in self.uncles:
+            parent = get_block(self.db, uncle.prevhash)
+            if uncle.difficulty != calc_difficulty(parent, uncle.timestamp):
+                return False
             if not uncle.check_pow():
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
