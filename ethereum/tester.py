@@ -183,7 +183,7 @@ class state():
                             " the abi_contract mechanism")
         tm, g = time.time(), self.block.gas_used
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
+        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
         recorder = LogRecorder() if profiling > 1 else None
@@ -221,7 +221,7 @@ class state():
             evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
-        tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
+        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
         return spv.mk_transaction_spv_proof(self.block, tx)
@@ -233,7 +233,7 @@ class state():
             evmdata = serpent.encode_abi(funid, *abi)
         else:
             evmdata = serpent.encode_datalist(*data)
-        tx = t.Transaction(sendnonce, 1, gas_limit, to, value, evmdata)
+        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
         return spv.verify_transaction_spv_proof(self.block, tx, proof)
