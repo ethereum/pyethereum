@@ -296,21 +296,23 @@ def set_level(name, level):
     assert not isinstance(level, int)
     logger = getLogger(name)
     logger.setLevel(getattr(logging, level.upper()))
-    ch = logging.StreamHandler()
-    ch.setLevel(getattr(logging, level.upper()))
-    formatter = logging.Formatter(PRINT_FORMAT)
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
 
-
-def configure_loglevels(config_string):
+def configure_loglevels(config_string, format=PRINT_FORMAT):
+    global FLAG_FISRST_CONFIGURE_LEVEL
     """
     config_string = ':debug,p2p:info,vm.op:trace'
     """
     assert ':' in config_string
     for name_levels in config_string.split(','):
         name, level = name_levels.split(':')
-        set_level(name, level)
+        assert not isinstance(level, int)
+        logger = getLogger(name)
+        logger.setLevel(getattr(logging, level.upper()))
+        if not len(logger.handlers):
+            ch = logging.StreamHandler()
+            formatter = logging.Formatter(format)
+            ch.setFormatter(formatter)
+            logger.addHandler(ch)
 
 def configure(config_string='', log_json=False):
     if log_json:
@@ -322,9 +324,15 @@ def configure(config_string='', log_json=False):
 
     logging.basicConfig(format=format, level=DEFAULT_LOGLEVEL) # work only first time
     ethlogger = getLogger()
+    if not len(ethlogger.handlers):
+        ch = logging.StreamHandler()
+        formatter = logging.Formatter(format)
+        ch.setFormatter(formatter)
+        ethlogger.addHandler(ch)
 
     if config_string:
-        configure_loglevels(config_string)
+        configure_loglevels(config_string=config_string, format=format)
+
 
 configure_logging = configure
 configure()
