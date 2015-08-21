@@ -75,7 +75,7 @@ class Transaction(rlp.Serializable):
                 rawhash = utils.sha3(rlpdata)
                 pub = ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
                 if pub is False:
-                    raise Exception("Invalid signature values (x^3+7 is non-residue)")
+                    raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
                 pub = encode_pubkey(pub, 'bin')
                 self._sender = utils.sha3(pub[1:])[-20:]
                 assert self.sender == self._sender
