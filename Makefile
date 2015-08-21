@@ -15,6 +15,8 @@ help:
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
 	@echo "release - package and upload a release"
 	@echo "dist - package"
+	@echo "fixtures-init - init fixtures
+	@echo "fixtures-update - update fixtures"
 
 clean: clean-build clean-pyc clean-test
 
