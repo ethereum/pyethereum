@@ -78,9 +78,9 @@ class solc_wrapper(object):
         return sorted_contracts[idx][1]['json-abi']
 
     @classmethod
-    def combined(cls, code):
+    def combined(cls, code, stdin=subprocess.PIPE, stdout=subprocess.PIPE):
         p = subprocess.Popen(['solc', '--add-std=1', '--combined-json', 'json-abi,binary,sol-abi,natspec-dev,natspec-user'],
-                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                             stdin=stdin, stdout=stdout)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
             raise CompileError('compilation failed')
