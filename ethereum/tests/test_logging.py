@@ -464,6 +464,30 @@ def test_incremental():
     l = th.logged
     assert 'a=3' in l and 'b=2' in l
 
+def test_count_logging_handlers():
+    config_string = ':WARNING'
+    config_string1 = ':DEBUG,eth:INFO'
+    config_string2 = ':DEBUG,eth.vm:INFO'
+    main_logger = slogging.getLogger()
+    # check main logger
+    slogging.configure(config_string)
+    assert len(main_logger.handlers) == 1
+    slogging.configure(config_string)
+    assert len(main_logger.handlers) == 1
+
+    # check named logger
+    eth_logger = slogging.getLogger('eth')
+    slogging.configure(config_string1)
+    assert len(eth_logger.handlers) == 1
+    slogging.configure(config_string1)
+    assert len(eth_logger.handlers) == 1
+
+    # check child of named logger
+    eth_vm_logger = slogging.getLogger('eth.vm')
+    slogging.configure(config_string2)
+    assert len(eth_vm_logger.handlers) == 1
+    slogging.configure(config_string2)
+    assert len(eth_vm_logger.handlers) == 1
 
 if __name__ == '__main__':
-    test_incremental()
+    pass
