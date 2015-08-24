@@ -2,8 +2,14 @@
 Ethereum -- Next generation cryptocurrency network
 ===================================================
 
-Ethereum Python Client
-======================
+Ethereum Core Library
+=====================
+
+This is the Python core library of the Ethereum project.
+
+For the python based command line client see:
+https://github.com/ethereum/pyethapp
+
 
 +-----------+------------------+------------------+--------------------+--------------------+
 |           | Linux            | OSX              | Travis             | Coverage           |

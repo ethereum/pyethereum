@@ -76,6 +76,8 @@ class Transaction(rlp.Serializable):
                 pub = ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
                 if pub is False:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
+                if pub == (0, 0):
+                    raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 pub = encode_pubkey(pub, 'bin')
                 self._sender = utils.sha3(pub[1:])[-20:]
                 assert self.sender == self._sender
@@ -92,6 +94,8 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
+        if key in (0, '', '\x00' * 32):
+            raise InvalidTransaction("Zero privkey cannot sign")
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
         self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
         self.sender = utils.privtoaddr(key)
