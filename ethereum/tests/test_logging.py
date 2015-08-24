@@ -57,7 +57,6 @@ def test_testhandler():
     assert th.does_log(log.warn)
     assert not th.does_log(log.debug)
 
-
 def test_baseconfig():
     # test default loglevel INFO
     th = setup_logging()
@@ -72,6 +71,39 @@ def test_baseconfig():
     config_string = ':inFO,a:trace,a.b:debug'
     th = setup_logging(config_string=config_string)
 
+def test_baseconfig2():
+    # test loglevels
+    th = setup_logging(':info,p2p.discovery:debug,p2p.peer:debug,p2p:warn,eth:debug,eth.chain.tx:info')
+    root = slogging.get_logger()
+    assert th.does_log(root.error)
+    assert th.does_log(root.info)
+    assert not th.does_log(root.debug)
+    p2p_discovery = slogging.get_logger('p2p.discovery')
+    assert th.does_log(p2p_discovery.error)
+    assert th.does_log(p2p_discovery.info)
+    assert th.does_log(p2p_discovery.debug)
+    p2p_peer = slogging.get_logger('p2p.peer')
+    assert th.does_log(p2p_peer.error)
+    assert th.does_log(p2p_peer.info)
+    assert th.does_log(p2p_peer.debug)
+    p2p = slogging.get_logger('p2p')
+    assert th.does_log(p2p.error)
+    assert th.does_log(p2p.warn)
+    assert th.does_log(p2p.warning)
+    assert not th.does_log(p2p.info)
+    assert not th.does_log(p2p.debug)
+    eth = slogging.get_logger('eth')
+    assert th.does_log(eth.error)
+    assert th.does_log(eth.warn)
+    assert th.does_log(eth.warning)
+    assert th.does_log(eth.info)
+    assert th.does_log(eth.debug)
+    eth_chain_tx = slogging.get_logger('eth.chain.tx')
+    assert th.does_log(eth_chain_tx.error)
+    assert th.does_log(eth_chain_tx.warn)
+    assert th.does_log(eth_chain_tx.warning)
+    assert th.does_log(eth_chain_tx.info)
+    assert not th.does_log(eth_chain_tx.debug)
 
 def test_is_active2():
     setup_logging(':info')
