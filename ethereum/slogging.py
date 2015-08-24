@@ -87,7 +87,7 @@ class LogRecorder(object):
 
 DEFAULT_LOGLEVEL = logging.INFO
 JSON_FORMAT = '%(message)s'
-PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
+PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s #L%(lineno)s'
 
 
 def get_configuration():
@@ -124,6 +124,7 @@ def bind_decorator(fun):
     return wrapper
 
 class EthLogger(logging.Logger):
+    #def __init__(self, name, level=DEFAULT_LOGLEVEL):
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
         self.context_head = {}
         self.context_bind = {}
@@ -286,7 +287,11 @@ def getLogger(name=None):
     """
 
     if name:
-        ethlogger = EthLogger.manager.getLogger(name)
+        if name in rootLogger.manager.loggerDict: # is this a new logger ?
+            ethlogger = EthLogger.manager.getLogger(name)
+        else:
+            ethlogger = EthLogger.manager.getLogger(name)
+            ethlogger.setLevel(rootLogger.level) # set level as rootloger level
         ethlogger.log_json = rootLogger.log_json
         return ethlogger
     else:
@@ -298,7 +303,6 @@ def set_level(name, level):
     logger.setLevel(getattr(logging, level.upper()))
 
 def configure_loglevels(config_string, format=PRINT_FORMAT):
-    global FLAG_FISRST_CONFIGURE_LEVEL
     """
     config_string = ':debug,p2p:info,vm.op:trace'
     """
