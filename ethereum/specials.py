@@ -21,7 +21,7 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, [0] * 32
     recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
-    if recovered_addr in (False, ZERO_PRIVKEY_ADDR):
+    if recovered_addr in (False, (0, 0)):
         return 1, msg.gas - gas_cost, []
     pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
