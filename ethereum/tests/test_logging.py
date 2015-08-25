@@ -105,6 +105,21 @@ def test_baseconfig2():
     assert th.does_log(eth_chain_tx.info)
     assert not th.does_log(eth_chain_tx.debug)
 
+    #---------------- configure again ------------------
+    th = setup_logging(':error')
+    assert th.does_log(root.error)
+    assert not th.does_log(root.info)
+    p2p_discovery = slogging.get_logger('p2p.discovery')
+    assert th.does_log(p2p_discovery.error)
+    assert not th.does_log(p2p_discovery.debug)
+    p2p_peer = slogging.get_logger('p2p.peer')
+    assert th.does_log(p2p_peer.error)
+    assert not th.does_log(p2p_peer.info)
+    p2p = slogging.get_logger('p2p')
+    assert th.does_log(p2p.error)
+    assert not th.does_log(p2p.warn)
+
+
 def test_is_active2():
     setup_logging(':info')
     tester = slogging.get_logger('tester')
@@ -510,16 +525,16 @@ def test_count_logging_handlers():
     # check named logger
     eth_logger = slogging.getLogger('eth')
     slogging.configure(config_string1)
-    assert len(eth_logger.handlers) == 1
+    assert len(eth_logger.handlers) == 0
     slogging.configure(config_string1)
-    assert len(eth_logger.handlers) == 1
+    assert len(eth_logger.handlers) == 0
 
     # check child of named logger
     eth_vm_logger = slogging.getLogger('eth.vm')
     slogging.configure(config_string2)
-    assert len(eth_vm_logger.handlers) == 1
+    assert len(eth_vm_logger.handlers) == 0
     slogging.configure(config_string2)
-    assert len(eth_vm_logger.handlers) == 1
+    assert len(eth_vm_logger.handlers) == 0
 
 if __name__ == '__main__':
     pass

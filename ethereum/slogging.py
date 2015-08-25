@@ -396,16 +396,23 @@ def configure_loglevels(config_string, format=PRINT_FORMAT):
     config_string = ':debug,p2p:info,vm.op:trace'
     """
     assert ':' in config_string
+    conf_dict = {}
     for name_levels in config_string.split(','):
         name, level = name_levels.split(':')
+        conf_dict[name] = level
+
+    root_logger = getLogger()
+    root_logger.setLevel(logging._checkLevel(conf_dict[""].upper()))
+
+    for i in root_logger.manager.loggerDict:
+        if isinstance(root_logger.manager.loggerDict[i], EthLogger):
+            root_logger.manager.loggerDict[i].setLevel(root_logger.level) # set all logers level as root logger. Protection from many execute configure
+
+    for name in conf_dict:
+        level = conf_dict[name]
         assert not isinstance(level, int)
         logger = getLogger(name)
         logger.setLevel(getattr(logging, level.upper()))
-        if not len(logger.handlers):
-            ch = EthStreamHandler()
-            formatter = logging.Formatter(format)
-            ch.setFormatter(formatter)
-            logger.addHandler(ch)
 
 def configure(config_string='', log_json=False):
     if log_json:
