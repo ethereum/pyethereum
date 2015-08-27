@@ -4,7 +4,9 @@ from ethereum import transactions
 from ethereum import utils
 import rlp
 from ethereum import trie
+from ethereum.slogging import get_logger
 
+log = get_logger('eth.spv')
 
 def mk_transaction_spv_proof(block, tx):
     trie.proof.push(trie.RECORDING)
@@ -22,7 +24,7 @@ def verify_transaction_spv_proof(block, tx, proof):
         trie.proof.pop()
         return True
     except Exception as e:
-        print(e)
+        log.error(e)
         trie.proof.pop()
         return False
 
@@ -42,7 +44,7 @@ def mk_independent_transaction_spv_proof(block, index):
     if index > 0:
         nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index - 1))))
     nodes = list(map(rlp.decode, list(set(map(rlp.encode, nodes)))))
-    print(nodes)
+    log.info(nodes)
     return rlp.encode([utils.encode_int(64), block.get_parent().list_header(),
                        block.list_header(), utils.encode_int(index), nodes])
 

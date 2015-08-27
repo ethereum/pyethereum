@@ -160,7 +160,7 @@ class EthStreamHandler(logging.StreamHandler):
     def emit(self, record):
         """
         Emit a record.
-        This function from standart logging module with some changes
+        This function from standart logging module from StreamHandler with some changes
         """
         try:
             msg = self.format(record)

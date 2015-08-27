@@ -9,6 +9,9 @@ import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
+from ethereum.slogging import get_logger
+
+log = get_logger('eth.utils')
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
@@ -69,9 +72,11 @@ def debug(label):
     def deb(f):
         def inner(*args, **kwargs):
             i = random.randrange(1000000)
-            print(label, i, 'start', args)
+            #print(label, i, 'start', args)
+            log.debug("%s %d %s %s", repr(label), i, 'start', repr(args))
             x = f(*args, **kwargs)
-            print(label, i, 'end', x)
+            #print(label, i, 'end', x)
+            log.debug("%s %d %s %s", repr(label), i, 'end', repr(x))
             return x
         return inner
     return deb
@@ -342,18 +347,30 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
             local['call_number'] += 1
             tmp_args = args[1:] if ignore_first_arg and len(args) else args
             this_call_number = local['call_number']
-            print(('{0}#{1} args: {2}, {3}'.format(
+            #print(('{0}#{1} args: {2}, {3}'.format(
+            #    f.__name__,
+            #    this_call_number,
+            #    ', '.join([display(x) for x in tmp_args]),
+            #    ', '.join(display(key) + '=' + to_string(value)
+            #              for key, value in kwargs.items())
+            #)))
+            log.dev('{0}#{1} args: {2}, {3}'.format(
                 f.__name__,
                 this_call_number,
                 ', '.join([display(x) for x in tmp_args]),
                 ', '.join(display(key) + '=' + to_string(value)
                           for key, value in kwargs.items())
-            )))
+            ))
+
             res = f(*args, **kwargs)
-            print(('{0}#{1} return: {2}'.format(
+            #print(('{0}#{1} return: {2}'.format(
+            #    f.__name__,
+            #    this_call_number,
+            #    display(res))))
+            log.dev('{0}#{1} return: {2}'.format(
                 f.__name__,
                 this_call_number,
-                display(res))))
+                display(res)))
 
             if local['call_number'] > 100:
                 raise Exception("Touch max call number!")
@@ -391,16 +408,6 @@ int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[91m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
 def DEBUG(*args, **kargs):
-    print(bcolors.FAIL + repr(args) + repr(kargs) + bcolors.ENDC)
+    #print(bcolors.FAIL + repr(args) + repr(kargs) + bcolors.ENDC)
+    log.dev(repr(args) + repr(kargs))

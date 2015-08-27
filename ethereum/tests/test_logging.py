@@ -536,5 +536,18 @@ def test_count_logging_handlers():
     slogging.configure(config_string2)
     assert len(eth_vm_logger.handlers) == 0
 
+def mytest():
+    th = setup_logging(config_string=":debug")
+    #rl.info("this is info %s %s", 'hi', 'hellow')
+    from ethereum.utils import debug
+
+    @debug("debug_test")
+    def debug_test():
+        pass
+
+    debug_test()
+    
+    assert "debug_test" in th.logged
+
 if __name__ == '__main__':
-    pass
+    mytest()
