@@ -1439,4 +1439,4 @@ def dump_genesis_block_tests_data(db):
     for addr, balance in GENESIS_INITIAL_ALLOC.items():
         data['initial_alloc'][addr] = to_string(balance)
 
-    print(json.dumps(data, indent=1))
+    log.info(json.dumps(data, indent=1))

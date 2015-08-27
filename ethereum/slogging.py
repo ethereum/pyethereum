@@ -33,6 +33,10 @@ TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
 logging.TRACE = TRACE
 
+# add level DEV into logging
+DEV = 15
+logging.addLevelName(DEV, "DEV")
+logging.DEV = DEV
 
 formatter_set = frozenset(['name', 'levelno', 'levelname', 'pathname', 'filename', 'module',
     'lineno', 'funcName', 'created', 'asctime', 'msecs', 'relativeCreated', 'thread',
@@ -122,6 +126,68 @@ def bind_decorator(fun):
             kwargs.update(**self.context_bind)
         fun(self, msg, *args, **kwargs)
     return wrapper
+
+class EthLogRecord(logging.LogRecord):
+    def __init__(self, *args, **kwargs):
+        super(EthLogRecord, self).__init__(*args, **kwargs)
+
+    def getMessage(self):
+        msg = super(EthLogRecord, self).getMessage()
+        if self.levelno == logging.DEV:
+            return msg
+        else:
+            return msg
+
+try:
+    unicode
+    _unicode = True
+except NameError:
+    _unicode = False
+
+class EthStreamHandler(logging.StreamHandler):
+    def __init__(self, stream=None ):
+        super(EthStreamHandler, self).__init__(stream)
+        self.dict_colors = {}
+        self.dict_colors["HEADER"] = '\033[95m'
+        self.dict_colors["OKBLUE"] = '\033[94m'
+        self.dict_colors["OKGREEN"] = '\033[92m'
+        self.dict_colors["WARNING"] = '\033[91m'
+        self.dict_colors["FAIL"] = '\033[91m'
+        self.dict_colors["ENDC"] = '\033[0m'
+        self.dict_colors["BOLD"] = '\033[1m'
+        self.dict_colors["UNDERLINE"] = '\033[4m'
+
+    def emit(self, record):
+        """
+        Emit a record.
+        This function from standart logging module from StreamHandler with some changes
+        """
+        try:
+            msg = self.format(record)
+            if record.levelno == logging.DEV:
+                msg = self.dict_colors["FAIL"] + msg + self.dict_colors["ENDC"]
+            stream = self.stream
+            fs = "%s\n"
+            if not _unicode: #if no unicode support...
+                stream.write(fs % msg)
+            else:
+                try:
+                    if (isinstance(msg, unicode) and
+                        getattr(stream, 'encoding', None)):
+                        ufs = u'%s\n'
+                        try:
+                            stream.write(ufs % msg)
+                        except UnicodeEncodeError:
+                            stream.write((ufs % msg).encode(stream.encoding))
+                    else:
+                        stream.write(fs % msg)
+                except UnicodeError:
+                    stream.write(fs % msg.encode("UTF-8"))
+            self.flush()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
 
 class EthLogger(logging.Logger):
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
@@ -229,6 +295,30 @@ class EthLogger(logging.Logger):
             new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
             self._log(logging.CRITICAL, new_message, args, **new_kws)
 
+    @bind_decorator
+    def dev(self, msg, *args, **kwargs):
+        new_message = ""
+        if self.isEnabledFor(logging.DEV):
+            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
+            self._log(logging.DEV, new_message, args, **new_kws)
+
+    @bind_decorator
+    def DEV(self, msg, *args, **kwargs):
+        self.dev(msg, *args, **kwargs)
+
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None):
+        """
+        A factory method which can be overridden in subclasses to create
+        specialized LogRecords.
+        """
+        rv = EthLogRecord(name, level, fn, lno, msg, args, exc_info, func)
+        if extra is not None:
+            for key in extra:
+                if (key in ["message", "asctime"]) or (key in rv.__dict__):
+                    raise KeyError("Attempt to overwrite %r in LogRecord" % key)
+                rv.__dict__[key] = extra[key]
+        return rv
+
 class RootLogger(EthLogger):
     """
     A root logger is not that different to any other logger, except that
@@ -286,7 +376,11 @@ def getLogger(name=None):
     """
 
     if name:
-        ethlogger = EthLogger.manager.getLogger(name)
+        if name in rootLogger.manager.loggerDict: # is this a new logger ?
+            ethlogger = EthLogger.manager.getLogger(name)
+        else:
+            ethlogger = EthLogger.manager.getLogger(name)
+            ethlogger.setLevel(rootLogger.level) # set level as rootloger level
         ethlogger.log_json = rootLogger.log_json
         return ethlogger
     else:
@@ -298,21 +392,27 @@ def set_level(name, level):
     logger.setLevel(getattr(logging, level.upper()))
 
 def configure_loglevels(config_string, format=PRINT_FORMAT):
-    global FLAG_FISRST_CONFIGURE_LEVEL
     """
     config_string = ':debug,p2p:info,vm.op:trace'
     """
     assert ':' in config_string
+    conf_dict = {}
     for name_levels in config_string.split(','):
         name, level = name_levels.split(':')
+        conf_dict[name] = level
+
+    root_logger = getLogger()
+    root_logger.setLevel(logging._checkLevel(conf_dict[""].upper()))
+
+    for i in root_logger.manager.loggerDict:
+        if isinstance(root_logger.manager.loggerDict[i], EthLogger):
+            root_logger.manager.loggerDict[i].setLevel(root_logger.level) # set all logers level as root logger. Protection from many execute configure
+
+    for name in conf_dict:
+        level = conf_dict[name]
         assert not isinstance(level, int)
         logger = getLogger(name)
         logger.setLevel(getattr(logging, level.upper()))
-        if not len(logger.handlers):
-            ch = logging.StreamHandler()
-            formatter = logging.Formatter(format)
-            ch.setFormatter(formatter)
-            logger.addHandler(ch)
 
 def configure(config_string='', log_json=False):
     if log_json:
@@ -324,8 +424,9 @@ def configure(config_string='', log_json=False):
 
     logging.basicConfig(format=format, level=DEFAULT_LOGLEVEL) # work only first time
     ethlogger = getLogger()
+    ethlogger.DEV("------------------------ configure function ------------------------------------------")
     if not len(ethlogger.handlers):
-        ch = logging.StreamHandler()
+        ch = EthStreamHandler()
         formatter = logging.Formatter(format)
         ch.setFormatter(formatter)
         ethlogger.addHandler(ch)

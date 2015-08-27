@@ -5,9 +5,12 @@ import rlp
 from ethereum import utils
 from ethereum.utils import to_string
 from ethereum.utils import is_string
+from ethereum.slogging import get_logger
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import sys
+
+log = get_logger('eth.pruning_trie')
 
 bin_to_nibbles_cache = {}
 
@@ -952,7 +955,7 @@ def verify_spv_proof(root, key, proof):
         proof.pop()
         return True
     except Exception as e:
-        print(e)
+        log.error(e)
         proof.pop()
         return False
 
@@ -972,7 +975,7 @@ if __name__ == "__main__":
         if sys.argv[1] == 'insert':
             t = Trie(_db, decode_hex(sys.argv[3]))
             t.update(sys.argv[4], sys.argv[5])
-            print(encode_node(t.root_hash))
+            log.info(encode_node(t.root_hash))
         elif sys.argv[1] == 'get':
             t = Trie(_db, decode_hex(sys.argv[3]))
-            print(t.get(sys.argv[4]))
+            log.info(t.get(sys.argv[4]))

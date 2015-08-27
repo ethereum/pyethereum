@@ -2,10 +2,13 @@ import sys
 import re
 import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
 from ethereum import utils
+from ethereum import slogging
 from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
+from ethereum.slogging import get_logger
 import ast
 
+log = get_logger('eth.abi')
 
 def json_decode(x):
     return yaml.safe_load(x)
@@ -105,7 +108,8 @@ class ContractTranslator():
                 c2 += 1
         o["_event_type"] = utils.to_string(name)
         if not noprint:
-            print(o)
+            logger = slogging.getLogger()
+            log.info(o)
         return o
 
 
