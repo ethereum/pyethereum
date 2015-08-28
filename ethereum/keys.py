@@ -150,15 +150,21 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
 
 def decode_keystore_json(jsondata, pw):
     # Get KDF function and parameters
-    kdfparams = jsondata["crypto"]["kdfparams"]
-    kdf = jsondata["crypto"]["kdf"]
-    if jsondata["crypto"]["kdf"] not in kdfs:
+    if "crypto" in jsondata:
+        cryptdata = jsondata["crypto"]
+    elif "Crypto" in jsondata:
+        cryptdata = jsondata["Crypto"]
+    else:
+        raise Exception("JSON data must contain \"crypto\" object")
+    kdfparams = cryptdata["kdfparams"]
+    kdf = cryptdata["kdf"]
+    if cryptdata["kdf"] not in kdfs:
         raise Exception("Hash algo %s not supported" % kdf)
     kdfeval = kdfs[kdf]["calc"]
     # Get cipher and parameters
-    cipherparams = jsondata["crypto"]["cipherparams"]
-    cipher = jsondata["crypto"]["cipher"]
-    if jsondata["crypto"]["cipher"] not in ciphers:
+    cipherparams = cryptdata["cipherparams"]
+    cipher = cryptdata["cipher"]
+    if cryptdata["cipher"] not in ciphers:
         raise Exception("Encryption algo %s not supported" % cipher)
     decrypt = ciphers[cipher]["decrypt"]
     # Compute the derived key
@@ -168,13 +174,13 @@ def decode_keystore_json(jsondata, pw):
     # print(b'derivedkey: ' + encode_hex(derivedkey))
     enckey = derivedkey[:16]
     # print(b'enckey: ' + encode_hex(enckey))
-    ctext = decode_hex(jsondata["crypto"]["ciphertext"])
+    ctext = decode_hex(cryptdata["ciphertext"])
     # Decrypt the ciphertext
     o = decrypt(ctext, enckey, cipherparams)
     # Compare the provided MAC with a locally computed MAC
     # print(b'macdata: ' + encode_hex(derivedkey[16:32] + ctext))
     mac1 = sha3(derivedkey[16:32] + ctext)
-    mac2 = decode_hex(jsondata["crypto"]["mac"])
+    mac2 = decode_hex(cryptdata["mac"])
     if mac1 != mac2:
         raise ValueError("MAC mismatch. Password incorrect?")
     return o
