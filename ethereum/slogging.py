@@ -1,6 +1,8 @@
 import logging
 import json
-import re
+from logging import StreamHandler, Formatter
+from ethereum.utils import bcolors
+
 
 """
 See test_logging.py for examples
@@ -21,47 +23,31 @@ eth.vm.mem
 eth.chain
 eth.chain.new_block
 """
-#!---------------
 
-FORMAT = "%(levelname)s:%(module)s %(asctime)-15s %(message)s"
 
-def hexprint(x):
-    return repr(x)
+DEFAULT_LOGLEVEL = 'INFO'
+
+JSON_FORMAT = '%(message)s'
+
+PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
+
+TRACE = 5
+
+known_loggers = set()
+
+log_listeners = []
+
 
 # add level trace into logging
-TRACE = 5
-logging.addLevelName(TRACE, "TRACE")
+def _trace(self, msg, *args, **kwargs):
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, msg, args, **kwargs)
+logging.Logger.trace = _trace
 logging.TRACE = TRACE
-
-
-formatter_set = frozenset(['name', 'levelno', 'levelname', 'pathname', 'filename', 'module',
-    'lineno', 'funcName', 'created', 'asctime', 'msecs', 'relativeCreated', 'thread',
-    'threadName', 'process', 'message', 'exc_info', 'extra'])
-
-######### listeners ###############
-
-
-class LogListeners(object):
-
-    """
-    allow to register listeners
-    """
-
-    def __init__(self):
-        self.listeners = []
-
-    def __call__(self, logger, name, event_dict):
-        #raise Exception
-        e = dict(event_dict)
-        for l in self.listeners:
-            l(e)
-        return event_dict
-
-log_listeners = LogListeners()
+logging.addLevelName(TRACE, "TRACE")
 
 
 class LogRecorder(object):
-
     """
     temporarily records all logs, w/o level filtering
     use only once!
@@ -70,24 +56,18 @@ class LogRecorder(object):
 
     def __init__(self):
         self._records = []
-        log_listeners.listeners.append(self.add_log)
-
-    def add_log(self, msg):
-        self._records.append(msg)
-        assert len(self._records) < self.max_capacity
+        log_listeners.append(self._add_log_record)
 
     def pop_records(self):
         # can only be called once
         r = self._records[:]
         self._records = None
-        log_listeners.listeners.remove(self.add_log)
+        log_listeners.remove(self._add_log_record)
         return r
 
-### configure #####################
-
-DEFAULT_LOGLEVEL = logging.INFO
-JSON_FORMAT = '%(message)s'
-PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
+    def _add_log_record(self, msg):
+        self._records.append(msg)
+        assert len(self._records) < self.max_capacity
 
 
 def get_configuration():
@@ -96,140 +76,88 @@ def get_configuration():
     snapshot = get_configuration()
     configure(**snapshot)
     """
-    rootLogger = getLogger()
-    name_levels = [('', logging.getLevelName(rootLogger.level))]
+    root = getLogger()
+    name_levels = [('', logging.getLevelName(root.level))]
 
-    for name, logger in list(rootLogger.manager.loggerDict.items()):
+    for name, logger in list(root.manager.loggerDict.items()):
         name_levels.append((name, logging.getLevelName(logger.level)))
     config_string = ','.join('%s:%s' % x for x in name_levels)
 
-    return dict(config_string=config_string, log_json=rootLogger.log_json)
-
-# helpers
-known_loggers = set()  # know to structlog (i.e. maybe not yet initialized w/ logging)
+    return dict(config_string=config_string, log_json=root.log_json)
 
 
 def get_logger_names():
-    # logging.Logger.manager.loggerDict.keys() # used ones
-    # initialized at module load get_logger
     return sorted(known_loggers, key=lambda x: '' if not x else x)
 
-#----------------------------- from standart logging module with some modifications ----------------------------
-def bind_decorator(fun):
-    def wrapper(self, msg, *args, **kwargs):
-        if kwargs:
-            kwargs.update(**self.context_head)
-            kwargs.update(**self.context_bind)
-        fun(self, msg, *args, **kwargs)
-    return wrapper
 
-class EthLogger(logging.Logger):
+class BoundLogger(object):
+    def __init__(self, logger, context):
+        self.logger = logger
+        self.context = context
+
+    def bind(self, **kwargs):
+        return BoundLogger(self, kwargs)
+
+    def _proxy(self, method_name, *args, **kwargs):
+        context = self.context.copy()
+        context.update(kwargs)
+        return getattr(self.logger, method_name)(*args, **context)
+
+    trace = lambda self, *args, **kwargs: self._proxy('trace', *args, **kwargs)
+    debug = lambda self, *args, **kwargs: self._proxy('debug', *args, **kwargs)
+    info = lambda self, *args, **kwargs: self._proxy('info', *args, **kwargs)
+    warn = warning = lambda self, *args, **kwargs: self._proxy('warning', *args, **kwargs)
+    error = lambda self, *args, **kwargs: self._proxy('error', *args, **kwargs)
+    exception = lambda self, *args, **kwargs: self._proxy('exception', *args, **kwargs)
+    fatal = critical = lambda self, *args, **kwargs: self._proxy('critical', *args, **kwargs)
+
+
+class SLogger(logging.Logger):
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
-        self.context_head = {}
-        self.context_bind = {}
         self.warn = self.warning
-        super(EthLogger, self).__init__(name, level=level)
+        super(SLogger, self).__init__(name, level=level)
 
     def is_active(self, level_name='trace'):
         return self.isEnabledFor(logging._checkLevel(level_name.upper()))
 
-    def help_make_kws(self, kws, name, msg, log_json=False):
-        """
-        The function separate standart logging from  arbitrary log parameters
-        """
-        new_kws = {}
-        message = None
+    def format_message(self, msg, kwargs, highlight):
+        if getattr(self, 'log_json', False):
+            message = {
+                k: v if isinstance(v, (int, long, float, complex)) else repr(v)
+                for k, v in kwargs.items()
+            }
 
-        if log_json:
-            message = {}
-            for i in kws:
-                if i not in formatter_set:  # levelno, asctime......
-                    if type(kws[i]) not in (int, long, float, complex):
-                        message[i] = repr(kws[i])
-                    else:
-                        message[i] = kws[i]
-                else:
-                    new_kws[i] = kws[i]
-
-            if name != rootLogger.name:
-                message1 = {'event': "{}.{}".format(name, msg)}
-            else:
-                message1 = {'event': "{}".format(msg)}
-            message.update(message1)
+            message['event'] = "{}.{}".format(self.name, msg)
             msg = json.dumps(message)
         else:
-            chunks = []
-            for i in kws:
-                if i not in formatter_set:
-                    chunks.append(" {i}={kwsi}".format(i=i, kwsi=str(kws[i])))
-                else:
-                    new_kws[i] = kws[i]
-            message = ''.join(chunks)
-            msg += message
+            msg = "{}{} {}{}".format(
+                bcolors.WARNING if highlight else "",
+                msg,
+                " ".join("{}={!s}".format(k, v) for k, v in kwargs.items()),
+                bcolors.ENDC if highlight else ""
+            )
 
-        return new_kws, msg
+        return msg
 
     def bind(self, **kwargs):
-        for i in kwargs:
-            if not len(self.context_head):
-                self.context_head[i] = kwargs[i]
-            else:
-                self.context_bind[i] = kwargs[i]
-        return self
+        return BoundLogger(self, kwargs)
 
-    # this function extends standart logging module
-    @bind_decorator
-    def trace(self, msg, *args, **kwargs):
-        # Yes, logger takes its '*args' as 'args'.
+    def _log(self, level, msg, args, **kwargs):
+        exc_info = kwargs.pop('exc_info', None)
+        extra = kwargs.pop('extra', {})
+        highlight = kwargs.pop('highlight', False)
+        extra['kwargs'] = kwargs
+        extra['original_msg'] = msg
+        msg = self.format_message(msg, kwargs, highlight)
+        super(SLogger, self)._log(level, msg, args, exc_info, extra)
 
-        if self.isEnabledFor(TRACE):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-            self._log(TRACE, new_message, args, **new_kws)
+    def DEV(self, msg, *args, **kwargs):
+        """Shortcut to output highlighted log text"""
+        kwargs['highlight'] = True
+        self.critical(msg, *args, **kwargs)
 
-    # this function extends standart logging module
-    @bind_decorator
-    def info(self, msg, *args, **kwargs):
-        # Yes, logger takes its '*args' as 'args'.
-        if self.isEnabledFor(logging.INFO):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
-            self._log(logging.INFO, new_message, args, **new_kws)
 
-    @bind_decorator
-    def debug(self, msg, *args, **kwargs):
-        if self.isEnabledFor(logging.DEBUG):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False) )
-            self._log(logging.DEBUG, new_message, args, **new_kws)
-
-    @bind_decorator
-    def warning(self, msg, *args, **kwargs):
-        new_message = ""
-        if self.isEnabledFor(logging.WARNING):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-            self._log(logging.WARNING, new_message, args, **new_kws)
-
-    @bind_decorator
-    def error(self, msg, *args, **kwargs):
-        new_message = ""
-        if self.isEnabledFor(logging.ERROR):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-            self._log(logging.ERROR, new_message, args, **new_kws)
-
-    @bind_decorator
-    def exception(self, msg, *args, **kwargs):
-        """
-        Convenience method for logging an ERROR with exception information.
-        """
-        kwargs['exc_info'] = 1
-        self.error(msg, *args, **kwargs)
-
-    @bind_decorator
-    def critical(self, msg, *args, **kwargs):
-        new_message = ""
-        if self.isEnabledFor(logging.CRITICAL):
-            new_kws, new_message = self.help_make_kws(kwargs, self.name, msg, getattr(self, "log_json", False))
-            self._log(logging.CRITICAL, new_message, args, **new_kws)
-
-class RootLogger(EthLogger):
+class RootLogger(SLogger):
     """
     A root logger is not that different to any other logger, except that
     it must have a logging level and there is only one instance of it in
@@ -239,44 +167,31 @@ class RootLogger(EthLogger):
         """
         Initialize the logger with the name "root".
         """
-        EthLogger.__init__(self, "root", level)
+        super(RootLogger, self).__init__("root", level)
         self.log_json = False
 
-class EthManager(logging.Manager):
+    def handle(self, record):
+        if log_listeners:
+            rec_dict = getattr(record, 'kwargs', {}).copy()
+            rec_dict['event'] = getattr(record, 'original_msg', "")
+            for listener in log_listeners:
+                listener(rec_dict)
+        super(RootLogger, self).handle(record)
+
+
+class SManager(logging.Manager):
     def __init__(self, rootnode):
-        self.context_head_key = None # head key for bind decorator
-        self.context_bind = {} # dict for bind decorator
-        self.loggerClass = EthLogger
-        super(EthManager, self).__init__(rootnode)
+        self.loggerClass = SLogger
+        super(SManager, self).__init__(rootnode)
 
     def getLogger(self, name):
-        logging.setLoggerClass(EthLogger)
-        return super(EthManager, self).getLogger(name)
+        logging.setLoggerClass(SLogger)
+        return super(SManager, self).getLogger(name)
 
 rootLogger = RootLogger(DEFAULT_LOGLEVEL)
-EthLogger.root = rootLogger
-EthLogger.manager = EthManager(EthLogger.root)
+SLogger.root = rootLogger
+SLogger.manager = SManager(SLogger.root)
 
-class ExecHandler(logging.Handler):
-    def __init__(self, log_json=False):
-        super(ExecHandler, self).__init__()
-        self.log_json = log_json
-
-    def emit(self, record):
-        msg = record.msg
-        d_keys_val = {}
-        for lstn in log_listeners.listeners:
-            if self.log_json:
-                d_keys_val = json.loads(record.msg)
-            else:
-                for i in re.findall(r'(\w+=\w+)', record.msg):
-                    k,v = i.split("=")
-                    d_keys_val[k] = v
-                    msg=msg.replace(i, "")
-                d_keys_val['event'] = msg[:-1]
-            lstn(d_keys_val)
-
-#----------------------------- / from standart logging module with some modifications ----------------------------
 
 def getLogger(name=None):
     """
@@ -286,68 +201,59 @@ def getLogger(name=None):
     """
 
     if name:
-        ethlogger = EthLogger.manager.getLogger(name)
-        ethlogger.log_json = rootLogger.log_json
-        return ethlogger
+        logger = SLogger.manager.getLogger(name)
+        logger.log_json = rootLogger.log_json
+        return logger
     else:
         return rootLogger
+
+
+def configure(config_string=None, log_json=False):
+    if not config_string:
+        config_string = ":{}".format(DEFAULT_LOGLEVEL)
+
+    if log_json:
+        log_format = JSON_FORMAT
+        rootLogger.log_json = True
+    else:
+        log_format = PRINT_FORMAT
+        rootLogger.log_json = False
+
+    if len(rootLogger.handlers) == 0:
+        handler = StreamHandler()
+        formatter = Formatter(log_format)
+        handler.setFormatter(formatter)
+        rootLogger.addHandler(handler)
+
+    # Reset logging levels before applying new config below
+    for name, logger in SLogger.manager.loggerDict.items():
+        if hasattr(logger, 'setLevel'):
+            # Guard against `logging.PlaceHolder` instances
+            logger.setLevel(logging.NOTSET)
+
+    for name_levels in config_string.split(','):
+        name, _, level = name_levels.partition(':')
+        logger = getLogger(name)
+        logger.setLevel(level.upper())
+
+configure_logging = configure
+
 
 def set_level(name, level):
     assert not isinstance(level, int)
     logger = getLogger(name)
     logger.setLevel(getattr(logging, level.upper()))
 
-def configure_loglevels(config_string, format=PRINT_FORMAT):
-    global FLAG_FISRST_CONFIGURE_LEVEL
-    """
-    config_string = ':debug,p2p:info,vm.op:trace'
-    """
-    assert ':' in config_string
-    for name_levels in config_string.split(','):
-        name, level = name_levels.split(':')
-        assert not isinstance(level, int)
-        logger = getLogger(name)
-        logger.setLevel(getattr(logging, level.upper()))
-        if not len(logger.handlers):
-            ch = logging.StreamHandler()
-            formatter = logging.Formatter(format)
-            ch.setFormatter(formatter)
-            logger.addHandler(ch)
-
-def configure(config_string='', log_json=False):
-    if log_json:
-        format = JSON_FORMAT
-        rootLogger.log_json = True
-    else:
-        format = PRINT_FORMAT
-        rootLogger.log_json = False
-
-    logging.basicConfig(format=format, level=DEFAULT_LOGLEVEL) # work only first time
-    ethlogger = getLogger()
-    if not len(ethlogger.handlers):
-        ch = logging.StreamHandler()
-        formatter = logging.Formatter(format)
-        ch.setFormatter(formatter)
-        ethlogger.addHandler(ch)
-
-    if config_string:
-        configure_loglevels(config_string=config_string, format=format)
-
-
-configure_logging = configure
-configure()
 
 def get_logger(name=None):
     known_loggers.add(name)
     return getLogger(name)
 
 
-def checkLevel(loghandler, level):
-    if logging._checkLevel(loghandler.level) == logging._checkLevel(level.upper()):
-        return True
-# quick debug
-def DEBUG(msg, **kargs):
-    "temporary logger during development that is always on"
-    logger = logging.getLogger('DEBUG')
+def DEBUG(msg, *args, **kwargs):
+    """temporary logger during development that is always on"""
+    logger = getLogger("DEBUG")
+    logger.addHandler(StreamHandler())
+    logger.propagate = False
     logger.setLevel(logging.DEBUG)
-    logger.debug(msg)
+    logger.DEV(msg, *args, **kwargs)
