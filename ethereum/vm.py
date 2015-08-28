@@ -570,8 +570,8 @@ def vm_execute(ext, msg, code):
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
             xfer = ext.get_balance(msg.to)
-            ext.set_balance(msg.to, 0)
             ext.set_balance(to, ext.get_balance(to) + xfer)
+            ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
