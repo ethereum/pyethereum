@@ -630,8 +630,6 @@ contract contract_sub {
 def test_solidity_compile_rich():
     contract_info = get_solidity().compile_rich(compile_rich_contract)
 
-    import json
-    print json.dumps(contract_info)
     assert len(contract_info) == 2
     assert set(contract_info.keys()) == {'contract_add', 'contract_sub'}
     assert set(contract_info['contract_add'].keys()) == {'info', 'code'}

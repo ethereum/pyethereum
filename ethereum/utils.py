@@ -391,6 +391,7 @@ int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
 
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -402,5 +403,7 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-def DEBUG(*args, **kargs):
-    print(bcolors.FAIL + repr(args) + repr(kargs) + bcolors.ENDC)
+def DEBUG(msg, *args, **kwargs):
+    from ethereum import slogging
+
+    slogging.DEBUG(msg, *args, **kwargs)
