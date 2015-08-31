@@ -1,5 +1,6 @@
 from ethereum import tester as t
-from ethereum import blocks, utils, transactions, vm, abi
+from ethereum import blocks, utils, transactions, vm, abi, opcodes
+from ethereum.exceptions import InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
@@ -57,7 +58,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items()}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
     }
 
 
@@ -117,6 +118,8 @@ def run_vm_test(params, mode, profiler=None):
     pre = params['pre']
     exek = params['exec']
     env = params['env']
+    if 'previousHash' not in env:
+        env['previousHash'] = encode_hex(blocks.GENESIS_PREVHASH)
 
     assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
                                    'previousHash', 'currentCoinbase',
@@ -153,8 +156,15 @@ def run_vm_test(params, mode, profiler=None):
     value = parse_int_or_hex(exek['value'])
     data = decode_hex(exek['data'][2:])
 
+    # bypass gas check in tx initialization by temporarily increasing startgas
+    num_zero_bytes = str_to_bytes(data).count(ascii_chr(0))
+    num_non_zero_bytes = len(data) - num_zero_bytes
+    intrinsic_gas = (opcodes.GTXCOST + opcodes.GTXDATAZERO * num_zero_bytes +
+                     opcodes.GTXDATANONZERO * num_non_zero_bytes)
+    startgas += intrinsic_gas
     tx = transactions.Transaction(nonce=nonce, gasprice=gasprice, startgas=startgas,
                                   to=recvaddr, value=value, data=data)
+    tx.startgas -= intrinsic_gas
     tx.sender = sender
 
     # capture apply_message calls
@@ -299,22 +309,6 @@ def run_state_test(params, mode):
                 decode_hex(k[2:]))) == utils.big_endian_to_int(decode_hex(v[2:]))
 
     # execute transactions
-    tx = transactions.Transaction(
-        nonce=parse_int_or_hex(exek['nonce'] or b"0"),
-        gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
-        startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
-        to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
-        value=parse_int_or_hex(exek['value'] or b"0"),
-        data=decode_hex(remove_0x_head(exek['data'])))
-    if 'secretKey' in exek:
-        tx.sign(exek['secretKey'])
-    elif all(key in exek for key in ['v', 'r', 's']):
-        tx.v = decode_hex(remove_0x_head(exek['v']))
-        tx.r = decode_hex(remove_0x_head(exek['r']))
-        tx.s = decode_hex(remove_0x_head(exek['s']))
-    else:
-        assert False
-
     orig_apply_msg = pb.apply_msg
 
     def apply_msg_wrapper(ext, msg):
@@ -330,19 +324,41 @@ def run_state_test(params, mode):
 
     pb.apply_msg = apply_msg_wrapper
 
-    time_pre = time.time()
     try:
-        # with a blk.commit_state() the tests pass
-        success, output = pb.apply_transaction(blk, tx)
-        blk.commit_state()
-    except pb.InvalidTransaction:
+        tx = transactions.Transaction(
+            nonce=parse_int_or_hex(exek['nonce'] or b"0"),
+            gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
+            startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
+            to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
+            value=parse_int_or_hex(exek['value'] or b"0"),
+            data=decode_hex(remove_0x_head(exek['data'])))
+    except InvalidTransaction:
+        tx = None
         success, output = False, b''
-        blk.commit_state()
-        pass
-    time_post = time.time()
+        time_pre = time.time()
+        time_post = time_pre
+    else:
+        if 'secretKey' in exek:
+            tx.sign(exek['secretKey'])
+        elif all(key in exek for key in ['v', 'r', 's']):
+            tx.v = decode_hex(remove_0x_head(exek['v']))
+            tx.r = decode_hex(remove_0x_head(exek['r']))
+            tx.s = decode_hex(remove_0x_head(exek['s']))
+        else:
+            assert False
 
-    if tx.to == b'':
-        output = blk.get_code(output)
+        time_pre = time.time()
+        try:
+            success, output = pb.apply_transaction(blk, tx)
+            blk.commit_state()
+        except pb.InvalidTransaction:
+            success, output = False, b''
+            blk.commit_state()
+            pass
+        time_post = time.time()
+
+        if tx.to == b'':
+            output = blk.get_code(output)
 
     pb.apply_msg = orig_apply_msg
 
