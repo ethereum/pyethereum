@@ -309,22 +309,6 @@ def run_state_test(params, mode):
                 decode_hex(k[2:]))) == utils.big_endian_to_int(decode_hex(v[2:]))
 
     # execute transactions
-    tx = transactions.Transaction(
-        nonce=parse_int_or_hex(exek['nonce'] or b"0"),
-        gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
-        startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
-        to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
-        value=parse_int_or_hex(exek['value'] or b"0"),
-        data=decode_hex(remove_0x_head(exek['data'])))
-    if 'secretKey' in exek:
-        tx.sign(exek['secretKey'])
-    elif all(key in exek for key in ['v', 'r', 's']):
-        tx.v = decode_hex(remove_0x_head(exek['v']))
-        tx.r = decode_hex(remove_0x_head(exek['r']))
-        tx.s = decode_hex(remove_0x_head(exek['s']))
-    else:
-        assert False
-
     orig_apply_msg = pb.apply_msg
 
     def apply_msg_wrapper(ext, msg):
@@ -340,19 +324,41 @@ def run_state_test(params, mode):
 
     pb.apply_msg = apply_msg_wrapper
 
-    time_pre = time.time()
     try:
-        # with a blk.commit_state() the tests pass
-        success, output = pb.apply_transaction(blk, tx)
-        blk.commit_state()
-    except pb.InvalidTransaction:
+        tx = transactions.Transaction(
+            nonce=parse_int_or_hex(exek['nonce'] or b"0"),
+            gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
+            startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
+            to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
+            value=parse_int_or_hex(exek['value'] or b"0"),
+            data=decode_hex(remove_0x_head(exek['data'])))
+    except InvalidTransaction:
+        tx = None
         success, output = False, b''
-        blk.commit_state()
-        pass
-    time_post = time.time()
+        time_pre = time.time()
+        time_post = time_pre
+    else:
+        if 'secretKey' in exek:
+            tx.sign(exek['secretKey'])
+        elif all(key in exek for key in ['v', 'r', 's']):
+            tx.v = decode_hex(remove_0x_head(exek['v']))
+            tx.r = decode_hex(remove_0x_head(exek['r']))
+            tx.s = decode_hex(remove_0x_head(exek['s']))
+        else:
+            assert False
 
-    if tx.to == b'':
-        output = blk.get_code(output)
+        time_pre = time.time()
+        try:
+            success, output = pb.apply_transaction(blk, tx)
+            blk.commit_state()
+        except pb.InvalidTransaction:
+            success, output = False, b''
+            blk.commit_state()
+            pass
+        time_post = time.time()
+
+        if tx.to == b'':
+            output = blk.get_code(output)
 
     pb.apply_msg = orig_apply_msg
 
