@@ -32,6 +32,7 @@ contract zoo {
 """
 
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_interop():
     if 'solidity' not in tester.languages:
         return
@@ -156,6 +157,7 @@ def disapprove(_addr:address):
 """
 
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_currency_apis():
     s = tester.state()
     c1 = s.abi_contract(serpent_currency, sender=tester.k0)
@@ -316,6 +318,7 @@ contract namereg {
 """
 
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_registrar_apis():
     s = tester.state()
     c1 = s.abi_contract(serpent_namereg, sender=tester.k0)
@@ -447,6 +450,7 @@ def deleteOrder(_offerId:uint256):
 """
 
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_exchange_apis():
     s = tester.state()
     oc1 = s.abi_contract(serpent_currency, sender=tester.k0)
@@ -527,6 +531,7 @@ contract datafeed {
 }
 """
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_datafeeds():
     s = tester.state()
     c1 = s.abi_contract(serpent_datafeed, sender=tester.k0)
@@ -598,6 +603,7 @@ contract datafeed {
 """
 
 
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_ether_charging_datafeeds():
     s = tester.state()
     c1 = s.abi_contract(serpent_ether_charging_datafeed, sender=tester.k0)
