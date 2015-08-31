@@ -199,7 +199,7 @@ def test_mine_block(db):
     blk2 = mine_next_block(blk, coinbase=v)
     store_block(blk2)
     assert blk2.get_balance(v) == blocks.BLOCK_REWARD + blk.get_balance(v)
-    assert blk.state.db.db == blk2.state.db.db
+    assert blk.state.db.db == blk2.state.db.db.db
     assert blk2.get_parent() == blk
 
 
@@ -241,7 +241,7 @@ def test_mine_block_with_transaction2(db):
     assert tx.gasprice == 0
     assert blk2.get_balance(
         v) == blocks.BLOCK_REWARD + blk.get_balance(v) - tx.value
-    assert blk.state.db.db == blk2.state.db.db
+    assert blk.state.db.db == blk2.state.db.db.db
     assert blk2.get_parent() == blk
     assert tx in blk2.get_transactions()
     assert tx not in blk.get_transactions()
