@@ -1,5 +1,6 @@
 from ethereum import tester as t
-from ethereum import blocks, utils, transactions, vm, abi
+from ethereum import blocks, utils, transactions, vm, abi, opcodes
+from ethereum.exceptions import InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
@@ -117,6 +118,8 @@ def run_vm_test(params, mode, profiler=None):
     pre = params['pre']
     exek = params['exec']
     env = params['env']
+    if 'previousHash' not in env:
+        env['previousHash'] = encode_hex(blocks.GENESIS_PREVHASH)
 
     assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
                                    'previousHash', 'currentCoinbase',
@@ -153,8 +156,15 @@ def run_vm_test(params, mode, profiler=None):
     value = parse_int_or_hex(exek['value'])
     data = decode_hex(exek['data'][2:])
 
+    # bypass gas check in tx initialization by temporarily increasing startgas
+    num_zero_bytes = str_to_bytes(data).count(ascii_chr(0))
+    num_non_zero_bytes = len(data) - num_zero_bytes
+    intrinsic_gas = (opcodes.GTXCOST + opcodes.GTXDATAZERO * num_zero_bytes +
+                     opcodes.GTXDATANONZERO * num_non_zero_bytes)
+    startgas += intrinsic_gas
     tx = transactions.Transaction(nonce=nonce, gasprice=gasprice, startgas=startgas,
                                   to=recvaddr, value=value, data=data)
+    tx.startgas -= intrinsic_gas
     tx.sender = sender
 
     # capture apply_message calls
