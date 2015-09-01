@@ -64,6 +64,14 @@ def rand():
     return seed % 2 ** 256
 
 
+class TransactionFailed(Exception):
+    pass
+
+
+class ContractCreationFailed(Exception):
+    pass
+
+
 class ABIContract():
 
     def __init__(self, _state, _abi, address, listen=True, log_listener=None):
@@ -167,7 +175,7 @@ class state():
         # print('starting', tx.startgas, gas_limit)
         (s, a) = pb.apply_transaction(self.block, tx)
         if not s:
-            raise Exception("Contract creation failed")
+            raise ContractCreationFailed()
         return a
 
     def call(*args, **kwargs):
@@ -189,7 +197,7 @@ class state():
         recorder = LogRecorder() if profiling > 1 else None
         (s, o) = pb.apply_transaction(self.block, tx)
         if not s:
-            raise Exception("Transaction failed")
+            raise TransactionFailed()
         out = {"output": o}
         if profiling > 0:
             zero_bytes = tx.data.count(ascii_chr(0))
