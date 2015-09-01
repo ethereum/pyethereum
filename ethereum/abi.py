@@ -132,8 +132,16 @@ class ContractTranslator():
 def split32(s):
     o = []
     for i in range(0, len(s), 32):
-        o.append(s[i:i+32])
+        o.append(s[i:i + 32])
     return o
+
+
+class EncodingError(Exception):
+    pass
+
+
+class ValueOutOfBounds(EncodingError):
+    pass
 
 
 # Decode an integer
@@ -143,19 +151,19 @@ def decint(n):
     if is_numeric(n) and n < 2**256 and n > -2**255:
         return n
     elif is_numeric(n):
-        raise Exception("Number out of range: %r" % n)
+        raise EncodingError("Number out of range: %r" % n)
     elif is_string(n) and len(n) == 40:
         return big_endian_to_int(decode_hex(n))
     elif is_string(n) and len(n) <= 32:
         return big_endian_to_int(n)
     elif is_string(n) and len(n) > 32:
-        raise Exception("String too long: %r" % n)
+        raise EncodingError("String too long: %r" % n)
     elif n is True:
         return 1
     elif n is False or n is None:
         return 0
     else:
-        raise Exception("Cannot encode integer: %r" % n)
+        raise EncodingError("Cannot encode integer: %r" % n)
 
 
 # Encodes a base datum
@@ -165,7 +173,9 @@ def encode_single(typ, arg):
     if base == 'uint':
         sub = int(sub)
         i = decint(arg)
-        assert 0 <= i < 2**sub, "Value out of bounds: %r" % arg
+
+        if not 0 <= i < 2**sub:
+            raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(i), 32)
     # bool: int<sz>
     elif base == 'bool':
@@ -175,23 +185,25 @@ def encode_single(typ, arg):
     elif base == 'int':
         sub = int(sub)
         i = decint(arg)
-        assert -2**(sub - 1) <= i < 2**sub, "Value out of bounds: %r" % arg
+        if not -2**(sub - 1) <= i < 2**sub:
+            raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
-        assert 0 <= arg < 2**high, "Value out of bounds: %r" % arg
+        if not 0 <= arg < 2**high:
+            raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(arg * 2**low), 32)
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
-        assert -2**(high - 1) <= arg < 2**(high - 1), \
-            "Value out of bounds: %r" % arg
+        if not -2**(high - 1) <= arg < 2**(high - 1):
+            raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int((arg % 2**high) * 2**low), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
         if not is_string(arg):
-            raise Exception("Expecting string: %r" % arg)
+            raise EncodingError("Expecting string: %r" % arg)
         # Fixed length: string<sz>
         if len(sub):
             assert int(sub) <= 32
@@ -204,7 +216,8 @@ def encode_single(typ, arg):
                 b'\x00' * (utils.ceil32(len(arg)) - len(arg))
     # Hashes: hash<sz>
     elif base == 'hash':
-        assert int(sub) and int(sub) <= 32
+        if not (int(sub) and int(sub) <= 32):
+            raise EncodingError("too long: %r" % arg)
         if isinstance(arg, int):
             return zpad(encode_int(arg), 32)
         elif len(arg) == len(sub):
@@ -212,7 +225,7 @@ def encode_single(typ, arg):
         elif len(arg) == len(sub) * 2:
             return zpad(decode_hex(arg), 32)
         else:
-            raise Exception("Could not parse hash: %r" % arg)
+            raise EncodingError("Could not parse hash: %r" % arg)
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
@@ -223,8 +236,8 @@ def encode_single(typ, arg):
         elif len(arg) == 40:
             return zpad(decode_hex(arg), 32)
         else:
-            raise Exception("Could not parse address: %r" % arg)
-    raise Exception("Unhandled type: %r %r" % (base, sub))
+            raise EncodingError("Could not parse address: %r" % arg)
+    raise EncodingError("Unhandled type: %r %r" % (base, sub))
 
 
 def process_type(typ):
@@ -391,14 +404,14 @@ def decode_abi(types, data):
     pos = 0
     for i, typ in enumerate(types):
         if sizes[i] is None:
-            start_positions[i] = big_endian_to_int(data[pos:pos+32])
+            start_positions[i] = big_endian_to_int(data[pos:pos + 32])
             j = i - 1
             while j >= 0 and start_positions[j] is None:
                 start_positions[j] = start_positions[i]
                 j -= 1
             pos += 32
         else:
-            outs[i] = data[pos:pos+sizes[i]]
+            outs[i] = data[pos:pos + sizes[i]]
             pos += sizes[i]
     # We add a start position equal to the length of the entire data
     # for convenience.
@@ -440,20 +453,20 @@ def dec(typ, arg):
             assert len(arg) >= 32 + 32 * L, "Not enough data for head"
             start_positions = [big_endian_to_int(arg[32 + 32 * i: 64 + 32 * i])
                                for i in range(L)] + [len(arg)]
-            outs = [arg[start_positions[i]: start_positions[i+1]]
+            outs = [arg[start_positions[i]: start_positions[i + 1]]
                     for i in range(L)]
             return [dec(subtyp, out) for out in outs]
         # If children are static, then grab the data slice for each one and
         # sequentially decode them manually
         else:
-            return [dec(subtyp, arg[32 + subsize * i: 32 + subsize * (i+1)])
+            return [dec(subtyp, arg[32 + subsize * i: 32 + subsize * (i + 1)])
                     for i in range(L)]
     # Static-sized arrays: decode piece-by-piece
     elif len(arrlist):
         L = arrlist[-1][0]
         subtyp = base, sub, arrlist[:-1]
         subsize = get_size(subtyp)
-        return [dec(subtyp, arg[subsize * i:subsize * (i+1)])
+        return [dec(subtyp, arg[subsize * i:subsize * (i + 1)])
                 for i in range(L)]
     else:
         return decode_single(typ, arg)
