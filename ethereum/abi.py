@@ -4,6 +4,7 @@ import yaml  # use yaml instead of json to get non unicode (works with ascii onl
 from ethereum import utils
 from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
+from ethereum.utils import isnumeric
 import ast
 
 
@@ -218,7 +219,7 @@ def encode_single(typ, arg):
     elif base == 'hash':
         if not (int(sub) and int(sub) <= 32):
             raise EncodingError("too long: %r" % arg)
-        if isinstance(arg, int):
+        if isnumeric(arg):
             return zpad(encode_int(arg), 32)
         elif len(arg) == len(sub):
             return zpad(arg, 32)
@@ -229,7 +230,7 @@ def encode_single(typ, arg):
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
-        if isinstance(arg, int):
+        if isnumeric(arg):
             return zpad(encode_int(arg), 32)
         elif len(arg) == 20:
             return zpad(arg, 32)

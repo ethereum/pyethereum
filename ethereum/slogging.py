@@ -1,28 +1,7 @@
 import logging
 import json
 from logging import StreamHandler, Formatter
-from ethereum.utils import bcolors
-
-
-"""
-See test_logging.py for examples
-
-Basic usage:
-log = get_logger('eth.vm.op')
-log.trace('event name', some=data)
-
-Use Namespaces for components and subprotocols
-net
-net.handshake
-net.frames
-p2p.peer
-p2p.peermanager
-eth.vm
-eth.vm.op
-eth.vm.mem
-eth.chain
-eth.chain.new_block
-"""
+from ethereum.utils import bcolors, isnumeric
 
 
 DEFAULT_LOGLEVEL = 'INFO'
@@ -48,6 +27,7 @@ logging.addLevelName(TRACE, "TRACE")
 
 
 class LogRecorder(object):
+
     """
     temporarily records all logs, w/o level filtering
     use only once!
@@ -91,6 +71,7 @@ def get_logger_names():
 
 
 class BoundLogger(object):
+
     def __init__(self, logger, context):
         self.logger = logger
         self.context = context
@@ -113,6 +94,7 @@ class BoundLogger(object):
 
 
 class SLogger(logging.Logger):
+
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
         self.warn = self.warning
         super(SLogger, self).__init__(name, level=level)
@@ -123,7 +105,7 @@ class SLogger(logging.Logger):
     def format_message(self, msg, kwargs, highlight):
         if getattr(self, 'log_json', False):
             message = {
-                k: v if isinstance(v, (int, long, float, complex)) else repr(v)
+                k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
                 for k, v in kwargs.items()
             }
 
@@ -158,11 +140,13 @@ class SLogger(logging.Logger):
 
 
 class RootLogger(SLogger):
+
     """
     A root logger is not that different to any other logger, except that
     it must have a logging level and there is only one instance of it in
     the hierarchy.
     """
+
     def __init__(self, level):
         """
         Initialize the logger with the name "root".
@@ -180,6 +164,7 @@ class RootLogger(SLogger):
 
 
 class SManager(logging.Manager):
+
     def __init__(self, rootnode):
         self.loggerClass = SLogger
         super(SManager, self).__init__(rootnode)

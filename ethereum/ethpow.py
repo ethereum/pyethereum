@@ -52,6 +52,7 @@ def get_cache(block_number):
         cache_by_seed.pop(cache_by_seed.keys()[0])  # remove last recently accessed
     return c
 
+
 @lru_cache(maxsize=32)
 def check_pow(block_number, header_hash, mixhash, nonce, difficulty):
     """Check if the proof-of-work of the block is valid.
@@ -106,7 +107,7 @@ class Miner():
 
 
 def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
-    assert isinstance(start_nonce, (int, long))
+    assert utils.isnumeric(start_nonce)
     cache = get_cache(block_number)
     nonce = start_nonce
     target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
