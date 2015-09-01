@@ -176,6 +176,7 @@ def apply_transaction(block, tx):
     block.suicides = []
     for s in suicides:
         block.ether_delta -= block.get_balance(s)
+        block.set_balance(s, 0)
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []

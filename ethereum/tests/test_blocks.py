@@ -121,8 +121,9 @@ if __name__ == '__main__':
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
-                print("Testing: %s %s" % (filename, testname))
-                run_block_test(testdata)
+                if (filename.split('/')[-1], testname) not in excludes:
+                    print("Testing: %s %s" % (filename, testname))
+                    run_block_test(testdata)
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join(testutils.fixture_path, 'BlockchainTests'))
