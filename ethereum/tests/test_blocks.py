@@ -73,7 +73,8 @@ def run_block_test(params):
         if 'blockHeader' not in blk:
             try:
                 rlpdata = decode_hex(blk["rlp"][2:])
-                blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
+                blkparent = rlp.decode(
+                    rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
                 success = b2.validate_uncles()
             except (ValueError, TypeError, AttributeError, VerificationFailed,
@@ -99,10 +100,14 @@ def run_block_test(params):
 
 
 def do_test_block(filename, testname=None, testdata=None, limit=99999999):
-    logger.debug('running test:%r in %r' % (testname, filename))
+    print('\nrunning test:%r in %r' % (testname, filename))
     run_block_test(testdata)
 
-excludes = ['walletReorganizeOwners']
+excludes = [('bcWalletTest.json', u'walletReorganizeOwners'),
+            ('bl10251623GO.json', u'randomBlockTest'),
+            ('bl201507071825GO.json', u'randomBlockTest')
+            ]
+
 
 if __name__ == '__main__':
     assert len(sys.argv) >= 2, "Please specify file or dir name"
@@ -128,5 +133,6 @@ else:
     for filename, tests in list(fixtures.items()):
         for testname, testdata in list(tests.items())[:500]:
             func_name = 'test_%s_%s' % (filename, testname)
-            if testname not in excludes:
+            if (filename.split('/')[-1], testname) not in excludes:
+                # print 'making function', (filename.split('/')[-1], testname)
                 globals()[func_name] = mk_test_func(filename, testname, testdata)
