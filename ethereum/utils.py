@@ -55,6 +55,8 @@ else:
         return str(to_string(value), 'utf-8')
     unicode = str
 
+isnumeric = is_numeric
+
 
 def safe_ord(value):
     if isinstance(value, int):
@@ -102,6 +104,7 @@ def int_to_32bytearray(i):
 def sha3(seed):
     return sha3_256(to_string(seed)).digest()
 assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+
 
 def privtoaddr(x, extended=False):
     if len(x) > 32:
