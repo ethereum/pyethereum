@@ -11,6 +11,28 @@ def json_decode(x):
     return yaml.safe_load(x)
 
 
+def _canonical_name(x):
+    if x.startswith('int['):
+        return 'uint256' + x[3:]
+    elif x == 'int':
+        return 'uint256'
+    elif x.startswith('real['):
+        return 'real128x128' + x[4:]
+    elif x == 'real':
+        return 'real128x128'
+    return x
+
+
+def method_id(name, encode_types):
+    sig = name + '(' + ','.join(_canonical_name(x) for x in encode_types) + ')'
+    return big_endian_to_int(utils.sha3(sig)[:4])
+
+
+def event_id(name, encode_types):
+    sig = name + '(' + ','.join(_canonical_name(x) for x in encode_types) + ')'
+    return big_endian_to_int(utils.sha3(sig))
+
+
 class ContractTranslator():
 
     def __init__(self, full_signature):
@@ -35,14 +57,12 @@ class ContractTranslator():
                 sys.stderr.write("Warning: multiple methods with the same "
                                  " name. Use %s to call %s with types %r"
                                  % (name, sig_item['name'], encode_types))
-            sig = name + '(' + ','.join(encode_types) + ')'
             if sig_item['type'] == 'function':
-                prefix = big_endian_to_int(utils.sha3(sig)[:4])
                 decode_types = [f['type'] for f in sig_item['outputs']]
                 is_unknown_type = len(sig_item['outputs']) and \
                     sig_item['outputs'][0]['name'] == 'unknown_out'
                 self.function_data[name] = {
-                    "prefix": prefix,
+                    "prefix": method_id(name, encode_types),
                     "encode_types": encode_types,
                     "decode_types": decode_types,
                     "is_unknown_type": is_unknown_type,
@@ -50,14 +70,14 @@ class ContractTranslator():
                     "signature": signature
                 }
             elif sig_item['type'] == 'event':
-                prefix = big_endian_to_int(utils.sha3(sig))
                 indexed = [f['indexed'] for f in sig_item['inputs']]
                 names = [f['name'] for f in sig_item['inputs']]
-                self.event_data[prefix] = {
+                self.event_data[event_id(name, encode_types)] = {
                     "types": encode_types,
                     "name": name,
                     "names": names,
                     "indexed": indexed,
+                    "anonymous": sig_item.get('anonymous', False)
                 }
 
     def encode(self, name, args):
