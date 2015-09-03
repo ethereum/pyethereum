@@ -8,6 +8,7 @@ import ethereum.opcodes as opcodes
 import ethereum.abi as abi
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 from ethereum.utils import to_string
+from ethereum.config import Env
 from ethereum._solidity import get_solidity
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
@@ -125,13 +126,14 @@ class state():
 
         self.temp_data_dir = tempfile.mkdtemp()
         self.db = db.EphemDB()
+        self.env = Env(self.db)
 
         o = {}
         for i in range(num_accounts):
             o[accounts[i]] = {"wei": 10 ** 24}
         for i in range(1, 5):
             o[u.int_to_addr(i)] = {"wei": 1}
-        self.block = b.genesis(self.db, start_alloc=o)
+        self.block = b.genesis(self.env, start_alloc=o)
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
         self.block.coinbase = a0
@@ -164,7 +166,6 @@ class state():
         assert len(self.block.get_code(address)), "Contract code empty"
         _abi = language.mk_full_signature(code, **cn_args)
         return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
-
 
     def evm(self, evm, sender=k0, endowment=0, gas=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
@@ -268,7 +269,7 @@ class state():
         return rlp.encode(self.block)
 
     def revert(self, data):
-        self.block = rlp.decode(data, b.Block, db=self.db)
+        self.block = rlp.decode(data, b.Block, env=self.env)
 
 # logging
 

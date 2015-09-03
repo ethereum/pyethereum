@@ -7,7 +7,11 @@ log = get_logger('db')
 databases = {}
 
 
-class _EphemDB(object):
+class BaseDB(object):
+    pass
+
+
+class _EphemDB(BaseDB):
 
     def __init__(self):
         self.db = {}
@@ -61,7 +65,7 @@ DB = EphemDB = _EphemDB
 
 
 # Used for SPV proof creation
-class ListeningDB(object):
+class ListeningDB(BaseDB):
 
     def __init__(self, db):
         self.parent = db
@@ -95,7 +99,8 @@ class ListeningDB(object):
 
 
 # Used for making temporary objects
-class OverlayDB(object):
+class OverlayDB(BaseDB):
+
     def __init__(self, db):
         self.db = db
         self.kv = None
