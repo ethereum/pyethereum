@@ -30,6 +30,20 @@ from Crypto.Hash import SHA256
 # TODO: make it compatible!
 
 
+SCRYPT_CONSTANTS = {
+    "n": 262144,
+    "r": 1,
+    "p": 8,
+    "dklen": 32
+}
+
+PBKDF2_CONSTANTS = {
+    "prf": "hmac-sha256",
+    "dklen": 32,
+    "c": 262144
+}
+
+
 def aes_ctr_encrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
     o = [0]
@@ -68,13 +82,9 @@ ciphers = {
 
 
 def mk_scrypt_params():
-    return {
-        "n": 262144,
-        "r": 1,
-        "p": 8,
-        "dklen": 32,
-        "salt": encode_hex(os.urandom(16))
-    }
+    params = SCRYPT_CONSTANTS.copy()
+    params['salt'] = encode_hex(os.urandom(16))
+    return params
 
 
 def scrypt_hash(val, params):
@@ -83,12 +93,9 @@ def scrypt_hash(val, params):
 
 
 def mk_pbkdf2_params():
-    return {
-        "prf": "hmac-sha256",
-        "dklen": 32,
-        "c": 262144,
-        "salt": encode_hex(os.urandom(16))
-    }
+    params = PBKDF2_CONSTANTS.copy()
+    params['salt'] = encode_hex(os.urandom(16))
+    return params
 
 
 def pbkdf2_hash(val, params):
