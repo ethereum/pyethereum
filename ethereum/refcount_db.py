@@ -1,13 +1,15 @@
 import rlp
 import ethereum.utils as utils
 import sys
+from db import BaseDB
 
 DEATH_ROW_OFFSET = 2**62
 ZERO_ENCODED = utils.encode_int(0)
 ONE_ENCODED = utils.encode_int(1)
 
 
-class RefcountDB(object):
+class RefcountDB(BaseDB):
+
     def __init__(self, db):
         self.db = db
         self.journal = []
