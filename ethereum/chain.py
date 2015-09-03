@@ -117,7 +117,7 @@ class Chain(object):
         self.new_head_cb = new_head_cb
         self.index = Index(self.env)
         self._coinbase = coinbase
-        if genesis and 'HEAD' not in self.db:
+        if 'HEAD' not in self.db:
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
         self.genesis = self.get(self.index.get_block_by_number(0))
