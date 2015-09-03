@@ -1334,13 +1334,15 @@ def get_block(env, blockhash):
 #    return blockhash in db.DB(utils.get_db_path())
 
 
-def genesis(env,
-            start_alloc=default_config['GENESIS_INITIAL_ALLOC'],
-            difficulty=default_config['GENESIS_DIFFICULTY'],
-            **kwargs):
+def genesis(env, **kwargs):
     assert isinstance(env, Env)
     """Build the genesis block."""
+    allowed_args = set(['start_alloc', 'prevhash', 'coinbase', 'difficulty', 'gas_limit',
+                        'timestamp', 'extra_data', 'mixhash', 'nonce'])
+    assert set(kwargs.keys()).issubset(allowed_args)
+
     # https://ethereum.etherpad.mozilla.org/11
+    start_alloc = kwargs.get('start_alloc', env.config['GENESIS_INITIAL_ALLOC'])
     header = BlockHeader(
         prevhash=kwargs.get('prevhash', env.config['GENESIS_PREVHASH']),
         uncles_hash=utils.sha3(rlp.encode([])),
@@ -1349,7 +1351,7 @@ def genesis(env,
         tx_list_root=trie.BLANK_ROOT,
         receipts_root=trie.BLANK_ROOT,
         bloom=0,
-        difficulty=difficulty,
+        difficulty=kwargs.get('difficulty', env.config['GENESIS_DIFFICULTY']),
         number=0,
         gas_limit=kwargs.get('gas_limit', env.config['GENESIS_GAS_LIMIT']),
         gas_used=0,

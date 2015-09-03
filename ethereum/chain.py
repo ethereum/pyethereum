@@ -128,7 +128,7 @@ class Chain(object):
     def _initialize_blockchain(self, genesis=None):
         log.info('Initializing new chain')
         if not genesis:
-            genesis = blocks.genesis(self.blockchain, difficulty=blocks.GENESIS_DIFFICULTY)
+            genesis = blocks.genesis(self.env)
             log.info('new genesis', genesis_hash=genesis, difficulty=genesis.difficulty)
             self.index.add_block(genesis)
         self._store_block(genesis)

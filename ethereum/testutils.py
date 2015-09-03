@@ -122,7 +122,7 @@ def run_vm_test(params, mode, profiler=None):
     exek = params['exec']
     env = params['env']
     if 'previousHash' not in env:
-        env['previousHash'] = encode_hex(blocks.GENESIS_PREVHASH)
+        env['previousHash'] = encode_hex(db_env.config['GENESIS_PREVHASH'])
 
     assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
                                    'previousHash', 'currentCoinbase',
