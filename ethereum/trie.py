@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import os
 import rlp
 from ethereum import utils
@@ -7,6 +6,8 @@ from ethereum.utils import to_string
 from ethereum.abi import is_string
 import copy
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from ethereum.fast_rlp import encode_optimized
+rlp_encode = encode_optimized
 
 bin_to_nibbles_cache = {}
 
@@ -64,7 +65,7 @@ class ProofConstructor():
         self.mode.append(mode)
         self.exempt.append(set())
         if mode == VERIFYING:
-            self.nodes.append(set([rlp.encode(x) for x in nodes]))
+            self.nodes.append(set([rlp_encode(x) for x in nodes]))
         else:
             self.nodes.append(set())
 
@@ -83,12 +84,12 @@ class ProofConstructor():
         return self.nodes[-1]
 
     def add_node(self, node):
-        node = rlp.encode(node)
+        node = rlp_encode(node)
         if node not in self.exempt[-1]:
             self.nodes[-1].add(node)
 
     def add_exempt(self, node):
-        self.exempt[-1].add(rlp.encode(node))
+        self.exempt[-1].add(rlp_encode(node))
 
     def get_mode(self):
         return self.mode[-1]
@@ -225,10 +226,10 @@ class Trie(object):
             pass
         elif proof.get_mode() == RECORDING:
             proof.add_node(copy.copy(node))
-            # print('recording %s' % encode_hex(utils.sha3(rlp.encode(node))))
+            # print('recording %s' % encode_hex(utils.sha3(rlp_encode(node))))
         elif proof.get_mode() == VERIFYING:
-            # print('verifying %s' % encode_hex(utils.sha3(rlp.encode(node))))
-            if rlp.encode(node) not in proof.get_nodes():
+            # print('verifying %s' % encode_hex(utils.sha3(rlp_encode(node))))
+            if rlp_encode(node) not in proof.get_nodes():
                 raise InvalidSPVProof("Proof invalid!")
 
     def spv_storing(self, node):
@@ -252,7 +253,7 @@ class Trie(object):
         if self.root_node == BLANK_NODE:
             return BLANK_ROOT
         assert isinstance(self.root_node, list)
-        val = rlp.encode(self.root_node)
+        val = rlp_encode(self.root_node)
         key = utils.sha3(val)
         self.db.put(key, val)
         self.spv_grabbing(self.root_node)
@@ -294,7 +295,7 @@ class Trie(object):
         if node == BLANK_NODE:
             return BLANK_NODE
         assert isinstance(node, list)
-        rlpnode = rlp.encode(node)
+        rlpnode = rlp_encode(node)
         if len(rlpnode) < 32:
             return node
 
@@ -871,7 +872,7 @@ def verify_spv_proof(root, key, proof):
     t = Trie(db.EphemDB())
 
     for i, node in enumerate(proof):
-        R = rlp.encode(node)
+        R = rlp_encode(node)
         H = utils.sha3(R)
         t.db.put(H, R)
     try:
@@ -895,7 +896,7 @@ if __name__ == "__main__":
         if is_string(nd):
             return encode_hex(nd)
         else:
-            return encode_hex(rlp.encode(nd))
+            return encode_hex(rlp_encode(nd))
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'insert':
