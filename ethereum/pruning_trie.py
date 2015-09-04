@@ -924,7 +924,7 @@ class Trie(object):
         self.root_node = self._update_and_delete_storage(
             self.root_node,
             bin_to_nibbles(to_string(key)),
-            value)
+            to_string(value))
         self.replace_root_hash(old_root, self.root_node)
 
     def root_hash_valid(self):
