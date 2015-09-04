@@ -1592,6 +1592,49 @@ def test_inner_abi_address_output():
     assert c.get_address(125) == b'5656565656565656565656565656565656565656'
 
 
+string_logging_code = """
+event foo(x:string:indexed, y:bytes:indexed, z:str:indexed)
+
+def moo():
+    log(type=foo, text("bob"), text("cow"), text("dog"))
+"""
+
+
+def test_string_logging():
+    s = tester.state()
+    c = s.abi_contract(string_logging_code)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    c.moo()
+    assert o == [{"_event_type": "foo", "x": "bob", "__hash_x": utils.sha3("bob"),
+                  "y": "cow", "__hash_y": utils.sha3("cow"), "z": "dog",
+                  "__hash_z": utils.sha3("dog")}]
+
+
+params_code = """
+data blah
+
+
+def init():
+    self.blah = $FOO
+
+
+def garble():
+    return(self.blah)
+
+def marble():
+    return(text($BAR):str)
+"""
+
+
+def test_params_contract():
+    s = tester.state()
+    c = s.abi_contract(params_code, FOO=4, BAR='horse')
+    assert c.garble() == 4
+    assert c.marble() == 'horse'
+    
+
+
 # test_evm = None
 # test_sixten = None
 # test_with = None
@@ -1639,3 +1682,5 @@ def test_inner_abi_address_output():
 # test_abi_logging = None
 # test_new_format = None
 # test_abi_address_output = None
+# test_string_logging = None
+# test_params_contract = None
