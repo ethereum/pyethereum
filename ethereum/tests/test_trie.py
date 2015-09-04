@@ -19,23 +19,26 @@ def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
         "test data changed, please adjust tests"
 
+fixture_path = os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures')
+
 
 def load_tests():
-    try:
-        fn = os.path.join(testutils.fixture_path, 'TrieTests', 'trietest.json')
-        fixture = json.load(open(fn, 'r'))
-    except IOError:
-        raise IOError("Could not read trietests.json from fixtures",
-                      "Make sure you did 'git submodule init'")
-    expected_keys = set(['jeff', 'emptyValues', 'branchingTests'])
-    assert set(fixture.keys()) == expected_keys, ("test data changed!", list(fixture.keys()))
+    fixture = {}
+    testdir = os.path.join(fixture_path, 'TrieTests')
+    print testdir
+    for f in os.listdir(testdir):
+        if f != 'trietest.json':
+            continue
+        sub_fixture = json.load(open(os.path.join(testdir, f)))
+        for k, v in sub_fixture.items():
+            fixture[f + "_" + k] = v
     return fixture_to_bytes(fixture)
 
 
-def run_test(name):
+def run_test(name, pairs):
 
     logger.debug('testing %s' % name)
-    pairs = load_tests()[name]
+    print name
 
     def _dec(x):
         if is_string(x) and x.startswith(b'0x'):
@@ -59,12 +62,13 @@ def run_test(name):
         # make sure we have deletes at the end
         for k, v in deletes:
             t.delete(k)
-        assert pairs['root'] == b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)
+        if pairs['root'] != b'0x' + encode_hex(t.root_hash):
+            raise Exception("Mismatch: %r %r %r %r" % (name, pairs['root'], b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
 
 
-def test_emptyValues():
-    run_test('emptyValues')
-
-
-def test_jeff():
-    run_test('jeff')
+if __name__ == '__main__':
+    for name, pairs in load_tests().items():
+        run_test(name, pairs)
+else:
+    for key, pairs in load_test().items():
+        globals()["test_"+key] = lambda: run_test(key, pairs)

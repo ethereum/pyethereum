@@ -195,51 +195,51 @@ def test_currency_apis():
 serpent_namereg = """
 data records[](owner, address, content, sub)
 
-event Changed(name:bytes32:indexed)
+event Changed(name:string:indexed)
 
-def reserve(_name:bytes32):
-    if not self.records[_name].owner:
-        self.records[_name].owner = msg.sender
+def reserve(_name:string):
+    if not self.records[sha3(_name:str)].owner:
+        self.records[sha3(_name:str)].owner = msg.sender
         log(type=Changed, _name)
         return(1:bool)
     return(0:bool)
 
-def owner(_name:bytes32):
-    return(self.records[_name].owner:address)
+def owner(_name:string):
+    return(self.records[sha3(_name:str)].owner:address)
 
-def transfer(_name:bytes32, _newOwner:address):
-    if self.records[_name].owner == msg.sender:
+def transfer(_name:string, _newOwner:address):
+    if self.records[sha3(_name:str)].owner == msg.sender:
         log(type=Changed, _name)
-        self.records[_name].owner = _newOwner
+        self.records[sha3(_name:str)].owner = _newOwner
 
-def setAddr(_name:bytes32, _a:address):
-    if self.records[_name].owner == msg.sender:
+def setAddr(_name:string, _a:address):
+    if self.records[sha3(_name:str)].owner == msg.sender:
         log(type=Changed, _name)
-        self.records[_name].address = _a
+        self.records[sha3(_name:str)].address = _a
 
-def addr(_name:bytes32):
-    return(self.records[_name].address:address)
+def addr(_name:string):
+    return(self.records[sha3(_name:str)].address:address)
 
-def setContent(_name:bytes32, _content:bytes32):
-    if self.records[_name].owner == msg.sender:
+def setContent(_name:string, _content:bytes32):
+    if self.records[sha3(_name:str)].owner == msg.sender:
         log(type=Changed, _name)
-        self.records[_name].content = _content
+        self.records[sha3(_name:str)].content = _content
 
-def content(_name:bytes32):
-    return(self.records[_name].content:bytes32)
+def content(_name:string):
+    return(self.records[sha3(_name:str)].content:bytes32)
 
-def setSubRegistrar(_name:bytes32, _subRegistrar:address):
-    if self.records[_name].owner == msg.sender:
+def setSubRegistrar(_name:string, _subRegistrar:address):
+    if self.records[sha3(_name:str)].owner == msg.sender:
         log(type=Changed, _name)
-        self.records[_name].sub = _subRegistrar
+        self.records[sha3(_name:str)].sub = _subRegistrar
 
-def subRegistrar(_name:bytes32):
-    return(self.records[_name].sub:address)
+def subRegistrar(_name:string):
+    return(self.records[sha3(_name:str)].sub:address)
 
-def disown(_name:bytes32):
-    if self.records[_name].owner == msg.sender:
+def disown(_name:string):
+    if self.records[sha3(_name:str)].owner == msg.sender:
         log(type=Changed, _name)
-        self.records[_name].owner = 0
+        self.records[sha3(_name:str)].owner = 0
 """
 
 solidity_namereg = """
@@ -251,11 +251,11 @@ contract namereg {
         address sub;
     }
 
-    mapping ( bytes32 => RegistryEntry ) records;
+    mapping ( string => RegistryEntry ) records;
 
-    event Changed(bytes32 indexed name);
+    event Changed(string name, bytes32 indexed __hash_name);
 
-    function reserve(bytes32 _name) returns (bool _success) {
+    function reserve(string _name) returns (bool _success) {
         if (records[_name].owner == 0) {
             records[_name].owner = msg.sender;
             Changed(_name);
@@ -264,54 +264,54 @@ contract namereg {
         else _success = false;
     }
 
-    function owner(bytes32 _name) returns (address _r) {
+    function owner(string _name) returns (address _r) {
         _r = records[_name].owner;
     }
 
-    function transfer(bytes32 _name, address _newOwner) {
+    function transfer(string _name, address _newOwner) {
         if (records[_name].owner == msg.sender) {
             records[_name].owner = _newOwner;
             Changed(_name);
         }
     }
 
-    function setAddr(bytes32 _name, address _addr) {
+    function setAddr(string _name, address _addr) {
         if (records[_name].owner == msg.sender) {
             records[_name].addr = _addr;
             Changed(_name);
         }
     }
 
-    function addr(bytes32 _name) returns (address _r) {
+    function addr(string _name) returns (address _r) {
         _r = records[_name].addr;
     }
 
-    function setContent(bytes32 _name, bytes32 _content) {
+    function setContent(string _name, bytes32 _content) {
         if (records[_name].owner == msg.sender) {
             records[_name].content = _content;
             Changed(_name);
         }
     }
 
-    function content(bytes32 _name) returns (bytes32 _r) {
+    function content(string _name) returns (bytes32 _r) {
         _r = records[_name].content;
     }
 
-    function setSubRegistrar(bytes32 _name, address _subRegistrar) {
+    function setSubRegistrar(string _name, address _subRegistrar) {
         if (records[_name].owner == msg.sender) {
             records[_name].sub = _subRegistrar;
             Changed(_name);
         }
     }
 
-    function subRegistrar(bytes32 _name) returns (address _r) {
+    function subRegistrar(string _name) returns (address _r) {
         _r = records[_name].sub;
     }
 
-    function disown(bytes32 _name) {
+    function disown(string _name) {
         if (records[_name].owner == msg.sender) {
             records[_name].owner = 0;
-            Changed(_name);
+            Changed(_name, sha3(_name));
         }
     }
 }
