@@ -18,8 +18,7 @@ def translate_keys(olddict, keymap, valueconv, deletes):
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
 
-
-e = db._EphemDB()
+env = blocks.Env(db._EphemDB())
 
 translator_list = {
     "extra_data": "extraData",
@@ -43,7 +42,7 @@ def valueconv(k, v):
 
 
 def run_block_test(params):
-    b = blocks.genesis(e, start_alloc=params["pre"])
+    b = blocks.genesis(env, start_alloc=params["pre"])
     gbh = params["genesisBlockHeader"]
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
     b.timestamp = utils.scanners['int'](gbh["timestamp"])
@@ -68,14 +67,14 @@ def run_block_test(params):
         raise Exception("header hash mismatch")
     assert b.header.check_pow()
     blockmap = {b.hash: b}
-    e.put(b.hash, rlp.encode(b))
+    env.db.put(b.hash, rlp.encode(b))
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             try:
                 rlpdata = decode_hex(blk["rlp"][2:])
                 blkparent = rlp.decode(
                     rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-                b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
+                b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
                 success = b2.validate_uncles()
             except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction, KeyError):
@@ -84,10 +83,10 @@ def run_block_test(params):
         else:
             rlpdata = decode_hex(blk["rlp"][2:])
             blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-            b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], db=e)
+            b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
             assert b2.validate_uncles()
             blockmap[b2.hash] = b2
-            e.put(b2.hash, rlp.encode(b2))
+            env.db.put(b2.hash, rlp.encode(b2))
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

@@ -35,7 +35,7 @@ def verify(block, parent):
     from ethereum import blocks
     try:
         block2 = rlp.decode(rlp.encode(block), blocks.Block,
-                            db=parent.db, parent=parent)
+                            env=parent.env, parent=parent)
         assert block == block2
         return True
     except blocks.VerificationFailed:

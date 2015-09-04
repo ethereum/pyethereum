@@ -6,14 +6,17 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
-from ethereum.utils import to_string, safe_ord, parse_int_or_hex, \
-    remove_0x_head, int_to_hex
+from ethereum.utils import to_string, safe_ord, parse_int_or_hex
+from ethereum.utils import remove_0x_head, int_to_hex
+from ethereum.config import Env
 import json
 import os
 import time
 from ethereum import ethash
 from ethereum import ethash_utils
+
 db = EphemDB()
+db_env = Env(db)
 
 env = {
     "currentCoinbase": b"2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -119,7 +122,7 @@ def run_vm_test(params, mode, profiler=None):
     exek = params['exec']
     env = params['env']
     if 'previousHash' not in env:
-        env['previousHash'] = encode_hex(blocks.GENESIS_PREVHASH)
+        env['previousHash'] = encode_hex(db_env.config['GENESIS_PREVHASH'])
 
     assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
                                    'previousHash', 'currentCoinbase',
@@ -132,7 +135,7 @@ def run_vm_test(params, mode, profiler=None):
         difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
-    blk = blocks.Block(header, db=db)
+    blk = blocks.Block(header, env=db_env)
 
     # setup state
     for address, h in list(pre.items()):
@@ -284,7 +287,7 @@ def run_state_test(params, mode):
         difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
-    blk = blocks.Block(header, db=db)
+    blk = blocks.Block(header, env=db_env)
 
     # setup state
     for address, h in list(pre.items()):
@@ -468,19 +471,19 @@ def run_genesis_test(params, mode):
     if 'difficulty' not in params:
         params['difficulty'] = int_to_hex(2**34)
     if 'mixhash' not in params:
-        params['mixhash'] = '0x'+'0'*64
+        params['mixhash'] = '0x' + '0' * 64
     if 'nonce' not in params:
         params['nonce'] = '0x0000000000000042'
     if 'timestamp' not in params:
         params['timestamp'] = int_to_hex(5000)
     if 'parentHash' not in params:
-        params['parentHash'] = '0x'+'0'*64
+        params['parentHash'] = '0x' + '0' * 64
     if 'gasLimit' not in params:
         params['gasLimit'] = int_to_hex(5000)
     if 'extraData' not in params:
         params['extraData'] = '0x'
     if 'coinbase' not in params:
-        params['coinbase'] = '0x'+'3'*40
+        params['coinbase'] = '0x' + '3' * 40
     x = time.time()
     b = blocks.genesis(EphemDB(), start_alloc=params['alloc'],
                        difficulty=parse_int_or_hex(params['difficulty']),

@@ -12,6 +12,7 @@ import json
 import os
 import tempfile
 from ethereum.db import DB as DB
+from ethereum.config import Env
 __TESTDATADIR = "../tests"
 
 tempdir = tempfile.mktemp()
@@ -23,3 +24,7 @@ def load_test_data(fname):
 
 def new_db():
     return DB()
+
+
+def new_env():
+    return Env(new_db())
