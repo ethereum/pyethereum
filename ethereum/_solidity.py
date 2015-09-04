@@ -65,7 +65,7 @@ class solc_wrapper(object):
             idx = [x[0] for x in sorted_contracts].index(contract_name)
         else:
             idx = -1
-        return sorted_contracts[idx][1]['binary'].decode('hex')
+        return sorted_contracts[idx][1]['bin'].decode('hex')
 
     @classmethod
     def mk_full_signature(cls, code, contract_name=''):
@@ -75,11 +75,11 @@ class solc_wrapper(object):
             idx = [x[0] for x in sorted_contracts].index(contract_name)
         else:
             idx = -1
-        return sorted_contracts[idx][1]['json-abi']
+        return sorted_contracts[idx][1]['abi']
 
     @classmethod
     def combined(cls, code):
-        p = subprocess.Popen(['solc', '--add-std=1', '--combined-json', 'json-abi,binary,sol-abi,natspec-dev,natspec-user'],
+        p = subprocess.Popen(['solc', '--add-std', '--combined-json', 'abi,bin,devdoc,userdoc'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
@@ -88,10 +88,9 @@ class solc_wrapper(object):
         contracts = yaml.safe_load(stdoutdata)['contracts']
 
         for contract_name, data in contracts.items():
-            data['json-abi'] = yaml.safe_load(data['json-abi'])
-            data['sol-abi'] = yaml.safe_load(data['sol-abi'])
-            data['natspec-dev'] = yaml.safe_load(data['natspec-dev'])
-            data['natspec-user'] = yaml.safe_load(data['natspec-user'])
+            data['abi'] = yaml.safe_load(data['abi'])
+            data['devdoc'] = yaml.safe_load(data['devdoc'])
+            data['userdoc'] = yaml.safe_load(data['userdoc'])
 
         names = cls.contract_names(code)
         assert len(names) <= len(contracts)  # imported contracts are not returned
@@ -114,15 +113,15 @@ class solc_wrapper(object):
 
         return {
             contract_name: {
-                'code': "0x" + contract.get('binary'),
+                'code': "0x" + contract.get('bin'),
                 'info': {
-                    'abiDefinition': contract.get('json-abi'),
+                    'abiDefinition': contract.get('abi'),
                     'compilerVersion': cls.compiler_version(),
-                    'developerDoc': contract.get('natspec-dev'),
+                    'developerDoc': contract.get('devdoc'),
                     'language': 'Solidity',
                     'languageVersion': '0',
                     'source': code,
-                    'userDoc': contract.get('natspec-user')
+                    'userDoc': contract.get('userdoc')
                 },
             }
             for contract_name, contract
