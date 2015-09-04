@@ -1356,7 +1356,7 @@ def genesis(env, **kwargs):
         gas_limit=kwargs.get('gas_limit', env.config['GENESIS_GAS_LIMIT']),
         gas_used=0,
         timestamp=kwargs.get('timestamp', 0),
-        extra_data=kwargs.get('extra_data', ''),
+        extra_data=kwargs.get('extra_data', env.config['GENESIS_EXTRA_DATA']),
         mixhash=kwargs.get('mixhash', env.config['GENESIS_MIXHASH']),
         nonce=kwargs.get('nonce', env.config['GENESIS_NONCE']),
     )
