@@ -258,7 +258,7 @@ contract namereg {
     function reserve(string _name) returns (bool _success) {
         if (records[_name].owner == 0) {
             records[_name].owner = msg.sender;
-            Changed(_name);
+            Changed(_name, sha3(_name));
             _success = true;
         }
         else _success = false;
@@ -271,14 +271,14 @@ contract namereg {
     function transfer(string _name, address _newOwner) {
         if (records[_name].owner == msg.sender) {
             records[_name].owner = _newOwner;
-            Changed(_name);
+            Changed(_name, sha3(_name));
         }
     }
 
     function setAddr(string _name, address _addr) {
         if (records[_name].owner == msg.sender) {
             records[_name].addr = _addr;
-            Changed(_name);
+            Changed(_name, sha3(_name));
         }
     }
 
@@ -289,7 +289,7 @@ contract namereg {
     function setContent(string _name, bytes32 _content) {
         if (records[_name].owner == msg.sender) {
             records[_name].content = _content;
-            Changed(_name);
+            Changed(_name, sha3(_name));
         }
     }
 
@@ -300,7 +300,7 @@ contract namereg {
     function setSubRegistrar(string _name, address _subRegistrar) {
         if (records[_name].owner == msg.sender) {
             records[_name].sub = _subRegistrar;
-            Changed(_name);
+            Changed(_name, sha3(_name));
         }
     }
 
@@ -342,7 +342,7 @@ def test_registrar_apis():
         c.setSubRegistrar('moose', tester.a7, sender=tester.k1)
         c.setSubRegistrar('moose', tester.a8, sender=tester.k2)
         assert c.subRegistrar('moose') == utils.encode_hex(tester.a7)
-        assert o == [{"_event_type": b"Changed", "name": b'moose' + b'\x00' * 27}] * 5
+        assert o == [{"_event_type": b"Changed", "name": b'moose', "__hash_name": utils.sha3(b'moose')}] * 5
 
 
 solidity_exchange = """

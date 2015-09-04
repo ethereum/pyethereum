@@ -307,5 +307,5 @@ def disable_logging():
     set_logging_level(0)
 
 
-gas_limit = 1000000
+gas_limit = 3141592
 gas_price = 1
