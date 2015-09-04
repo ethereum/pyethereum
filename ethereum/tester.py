@@ -152,12 +152,12 @@ class state():
         return o
 
     def abi_contract(self, code, sender=k0, endowment=0, language='serpent', contract_name='',
-                     gas=None, log_listener=None, listen=True):
+                     gas=None, log_listener=None, listen=True, **kwargs):
         if contract_name:
             assert language == 'solidity'
             cn_args = dict(contract_name=contract_name)
         else:
-            cn_args = {}
+            cn_args = kwargs
         if language not in languages:
             languages[language] = __import__(language)
         language = languages[language]
