@@ -12,7 +12,7 @@ logger = get_logger()
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-#configure_logging(':trace')
+# configure_logging(':trace')
 
 
 def check_testdata(data_keys, expected_keys):
@@ -63,12 +63,13 @@ def run_test(name, pairs):
         for k, v in deletes:
             t.delete(k)
         if pairs['root'] != b'0x' + encode_hex(t.root_hash):
-            raise Exception("Mismatch: %r %r %r %r" % (name, pairs['root'], b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
+            raise Exception("Mismatch: %r %r %r %r" % (
+                name, pairs['root'], b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
 
 
 if __name__ == '__main__':
     for name, pairs in load_tests().items():
         run_test(name, pairs)
 else:
-    for key, pairs in load_test().items():
-        globals()["test_"+key] = lambda: run_test(key, pairs)
+    for key, pairs in load_tests().items():
+        globals()["test_" + key] = lambda: run_test(key, pairs)
