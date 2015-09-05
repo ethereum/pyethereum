@@ -168,7 +168,7 @@ class Chain(object):
             block.to_dict(with_state=True)
             n = trie.proof.get_nodelist()
             trie.proof.pop()
-            sys.stderr.write('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
+            # log.debug('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
         # Fork detected, revert death row and change logs
         if block.number > 0:
             b = block.get_parent()
@@ -191,7 +191,7 @@ class Chain(object):
                     processblock.verify(bc, bc.get_parent())
         self.blockchain.put('HEAD', block.hash)
         assert self.blockchain.get('HEAD') == block.hash
-        sys.stderr.write('New head: %s %d\n' % (utils.encode_hex(block.hash), block.number))
+        #log.debug('New head: %s %d\n' % (utils.encode_hex(block.hash), block.number))
         self.index.update_blocknumbers(self.head)
         self._update_head_candidate(forward_pending_transactions)
         if self.new_head_cb and not block.is_genesis():
