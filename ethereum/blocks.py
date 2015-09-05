@@ -405,15 +405,15 @@ class Block(rlp.Serializable):
             if self.prevhash != parent.header.hash:
                 raise ValueError("Block's prevhash and parent's hash do not match")
             if self.number != parent.header.number + 1:
-                raise ValueError("Block's number is not the successor of its parent number")
+                raise ValueError("Block's number [%d] is not the successor of its parent number [%d]" % (self.number, parent.header.number))
             if not check_gaslimit(parent, self.gas_limit):
-                raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
+                raise ValueError("Block's gaslimit [%s] is inconsistent with its parent's gaslimit [%d]" % (self.gas_limit, parent.header.gas_limit))
             if self.difficulty != calc_difficulty(parent, self.timestamp):
-                raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
+                raise ValueError("Block's difficulty [%s] is inconsistent with its expected difficulty [%d]" % ( self.difficulty, calc_difficulty(parent, self.timestamp)))
             if self.gas_used > self.gas_limit:
-                raise ValueError("Gas used exceeds gas limit")
+                raise ValueError("Gas used [%d] exceeds gas limit [%d]" % (self.gas_used, self.gas_limit))
             if self.timestamp <= parent.header.timestamp:
-                raise ValueError("Timestamp equal to or before parent")
+                raise ValueError("Timestamp [%d] equal to or before parent [%d]" % (self.timestamp, parent.header.timestamp))
 
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
@@ -559,6 +559,7 @@ class Block(rlp.Serializable):
 
         This is equivalent to ``header.hash``.
         """
+
         return utils.sha3(rlp.encode(self.header))
 
     def hex_hash(self):
