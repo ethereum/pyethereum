@@ -155,6 +155,32 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     }
 
 
+def check_keystore_json(jsondata):
+    """Check if ``jsondata`` has the structure of a keystore file version 3.
+
+    Note that this test is not complete, e.g. it doesn't check key derivation or cipher parameters.
+
+    :param jsondata: dictionary containing the data from the json file
+    :returns: `True` if the data appears to be valid, otherwise `False`
+    """
+    if 'crypto' not in jsondata and 'Crypto' not in jsondata:
+        return False
+    if 'version' not in jsondata:
+        return False
+    if jsondata['version'] != 3:
+        return False
+    crypto = jsondata.get('crypto', jsondata.get('Crypto'))
+    if 'cipher' not in crypto:
+        return False
+    if 'ciphertext' not in crypto:
+        return False
+    if 'kdf' not in crypto:
+        return False
+    if 'mac' not in crypto:
+        return False
+    return True
+
+
 def decode_keystore_json(jsondata, pw):
     # Get KDF function and parameters
     if "crypto" in jsondata:
