@@ -284,11 +284,7 @@ class Chain(object):
             _log.debug('invalid uncles')
             return False
 
-        if not len(block.nonce) == 8:
-            _log.debug('nonce not set')
-            return False
-        elif not block.header.check_pow(nonce=block.nonce) and\
-                not block.is_genesis():
+        elif not block.header.check_pow() and not block.is_genesis():
             _log.debug('invalid nonce')
             return False
 
