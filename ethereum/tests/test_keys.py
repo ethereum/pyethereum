@@ -13,6 +13,7 @@ def gen_func(filename, testname, testdata):
 
 def do_test_key(filename, testname=None, testdata=None, limit=99999999):
     logger.debug('running test:%r in %r' % (testname, filename))
+    assert keys.check_keystore_json(testdata["json"])
     privkey = keys.decode_keystore_json(testdata["json"], testdata["password"])
     assert utils.encode_hex(privkey) == utils.to_string(testdata["priv"])
 
