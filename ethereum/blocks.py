@@ -414,6 +414,8 @@ class Block(rlp.Serializable):
                 raise ValueError("Gas used exceeds gas limit")
             if self.timestamp <= parent.header.timestamp:
                 raise ValueError("Timestamp equal to or before parent")
+            if self.timestamp >= 2**256:
+                raise ValueError("Timestamp waaaaaaaaaaayy too large")
 
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
