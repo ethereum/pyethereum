@@ -1,8 +1,8 @@
 try:
-    import Crypto.Hash.SHA3_256 as _SHA3_256  # from pycryptodome
-    sha3_256 = _SHA3_256.new
+    from keccak import sha3_256  # pypy
 except ImportError:
-    from sha3 import sha3_256
+    from sha3 import sha3_256 as _sha3_256
+    sha3_256 = lambda x: _sha3_256(x).digest()
 from bitcoin import privtopub
 import sys
 import rlp
@@ -102,7 +102,7 @@ def int_to_32bytearray(i):
 
 
 def sha3(seed):
-    return sha3_256(to_string(seed)).digest()
+    return sha3_256(to_string(seed))
 assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
