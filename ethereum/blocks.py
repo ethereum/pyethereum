@@ -426,7 +426,11 @@ class Block(rlp.Serializable):
             'difficulty': header.difficulty,
             'uncles_hash': header.uncles_hash,
             'bloom': header.bloom,
+            'header_mutable': self.header.mutable_,
         }
+        assert self.mutable_
+        self.rlp_ = None
+        self.header.mutable_ = True
 
         self.transactions = Trie(self.db, trie.BLANK_ROOT)
         self.receipts = Trie(self.db, trie.BLANK_ROOT)
@@ -492,6 +496,7 @@ class Block(rlp.Serializable):
 
         # from now on, trie roots refer to block instead of header
         header.block = self
+        self.header.mutable_ = original_values['header_mutable']
 
         # Basic consistency verifications
         if not self.check_fields():
@@ -687,6 +692,8 @@ class Block(rlp.Serializable):
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
             acct = rlp.decode(rlpdata, Account, db=self.db)
+            acct.mutable_ = True
+            acct.rlp_ = None
         else:
             acct = Account.blank_account(self.db)
         return acct

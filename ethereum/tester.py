@@ -270,6 +270,10 @@ class state():
 
     def revert(self, data):
         self.block = rlp.decode(data, b.Block, env=self.env)
+        self.block.mutable_ = True
+        self.block.header.mutable_ = True
+        self.block.rlp_ = None
+        self.block.header.rlp_ = None
 
 # logging
 
