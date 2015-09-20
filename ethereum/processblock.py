@@ -8,7 +8,7 @@ from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.exceptions import *
-from ethereum.utils import safe_ord
+from ethereum.utils import safe_ord, normalize_address
 
 sys.setrecursionlimit(100000)
 
@@ -28,7 +28,7 @@ CREATE_CONTRACT_ADDRESS = b''
 
 
 def mk_contract_address(sender, nonce):
-    return utils.sha3(rlp.encode([sender, nonce]))[12:]
+    return utils.sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
 
 
 def verify(block, parent):
