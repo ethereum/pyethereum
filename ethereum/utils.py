@@ -128,6 +128,19 @@ def check_and_strip_checksum(x):
     return x[:20]
 
 
+def normalize_address(x):
+    if len(x) in (42, 50) and x[:2] == '0x':
+        x = x[2:]
+    if len(x) in (40, 48):
+        x = decode_hex(x)
+    if len(x) == 24:
+        assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
+        x = x[:20]
+    if len(x) != 20:
+        raise Exception("Invalid address format!")
+    return x
+
+
 def zpad(x, l):
     return b'\x00' * max(0, l - len(x)) + x
 
