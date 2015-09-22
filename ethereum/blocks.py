@@ -116,11 +116,14 @@ class Receipt(rlp.Serializable):
     ]
 
     def __init__(self, state_root, gas_used, logs, bloom=None):
+        # does not call super.__init__ as bloom should not be an attribute but a property
         self.state_root = state_root
         self.gas_used = gas_used
         self.logs = logs
         if bloom is not None and bloom != self.bloom:
             raise ValueError("Invalid bloom filter")
+        self._cached_rlp = None
+        self._mutable = True
 
     @property
     def bloom(self):
@@ -426,11 +429,11 @@ class Block(rlp.Serializable):
             'difficulty': header.difficulty,
             'uncles_hash': header.uncles_hash,
             'bloom': header.bloom,
-            'header_mutable': self.header.mutable_,
+            'header_mutable': self.header._mutable,
         }
-        assert self.mutable_
-        self.rlp_ = None
-        self.header.mutable_ = True
+        assert self._mutable
+        self._cached_rlp = None
+        self.header._mutable = True
 
         self.transactions = Trie(self.db, trie.BLANK_ROOT)
         self.receipts = Trie(self.db, trie.BLANK_ROOT)
@@ -496,7 +499,7 @@ class Block(rlp.Serializable):
 
         # from now on, trie roots refer to block instead of header
         header.block = self
-        self.header.mutable_ = original_values['header_mutable']
+        self.header._mutable = original_values['header_mutable']
 
         # Basic consistency verifications
         if not self.check_fields():
@@ -692,8 +695,8 @@ class Block(rlp.Serializable):
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
             acct = rlp.decode(rlpdata, Account, db=self.db)
-            acct.mutable_ = True
-            acct.rlp_ = None
+            acct._mutable = True
+            acct._cached_rlp = None
         else:
             acct = Account.blank_account(self.db)
         return acct
