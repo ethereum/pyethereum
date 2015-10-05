@@ -79,7 +79,7 @@ class solc_wrapper(object):
 
     @classmethod
     def combined(cls, code):
-        p = subprocess.Popen(['solc', '--add-std', '--combined-json', 'abi,bin,devdoc,userdoc'],
+        p = subprocess.Popen(['solc', '--add-std', '--optimize', '--combined-json', 'abi,bin,devdoc,userdoc'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdoutdata, stderrdata = p.communicate(input=code)
         if p.returncode:
