@@ -1,8 +1,6 @@
 [run]
 source = pyethereum
 
-To exclude parts of your source from coverage, for example migrations folders:
-
 [report]
 omit =
   */fixtures/*
