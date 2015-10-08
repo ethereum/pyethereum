@@ -93,7 +93,7 @@ class Account(rlp.Serializable):
         self.db.inc_refcount(self.code_hash, value)
 
     @classmethod
-    def blank_account(cls, db):
+    def blank_account(cls, db, initial_nonce=0):
         """Create a blank account
 
         The returned account will have zero nonce and balance, a blank storage
@@ -103,7 +103,7 @@ class Account(rlp.Serializable):
         """
         code_hash = utils.sha3(b'')
         db.put(code_hash, b'')
-        return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
+        return cls(initial_nonce, 0, trie.BLANK_ROOT, code_hash, db)
 
 
 class Receipt(rlp.Serializable):
@@ -698,7 +698,7 @@ class Block(rlp.Serializable):
             acct._mutable = True
             acct._cached_rlp = None
         else:
-            acct = Account.blank_account(self.db)
+            acct = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
         return acct
 
     def _get_acct_item(self, address, param):
