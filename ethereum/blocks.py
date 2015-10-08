@@ -852,15 +852,10 @@ class Block(rlp.Serializable):
         :param address: the address of the account (binary or hex string)
         :returns: `True` if successful, otherwise `False`
         """
-        return self._delta_item(address, 'nonce', 1)
-
-    def decrement_nonce(self, address):
-        """Decrement the nonce of an account.
-
-        :param address: the address of the account (binary or hex string)
-        :returns: `True` if successful, otherwise `False`
-        """
-        return self._delta_item(address, 'nonce', -1)
+        if self.get_nonce(address) == 0:
+            return self._delta_item(address, 'nonce', self.config['STARTING_ACCT_NONCE'] + 1)
+        else:
+            return self._delta_item(address, 'nonce', 1)
 
     def get_balance(self, address):
         """Get the balance of an account.
