@@ -14,6 +14,10 @@ from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import get_logger
 log = get_logger('eth.chain.tx')
 
+# in the yellow paper it is specified that s should be smaller than secpk1n (eq.205)
+secpk1n = 115792089237316195423570985008687907852837564279074904382605163141518161494337
+
+
 class Transaction(rlp.Serializable):
 
     """
@@ -67,10 +71,12 @@ class Transaction(rlp.Serializable):
 
     @property
     def sender(self):
+
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28 or self.r == 0 or self.s == 0:
+                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28 \
+                or self.r == 0 or self.s == 0 or self.s >= secpk1n:
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
