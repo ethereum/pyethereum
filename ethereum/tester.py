@@ -260,8 +260,6 @@ class state():
             self.db.put(self.block.hash, rlp.encode(self.block))
             t = self.block.timestamp + 6 + rand() % 12
             x = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
-            # copy listeners
-            x.log_listeners = self.block.log_listeners
             self.block = x
             self.blocks.append(self.block)
 
