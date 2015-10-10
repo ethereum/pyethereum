@@ -555,6 +555,7 @@ class Block(rlp.Serializable):
         block = Block(header, [], uncles, env=env or parent.env,
                       parent=parent, making=True)
         block.ancestor_hashes = [parent.hash] + parent.ancestor_hashes
+        block.log_listeners = parent.log_listeners
         return block
 
     def check_fields(self):
