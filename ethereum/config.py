@@ -41,8 +41,8 @@ default_config = dict(
     # Exponential difficulty timebomb period
     EXPDIFF_PERIOD=100000,
     EXPDIFF_FREE_PERIODS=2,
-    # Starting nonce
-    STARTING_ACCT_NONCE=0
+    # Blank account initial nonce
+    ACCOUNT_INITIAL_NONCE=0,
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

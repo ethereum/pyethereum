@@ -1,6 +1,6 @@
 from bitcoin import encode_pubkey, N, P
 try:
-    from ecdsa_recover import ecdsa_raw_sign, ecdsa_raw_recover
+    from c_secp256k1 import ecdsa_raw_sign, ecdsa_raw_recover
 except ImportError:
     from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
 import rlp

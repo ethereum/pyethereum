@@ -1,6 +1,6 @@
 import logging
 import json
-from logging import StreamHandler, Formatter
+from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, isnumeric
 
 
@@ -9,6 +9,7 @@ DEFAULT_LOGLEVEL = 'INFO'
 JSON_FORMAT = '%(message)s'
 
 PRINT_FORMAT = '%(levelname)s:%(name)s\t%(message)s'
+FILE_PREFIX = '%(asctime)s'
 
 TRACE = 5
 
@@ -193,7 +194,7 @@ def getLogger(name=None):
         return rootLogger
 
 
-def configure(config_string=None, log_json=False):
+def configure(config_string=None, log_json=False, log_file=None):
     if not config_string:
         config_string = ":{}".format(DEFAULT_LOGLEVEL)
 
@@ -209,6 +210,12 @@ def configure(config_string=None, log_json=False):
         formatter = Formatter(log_format)
         handler.setFormatter(formatter)
         rootLogger.addHandler(handler)
+    if log_file:
+        if not any(isinstance(hndlr, FileHandler) for hndlr in rootLogger.handlers):
+            handler = FileHandler(log_file)
+            formatter = Formatter("{} {}".format(FILE_PREFIX, log_format))
+            handler.setFormatter(formatter)
+            rootLogger.addHandler(handler)
 
     # Reset logging levels before applying new config below
     for name, logger in SLogger.manager.loggerDict.items():
