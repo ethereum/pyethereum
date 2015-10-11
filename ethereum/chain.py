@@ -191,15 +191,16 @@ class Chain(object):
                     processblock.verify(bc, bc.get_parent())
         self.blockchain.put('HEAD', block.hash)
         assert self.blockchain.get('HEAD') == block.hash
-        #log.debug('New head: %s %d\n' % (utils.encode_hex(block.hash), block.number))
         self.index.update_blocknumbers(self.head)
+        assert self.head == block
+        log.debug('set new head', head=self.head)
         self._update_head_candidate(forward_pending_transactions)
         if self.new_head_cb and not block.is_genesis():
             self.new_head_cb(block)
 
     def _update_head_candidate(self, forward_pending_transactions=True):
         "after new head is set"
-        log.debug('updating head candidate')
+        log.debug('updating head candidate', head=self.head)
         # collect uncles
         blk = self.head  # parent of the block we are collecting uncles for
         uncles = set(u.header for u in self.get_brothers(blk))
@@ -225,12 +226,17 @@ class Chain(object):
         # add transactions from previous head candidate
         old_head_candidate = self.head_candidate
         self.head_candidate = head_candidate
-        if old_head_candidate is not None and forward_pending_transactions:
-            log.debug('forwarding pending transactions')
-            for tx in old_head_candidate.get_transactions():
-                self.add_transaction(tx)
-        else:
-            log.debug('discarding pending transactions')
+        if old_head_candidate is not None:
+            tx_hashes = self.head.get_transaction_hashes()
+            pending = [tx for tx in old_head_candidate.get_transactions()
+                       if tx.hash not in tx_hashes]
+            if pending:
+                if forward_pending_transactions:
+                    log.debug('forwarding pending transactions', num=len(pending))
+                    for tx in pending:
+                        self.add_transaction(tx)
+                else:
+                    log.debug('discarding pending transactions', num=len(pending))
 
     def get_uncles(self, block):
         """Return the uncles of `block`."""
@@ -306,7 +312,7 @@ class Chain(object):
 
         # set to head if this makes the longest chain w/ most work for that number
         if block.chain_difficulty() > self.head.chain_difficulty():
-            _log.debug('new head')
+            _log.debug('new head', num_tx=block.num_transactions())
             self._update_head(block, forward_pending_transactions)
         elif block.number > self.head.number:
             _log.warn('has higher blk number than head but lower chain_difficulty',
