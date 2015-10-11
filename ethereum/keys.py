@@ -26,6 +26,7 @@ from math import ceil
 from sha3 import sha3_256
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
+from Crypto.Util import Counter
 
 # TODO: make it compatible!
 
@@ -46,11 +47,7 @@ PBKDF2_CONSTANTS = {
 
 def aes_ctr_encrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    o = [0]
-
-    def ctr():
-        o[0] += 1
-        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
+    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
@@ -58,11 +55,7 @@ def aes_ctr_encrypt(text, key, params):
 
 def aes_ctr_decrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    o = [0]
-
-    def ctr():
-        o[0] += 1
-        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
+    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
