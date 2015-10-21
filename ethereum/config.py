@@ -43,6 +43,9 @@ default_config = dict(
     EXPDIFF_FREE_PERIODS=2,
     # Blank account initial nonce
     ACCOUNT_INITIAL_NONCE=0,
+    # Homestead fork (500k on livenet?)
+    HOMESTEAD_FORK_BLKNUM=2**100,
+    HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=16,
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

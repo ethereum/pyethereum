@@ -39,7 +39,10 @@ Log = processblock.Log
 def calc_difficulty(parent, timestamp):
     config = parent.config
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
-    sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
+    if parent.number < config['HOMESTEAD_FORK_BLKNUM']:
+        sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
+    else:
+        sign = max(1 - 2 * ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)

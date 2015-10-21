@@ -124,10 +124,18 @@ def apply_transaction(block, tx):
     block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
 
+    intrinsic_gas = intrinsic_gas_used(tx)
+    if block.number >= block.config['HOMESTEAD_FORK_BLKNUM']:
+        assert tx.s * 2 < transactions.secpk1n
+        if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
+            intrinsic_gas += opcodes.CREATE[3]
+            if tx.startgas < intrinsic_gas:
+                raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas))
+                
     # buy startgas
     assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
-    message_gas = tx.startgas - intrinsic_gas_used(tx)
+    message_gas = tx.startgas - intrinsic_gas
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
@@ -293,6 +301,8 @@ def create_contract(ext, msg):
         else:
             dat = []
             #print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
+            if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
+                return 0, 0, b''
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
         ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to

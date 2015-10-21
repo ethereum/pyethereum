@@ -53,10 +53,7 @@ class Transaction(rlp.Serializable):
     _sender = None
 
     def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
-        if len(to) in (40, 48):
-            to = decode_hex(to)
-        if len(to) == 24:
-            to = utils.check_and_strip_checksum(to)
+        to = utils.normalize_address(to, allow_blank=True)
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
         self.logs = []
