@@ -261,6 +261,10 @@ class Chain(object):
         assert len(blockhash) == 32
         return blocks.get_block(self.env, blockhash)
 
+    def get_bloom(self, blockhash):
+        h = rlp.decode(rlp.descend(self.db.get(blockhash), 0, 6))
+        return utils.big_endian_to_int(h)
+
     def has_block(self, blockhash):
         assert is_string(blockhash)
         assert len(blockhash) == 32
