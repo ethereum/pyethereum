@@ -308,6 +308,17 @@ def test_logging_reconfigure():
     assert len(eth_vm_logger.handlers) == 0
 
 
+@pytest.mark.parametrize(
+    ('config', 'logger', 'level'), (
+        (":WARNING", "", "WARNING"),
+        (":DEBUG,eth:INFO", "", "DEBUG"),
+        (":DEBUG,eth:INFO", "eth", "INFO"),
+        (":DEBUG,eth:INFO,devp2p:INFO", "devp2p", "INFO"),))
+def test_logging_reconfigure_levels(config, logger, level):
+    slogging.configure(config)
+    assert slogging.getLogger(logger).level == getattr(logging, level)
+
+
 def test_set_level():
     slogging.set_level('test', 'CRITICAL')
     assert slogging.getLogger('test').level == logging.CRITICAL
