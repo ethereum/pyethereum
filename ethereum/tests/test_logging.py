@@ -9,7 +9,7 @@ from ethereum import slogging
 def test_basic(caplog, level_name):
     slogging.configure(":trace")
     log = slogging.get_logger()
-    with caplog.atLevel('TRACE'):
+    with caplog.at_level('TRACE'):
         getattr(log, level_name)(level_name)
 
     assert len(caplog.records()) == 1
@@ -234,13 +234,13 @@ def test_bound_logger(caplog):
     real_log = slogging.getLogger()
 
     bound_log_1 = real_log.bind(key1="value1")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
         assert "test1" in caplog.text()
         assert "key1=value1" in caplog.text()
 
     bound_log_2 = bound_log_1.bind(key2="value2")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_2.info("test2")
         assert "test2" in caplog.text()
         assert "key1=value1" in caplog.text()
@@ -255,14 +255,14 @@ def test_bound_logger_isolation(caplog):
     real_log = slogging.getLogger()
 
     bound_log_1 = real_log.bind(key1="value1")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
         records = caplog.records()
         assert len(records) == 1
         assert "test1" in records[0].msg
         assert "key1=value1" in records[0].msg
 
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         real_log.info("test2")
         records = caplog.records()
         assert len(records) == 2
