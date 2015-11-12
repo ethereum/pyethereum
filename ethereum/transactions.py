@@ -72,8 +72,8 @@ class Transaction(rlp.Serializable):
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28 \
-                or self.r == 0 or self.s == 0 or self.s >= secpk1n:
+                if self.r >= N or self.s >= N or self.v < 27 or self.v > 28 \
+                or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)

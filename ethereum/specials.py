@@ -18,8 +18,8 @@ def proc_ecrecover(ext, msg):
     v = msg.data.extract32(32)
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)
-    if r >= bitcoin.N or s >= bitcoin.P or v < 27 or v > 28:
-        return 1, msg.gas - opcodes.GECRECOVER, [0] * 32
+    if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
+        return 1, msg.gas - opcodes.GECRECOVER, []
     recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
     if recovered_addr in (False, (0, 0)):
         return 1, msg.gas - gas_cost, []
