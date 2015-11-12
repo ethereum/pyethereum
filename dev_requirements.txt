@@ -1,6 +1,6 @@
 tox
 coveralls
 pytest
-pytest-capturelog
+pytest-catchlog==1.1
 pytest-timeout
 https://github.com/ethereum/serpent/tarball/develop

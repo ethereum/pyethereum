@@ -9,7 +9,7 @@ from ethereum import slogging
 def test_basic(caplog, level_name):
     slogging.configure(":trace")
     log = slogging.get_logger()
-    with caplog.atLevel('TRACE'):
+    with caplog.at_level('TRACE'):
         getattr(log, level_name)(level_name)
 
     assert len(caplog.records()) == 1
@@ -234,13 +234,13 @@ def test_bound_logger(caplog):
     real_log = slogging.getLogger()
 
     bound_log_1 = real_log.bind(key1="value1")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
         assert "test1" in caplog.text()
         assert "key1=value1" in caplog.text()
 
     bound_log_2 = bound_log_1.bind(key2="value2")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_2.info("test2")
         assert "test2" in caplog.text()
         assert "key1=value1" in caplog.text()
@@ -255,14 +255,14 @@ def test_bound_logger_isolation(caplog):
     real_log = slogging.getLogger()
 
     bound_log_1 = real_log.bind(key1="value1")
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
         records = caplog.records()
         assert len(records) == 1
         assert "test1" in records[0].msg
         assert "key1=value1" in records[0].msg
 
-    with caplog.atLevel(slogging.TRACE):
+    with caplog.at_level(slogging.TRACE):
         real_log.info("test2")
         records = caplog.records()
         assert len(records) == 2
@@ -306,6 +306,17 @@ def test_logging_reconfigure():
     assert len(eth_vm_logger.handlers) == 0
     slogging.configure(config_string2)
     assert len(eth_vm_logger.handlers) == 0
+
+
+@pytest.mark.parametrize(
+    ('config', 'logger', 'level'), (
+        (":WARNING", "", "WARNING"),
+        (":DEBUG,eth:INFO", "", "DEBUG"),
+        (":DEBUG,eth:INFO", "eth", "INFO"),
+        (":DEBUG,eth:INFO,devp2p:INFO", "devp2p", "INFO"),))
+def test_logging_reconfigure_levels(config, logger, level):
+    slogging.configure(config)
+    assert slogging.getLogger(logger).level == getattr(logging, level)
 
 
 def test_set_level():
