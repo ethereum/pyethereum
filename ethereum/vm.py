@@ -533,7 +533,7 @@ def vm_execute(ext, msg, code):
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
-        elif op == 'CALLCODE':
+        elif op == 'CALLCODE' or op == 'DELEGATECALL':
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
@@ -548,9 +548,11 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = ((b'\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
-                if ext.post_homestead_hardfork():
+                if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
+                elif op == 'DELEGATECALL':
+                    return vm_exception('OPCODE INACTIVE')
                 else:
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
