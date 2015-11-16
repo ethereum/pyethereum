@@ -548,8 +548,12 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = ((b'\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
-                                   msg.depth + 1, code_address=to)
+                if ext.post_homestead_hardfork():
+                    call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to)
+                else:
+                    call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
