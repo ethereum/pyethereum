@@ -18,7 +18,7 @@ try:
     ETHASH_LIB = 'pyethash'  # the C++ based implementation
 except ImportError:
     ETHASH_LIB = 'ethash'
-    warnings.warn('using pure python implementation')
+    warnings.warn('using pure python implementation', ImportWarning)
 
 if ETHASH_LIB == 'ethash':
     mkcache = ethash.mkcache
