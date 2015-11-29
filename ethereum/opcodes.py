@@ -38,6 +38,7 @@ opcodes = {
     0x3a: ['GASPRICE', 0, 1, 2],
     0x3b: ['EXTCODESIZE', 1, 1, 20],
     0x3c: ['EXTCODECOPY', 4, 0, 20],
+    0x3d: ['MCOPY', 3, 0, 3],
     0x40: ['BLOCKHASH', 1, 1, 20],
     0x41: ['COINBASE', 0, 1, 2],
     0x42: ['TIMESTAMP', 0, 1, 2],
@@ -66,6 +67,11 @@ opcodes = {
     0xf2: ['CALLCODE', 7, 1, 40],
     0xf3: ['RETURN', 2, 0, 0],
     0xf4: ['DELEGATECALL', 2, 0, 0],
+    0xf8: ['SLOADBYTES', 1, 1, 50],
+    0xf9: ['SSTOREBYTES', 2, 0, 2500],
+    0xfa: ['SSIZE', 1, 1, 50],
+    0xfb: ['STATEROOT', 1, 1, 50],
+    0xfc: ['TXEXECGAS', 0, 1, 50],
     0xff: ['SUICIDE', 1, 0, 0],
 }
 

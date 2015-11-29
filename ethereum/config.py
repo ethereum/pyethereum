@@ -1,5 +1,8 @@
 from ethereum import utils
 from ethereum.db import BaseDB
+import time
+from ethereum.utils import address, int256, trie_root, hash32, to_string, \
+    sha3, zpad, normalize_address, int_to_addr, big_endian_to_int
 
 default_config = dict(
     # Genesis block difficulty
@@ -53,8 +56,20 @@ assert default_config['NEPHEW_REWARD'] == \
 
 class Env(object):
 
-    def __init__(self, db, config=None, global_config=None):
+    def __init__(self, db, config=None, global_config=None, genesis_timestamp=time.time()):
         assert isinstance(db, BaseDB)
         self.db = db
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
+        self.genesis_timestamp = genesis_timestamp
+
+BLOCKHASHES = utils.int_to_addr(2**160 - 1)
+STATEROOTS = utils.int_to_addr(2**160 - 2)
+BLKNUMBER = utils.int_to_addr(2**160 - 3)
+GAS_CONSUMED = utils.int_to_addr(2**160 - 4)
+ETHER = utils.int_to_addr(2**160 - 5)
+CASPER = int_to_addr(2**160 - 6)
+ECRECOVERACCT = utils.int_to_addr(2**160 - 7)
+PROPOSER = utils.int_to_addr(2**160 - 8)
+GASLIMIT = 4712388 # Pau million
+NULL_SENDER = utils.int_to_addr(0)
