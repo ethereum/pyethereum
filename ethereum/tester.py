@@ -151,20 +151,15 @@ class state():
         assert len(self.block.get_code(o)), "Contract code empty"
         return o
 
-    def abi_contract(self, code, sender=k0, endowment=0, language='serpent', contract_name='',
+    def abi_contract(self, code, sender=k0, endowment=0, language='serpent',
                      gas=None, log_listener=None, listen=True, **kwargs):
-        if contract_name:
-            assert language == 'solidity'
-            cn_args = dict(contract_name=contract_name)
-        else:
-            cn_args = kwargs
         if language not in languages:
             languages[language] = __import__(language)
         language = languages[language]
-        evm = language.compile(code, **cn_args)
+        evm = language.compile(code, **kwargs)
         address = self.evm(evm, sender, endowment, gas)
         assert len(self.block.get_code(address)), "Contract code empty"
-        _abi = language.mk_full_signature(code, **cn_args)
+        _abi = language.mk_full_signature(code, **kwargs)
         return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
 
     def clear_listeners(self):
