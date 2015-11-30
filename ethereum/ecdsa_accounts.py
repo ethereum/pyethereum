@@ -24,21 +24,15 @@ sigdata = string(~calldatasize() - 64)
 ~calldatacopy(sigdata + 32, 96, ~calldatasize() - 96)
 h = ~sha3(sigdata, ~calldatasize() - 64)
 # Call ECRECOVER contract to get the sender
-~log3(50, h, ~calldataload(0), ~calldataload(32), ~calldataload(64))
 ~call(5000, 1, 0, [h, ~calldataload(0), ~calldataload(32), ~calldataload(64)], 128, ref(addr), 32)
-~log1(51, 51, ~calldatasize())
 myaddr = 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1
-~log4(0, 0, addr, myaddr, 0, 0)
 # Check sender correctness
 assert addr == myaddr
-~log2(52, 1, ~calldataload(96), self.storage[~sub(0, 1)])
 # Check sequence number correctness
 assert ~calldataload(96) == self.storage[~sub(0, 1)]
-~log0(53, 1)
 # Increment sequence number
 self.storage[~sub(0, 1)] += 1
 # Make the sub-call and discard output
-~log2(54, 1, ~calldataload(160), ~calldataload(192))
 x = ~msize()
 ~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), sigdata + 160, ~calldatasize() - 224, x, 1000)
 # Pay for gas
@@ -83,6 +77,12 @@ def mk_validation_code(addr):
     s = State('', db.EphemDB())
     tx_state_transition(s, Transaction(None, 1000000, '', code3), 0)
     return s.get_storage(mk_contract_address(code=code3), '')
+
+def sign_block(block, key):
+    sigdata = sha3(encode_int32(block.number) + block.txroot)
+    v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
+    block.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
+    return block
 
 # Creates data for a transaction 
 def mk_txdata(seq, gasprice, to, value, data):

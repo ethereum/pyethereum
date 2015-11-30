@@ -7,6 +7,9 @@ from utils import privtoaddr, normalize_address, zpad, encode_int, big_endian_to
 import ecdsa_accounts
 import abi
 import sys
+import bet
+import time
+import network
 
 genesis = State('', db.EphemDB())
 gc = genesis.clone()
@@ -24,15 +27,13 @@ ct = abi.ContractTranslator(serpent.mk_full_signature('casper.se.py'))
 # Call a method of a function with no effect
 def call_method(state, addr, ct, fun, args):
     tx = Transaction(addr, 1000000, ct.encode(fun, args))
-    o = tx_state_transition(state.clone(), tx, 0)
-    print 'baa', o, len(o)
     return ct.decode(fun, ''.join(map(chr, tx_state_transition(state.clone(), tx, 0))))
     
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace'
 # configure_logging(config_string=config_string)
 
-keys = [zpad(encode_int(x), 32) for x in range(1, 13)][:3]
+keys = [zpad(encode_int(x), 32) for x in range(1, 13)]
 for i, k in enumerate(keys):
     a = ecdsa_accounts.privtoaddr(k)
     genesis.set_storage(ETHER, a, 1600 * 10**18)
@@ -46,11 +47,13 @@ for i, k in enumerate(keys):
     tx = ecdsa_accounts.mk_transaction(1, 1, 1000000, CASPER, 1500 * 10**18, txdata, k)
     print 'seq', big_endian_to_int(genesis.get_storage(a, 2**256 - 1))
     v = tx_state_transition(genesis, tx, i * 2 + 2)
-    print 'nonce', repr(v)
     print 'seq', big_endian_to_int(genesis.get_storage(a, 2**256 - 1))
-    print 'vee', v
-    print ct.function_data['getUserValidationCode']
     v = ct.decode('join', ''.join(map(chr, v)))
     print 'Joined with index', v
     vcode2 = call_method(genesis, CASPER, ct, 'getUserValidationCode', v)[0]
     assert vcode2 == vcode
+
+bets = [bet.defaultBetStrategy(genesis.clone(), k, time.time()) for k in keys]
+
+# n = NetworkSimulator(latency=5)
+# n.run(100)

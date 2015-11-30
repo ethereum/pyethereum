@@ -1,12 +1,12 @@
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int, safe_ord
+    encode_int, safe_ord, encode_int32
 from config import Env
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS
 import rlp
 import trie
 import specials
@@ -65,6 +65,7 @@ class State():
     def __init__(self, state_root, db):
         self.state = trie.Trie(db)
         self.state.root_hash = state_root
+        self.db = self.state.db
 
     def set_storage(self, addr, k, v):
         if isinstance(k, (int, long)):
@@ -121,20 +122,27 @@ class State():
         self.state.root_hash = snapshot
 
 def block_state_transition(state, block):
-    # Put the previous state root in storage
-    if block.number:
-        state.set_storage(STATEROOTS, zpad(encode_int(block.number - 1), 32), state.root)
-        # Check the block number, and put the block number in storage
-        assert state.get_storage(BLKNUMBER, '\x00' * 32) == zpad(encode_int(block.number - 1), 32)
-    state.set_storage(BLKNUMBER, '\x00' * 32, 32, zpad(encode_int(block.number), 32))
-    state.set_storage(PROPOSER, '\x00' * 32, 32, block.proposer)
-    # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
-    state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
-    # Apply transactions sequentially
-    for i, tx in enumerate(block.transaction_list):
-        tx_state_transition(state, tx, i)
+    blknumber = utils.big_endian_int(state.get_storage(BLKNUMBER, '\x00' * 32)) + 1
+    blkproposer = block.proposer if block else '\x00' * 20
+    blkhash = block.hash if block else '\x00' * 32
+    state.set_storage(BLKNUMBER, '\x00' * 32, 32, encode_int32(blknumber))
+    state.set_storage(PROPOSER, '\x00' * 32, 32, blkproposer)
+    if block:
+        # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
+        state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
+        # Apply transactions sequentially
+        for i, tx in enumerate(block.transaction_list):
+            tx_state_transition(state, tx, i)
     # Put the block hash in storage
-    state.set_storage(BLOCKHASHES, zpad(encode_int(block.number), 32), block.hash)
+    state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
+    # Update the RNG seed (the lower 64 bits contains the number of validators,
+    # the upper 192 bits are pseudorandom)
+    prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) 
+    newseed = utils.big_endian_to_int(sha3(prevseed + blkproposer))
+    newseed = newseed - (newseed % 2**64) + state.get_storage(CASPER, 0)
+    state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
+    # Put the state root in storage
+    state.set_storage(STATEROOTS, encode_int32(blknumber), state.root)
 
 
 def tx_state_transition(state, tx, index):
@@ -180,6 +188,16 @@ class VMExt():
         self.msg = lambda msg, code: apply_msg(self, msg, code)
 
 
+class EmptyVMExt():
+    def __init__():
+        self.set_storage = lambda addr, k, v: 0
+        self.get_storage = lambda addr, k: 0
+        self.account_exists = lambda addr: 0
+        self.log_storage = lambda addr: 0
+        self.tx_execgas = 0
+        self.msg = lambda msg, code: (1, msg.gas, [])
+
+
 def apply_msg(ext, msg, code):
     # Transfer value, instaquit if not enough
     snapshot = ext._state.snapshot()
@@ -190,7 +208,6 @@ def apply_msg(ext, msg, code):
         ext.set_storage(ETHER, msg.sender, big_endian_to_int(ext.get_storage(ETHER, msg.sender)) - msg.value)
         ext.set_storage(ETHER, msg.to, big_endian_to_int(ext.get_storage(ETHER, msg.to)) + msg.value)
     # Main loop
-    print 'to', msg.to.encode('hex')
     if msg.to in specials.specials:
         res, gas, dat = specials.specials[msg.to](ext, msg)
     else:

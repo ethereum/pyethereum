@@ -1,11 +1,13 @@
-data users[2**40](address, prevsubmission, deposit_size, time_withdrawn, validationCode, seq, prevhash, blockhashes[2**40], stateroots[2**40], probs[2**40])
-data nextUser
+data nextUser # map to storage index 0
+data users[2**40](address, prevsubmission, deposit_size, time_inducted, time_withdrawn, validationCode, seq, prevhash, blockhashes[2**40], stateroots[2**40], probs[2**40])
 data deletedUserIds[2**40]
 data nextDeletedUserId
 
 macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 100000 * 10**18
+
+macro ENTER_EXIT_DELAY: 10000
 
 macro WITHDRAWAL_WAITTIME: 10000000
 
@@ -14,7 +16,6 @@ macro SCORING_REWARD_DIVISOR: 2**35
 
 # Become a validator
 def join(validationCode:bytes):
-    ~log0(45, 45)
     assert msg.value >= MIN_DEPOSIT and msg.value <= MAX_DEPOSIT
     if self.nextDeletedUserId:
         userIndex = self.nextDeletedUserId - 1
@@ -25,6 +26,7 @@ def join(validationCode:bytes):
     self.users[userIndex].address = msg.sender
     ~sstorebytes(ref(self.users[userIndex].validationCode), validationCode, len(validationCode))
     self.users[userIndex].deposit_size = msg.value
+    self.users[userIndex].time_inducted = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
     self.users[userIndex].time_withdrawn = 2**100
     self.users[userIndex].prevhash = 0
     self.users[userIndex].seq = 0
@@ -34,14 +36,14 @@ def join(validationCode:bytes):
 # Queue up to leave the validator pool
 def startWithdrawal(index:uint256, sig:bytes):
     if 1: # callStatic(text("withdraw"), sig):
-        self.users[index].time_withdrawn = min(self.users[index].time_withdrawn, block.timestamp)
+        self.users[index].time_withdrawn = min(self.users[index].time_withdrawn, block.number + ENTER_EXIT_DELAENTER_EXIT_DELAY)
         return(1:bool)
     return(0:bool)
 
 
 # Leave the validator pool
 def withdraw(index:uint256):
-    if self.users[index].time_withdrawn + WITHDRAWAL_WAITTIME <= block.timestamp:
+    if self.users[index].time_withdrawn + WITHDRAWAL_WAITTIME <= block.number:
         send(self.users[index].address, self.users[index].deposit_size)
         self.users[index].address = 0
         self.users[index].deposit_size = 0
@@ -135,33 +137,34 @@ def scoreIncorrect(odds:uint256):
 
 
 # Randomly select a validator using a las vegas algorithm
-def const sampleValidator(seed:bytes32):
+def const sampleValidator(seed:bytes32, blknumber:uint256):
     while 1:
-        seed = sha3(seed)
-        index = seed % self.nextUser
-        if self.users[index].time_withdrawn >= block.timestamp:
+        seedhash = sha3(seed)
+        n = seed % 2**64
+        index = seedhash % n
+        if self.users[index].time_withdrawn >= blknumber:
             if ((seed / 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
                 return(index)
 
 
-#Getter methods 
+# Getter methods 
 def const getNextUserId():
     return self.nextUser
 
 def const getUserStatus(i:uint256):
-    if not self.users[i].address:
+    if not self.users[i].address: # inactive
         return 0
-    elif self.users[i].time_withdrawn > block.timestamp:
+    elif block.number < self.users[i].time_inducted: # not yet inducted
         return 1
-    else:
+    elif block.number < self.users[i].time_withdrawn: # now inducted
         return 2
+    else: # withdrawing
+        return 3
 
 def const getUserAddress(i:uint256):
-    return self.users[i].address
+    return(self.users[i].address:address)
 
 def const getUserValidationCode(i:uint256):
-    ~log0(46, 45)
-    ~log1(47, 45, self.users[i].validationCode)
     a = string(~ssize(ref(self.users[i].validationCode)))
     ~sloadbytes(ref(self.users[i].validationCode), a, len(a))
     return(a:str)

@@ -63,7 +63,7 @@ class Env(object):
         self.global_config = global_config or dict()
         self.genesis_timestamp = genesis_timestamp
 
-BLOCKHASHES = utils.int_to_addr(2**160 - 1)
+SYS = utils.int_to_addr(2**160 - 1)
 STATEROOTS = utils.int_to_addr(2**160 - 2)
 BLKNUMBER = utils.int_to_addr(2**160 - 3)
 GAS_CONSUMED = utils.int_to_addr(2**160 - 4)
@@ -71,5 +71,8 @@ ETHER = utils.int_to_addr(2**160 - 5)
 CASPER = int_to_addr(2**160 - 6)
 ECRECOVERACCT = utils.int_to_addr(2**160 - 7)
 PROPOSER = utils.int_to_addr(2**160 - 8)
+RNGSEEDS = utils.int_to_addr(2**160 - 9)
+BLOCKHASHES = utils.int_to_addr(2**160 - 10)
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = utils.int_to_addr(0)
+BLKTIME = 5

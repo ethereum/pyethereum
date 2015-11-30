@@ -397,7 +397,7 @@ def vm_execute(ext, msg, code):
             elif op == 'BLOCKHASH':
                 stk.append(utils.big_endian_to_int(ext.get_storage(BLOCKHASHES, stk.pop())))
             elif op == 'NUMBER':
-                stk.append(ext.block_number)
+                stk.append(utils.big_endian_to_int(ext.get_storage(BLKNUMBER, '\x00' * 32)))
             elif op == 'DIFFICULTY':
                 stk.append(ext.block_difficulty)
             elif op == 'GASLIMIT':

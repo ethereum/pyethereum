@@ -20,7 +20,6 @@ class Transaction(rlp.Serializable):
         self.execgas = execgas
         self.data = data
         self.code = code
-        print self.addr.encode('hex'), self.code.encode('hex')
         assert len(self.addr) == 20 and (self.code == b'' or sha3('\x00' * 20 + self.code)[12:] == self.addr)
 
     @property
