@@ -33,42 +33,24 @@ class solc_wrapper(object):
         return None
 
     @classmethod
-    def split_contracts(cls, code):
-        contracts = []
-        contract = None
-        for line in code.split('\n'):
-            line = line.lstrip()
-            if line.startswith('contract '):  # FIXME
-                if contract:
-                    contracts.append('\n'.join(contract))
-                contract = [line]
-            elif contract:
-                contract.append(line)
-        if contract:
-            contracts.append('\n'.join(contract))
-        return contracts
-
-    @classmethod
     def contract_names(cls, code):
-        names = []
-        for contract in cls.split_contracts(code):
-            keyword, name, _ = contract.split(' ', 2)
-            assert keyword == 'contract' and len(name)
-            names.append(name)
-        return names
+        return re.findall(r'^\s*(contract|library) (\S*) ', code, re.MULTILINE)
 
     @classmethod
-    def compile(cls, code, contract_name=''):
+    def compile(cls, code, libraries=None, contract_name=''):
         "returns binary of last contract in code"
         sorted_contracts = cls.combined(code)
         if contract_name:
             idx = [x[0] for x in sorted_contracts].index(contract_name)
         else:
             idx = -1
+        if libraries:
+            for lib_name, lib_address in libraries.iteritems():
+                sorted_contracts[idx][1]['bin'] = sorted_contracts[idx][1]['bin'].replace("__{}{}".format(lib_name, "_" * (38-len(lib_name))), lib_address)
         return sorted_contracts[idx][1]['bin'].decode('hex')
 
     @classmethod
-    def mk_full_signature(cls, code, contract_name=''):
+    def mk_full_signature(cls, code, libraries=None, contract_name=''):
         "returns signature of last contract in code"
         sorted_contracts = cls.combined(code)
         if contract_name:
@@ -86,7 +68,6 @@ class solc_wrapper(object):
             raise CompileError('compilation failed')
         # contracts = json.loads(stdoutdata)['contracts']
         contracts = yaml.safe_load(stdoutdata)['contracts']
-
         for contract_name, data in contracts.items():
             data['abi'] = yaml.safe_load(data['abi'])
             data['devdoc'] = yaml.safe_load(data['devdoc'])
@@ -96,8 +77,7 @@ class solc_wrapper(object):
         assert len(names) <= len(contracts)  # imported contracts are not returned
         sorted_contracts = []
         for name in names:
-            sorted_contracts.append((name, contracts[name]))
-
+            sorted_contracts.append((name[1], contracts[name[1]]))
         return sorted_contracts
 
     @classmethod
@@ -146,7 +126,6 @@ if __name__ == '__main__':
     assert 'solidity' in tester.languages
 
     one_contract = """
-
     contract foo {
         function seven() returns (int256 y) {
             y = 7;
@@ -178,21 +157,3 @@ if __name__ == '__main__':
     assert c1.seven() == 7
     assert c1.mul2(2) == 4
     assert c1.mul2(-2) == -4
-
-    two_codes = solc_wrapper.split_contracts(two_contracts)
-    assert len(two_codes) == 2
-
-    for code in two_codes:
-        bytecode = solc_wrapper.compile(code)
-        jsonabi = solc_wrapper.mk_full_signature(code)
-        c = s.abi_contract(code, language='solidity')
-
-    c1 = s.abi_contract(two_codes[0], language='solidity')
-    assert c1.seven() == 7
-    assert c1.mul2(2) == 4
-    assert c1.mul2(-2) == -4
-
-    c2 = s.abi_contract(two_codes[1], language='solidity')
-    a = '\0' * 20
-    assert c2.echo(a).decode('hex') == a
-    assert c2.eight() == 8
