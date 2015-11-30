@@ -1,4 +1,6 @@
-import sha3
+from Crypto.Hash import keccak
+sha3_256 = lambda x: keccak.new(digest_bits=256, data=x)
+sha3_512 = lambda x: keccak.new(digest_bits=512, data=x)
 from rlp.utils import decode_hex, encode_hex
 import sys
 
@@ -59,11 +61,11 @@ def to_bytes(x):
 
 # sha3 hash function, outputs 64 bytes
 def sha3_512(x):
-    return hash_words(lambda v: sha3.sha3_512(to_bytes(v)).digest(), 64, x)
+    return hash_words(sha3_512(to_bytes(v)).digest(), 64, x)
 
 
 def sha3_256(x):
-    return hash_words(lambda v: sha3.sha3_256(to_bytes(v)).digest(), 32, x)
+    return hash_words(sha3_256(to_bytes(v)).digest(), 32, x)
 
 
 def xor(a, b):
