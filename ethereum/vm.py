@@ -25,7 +25,7 @@ TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS
 
 
 class CallData(object):
@@ -578,8 +578,8 @@ def vm_execute(ext, msg, code):
             ext.set_storage(msg.to, s0, data)
         elif op == 'SSIZE':
             stk.append(len(ext.get_storage(msg.to, stk.pop())))
-        elif op == 'TXEXECGAS':
-            stk.append(ext.tx_execgas)
+        elif op == 'TXGAS':
+            stk.append(utils.big_endian_to_int(ext.get_storage(TXGAS, '\x00' * 32)))
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]

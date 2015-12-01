@@ -10,14 +10,14 @@ import rlp
 class Transaction(rlp.Serializable):
     fields = [
         ('addr', address),
-        ('execgas', big_endian_int),
+        ('gas', big_endian_int),
         ('data', binary),
         ('code', binary)
     ]
 
-    def __init__(self, addr, execgas, data, code=b''):
+    def __init__(self, addr, gas, data, code=b''):
         self.addr = addr or sha3('\x00' * 20 + code)[12:]
-        self.execgas = execgas
+        self.gas = gas
         self.data = data
         self.code = code
         assert len(self.addr) == 20 and (self.code == b'' or sha3('\x00' * 20 + self.code)[12:] == self.addr)
@@ -28,9 +28,13 @@ class Transaction(rlp.Serializable):
 
     @property
     def intrinsic_gas(self):
-        num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
-        num_non_zero_bytes = len(tx.data) - num_zero_bytes
+        num_zero_bytes = str_to_bytes(self.data).count(ascii_chr(0))
+        num_non_zero_bytes = len(self.data) - num_zero_bytes
         return opcodes.GTXCOST + \
             num_zero_bytes * opcodes.GTXDATAZERO + \
             num_non_zero_bytes * opcodes.GTXDATANONZERO + \
-            len(tx.code) * opcodes.GCONTRACTBYTE
+            len(self.code) * opcodes.GCONTRACTBYTE
+
+    @property
+    def exec_gas(self):
+        return self.gas - self.intrinsic_gas

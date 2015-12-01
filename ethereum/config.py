@@ -74,6 +74,7 @@ PROPOSER = utils.int_to_addr(2**160 - 8)
 RNGSEEDS = utils.int_to_addr(2**160 - 9)
 BLOCKHASHES = utils.int_to_addr(2**160 - 10)
 GENESIS_TIME = utils.int_to_addr(2**160 - 11)
+TXGAS = utils.int_to_addr(2**160 - 12)
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = utils.int_to_addr(0)
 BLKTIME = 4

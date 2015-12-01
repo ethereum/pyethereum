@@ -2,17 +2,20 @@ import time
 from abi import ContractTranslator
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int32
+    encode_int32, safe_ord
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from serenity_blocks import tx_state_transition, BLKNUMBER, \
-    block_state_transition, Block, apply_msg, EmptyVMExt
+    block_state_transition, Block, apply_msg, EmptyVMExt, State
 from serenity_transactions import Transaction
-from ecdsa_accounts import sign_block, privtoaddr
+from ecdsa_accounts import sign_block, privtoaddr, sign_bet
 from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME
 from db import OverlayDB
 import vm
 import serpent
 import rlp
+import sys
+import random
+import math
 
 NM_BLOCK = 1
 
@@ -26,8 +29,17 @@ class NetworkMessage(rlp.Serializable):
         self.typ = typ
         self.args = args
 
+
+def encode_prob(p):
+    q = p / (1.0 - p)
+    exp = int(math.log(q) / math.log(2))
+    mantissa = int(min(1, q / 2**exp) * 8 - 8)
+    return chr(max(0, min(255, exp * 8 + 128 + mantissa)))
+
+
 class Bet():
-    def __init__(self, max_height, probs, blockhashes, stateroots, prevhash, seq, sig):
+    def __init__(self, index, max_height, probs, blockhashes, stateroots, prevhash, seq, sig):
+        self.index = index
         self.max_height = max_height
         self.probs = probs
         self.blockhashes = blockhashes
@@ -36,6 +48,11 @@ class Bet():
         self.seq = seq
         self.sig = sig
         self.hash = sha3(str([max_height, probs, blockhashes, stateroots, prevhash, seq, sig]))
+
+    # def submitBet(index:uint256, max_height:uint256, prob:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes, seqnum:uint256, sig:bytes):
+
+    def serialize(self):
+        return casper_ct.encode('submitBet', [self.index, self.max_height, ''.join(map(encode_prob, self.probs)), self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig])
 
 
 class Opinion():
@@ -93,14 +110,20 @@ def is_block_valid(state, block):
     validator_index = get_validator_index(state, block.number)
     validator_address = call_casper(state, 'getUserAddress', [validator_index])
     validator_code = call_casper(state, 'getUserValidationCode', [validator_index])
-    if block.number != state.get_storage(BLKNUMBER, '\x00' * 32):
-        return False
+    desired_block_number = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) + 1
+    # Check block proposer correctness
     if block.proposer != normalize_address(validator_address):
+        sys.stderr.write('Block proposer check failed: actual %s desired %s\n' %
+                         (block.proposer.encode('hex'), normalize_address(validator_address.encode('hex'))))
         return False
-    message_data = vm.CallData([safe_ord(x) for x in (sha3(encode_int32(block.number) + block.txroot) + block.sig)], 0, len(tx.data))
+    # Check signature correctness
+    message_data = vm.CallData([safe_ord(x) for x in (sha3(encode_int32(block.number) + block.txroot) + block.sig)], 0, 32 + len(block.sig))
     message = vm.Message(NULL_SENDER, '\x00' * 20, 0, 1000000, message_data)
-    if apply_msg(EmptyVMExt, message, validator_code) != [0] * 31 + [1]:
+    _, _, signature_check_result = apply_msg(EmptyVMExt, message, validator_code)
+    if signature_check_result != [0] * 31 + [1]:
+        sys.stderr.write('Block signature check failed. Actual result: %s\n' % str(signature_check_result))
         return False
+    print 'Block validation successful'
     return True
 
 def get_validator_index(state, blknumber):
@@ -127,6 +150,8 @@ class defaultBetStrategy():
         self.validators = {}
         self.last_block_produced = -1
         self.next_block_to_produce = -1
+        self.prevhash = '\x00' * 32
+        self.seq = 0
         print "My address", self.addr.encode('hex')
         for i in range(nextUserId):
             exists = (call_casper(self.genesis_state, 'getUserStatus', [i]) == 2)
@@ -139,7 +164,7 @@ class defaultBetStrategy():
                 }
                 assert self.validators[i]["valcode"], self.validators[i]["address"]
                 self.opinions[i] = Opinion(self.validators[i]["valcode"], i, '\x00' * 32, 0)
-                self.max_finalized_heights[i] = self.genesis_state.get_storage(BLKNUMBER, '\x00' * 32)
+                self.max_finalized_heights[i] = -1
                 if self.validators[i]["address"] == self.addr.encode('hex'):
                     self.id = i
         assert self.id >= 0
@@ -166,17 +191,24 @@ class defaultBetStrategy():
         self.next_block_to_produce = None
 
     def receive_block(self, block):
-        while len(self.blocks) < block.number:
+        if block.hash in self.objects:
+            return
+        print 'Received block: %d %s' % (block.number, block.hash.encode('hex')[:16])
+        while len(self.blocks) <= block.number:
             self.blocks.append(None)
             self.stateroots.append(None)
-        if not self.blocks[block.number]:
-            if is_block_valid(State(self.stateroots[max(block.number - 10000, 0)], self.db), block.number):
-                self.blocks[block.number] = block
-                self.time_received[block.hash] == time.time()
-                sys.stderr.write("Received good block! "+block.hash.encode('hex'))
-                self.mkbet()
-            else:
-                sys.stderr.write("ERR: Received invalid block "+block.hash.encode('hex'))
+            self.probs.append(0.5)
+        self.objects[block.hash] = block
+        self.time_received[block.hash] = time.time()
+        check_state = State(self.stateroots[block.number - 10000], self.db) if block.number >= 10000 else self.genesis_state
+        if not is_block_valid(check_state, block):
+            sys.stderr.write("ERR: Received invalid block: %s\n" % block.hash.encode('hex')[:16])
+            return
+        self.blocks[block.number] = block
+        print "Received good block! "+block.hash.encode('hex')
+        self.mkbet()
+        self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
+        bet = self.mkbet()
 
     def receive_bet(self, bet):
         if bet not in self.time_received:
@@ -191,21 +223,23 @@ class defaultBetStrategy():
 
     # Make a default vote on a block based on when you received it
     def default_vote(self, blk_number, blk_hash):
-        scheduled_time = BLKTIME * blk_number + genesis_time
+        scheduled_time = BLKTIME * blk_number + self.genesis_time
         received_time = self.time_received.get(blk_hash, None)
         if received_time:
             time_delta = abs(received_time * 0.98 + time.time() * 0.02 - scheduled_time)
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            return 0.3 if random.random() < prob else 0.7
+            print 'Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob)
+            return 0.7 if random.random() < prob else 0.3
         else:
             time_delta = time.time() - scheduled_time
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            return 0.5 if random.random() < prob else 0.7
+            print 'Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob)
+            return 0.5 if random.random() < prob else 0.3
 
     # Vote based on others' votes
     def vote(self, blk_number, blk_hash):
         probs = [self.opinions[k].probs[blk_number] for k in self.opinions.keys() if blk_number < len(self.opinions[k].probs)]
-        probs += [default_vote(blk)] * (len(self.opinions) - len(probs))
+        probs += [self.default_vote(blk_number, blk_hash)] * (len(self.opinions) - len(probs))
         probs = sorted(probs)
         if probs[len(probs)/3] > 0.7:
             o = 0.7 + probs[len(probs)/3] * 0.3
@@ -217,37 +251,37 @@ class defaultBetStrategy():
         
     # Construct a bet
     def mkbet(self):
+        print 'Betting', self.max_finalized_heights
         sign_from = max(0, self.max_finalized_heights[self.id] - 3)
+        print 'Signing from:', sign_from
         blockhashes = []
         lowest_changed = len(self.blocks)
         for h in range(sign_from, len(self.blocks)):
             prob = self.vote(h, self.blocks[h].hash if self.blocks[h] else None)
-            if (vote - 0.5) * (self.probs[h] - 0.5) <= 0:
+            if (prob - 0.5) * (self.probs[h] - 0.5) <= 0:
                 lowest_changed = min(lowest_changed, h)
-            probs.append(vote)
+            self.probs[h] = prob
             if prob < 0.0001 and h == self.my_max_finalized_height + 1:
                 while len(self.finalized_hashes) < h:
                     self.finalized_hashes.append(None)
                 self.finalized_hashes[h] = self.blocks[h].hash if p > 0.9999 else False
-                self.states[h] = block_state_transition(self.states[h-1] if h else genesis_state, self.blocks[h])
             blockhashes.append(self.blocks[h].hash if self.blocks[h] else None)
-        for h in range(lowest_changed + 1, len(self.blocks)):
-            self.states[h] = block_state_transition(self.states[h-1] if h else genesis_state, self.blocks[h])
-        o = Bet(len(self.blocks), self.probs[sign_from:][::-1], [x.root for x in self.states[sign_from:]][::-1], self.prevhash, self.seq, '')
+        for h in range(lowest_changed, len(self.blocks)):
+            run_state = State(self.stateroots[h-1], self.db) if h else self.genesis_state
+            block_state_transition(run_state, self.blocks[h] if self.probs[h] > 0.5 else None)
+            self.stateroots[h] = run_state.root
+        print 'Making bet with probabilities:', self.probs
+        o = sign_bet(Bet(self.id, len(self.blocks), self.probs[sign_from:][::-1], [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1], self.stateroots[sign_from:][::-1], self.prevhash, self.seq, ''), self.key)
         self.prevhash = o.hash
         self.seq += 1
+        return o
 
     def on_receive(self, objdata):
         obj = rlp.decode(objdata, NetworkMessage)
         # print 'Received network message of type:', obj.typ
         if obj.typ == NM_BLOCK:
             blk = rlp.decode(obj.args[0], Block)
-            if blk.hash in self.objects:
-                return
-            print 'Received block: %d %s' % (blk.number, blk.hash.encode('hex')[:16])
-            self.objects[blk.hash] = blk
-            self.network.broadcast(self, objdata)
-            
+            self.receive_block(blk)           
 
     # Run every tick
     def tick(self):
@@ -255,7 +289,7 @@ class defaultBetStrategy():
         target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
         # print 'Node %d ticking. Time: %.2f. Target time: %d (block %d)' % (self.id, mytime, target_time, self.next_block_to_produce)
         if mytime >= target_time:
-            o = sign_block(Block(transactions=[], number=self.next_block_to_produce), self.key)
+            o = sign_block(Block(transactions=[], number=self.next_block_to_produce, proposer=self.addr), self.key)
             self.last_block_produced = self.next_block_to_produce
             self.add_proposers()
             print 'Node %d making block: %d %s' % (self.id, o.number, o.hash.encode('hex')[:16])
@@ -263,6 +297,7 @@ class defaultBetStrategy():
             while len(self.blocks) <= o.number:
                 self.blocks.append(None)
                 self.stateroots.append(None)
+                self.probs.append(0.5)
             self.blocks[o.number] = o
             self.objects[o.hash] = o
             self.time_received[o.hash] = mytime

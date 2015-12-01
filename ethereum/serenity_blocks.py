@@ -6,7 +6,7 @@ from config import Env
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS
 import rlp
 import trie
 import specials
@@ -139,24 +139,25 @@ class State():
         self.state.root_hash = snapshot
 
 def block_state_transition(state, block):
-    blknumber = utils.big_endian_int(state.get_storage(BLKNUMBER, '\x00' * 32))
+    blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
     blkproposer = block.proposer if block else '\x00' * 20
     blkhash = block.hash if block else '\x00' * 32
-    state.set_storage(BLKNUMBER, '\x00' * 32, 32, encode_int32(blknumber))
-    state.set_storage(PROPOSER, '\x00' * 32, 32, blkproposer)
+    state.set_storage(PROPOSER, '\x00' * 32, blkproposer)
     if block:
+        assert block.number == blknumber
         # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
         state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
         # Apply transactions sequentially
-        for i, tx in enumerate(block.transaction_list):
+        for i, tx in enumerate(block.transactions):
             tx_state_transition(state, tx, i)
     # Put the block hash in storage
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
+    state.set_storage(BLKNUMBER, '\x00' * 32, encode_int32(blknumber + 1))
     # Update the RNG seed (the lower 64 bits contains the number of validators,
     # the upper 192 bits are pseudorandom)
     prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) if blknumber else '\x00' * 32 
-    newseed = utils.big_endian_to_int(sha3(prevseed + blkproposer))
-    newseed = newseed - (newseed % 2**64) + state.get_storage(CASPER, 0)
+    newseed = big_endian_to_int(sha3(prevseed + blkproposer))
+    newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
     # Put the state root in storage
     state.set_storage(STATEROOTS, encode_int32(blknumber), state.root)
@@ -165,24 +166,26 @@ def block_state_transition(state, block):
 def tx_state_transition(state, tx, index):
     # Get prior gas used
     gas_used = big_endian_to_int(state.get_storage(GAS_CONSUMED, '\x00' * 32))
-    if gas_used + tx.execgas > GASLIMIT:
+    if gas_used + tx.exec_gas > GASLIMIT:
         return None
+    # Set an object in the state for tx gas
+    state.set_storage(TXGAS, '\x00' * 32, encode_int32(tx.gas))
     ext = VMExt(state, tx)
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
-        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.execgas, b'')
+        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, b'')
         result, execution_start_gas, data = apply_msg(ext, message, tx.code)
         if not result:
             return None
         state.set_storage(tx.addr, b'', ''.join([chr(x) for x in data]))
     else:
-        execution_start_gas = tx.execgas
+        execution_start_gas = tx.exec_gas
     # Process VM execution
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
     result, gas_remained, data = apply_msg(ext, message, state.get_storage(tx.addr, b''))
     # Set gas used
-    state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.execgas - gas_remained), 32))
+    state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.exec_gas - gas_remained), 32))
     return data
 
 def mk_contract_address(sender='\x00'*20, code=''):
@@ -200,18 +203,20 @@ class VMExt():
         self.get_storage = state.get_storage
         self.account_exists = state.account_exists
         self.log_storage = state.account_to_dict
-        self.tx_execgas = tx.execgas
         self.msg = lambda msg, code: apply_msg(self, msg, code)
 
 
-class EmptyVMExt():
-    def __init__():
+class _EmptyVMExt():
+
+    def __init__(self):
+        self._state = State('', EphemDB())
         self.set_storage = lambda addr, k, v: 0
         self.get_storage = lambda addr, k: 0
         self.account_exists = lambda addr: 0
         self.log_storage = lambda addr: 0
-        self.tx_execgas = 0
-        self.msg = lambda msg, code: (1, msg.gas, [])
+        self.msg = lambda msg, code: apply_msg(self, msg, code)
+
+EmptyVMExt = _EmptyVMExt()
 
 
 def apply_msg(ext, msg, code):
@@ -224,6 +229,7 @@ def apply_msg(ext, msg, code):
         ext.set_storage(ETHER, msg.sender, big_endian_to_int(ext.get_storage(ETHER, msg.sender)) - msg.value)
         ext.set_storage(ETHER, msg.to, big_endian_to_int(ext.get_storage(ETHER, msg.to)) + msg.value)
     # Main loop
+    # print 'to', msg.to.encode('hex')
     if msg.to in specials.specials:
         res, gas, dat = specials.specials[msg.to](ext, msg)
     else:

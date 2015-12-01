@@ -19,25 +19,27 @@ cc = """
 # bytes 224+: data
 
 # Get the hash for transaction signing
-sigdata = string(~calldatasize() - 64)
-~mstore(sigdata, ~txexecgas())
-~calldatacopy(sigdata + 32, 96, ~calldatasize() - 96)
-h = ~sha3(sigdata, ~calldatasize() - 64)
+~mstore(0, ~txexecgas())
+~calldatacopy(32, 96, ~calldatasize() - 96)
+~mstore(0, ~sha3(0, ~calldatasize() - 64))
+~calldatacopy(32, 0, 96)
 # Call ECRECOVER contract to get the sender
-~call(5000, 1, 0, [h, ~calldataload(0), ~calldataload(32), ~calldataload(64)], 128, ref(addr), 32)
-myaddr = 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1
+~call(5000, 1, 0, 0, 128, 0, 32)
 # Check sender correctness
-assert addr == myaddr
-# Check sequence number correctness
-assert ~calldataload(96) == self.storage[~sub(0, 1)]
-# Increment sequence number
-self.storage[~sub(0, 1)] += 1
+assert ~mload(0) == 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1
+# Sequence number operations
+with minusone = ~sub(0, 1):
+    with curseq = self.storage[minusone]:
+        # Check sequence number correctness
+        assert ~calldataload(96) == curseq
+        # Increment sequence number
+        self.storage[minusone] = curseq + 1
 # Make the sub-call and discard output
-x = ~msize()
-~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), sigdata + 160, ~calldatasize() - 224, x, 1000)
-# Pay for gas
-~call(40000, block.coinbase, ~calldataload(128) * (~txexecgas() - msg.gas + 50000), 0, 0, 0, 0)
-~return(x, ~msize() - x)
+with x = ~msize():
+    ~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, x, 1000)
+    # Pay for gas
+    ~call(40000, block.coinbase, ~calldataload(128) * (~txexecgas() - msg.gas + 50000), 0, 0, 0, 0)
+    ~return(x, ~msize() - x)
 """
 constructor_code = serpent.compile(cc)
 
@@ -49,7 +51,8 @@ validation_code = """
 # bytes 96-127: s (ECDSA sig)
 
 # Call ECRECOVER contract to get the sender
-~call(5000, 1, 0, [~calldataload(0), ~calldataload(32), ~calldataload(64), ~calldataload(96)], 128, 0, 32)
+~calldatacopy(0, 0, 128)
+~call(5000, 1, 0, 0, 128, 0, 32)
 # Check sender correctness
 return(~mload(0) == 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
 """
@@ -72,8 +75,10 @@ def privtoaddr(k):
     return mk_contract_address(code=mk_code(_privtoaddr(k)))
 
 # Make the validation code for a particular address
-def mk_validation_code(addr):
+def mk_validation_code(k):
+    pubkeyhash = _privtoaddr(k)
     code3 = serpent.compile(validation_code)
+    code3 = code3.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', normalize_address(pubkeyhash))
     s = State('', db.EphemDB())
     tx_state_transition(s, Transaction(None, 1000000, '', code3), 0)
     return s.get_storage(mk_contract_address(code=code3), '')
@@ -84,18 +89,25 @@ def sign_block(block, key):
     block.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
     return block
 
+def sign_bet(bet, key):
+    bet.sig = ''
+    sigdata = sha3(bet.serialize())
+    v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
+    bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
+    return bet
+
 # Creates data for a transaction 
 def mk_txdata(seq, gasprice, to, value, data):
     return encode_int32(seq) + encode_int32(gasprice) + \
         '\x00' * 12 + normalize_address(to) + encode_int32(value) + data
 
 # Signs data+startgas
-def sign_txdata(data, execgas, key):
-    v, r, s = bitcoin.ecdsa_raw_sign(sha3(encode_int32(execgas) + data), key)
+def sign_txdata(data, gas, key):
+    v, r, s = bitcoin.ecdsa_raw_sign(sha3(encode_int32(gas) + data), key)
     return encode_int32(v) + encode_int32(r) + encode_int32(s) + data
 
-def mk_transaction(seq, gasprice, execgas, to, value, data, key, create=False):
+def mk_transaction(seq, gasprice, gas, to, value, data, key, create=False):
     code = mk_code(_privtoaddr(key))
     addr = mk_contract_address(code=code)
-    data = sign_txdata(mk_txdata(seq, gasprice, to, value, data), execgas, key)
-    return Transaction(addr, execgas, data, code if create else b'')
+    data = sign_txdata(mk_txdata(seq, gasprice, to, value, data), gas, key)
+    return Transaction(addr, gas, data, code if create else b'')

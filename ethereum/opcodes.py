@@ -71,7 +71,7 @@ opcodes = {
     0xf9: ['SSTOREBYTES', 2, 0, 2500],
     0xfa: ['SSIZE', 1, 1, 50],
     0xfb: ['STATEROOT', 1, 1, 50],
-    0xfc: ['TXEXECGAS', 0, 1, 50],
+    0xfc: ['TXGAS', 0, 1, 50],
     0xff: ['SUICIDE', 1, 0, 0],
 }
 
