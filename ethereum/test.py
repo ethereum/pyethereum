@@ -2,7 +2,7 @@ from serenity_blocks import State, tx_state_transition, mk_contract_address
 from serenity_transactions import Transaction
 import db
 import serpent
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME
 from utils import privtoaddr, normalize_address, zpad, encode_int, big_endian_to_int, encode_int32
 import ecdsa_accounts
 import abi
@@ -53,7 +53,13 @@ for i, k in enumerate(keys):
     vcode2 = call_method(genesis, CASPER, ct, 'getUserValidationCode', v)[0]
     assert vcode2 == vcode
 
-bets = [bet.defaultBetStrategy(genesis.clone(), k, time.time()) for k in keys]
+genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
+genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 10))
 
-# n = NetworkSimulator(latency=5)
-# n.run(100)
+bets = [bet.defaultBetStrategy(genesis.clone(), k) for k in keys]
+
+n = network.NetworkSimulator(latency=5, agents=bets, broadcast_success_rate=0.9)
+n.generate_peers(5)
+for bet in bets:
+    bet.network = n
+n.run(300, sleep=0.1)

@@ -1,14 +1,15 @@
-import random, sys
+import random, sys, time
 
 class NetworkSimulator():
 
-    def __init__(self, latency=50):
-        self.agents = []
+    def __init__(self, latency=50, agents=[], reliability=0.9, broadcast_success_rate=1.0):
+        self.agents = agents
         self.latency_distribution_sample = transform(normal_distribution(latency, (latency * 2) // 5), lambda x: max(x, 0))
         self.time = 0
         self.objqueue = {}
         self.peers = {}
-        self.reliability = 0.9
+        self.reliability = reliability
+        self.broadcast_success_rate = broadcast_success_rate
 
     def generate_peers(self, num_peers=5):
         self.peers = {}
@@ -32,24 +33,29 @@ class NetworkSimulator():
             a.tick()
         self.time += 1
 
-    def run(self, steps):
+    def run(self, steps, sleep=0):
         for i in range(steps):
             self.tick()
+            if sleep:
+                time.sleep(sleep)
 
     def broadcast(self, sender, obj):
-        for p in self.peers[sender.id]:
-            recv_time = self.time + self.latency_distribution_sample()
-            if recv_time not in self.objqueue:
-                self.objqueue[recv_time] = []
-            self.objqueue[recv_time].append((p, obj))
-
-    def direct_send(self, to_id, obj):
-        for a in self.agents:
-            if a.id == to_id:
+        assert isinstance(obj, (str, bytes))
+        if random.random() < self.broadcast_success_rate:
+            for p in self.peers[sender.id]:
                 recv_time = self.time + self.latency_distribution_sample()
                 if recv_time not in self.objqueue:
                     self.objqueue[recv_time] = []
-                self.objqueue[recv_time].append((a, obj))
+                self.objqueue[recv_time].append((p, obj))
+
+    def direct_send(self, to_id, obj):
+        if random.random() < self.broadcast_success_rate * self.reliability:
+            for a in self.agents:
+                if a.id == to_id:
+                    recv_time = self.time + self.latency_distribution_sample()
+                    if recv_time not in self.objqueue:
+                        self.objqueue[recv_time] = []
+                    self.objqueue[recv_time].append((a, obj))
 
     def knock_offline_random(self, n):
         ko = {}

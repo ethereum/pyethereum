@@ -34,31 +34,48 @@ class BlockHeader(rlp.Serializable):
 class Block(rlp.Serializable):
     fields = [
         ('header', BlockHeader),
-        ('transaction_list', CountableList(Transaction))
+        ('transactions', CountableList(Transaction))
     ]
 
-    def __init__(self, header=None, transactions=[], number=None, sig=b''):
-        self.db = env.db
-        self.transaction_list = transactions
-        self.transactions = trie.Trie(db.EphemDB())
+    def __init__(self, header=None, transactions=[], number=None, proposer='\x00' * 20, sig=b''):
+        self.transactions = transactions
+        self.transaction_trie = trie.Trie(EphemDB())
         self.intrinsic_gas = sum([tx.intrinsic_gas for tx in transactions])
         assert self.intrinsic_gas <= GASLIMIT
-        for i, tx in enumerate(self.transaction_list):
-            self.transactions.update(zpad(rlp.encode(i), 32), rlp.encode(tx))
+        for i, tx in enumerate(self.transactions):
+            self.transaction_trie.update(encode_int32(i), rlp.encode(tx))
         if header:
-            assert header.txroot == self.transactions.root_hash
-            assert header.number
+            assert header.txroot == self.transaction_trie.root_hash
             self.header = header
-        if not header:
-            self.header = BlockHeader(number, self.transations.root_hash, sig)
+        else:
+            self.header = BlockHeader(number, self.transaction_trie.root_hash, proposer, sig)
 
     def add_transaction(tx):
-        self.transactions.update(zpad(rlp.encode(len(self.transaction_list), 32)), rlp.encode(tx))
-        self.transaction_list.append(tx)
+        self.transaction_trie.update(zpad(rlp.encode(len(self.transactions), 32)), rlp.encode(tx))
+        self.transactions.append(tx)
+        self.header.txroot = self.transaction_trie.root_hash
 
     @property
-    def hash(self):
-        return self.header.hash
+    def hash(self): return self.header.hash
+
+    @property
+    def number(self): return self.header.number
+    @number.setter
+    def number(self, number): self.header.number = number
+
+    @property
+    def sig(self): return self.header.sig
+    @sig.setter
+    def sig(self, sig): self.header.sig = sig
+
+    @property
+    def proposer(self): return self.header.proposer
+    @proposer.setter
+    def proposer(self, proposer): self.header.proposer = proposer
+
+    @property
+    def txroot(self): return self.header.txroot
+
 
 
 class State():
@@ -122,7 +139,7 @@ class State():
         self.state.root_hash = snapshot
 
 def block_state_transition(state, block):
-    blknumber = utils.big_endian_int(state.get_storage(BLKNUMBER, '\x00' * 32)) + 1
+    blknumber = utils.big_endian_int(state.get_storage(BLKNUMBER, '\x00' * 32))
     blkproposer = block.proposer if block else '\x00' * 20
     blkhash = block.hash if block else '\x00' * 32
     state.set_storage(BLKNUMBER, '\x00' * 32, 32, encode_int32(blknumber))
@@ -137,7 +154,7 @@ def block_state_transition(state, block):
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
     # Update the RNG seed (the lower 64 bits contains the number of validators,
     # the upper 192 bits are pseudorandom)
-    prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) 
+    prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) if blknumber else '\x00' * 32 
     newseed = utils.big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + state.get_storage(CASPER, 0)
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
@@ -163,7 +180,6 @@ def tx_state_transition(state, tx, index):
     # Process VM execution
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
-    print '### starting main execution ###'
     result, gas_remained, data = apply_msg(ext, message, state.get_storage(tx.addr, b''))
     # Set gas used
     state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.execgas - gas_remained), 32))
@@ -218,6 +234,6 @@ def apply_msg(ext, msg, code):
         print 'REVERTING'
         ext._state.revert(snapshot)
     else:
-        print 'MSG APPLY SUCCESSFUL'
+        pass  # print 'MSG APPLY SUCCESSFUL'
 
     return res, gas, dat

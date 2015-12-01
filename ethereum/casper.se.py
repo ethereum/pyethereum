@@ -137,14 +137,15 @@ def scoreIncorrect(odds:uint256):
 
 
 # Randomly select a validator using a las vegas algorithm
-def const sampleValidator(seed:bytes32, blknumber:uint256):
+def const sampleValidator(seedhash:bytes32, blknumber:uint256):
+    n = seedhash % 2**64
+    seedhash = sha3([seedhash, blknumber]:arr)
     while 1:
-        seedhash = sha3(seed)
-        n = seed % 2**64
-        index = seedhash % n
-        if self.users[index].time_withdrawn >= blknumber:
-            if ((seed / 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
-                return(index)
+        with index = seedhash % n:
+            if (div(seedhash, 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
+                if blknumber >= self.users[index].time_inducted and blknumber <= self.users[index].time_withdrawn:
+                    return(index)
+        seedhash = sha3(seedhash)
 
 
 # Getter methods 
