@@ -58,8 +58,8 @@ genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 10))
 
 bets = [bet.defaultBetStrategy(genesis.clone(), k) for k in keys]
 
-n = network.NetworkSimulator(latency=5, agents=bets, broadcast_success_rate=0.9)
+n = network.NetworkSimulator(latency=3, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
 for bet in bets:
     bet.network = n
-n.run(300, sleep=0.1)
+n.run(300, sleep=0.2)

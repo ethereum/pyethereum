@@ -144,7 +144,7 @@ def block_state_transition(state, block):
     blkhash = block.hash if block else '\x00' * 32
     state.set_storage(PROPOSER, '\x00' * 32, blkproposer)
     if block:
-        assert block.number == blknumber
+        assert block.number == blknumber, (block.number, blknumber)
         # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
         state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
         # Apply transactions sequentially

@@ -43,7 +43,7 @@ with x = ~msize():
 """
 constructor_code = serpent.compile(cc)
 
-validation_code = """
+validation_code = serpent.compile("""
 # We assume that data takes the following schema:
 # bytes 0-31: hash
 # bytes 32-63: v (ECDSA sig)
@@ -55,21 +55,23 @@ validation_code = """
 ~call(5000, 1, 0, 0, 128, 0, 32)
 # Check sender correctness
 return(~mload(0) == 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
-"""
+""")
 s = State('', db.EphemDB())
 tx_state_transition(s, Transaction(None, 1000000, '', constructor_code), 0)
 constructor_output_code = s.get_storage(mk_contract_address(code=constructor_code), '')
 index = constructor_output_code.index('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1')
 
-# Make the account code for a particular address
-def mk_code(addr):
-    return serpent.compile("""
+account_code = serpent.compile("""
 def init():
         ~call(100000, ~sub(0, %d), 0, 0, 0, 32, %d)
-        ~mstore(0, 0x%s)
+        ~mstore(0, 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
         ~mcopy(%s + 32, 12, 20)
         ~return(32, %d)
-    """ % (2**160 - big_endian_to_int(ECRECOVERACCT), len(constructor_code), normalize_address(addr).encode('hex'), index, len(constructor_code)))
+""" % (2**160 - big_endian_to_int(ECRECOVERACCT), len(constructor_code), index, len(constructor_code)))
+
+# Make the account code for a particular address
+def mk_code(pubkeyhash):
+    return account_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', pubkeyhash)
 
 def privtoaddr(k):
     return mk_contract_address(code=mk_code(_privtoaddr(k)))
@@ -77,8 +79,7 @@ def privtoaddr(k):
 # Make the validation code for a particular address
 def mk_validation_code(k):
     pubkeyhash = _privtoaddr(k)
-    code3 = serpent.compile(validation_code)
-    code3 = code3.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', normalize_address(pubkeyhash))
+    code3 = validation_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', normalize_address(pubkeyhash))
     s = State('', db.EphemDB())
     tx_state_transition(s, Transaction(None, 1000000, '', code3), 0)
     return s.get_storage(mk_contract_address(code=code3), '')

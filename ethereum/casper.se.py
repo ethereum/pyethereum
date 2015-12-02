@@ -5,7 +5,7 @@ data nextDeletedUserId
 
 macro MIN_DEPOSIT: 1500 * 10**18
 
-macro MAX_DEPOSIT: 100000 * 10**18
+macro MAX_DEPOSIT: 60000 * 10**18
 
 macro ENTER_EXIT_DELAY: 10000
 

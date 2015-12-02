@@ -1,8 +1,8 @@
 import time
-from abi import ContractTranslator
+from abi import ContractTranslator, decode_abi
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int32, safe_ord
+    encode_int32, safe_ord, encode_int
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from serenity_blocks import tx_state_transition, BLKNUMBER, \
     block_state_transition, Block, apply_msg, EmptyVMExt, State
@@ -17,7 +17,10 @@ import sys
 import random
 import math
 
+NM_LIST = 0
 NM_BLOCK = 1
+NM_BET = 2
+NM_BET_REQUEST = 3
 
 class NetworkMessage(rlp.Serializable):
     fields = [
@@ -30,11 +33,19 @@ class NetworkMessage(rlp.Serializable):
         self.args = args
 
 
+# Convert probability from a number to one-byte encoded form
 def encode_prob(p):
     q = p / (1.0 - p)
-    exp = int(math.log(q) / math.log(2))
-    mantissa = int(min(1, q / 2**exp) * 8 - 8)
+    exp = int(math.floor(math.log(q) / math.log(2)))
+    mantissa = int(max(1, q / 2.0**exp) * 8 - 8)
     return chr(max(0, min(255, exp * 8 + 128 + mantissa)))
+
+
+# Convert probability from one-byte encoded form to a number
+def decode_prob(c):
+    c = ord(c)
+    q = 2.0**((c - 128) // 8) * (1 + 0.125 * (c % 8))
+    return q / (1.0 + q)
 
 
 class Bet():
@@ -52,7 +63,16 @@ class Bet():
     # def submitBet(index:uint256, max_height:uint256, prob:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes, seqnum:uint256, sig:bytes):
 
     def serialize(self):
-        return casper_ct.encode('submitBet', [self.index, self.max_height, ''.join(map(encode_prob, self.probs)), self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig])
+        return casper_ct.encode('submitBet', [self.index, self.max_height, ''.join(map(encode_prob, self.probs)), self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig])[4:]
+
+    @classmethod
+    def deserialize(self, betdata):
+        params = decode_abi(casper_ct.function_data['submitBet']['encode_types'], betdata)
+        return Bet(params[0], params[1], map(decode_prob, params[2]), params[3], params[4], params[5], params[6], params[7])
+
+    @property
+    def hash(self):
+        return sha3(self.serialize())
 
 
 class Opinion():
@@ -69,6 +89,7 @@ class Opinion():
     def process_bet(self, bet):
         # TODO: check crypto and hash
         if bet.seq != self.seq:
+            # print 'Bet sequence number does not match expectation: actual %d desired %d' % (bet.seq, self.seq)
             return False
         self.seq = bet.seq + 1
         while len(self.probs) <= bet.max_height:
@@ -88,10 +109,11 @@ class Opinion():
         for i in range(start_index, bet.max_height + 1):
             stateprobs.append(stateprobs[i] * max(self.probs[i], 1 - self.probs[i]))
         self.stateroot_probs = self.stateroot_probs[:start_index] + stateprobs[1:][::-1]
+        # print 'Processed bet from index %d with seq %d. Probs are: %r' % (bet.index, bet.seq, self.probs)
         return True
 
     @property
-    def max_height():
+    def max_height(self):
         return len(self.probs) - 1
 
 
@@ -135,11 +157,12 @@ class defaultBetStrategy():
         print "Initializing betting strategy"
         self.key = key
         self.addr = privtoaddr(key)
-        self.opinions = {}
         self.db = genesis_state.db
         nextUserId = call_casper(genesis_state.clone(), 'getNextUserId', [])
         print 'Found %d validators in genesis' % nextUserId
         self.opinions = {}
+        self.bets = {}
+        self.highest_bet_processed = {}
         self.time_received = {}
         self.objects = {}
         self.max_finalized_heights = {}
@@ -165,6 +188,8 @@ class defaultBetStrategy():
                 assert self.validators[i]["valcode"], self.validators[i]["address"]
                 self.opinions[i] = Opinion(self.validators[i]["valcode"], i, '\x00' * 32, 0)
                 self.max_finalized_heights[i] = -1
+                self.bets[i] = {}
+                self.highest_bet_processed[i] = -1
                 if self.validators[i]["address"] == self.addr.encode('hex'):
                     self.id = i
         assert self.id >= 0
@@ -205,21 +230,37 @@ class defaultBetStrategy():
             sys.stderr.write("ERR: Received invalid block: %s\n" % block.hash.encode('hex')[:16])
             return
         self.blocks[block.number] = block
-        print "Received good block! "+block.hash.encode('hex')
+        print "Received good block at height %d: %s" % (block.number, block.hash.encode('hex')[:16])
         self.mkbet()
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
         bet = self.mkbet()
 
     def receive_bet(self, bet):
-        if bet not in self.time_received:
-            self.opinions[bet.index].process_bet(bet)
-            self.time_received[bet] = time.time()
-            while self.max_finalized_heights[bet.index] < self.opinions[bet.index].max_height:
-                p = self.opinions[bet.index].probs[self.max_finalized_heights[bet.index] + 1]
-                if p < 0.0001 or p > 0.9999:
-                    self.max_finalized_heights[bet.index] += 1
-                else:
-                    break
+        if bet.hash in self.objects:
+            return
+        self.objects[bet.hash] = bet
+        self.time_received[bet.hash] = time.time()
+        self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])))
+        self.bets[bet.index][bet.seq] = bet
+        proc = 0
+        while (self.highest_bet_processed[bet.index] + 1) in self.bets[bet.index]:
+            assert self.opinions[bet.index].process_bet(self.bets[bet.index][self.highest_bet_processed[bet.index] + 1])
+            self.highest_bet_processed[bet.index] += 1
+            proc += 1
+        for i in range(0, self.highest_bet_processed[bet.index] + 1):
+            assert i in self.bets[bet.index]
+        if not proc:
+            self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [bet.index, self.highest_bet_processed[bet.index] + 1]))))
+        # Update max finalized heights
+        while self.max_finalized_heights[bet.index] < self.opinions[bet.index].max_height:
+            p = self.opinions[bet.index].probs[self.max_finalized_heights[bet.index] + 1]
+            if p < 0.0001 or p > 0.9999:
+                self.max_finalized_heights[bet.index] += 1
+            else:
+                break
+        # print 'Block holding status:', ''.join(['1' if self.blocks[i] else '0' for i in range(len(self.blocks))])
+        # print 'Time deltas:', [self.time_received[self.blocks[i].hash] - self.genesis_time - BLKTIME * i if self.blocks[i] else None for i in range(len(self.blocks))]
+        # print 'broadcasting bet from index %d seq %d as node %d' % (bet.index, bet.seq, self.id)
 
     # Make a default vote on a block based on when you received it
     def default_vote(self, blk_number, blk_hash):
@@ -238,20 +279,32 @@ class defaultBetStrategy():
 
     # Vote based on others' votes
     def vote(self, blk_number, blk_hash):
-        probs = [self.opinions[k].probs[blk_number] for k in self.opinions.keys() if blk_number < len(self.opinions[k].probs)]
-        probs += [self.default_vote(blk_number, blk_hash)] * (len(self.opinions) - len(probs))
+        probs = []
+        default_vote = self.default_vote(blk_number, blk_hash)
+        for k in self.opinions.keys():
+            if blk_number < len(self.opinions[k].probs):
+                probs.append(self.opinions[k].probs[blk_number])
+            else:
+                probs.append(default_vote)
+        print 'source probs on block %d: %r with %d opinions' % (blk_number, probs, len([o for o in self.opinions.values() if blk_number < len(o.probs)]))
         probs = sorted(probs)
+        have_block = blk_hash and blk_hash in self.objects
         if probs[len(probs)/3] > 0.7:
             o = 0.7 + probs[len(probs)/3] * 0.3
         elif probs[len(probs)*2/3] < 0.3:
-            o = probs[len(probs)/3] * 0.3
+            o = probs[len(probs)*2/3] * 0.3
         else:
-            o = probs[len(probs)/2]
-        return min(o, 1 if blk_hash and blk_hash in self.time_received else 0.7)
+            o = min(0.8, max(0.2, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
+        res = min(o, 1 if have_block else 0.7)
+        print 'result prob', res, ('have block' if blk_hash in self.objects else 'no block')
+        return res
         
     # Construct a bet
     def mkbet(self):
         print 'Betting', self.max_finalized_heights
+        print 'Bet status:', {k: (self.highest_bet_processed[k], self.bets[k][self.highest_bet_processed[k]].probs if self.highest_bet_processed[k] >= 0 else None) for k in self.bets}
+        print 'My highest bet(%d): %d' % (self.id, self.seq)
+        print 'Opinion status:', [[v.probs[i] for v in self.opinions.values() if len(v.probs) > i] for i in range(len(self.blocks))]
         sign_from = max(0, self.max_finalized_heights[self.id] - 3)
         print 'Signing from:', sign_from
         blockhashes = []
@@ -267,21 +320,43 @@ class defaultBetStrategy():
                 self.finalized_hashes[h] = self.blocks[h].hash if p > 0.9999 else False
             blockhashes.append(self.blocks[h].hash if self.blocks[h] else None)
         for h in range(lowest_changed, len(self.blocks)):
-            run_state = State(self.stateroots[h-1], self.db) if h else self.genesis_state
+            run_state = State(self.stateroots[h-1] if h else self.genesis_state.root, self.db)
+            prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             block_state_transition(run_state, self.blocks[h] if self.probs[h] > 0.5 else None)
             self.stateroots[h] = run_state.root
-        print 'Making bet with probabilities:', self.probs
-        o = sign_bet(Bet(self.id, len(self.blocks), self.probs[sign_from:][::-1], [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1], self.stateroots[sign_from:][::-1], self.prevhash, self.seq, ''), self.key)
+            blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
+            assert blknum == h + 1, "Prev: %d, block %r, wanted: %d, actual: %d" % (prevblknum, self.blocks[h] if self.probs[h] > 0.5 else None, h + 1, blknum)
+        print 'Node %d making bet %d with probabilities: %r' % (self.id, self.seq, self.probs)
+        assert len(self.probs) == len(self.blocks) == len(self.stateroots)
+        o = sign_bet(Bet(self.id, len(self.blocks) - 1, self.probs[sign_from:][::-1], [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1], self.stateroots[sign_from:][::-1], self.prevhash, self.seq, ''), self.key)
         self.prevhash = o.hash
         self.seq += 1
+        payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
+        self.network.broadcast(self, payload)
+        self.on_receive(payload, self.id)
         return o
 
-    def on_receive(self, objdata):
+    def on_receive(self, objdata, sender_id):
         obj = rlp.decode(objdata, NetworkMessage)
         # print 'Received network message of type:', obj.typ
         if obj.typ == NM_BLOCK:
             blk = rlp.decode(obj.args[0], Block)
             self.receive_block(blk)           
+        elif obj.typ == NM_BET:
+            bet = Bet.deserialize(obj.args[0])
+            self.receive_bet(bet)           
+        elif obj.typ == NM_BET_REQUEST:
+            index = big_endian_to_int(obj.args[0])
+            seq = big_endian_to_int(obj.args[1])
+            bets = [self.bets[index][x] for x in range(seq, self.highest_bet_processed[index] + 1)]
+            if len(bets):
+                messages = [rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])) for bet in bets]
+                # print 'Direct sending a response with %d items to %d' % (len(messages), sender_id)
+                self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_LIST, messages)))
+        elif obj.typ == NM_LIST:
+            # print 'Receiving list with %d items' % len(obj.args)
+            for x in obj.args:
+                self.on_receive(x, sender_id)
 
     # Run every tick
     def tick(self):
