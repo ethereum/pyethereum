@@ -201,7 +201,6 @@ class VMExt():
         self._state = state
         self.set_storage = state.set_storage
         self.get_storage = state.get_storage
-        self.account_exists = state.account_exists
         self.log_storage = state.account_to_dict
         self.msg = lambda msg, code: apply_msg(self, msg, code)
 
@@ -212,7 +211,6 @@ class _EmptyVMExt():
         self._state = State('', EphemDB())
         self.set_storage = lambda addr, k, v: 0
         self.get_storage = lambda addr, k: 0
-        self.account_exists = lambda addr: 0
         self.log_storage = lambda addr: 0
         self.msg = lambda msg, code: apply_msg(self, msg, code)
 
