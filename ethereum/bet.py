@@ -107,7 +107,7 @@ class Opinion():
             start_index -= 1
         stateprobs = [0.9999]
         for i in range(start_index, bet.max_height + 1):
-            stateprobs.append(stateprobs[i] * max(self.probs[i], 1 - self.probs[i]))
+            stateprobs.append(stateprobs[-1] * max(self.probs[i], 1 - self.probs[i]))
         self.stateroot_probs = self.stateroot_probs[:start_index] + stateprobs[1:][::-1]
         # print 'Processed bet from index %d with seq %d. Probs are: %r' % (bet.index, bet.seq, self.probs)
         return True
