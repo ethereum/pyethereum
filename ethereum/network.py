@@ -1,5 +1,7 @@
 import random, sys, time
 
+# A network simulator
+
 class NetworkSimulator():
 
     def __init__(self, latency=50, agents=[], reliability=0.9, broadcast_success_rate=1.0):
@@ -35,9 +37,11 @@ class NetworkSimulator():
 
     def run(self, steps, sleep=0):
         for i in range(steps):
+            a = time.time()
             self.tick()
-            if sleep:
-                time.sleep(sleep)
+            timedelta = time.time() - a
+            if sleep > timedelta:
+                time.sleep(sleep - timedelta)
 
     def broadcast(self, sender, obj):
         assert isinstance(obj, (str, bytes))

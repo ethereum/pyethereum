@@ -17,6 +17,10 @@ import sys
 import random
 import math
 
+def log(text, condition):
+    if condition:
+        print text
+
 NM_LIST = 0
 NM_BLOCK = 1
 NM_BET = 2
@@ -32,8 +36,16 @@ class NetworkMessage(rlp.Serializable):
         self.typ = typ
         self.args = args
 
+# Call a method of a function with no effect
+def call_method(state, addr, ct, fun, args, gas=1000000):
+    tx = Transaction(addr, gas, ct.encode(fun, args))
+    return ct.decode(fun, ''.join(map(chr, tx_state_transition(state.clone(), tx, 0))))[0]
+
 
 # Convert probability from a number to one-byte encoded form
+# using scientific notation on odds with a 3-bit mantissa;
+# 0 = 65536:1 odds = 0.0015%, 128 = 1:1 odds = 50%, 255 =
+# 1:61440 = 99.9984%
 def encode_prob(p):
     q = p / (1.0 - p)
     exp = int(math.floor(math.log(q) / math.log(2)))
@@ -48,6 +60,7 @@ def decode_prob(c):
     return q / (1.0 + q)
 
 
+# An object that stores a bet made by a validator
 class Bet():
     def __init__(self, index, max_height, probs, blockhashes, stateroots, prevhash, seq, sig):
         self.index = index
@@ -59,8 +72,6 @@ class Bet():
         self.seq = seq
         self.sig = sig
         self.hash = sha3(str([max_height, probs, blockhashes, stateroots, prevhash, seq, sig]))
-
-    # def submitBet(index:uint256, max_height:uint256, prob:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes, seqnum:uint256, sig:bytes):
 
     def serialize(self):
         return casper_ct.encode('submitBet', [self.index, self.max_height, ''.join(map(encode_prob, self.probs)), self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig])[4:]
@@ -75,6 +86,8 @@ class Bet():
         return sha3(self.serialize())
 
 
+# An object that stores the "current opinion" of a validator, as computed
+# from their chain of bets
 class Opinion():
     def __init__(self, validation_code, index, prevhash, seq):
         self.validation_code = validation_code
@@ -116,12 +129,6 @@ class Opinion():
     def max_height(self):
         return len(self.probs) - 1
 
-
-# Call a method of a function with no effect
-def call_method(state, addr, ct, fun, args):
-    tx = Transaction(addr, 1000000, ct.encode(fun, args))
-    return ct.decode(fun, ''.join(map(chr, tx_state_transition(state.clone(), tx, 0))))[0]
-
 casper_ct = ContractTranslator(serpent.mk_full_signature('casper.se.py'))
 
 def call_casper(state, fun, args):
@@ -145,21 +152,24 @@ def is_block_valid(state, block):
     if signature_check_result != [0] * 31 + [1]:
         sys.stderr.write('Block signature check failed. Actual result: %s\n' % str(signature_check_result))
         return False
-    print 'Block validation successful'
     return True
 
+gvi_cache = {}
+
 def get_validator_index(state, blknumber):
-    preseed = state.get_storage(RNGSEEDS, blknumber - 10000 if blknumber >= 10000 else 2**256 - 1)
-    return call_casper(state, 'sampleValidator', [preseed, blknumber])
+    if blknumber not in gvi_cache:
+        preseed = state.get_storage(RNGSEEDS, blknumber - 10000 if blknumber >= 10000 else 2**256 - 1)
+        gvi_cache[blknumber] = call_casper(state, 'sampleValidator', [preseed, blknumber])
+    return gvi_cache[blknumber]
 
 class defaultBetStrategy():
     def __init__(self, genesis_state, key):
-        print "Initializing betting strategy"
+        log("Initializing betting strategy", True)
         self.key = key
         self.addr = privtoaddr(key)
         self.db = genesis_state.db
         nextUserId = call_casper(genesis_state.clone(), 'getNextUserId', [])
-        print 'Found %d validators in genesis' % nextUserId
+        log('Found %d validators in genesis' % nextUserId, True)
         self.opinions = {}
         self.bets = {}
         self.highest_bet_processed = {}
@@ -175,7 +185,7 @@ class defaultBetStrategy():
         self.next_block_to_produce = -1
         self.prevhash = '\x00' * 32
         self.seq = 0
-        print "My address", self.addr.encode('hex')
+        log("My address: %s" % self.addr.encode('hex'), True)
         for i in range(nextUserId):
             exists = (call_casper(self.genesis_state, 'getUserStatus', [i]) == 2)
             if exists:
@@ -193,14 +203,14 @@ class defaultBetStrategy():
                 if self.validators[i]["address"] == self.addr.encode('hex'):
                     self.id = i
         assert self.id >= 0
-        print "My index", self.id
-        self.my_max_finalized_height = 0
+        log("My index: %d" % self.id, True)
+        self.my_max_finalized_height = -1
         self.probs = []
         self.finalized_hashes = []
         self.stateroots = []
         self.proposers = []
         self.add_proposers()
-        print 'Proposers: ', self.proposers
+        log('Proposers: %r' % self.proposers, True)
 
     def add_proposers(self):
         maxh = len(self.finalized_hashes) + 9999
@@ -218,10 +228,11 @@ class defaultBetStrategy():
     def receive_block(self, block):
         if block.hash in self.objects:
             return
-        print 'Received block: %d %s' % (block.number, block.hash.encode('hex')[:16])
+        log('Received block: %d %s' % (block.number, block.hash.encode('hex')[:16]), self.id == 0)
         while len(self.blocks) <= block.number:
             self.blocks.append(None)
             self.stateroots.append(None)
+            self.finalized_hashes.append(None)
             self.probs.append(0.5)
         self.objects[block.hash] = block
         self.time_received[block.hash] = time.time()
@@ -230,10 +241,9 @@ class defaultBetStrategy():
             sys.stderr.write("ERR: Received invalid block: %s\n" % block.hash.encode('hex')[:16])
             return
         self.blocks[block.number] = block
-        print "Received good block at height %d: %s" % (block.number, block.hash.encode('hex')[:16])
-        self.mkbet()
+        log("Received good block at height %d: %s" % (block.number, block.hash.encode('hex')[:16]), self.id == 0)
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
-        bet = self.mkbet()
+        self.mkbet()
 
     def receive_bet(self, bet):
         if bet.hash in self.objects:
@@ -251,13 +261,6 @@ class defaultBetStrategy():
             assert i in self.bets[bet.index]
         if not proc:
             self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [bet.index, self.highest_bet_processed[bet.index] + 1]))))
-        # Update max finalized heights
-        while self.max_finalized_heights[bet.index] < self.opinions[bet.index].max_height:
-            p = self.opinions[bet.index].probs[self.max_finalized_heights[bet.index] + 1]
-            if p < 0.0001 or p > 0.9999:
-                self.max_finalized_heights[bet.index] += 1
-            else:
-                break
         # print 'Block holding status:', ''.join(['1' if self.blocks[i] else '0' for i in range(len(self.blocks))])
         # print 'Time deltas:', [self.time_received[self.blocks[i].hash] - self.genesis_time - BLKTIME * i if self.blocks[i] else None for i in range(len(self.blocks))]
         # print 'broadcasting bet from index %d seq %d as node %d' % (bet.index, bet.seq, self.id)
@@ -269,12 +272,12 @@ class defaultBetStrategy():
         if received_time:
             time_delta = abs(received_time * 0.98 + time.time() * 0.02 - scheduled_time)
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            print 'Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob)
+            log('Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.id == 0)
             return 0.7 if random.random() < prob else 0.3
         else:
             time_delta = time.time() - scheduled_time
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            print 'Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob)
+            log('Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.id == 0)
             return 0.5 if random.random() < prob else 0.3
 
     # Vote based on others' votes
@@ -286,27 +289,27 @@ class defaultBetStrategy():
                 probs.append(self.opinions[k].probs[blk_number])
             else:
                 probs.append(default_vote)
-        print 'source probs on block %d: %r with %d opinions' % (blk_number, probs, len([o for o in self.opinions.values() if blk_number < len(o.probs)]))
+        log('source probs on block %d: %r with %d opinions' % (blk_number, probs, len([o for o in self.opinions.values() if blk_number < len(o.probs)])), self.id == 0)
         probs = sorted(probs)
         have_block = blk_hash and blk_hash in self.objects
-        if probs[len(probs)/3] > 0.7:
-            o = 0.7 + probs[len(probs)/3] * 0.3
-        elif probs[len(probs)*2/3] < 0.3:
-            o = probs[len(probs)*2/3] * 0.3
+        if probs[len(probs)/3] > 0.8:
+            o = 0.8 + probs[len(probs)/3] * 0.2
+        elif probs[len(probs)*2/3] < 0.2:
+            o = probs[len(probs)*2/3] * 0.2
         else:
-            o = min(0.8, max(0.2, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
+            o = min(0.85, max(0.15, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
         res = min(o, 1 if have_block else 0.7)
-        print 'result prob', res, ('have block' if blk_hash in self.objects else 'no block')
+        log('result prob: %.5f %s'% (res, ('have block' if blk_hash in self.objects else 'no block')), self.id == 0)
         return res
         
     # Construct a bet
     def mkbet(self):
-        print 'Betting', self.max_finalized_heights
-        print 'Bet status:', {k: (self.highest_bet_processed[k], self.bets[k][self.highest_bet_processed[k]].probs if self.highest_bet_processed[k] >= 0 else None) for k in self.bets}
-        print 'My highest bet(%d): %d' % (self.id, self.seq)
-        print 'Opinion status:', [[v.probs[i] for v in self.opinions.values() if len(v.probs) > i] for i in range(len(self.blocks))]
-        sign_from = max(0, self.max_finalized_heights[self.id] - 3)
-        print 'Signing from:', sign_from
+        sign_from = max(0, self.my_max_finalized_height)
+        log('Betting: %r' % self.max_finalized_heights, self.id == 0)
+        log('Bet status: %r' % {k: (self.highest_bet_processed[k], self.bets[k][self.highest_bet_processed[k]].probs[sign_from:] if self.highest_bet_processed[k] >= 0 else None) for k in self.bets}, self.id == 0)
+        log('My highest bet(%d): %d' % (self.id, self.seq), self.id == 0)
+        log('Opinion status: %r' % [[v.probs[i] for v in self.opinions.values() if len(v.probs) > i] for i in range(sign_from, len(self.blocks))], self.id == 0)
+        log('Signing from: %r' % sign_from, self.id == 0)
         blockhashes = []
         lowest_changed = len(self.blocks)
         for h in range(sign_from, len(self.blocks)):
@@ -314,10 +317,13 @@ class defaultBetStrategy():
             if (prob - 0.5) * (self.probs[h] - 0.5) <= 0:
                 lowest_changed = min(lowest_changed, h)
             self.probs[h] = prob
-            if prob < 0.0001 and h == self.my_max_finalized_height + 1:
-                while len(self.finalized_hashes) < h:
-                    self.finalized_hashes.append(None)
-                self.finalized_hashes[h] = self.blocks[h].hash if p > 0.9999 else False
+            if prob < 0.0001 or prob > 0.9999:
+                log('prob in finality bounds. Current mfh: %d height %d' % (self.my_max_finalized_height, h), self.id == 0)
+                self.finalized_hashes[h] = self.blocks[h].hash if prob > 0.9999 else '\x00' * 32
+                if h == self.my_max_finalized_height + 1:
+                    self.my_max_finalized_height = h
+                    log('Increasing max finalized height to %d' % h, self.id == 0)
+                assert self.finalized_hashes[h] is not None
             blockhashes.append(self.blocks[h].hash if self.blocks[h] else None)
         for h in range(lowest_changed, len(self.blocks)):
             run_state = State(self.stateroots[h-1] if h else self.genesis_state.root, self.db)
@@ -326,7 +332,7 @@ class defaultBetStrategy():
             self.stateroots[h] = run_state.root
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             assert blknum == h + 1, "Prev: %d, block %r, wanted: %d, actual: %d" % (prevblknum, self.blocks[h] if self.probs[h] > 0.5 else None, h + 1, blknum)
-        print 'Node %d making bet %d with probabilities: %r' % (self.id, self.seq, self.probs)
+        log('Node %d making bet %d with probabilities from height %d: %r' % (self.id, self.seq, sign_from, self.probs[sign_from:]), self.id == 0)
         assert len(self.probs) == len(self.blocks) == len(self.stateroots)
         o = sign_bet(Bet(self.id, len(self.blocks) - 1, self.probs[sign_from:][::-1], [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1], self.stateroots[sign_from:][::-1], self.prevhash, self.seq, ''), self.key)
         self.prevhash = o.hash
@@ -367,12 +373,13 @@ class defaultBetStrategy():
             o = sign_block(Block(transactions=[], number=self.next_block_to_produce, proposer=self.addr), self.key)
             self.last_block_produced = self.next_block_to_produce
             self.add_proposers()
-            print 'Node %d making block: %d %s' % (self.id, o.number, o.hash.encode('hex')[:16])
+            log('Node %d making block: %d %s' % (self.id, o.number, o.hash.encode('hex')[:16]), self.id == 0)
             self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(o)])))
             while len(self.blocks) <= o.number:
                 self.blocks.append(None)
                 self.stateroots.append(None)
                 self.probs.append(0.5)
+                self.finalized_hashes.append(None)
             self.blocks[o.number] = o
             self.objects[o.hash] = o
             self.time_received[o.hash] = mytime

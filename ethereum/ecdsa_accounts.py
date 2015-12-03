@@ -7,6 +7,15 @@ from serenity_blocks import mk_contract_address, tx_state_transition, State
 import serpent
 import db
 
+# This file provides helper methods for managing ECDSA-based accounts
+# on top of Serenity
+
+# Code stored on the blockchain that outputs the blockchain code for
+# an ECDSA-secured account. Note that serpent compiling this outputs
+# init code, which is essentially code that outputs the desired code.
+# Hence, we can take this init code and directly paste it into an
+# account and we have a contract which hands out a copy of the ECDSA
+# code
 cc = """
 # We assume that data takes the following schema:
 # bytes 0-31: v (ECDSA sig)
@@ -43,6 +52,31 @@ with x = ~msize():
 """
 constructor_code = serpent.compile(cc)
 
+s = State('', db.EphemDB())
+tx_state_transition(s, Transaction(None, 1000000, '', constructor_code), 0)
+constructor_output_code = s.get_storage(mk_contract_address(code=constructor_code), '')
+index = constructor_output_code.index('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1')
+
+# The init code for an ECDSA account. Calls the constructor storage contract to
+# get the ECDSA account code, then uses mcopy to swap the default address for
+# the user's pubkeyhash
+account_code = serpent.compile("""
+def init():
+        ~call(100000, ~sub(0, %d), 0, 0, 0, 32, %d)
+        ~mstore(0, 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
+        ~mcopy(%s + 32, 12, 20)
+        ~return(32, %d)
+""" % (2**160 - big_endian_to_int(ECRECOVERACCT), len(constructor_code), index, len(constructor_code)))
+
+# Make the account code for a particular pubkey hash
+def mk_code(pubkeyhash):
+    return account_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', pubkeyhash)
+
+# Provide the address corresponding to a particular public key
+def privtoaddr(k):
+    return mk_contract_address(code=mk_code(_privtoaddr(k)))
+
+# The code to validate bets made by an account in Casper
 validation_code = serpent.compile("""
 # We assume that data takes the following schema:
 # bytes 0-31: hash
@@ -56,27 +90,9 @@ validation_code = serpent.compile("""
 # Check sender correctness
 return(~mload(0) == 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
 """)
-s = State('', db.EphemDB())
-tx_state_transition(s, Transaction(None, 1000000, '', constructor_code), 0)
-constructor_output_code = s.get_storage(mk_contract_address(code=constructor_code), '')
-index = constructor_output_code.index('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1')
 
-account_code = serpent.compile("""
-def init():
-        ~call(100000, ~sub(0, %d), 0, 0, 0, 32, %d)
-        ~mstore(0, 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1)
-        ~mcopy(%s + 32, 12, 20)
-        ~return(32, %d)
-""" % (2**160 - big_endian_to_int(ECRECOVERACCT), len(constructor_code), index, len(constructor_code)))
-
-# Make the account code for a particular address
-def mk_code(pubkeyhash):
-    return account_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', pubkeyhash)
-
-def privtoaddr(k):
-    return mk_contract_address(code=mk_code(_privtoaddr(k)))
-
-# Make the validation code for a particular address
+# Make the validation code for a particular address, using a similar
+# replacement technique as previously
 def mk_validation_code(k):
     pubkeyhash = _privtoaddr(k)
     code3 = validation_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', normalize_address(pubkeyhash))
@@ -84,12 +100,14 @@ def mk_validation_code(k):
     tx_state_transition(s, Transaction(None, 1000000, '', code3), 0)
     return s.get_storage(mk_contract_address(code=code3), '')
 
+# Helper function for signing a block
 def sign_block(block, key):
     sigdata = sha3(encode_int32(block.number) + block.txroot)
     v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
     block.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
     return block
 
+# Helper function for signing a bet
 def sign_bet(bet, key):
     bet.sig = ''
     sigdata = sha3(bet.serialize())
@@ -97,7 +115,8 @@ def sign_bet(bet, key):
     bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
     return bet
 
-# Creates data for a transaction 
+# Creates data for a transaction with the given gasprice, to address,
+# value and data
 def mk_txdata(seq, gasprice, to, value, data):
     return encode_int32(seq) + encode_int32(gasprice) + \
         '\x00' * 12 + normalize_address(to) + encode_int32(value) + data
@@ -107,6 +126,8 @@ def sign_txdata(data, gas, key):
     v, r, s = bitcoin.ecdsa_raw_sign(sha3(encode_int32(gas) + data), key)
     return encode_int32(v) + encode_int32(r) + encode_int32(s) + data
 
+# The equivalent of transactions.Transaction(nonce, gasprice, startgas,
+# to, value, data).sign(key) in 1.0
 def mk_transaction(seq, gasprice, gas, to, value, data, key, create=False):
     code = mk_code(_privtoaddr(key))
     addr = mk_contract_address(code=code)
