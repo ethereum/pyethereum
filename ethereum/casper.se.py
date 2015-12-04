@@ -7,7 +7,7 @@ macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
 
-macro ENTER_EXIT_DELAY: 10000
+macro ENTER_EXIT_DELAY: 75
 
 macro WITHDRAWAL_WAITTIME: 10000000
 
@@ -138,7 +138,7 @@ def scoreIncorrect(odds:uint256):
 
 # Randomly select a validator using a las vegas algorithm
 def const sampleValidator(seedhash:bytes32, blknumber:uint256):
-    n = seedhash % 2**64
+    n = mod(seedhash, 2**64)
     seedhash = sha3([seedhash, blknumber]:arr)
     while 1:
         with index = seedhash % n:
@@ -164,6 +164,9 @@ def const getUserStatus(i:uint256):
 
 def const getUserAddress(i:uint256):
     return(self.users[i].address:address)
+
+def const getUserInductionHeight(i:uint256):
+    return(self.users[i].time_inducted)
 
 def const getUserValidationCode(i:uint256):
     a = string(~ssize(ref(self.users[i].validationCode)))

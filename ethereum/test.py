@@ -2,13 +2,13 @@ from serenity_blocks import State, tx_state_transition, mk_contract_address, blo
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 import serpent
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY
 from utils import privtoaddr, normalize_address, zpad, encode_int, big_endian_to_int, encode_int32
 import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method
+from bet import call_method, casper_ct, defaultBetStrategy
 import time
 import network
 import os
@@ -18,7 +18,7 @@ gc = genesis.clone()
 # Unleash the kraken....err, I mean casper
 casper_file = os.path.join(os.path.split(__file__)[0], 'casper.se.py')
 code = serpent.compile(casper_file)
-tx_state_transition(gc, Transaction(None, 1000000, '', code), 0)
+tx_state_transition(gc, Transaction(None, 1000000, '', code))
 genesis.set_storage(CASPER, '', gc.get_storage(mk_contract_address(code=code), ''))
 ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
 
@@ -32,6 +32,8 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 
 # Generate 12 keys
 keys = [zpad(encode_int(x), 32) for x in range(1, 13)]
+# Create the second set of 12 keys
+secondkeys = [zpad(encode_int(x), 32) for x in range(13, 25)]
 # Initialize 12 keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -39,19 +41,19 @@ for i, k in enumerate(keys):
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
     # Give them 1600 ether
     genesis.set_storage(ETHER, a, 1600 * 10**18)
+    # Make a dummy transaction to initialize the account
+    # tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, '', k, create=True)
+    # v = tx_state_transition(genesis, tx)
+    # assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
     print 'Length of validation code:', len(vcode)
-    # Make a dummy transaction to initialize the account
-    tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, '', k, create=True)
-    v = tx_state_transition(genesis, tx, i * 2 + 1)
-    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Make the transaction to join as a Casper validator
     txdata = ct.encode('join', [vcode])
     print 'Length of account code:', len(genesis.get_storage(a, ''))
-    tx = ecdsa_accounts.mk_transaction(1, 1, 1000000, CASPER, 1500 * 10**18, txdata, k)
-    v = tx_state_transition(genesis, tx, i * 2 + 2)
-    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 2
+    tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
+    v = tx_state_transition(genesis, tx)
+    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     v = ct.decode('join', ''.join(map(chr, v)))
     print 'Joined with index', v
     # Check that we actually joined Casper with the right
@@ -59,23 +61,28 @@ for i, k in enumerate(keys):
     vcode2 = call_method(genesis, CASPER, ct, 'getUserValidationCode', v)
     assert vcode2 == vcode
 
+# Give the secondary keys some ether as well
+for i, k in enumerate(secondkeys):
+    # Generate the address
+    a = ecdsa_accounts.privtoaddr(k)
+    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
+    # Give them 1600 ether
+    genesis.set_storage(ETHER, a, 1600 * 10**18)
+
 # Set the starting RNG seed to equal to the number of casper validators
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
 genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 10))
 # Create betting strategy objects for every validator
-bets = [bet.defaultBetStrategy(genesis.clone(), k) for k in keys]
-# Simulate a network
-n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n.generate_peers(5)
-for bet in bets:
-    bet.network = n
-for i in range(30):
-    n.run(100, sleep=0.2)
+bets = [defaultBetStrategy(genesis.clone(), k) for k in keys]
+
+def check_correctness(bets):
     mfhs = [bet.my_max_finalized_height for bet in bets]
+    print '#'*80
     print 'Max finalized heights: %r' % mfhs
     print 'Verifying finalized block hash equivalence'
+    global min_mfh
     min_mfh = min(mfhs)
     for j in range(1, len(bets)):
         j_hashes = bets[j].finalized_hashes[:(min_mfh+1)]
@@ -88,3 +95,50 @@ for i in range(30):
         block_state_transition(state, block)
         assert state.root == bets[0].stateroots[i]
     print 'Min common finalized height: %d, integrity checks passed' % min_mfh
+
+# Simulate a network
+n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
+n.generate_peers(5)
+for bet in bets:
+    bet.network = n
+min_mfh = 0
+while 1:
+    n.run(100, sleep=0.2)
+    check_correctness(bets)
+    if min_mfh >= 40:
+        print 'Reached breakpoint'
+        break
+    print 'Min mfh:', min_mfh
+
+# Create transactions for old validators to leave and new ones to join
+print '#' * 80 + '\n' + '#' * 80
+print 'Generating transactions to include new validators'
+for k in secondkeys:
+    # Make their validation code
+    vcode = ecdsa_accounts.mk_validation_code(k)
+    # Make the transaction to join as a Casper validator
+    txdata = ct.encode('join', [vcode])
+    tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, create=True)
+    print 'Making transaction: ', tx.hash.encode('hex')
+    bets[0].add_transaction(tx)
+
+while 1:
+    n.run(100, sleep=0.2)
+    check_correctness(bets)
+    if min_mfh > 80:
+        print 'Reached breakpoint'
+        break
+    print 'Min mfh:', min_mfh
+
+state = State(bets[0].stateroots[min_mfh], bets[0].db)
+secondbets = [defaultBetStrategy(state.clone(), k) for k in secondkeys]
+assert call_method(state, CASPER, casper_ct, 'getNextUserId', []) == 24
+print 'Induction heights: %r' % [call_method(state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(12, 24)]
+
+while 1:
+    n.run(160, sleep=0.2)
+    check_correctness(bets)
+    if min_mfh > 80:
+        print 'Reached breakpoint'
+        break
+    print 'Min mfh:', min_mfh

@@ -6,7 +6,7 @@ from config import Env
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG
 import rlp
 import trie
 import specials
@@ -147,9 +147,10 @@ def block_state_transition(state, block):
         assert block.number == blknumber, (block.number, blknumber)
         # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
         state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
+        state.set_storage(TXINDEX, '\x00' * 32, zpad(encode_int(0), 32))
         # Apply transactions sequentially
-        for i, tx in enumerate(block.transactions):
-            tx_state_transition(state, tx, i)
+        for tx in block.transactions:
+            tx_state_transition(state, tx)
     # Put the block hash in storage
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
     state.set_storage(BLKNUMBER, '\x00' * 32, encode_int32(blknumber + 1))
@@ -163,14 +164,15 @@ def block_state_transition(state, block):
     state.set_storage(STATEROOTS, encode_int32(blknumber), state.root)
 
 
-def tx_state_transition(state, tx, index):
+def tx_state_transition(state, tx):
     # Get prior gas used
     gas_used = big_endian_to_int(state.get_storage(GAS_CONSUMED, '\x00' * 32))
     if gas_used + tx.exec_gas > GASLIMIT:
+        state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), '\x00' * 32)
         return None
     # Set an object in the state for tx gas
     state.set_storage(TXGAS, '\x00' * 32, encode_int32(tx.gas))
-    ext = VMExt(state, tx)
+    ext = VMExt(state)
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
         message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, b'')
@@ -186,6 +188,10 @@ def tx_state_transition(state, tx, index):
     result, gas_remained, data = apply_msg(ext, message, state.get_storage(tx.addr, b''))
     # Set gas used
     state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.exec_gas - gas_remained), 32))
+    # Places a log in storage
+    state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), encode_int32(2 if result else 1) + ''.join([chr(x) for x in data]))
+    # Increments the txindex
+    state.set_storage(TXINDEX, '\x00' * 32, encode_int32(big_endian_to_int(state.get_storage(TXINDEX, '\x00' * 32)) + 1))
     return data
 
 def mk_contract_address(sender='\x00'*20, code=''):
@@ -197,7 +203,7 @@ def mk_contract_address(sender='\x00'*20, code=''):
 # swap out the functions here
 class VMExt():
 
-    def __init__(self, state, tx):
+    def __init__(self, state):
         self._state = state
         self.set_storage = state.set_storage
         self.get_storage = state.get_storage

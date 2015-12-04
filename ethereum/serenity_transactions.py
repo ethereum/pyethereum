@@ -21,6 +21,7 @@ class Transaction(rlp.Serializable):
         self.data = data
         self.code = code
         assert len(self.addr) == 20 and (self.code == b'' or sha3('\x00' * 20 + self.code)[12:] == self.addr)
+        assert self.exec_gas >= 0
 
     @property
     def hash(self):

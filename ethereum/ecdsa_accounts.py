@@ -53,7 +53,7 @@ with x = ~msize():
 constructor_code = serpent.compile(cc)
 
 s = State('', db.EphemDB())
-tx_state_transition(s, Transaction(None, 1000000, '', constructor_code), 0)
+tx_state_transition(s, Transaction(None, 1000000, '', constructor_code))
 constructor_output_code = s.get_storage(mk_contract_address(code=constructor_code), '')
 index = constructor_output_code.index('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1')
 
@@ -97,7 +97,7 @@ def mk_validation_code(k):
     pubkeyhash = _privtoaddr(k)
     code3 = validation_code.replace('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1', normalize_address(pubkeyhash))
     s = State('', db.EphemDB())
-    tx_state_transition(s, Transaction(None, 1000000, '', code3), 0)
+    tx_state_transition(s, Transaction(None, 1000000, '', code3))
     return s.get_storage(mk_contract_address(code=code3), '')
 
 # Helper function for signing a block
