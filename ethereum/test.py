@@ -81,6 +81,8 @@ def check_correctness(bets):
     mfhs = [bet.my_max_finalized_height for bet in bets]
     print '#'*80
     print 'Max finalized heights: %r' % mfhs
+    # print 'Bets received: %r' % [[len(bet.bets[bet2.id]) for bet2 in bets] for bet in bets]
+    # print 'Probs: %r' % [bet.probs for bet in bets]
     print 'Verifying finalized block hash equivalence'
     global min_mfh
     min_mfh = min(mfhs)
@@ -98,7 +100,7 @@ def check_correctness(bets):
 
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n.generate_peers(6)
+n.generate_peers(5)
 for bet in bets:
     bet.network = n
 min_mfh = 0
