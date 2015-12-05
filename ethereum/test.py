@@ -32,8 +32,8 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 
 # Generate 12 keys
 keys = [zpad(encode_int(x), 32) for x in range(1, 13)]
-# Create the second set of 12 keys
-secondkeys = [zpad(encode_int(x), 32) for x in range(13, 25)]
+# Create a second set of 6 keys
+secondkeys = [zpad(encode_int(x), 32) for x in range(13, 19)]
 # Initialize 12 keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -73,7 +73,7 @@ for i, k in enumerate(secondkeys):
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
-genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 10))
+genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 5))
 # Create betting strategy objects for every validator
 bets = [defaultBetStrategy(genesis.clone(), k) for k in keys]
 
@@ -98,17 +98,18 @@ def check_correctness(bets):
 
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n.generate_peers(5)
+n.generate_peers(6)
 for bet in bets:
     bet.network = n
 min_mfh = 0
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh >= 40:
+    if min_mfh >= 30:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
+    print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
 
 # Create transactions for old validators to leave and new ones to join
 print '#' * 80 + '\n' + '#' * 80
@@ -125,20 +126,27 @@ for k in secondkeys:
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 80:
+    if min_mfh > 60:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
 
-state = State(bets[0].stateroots[min_mfh], bets[0].db)
+state = State(genesis.root, bets[0].db)
 secondbets = [defaultBetStrategy(state.clone(), k) for k in secondkeys]
-assert call_method(state, CASPER, casper_ct, 'getNextUserId', []) == 24
-print 'Induction heights: %r' % [call_method(state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(12, 24)]
+for bet in secondbets:
+    bet.network = n
+n.agents.extend(secondbets)
+n.generate_peers()
+print 'Increasing number of peers in the network to %d!' % len(keys + secondkeys)
+recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
+assert call_method(recent_state, CASPER, casper_ct, 'getNextUserId', []) == len(keys + secondkeys)
+print 'All new validators inducted'
+print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
 while 1:
-    n.run(160, sleep=0.2)
+    n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 80:
+    if min_mfh > 60 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh

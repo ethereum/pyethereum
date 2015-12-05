@@ -1,7 +1,8 @@
 data nextUser # map to storage index 0
-data users[2**40](address, prevsubmission, deposit_size, time_inducted, time_withdrawn, validationCode, seq, prevhash, blockhashes[2**40], stateroots[2**40], probs[2**40])
+data users[2**40](address, prevsubmission, deposit_size, induction_height, withdrawal_height, validationCode, seq, prevhash, induction_prevhash, induction_seq, blockhashes[2**40], stateroots[2**40], probs[2**40])
 data deletedUserIds[2**40]
 data nextDeletedUserId
+data validatorsLastUpdated
 
 macro MIN_DEPOSIT: 1500 * 10**18
 
@@ -23,28 +24,31 @@ def join(validationCode:bytes):
     else:
         userIndex = self.nextUser
         self.nextUser += 1
+    self.validatorsLastUpdated = block.number
     self.users[userIndex].address = msg.sender
     ~sstorebytes(ref(self.users[userIndex].validationCode), validationCode, len(validationCode))
     self.users[userIndex].deposit_size = msg.value
-    self.users[userIndex].time_inducted = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
-    self.users[userIndex].time_withdrawn = 2**100
-    self.users[userIndex].prevhash = 0
-    self.users[userIndex].seq = 0
+    self.users[userIndex].induction_height = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
+    self.users[userIndex].withdrawal_height = 2**100
+    self.users[userIndex].induction_prevhash = self.users[userIndex].prevhash
+    self.users[userIndex].induction_seq = self.users[userIndex].seq
     return(userIndex:uint256)
 
 
 # Queue up to leave the validator pool
 def startWithdrawal(index:uint256, sig:bytes):
     if 1: # callStatic(text("withdraw"), sig):
-        self.users[index].time_withdrawn = min(self.users[index].time_withdrawn, block.number + ENTER_EXIT_DELAENTER_EXIT_DELAY)
+        self.users[index].withdrawal_height = min(self.users[index].withdrawal_height, block.number + ENTER_EXIT_DELAENTER_EXIT_DELAY)
+        self.validatorsLastUpdated = block.number
         return(1:bool)
     return(0:bool)
 
 
 # Leave the validator pool
 def withdraw(index:uint256):
-    if self.users[index].time_withdrawn + WITHDRAWAL_WAITTIME <= block.number:
+    if self.users[index].withdrawal_height + WITHDRAWAL_WAITTIME <= block.number:
         send(self.users[index].address, self.users[index].deposit_size)
+        # NOTE: we do NOT reset the sequence number or the prevhash!
         self.users[index].address = 0
         self.users[index].deposit_size = 0
         self.deletedUserIds[self.nextDeletedUserId] = index
@@ -143,7 +147,7 @@ def const sampleValidator(seedhash:bytes32, blknumber:uint256):
     while 1:
         with index = seedhash % n:
             if (div(seedhash, 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
-                if blknumber >= self.users[index].time_inducted and blknumber <= self.users[index].time_withdrawn:
+                if blknumber >= self.users[index].induction_height and blknumber <= self.users[index].withdrawal_height:
                     return(index)
         seedhash = sha3(seedhash)
 
@@ -155,9 +159,9 @@ def const getNextUserId():
 def const getUserStatus(i:uint256):
     if not self.users[i].address: # inactive
         return 0
-    elif block.number < self.users[i].time_inducted: # not yet inducted
+    elif block.number < self.users[i].induction_height: # not yet inducted
         return 1
-    elif block.number < self.users[i].time_withdrawn: # now inducted
+    elif block.number < self.users[i].withdrawal_height: # now inducted
         return 2
     else: # withdrawing
         return 3
@@ -166,15 +170,21 @@ def const getUserAddress(i:uint256):
     return(self.users[i].address:address)
 
 def const getUserInductionHeight(i:uint256):
-    return(self.users[i].time_inducted)
+    return(self.users[i].induction_height)
+
+def const getUserWithdrawalHeight(i:uint256):
+    return(self.users[i].withdrawal_height)
 
 def const getUserValidationCode(i:uint256):
     a = string(~ssize(ref(self.users[i].validationCode)))
     ~sloadbytes(ref(self.users[i].validationCode), a, len(a))
     return(a:str)
 
-def const getSeq(i:uint256):
+def const getUserSeq(i:uint256):
     return(self.users[i].seq:uint256)
 
-def const getPrevhash(i:uint256):
+def const getUserPrevhash(i:uint256):
     return(self.users[i].prevhash:bytes32)
+
+def const getValidatorsLastUpdated():
+    return self.validatorsLastUpdated

@@ -242,8 +242,11 @@ def encode_single(typ, arg):
             raise EncodingError("Could not parse address: %r" % arg)
     raise EncodingError("Unhandled type: %r %r" % (base, sub))
 
+proctype_cache = {}
 
 def process_type(typ):
+    if typ in proctype_cache:
+        return proctype_cache[typ]
     # Crazy reg expression to separate out base type component (eg. uint),
     # size (eg. 256, 128x128, none), array component (eg. [], [45], none)
     regexp = '([a-z]*)([0-9]*x?[0-9]*)((\[[0-9]*\])*)'
@@ -251,12 +254,8 @@ def process_type(typ):
     arrlist = re.findall('\[[0-9]*\]', arr)
     assert len(''.join(arrlist)) == len(arr), \
         "Unknown characters found in array declaration"
-    # Check validity of string type
-    if base == 'string' or base == 'bytes':
-        assert re.match('^[0-9]*$', sub), \
-            "String type must have no suffix or numerical suffix"
     # Check validity of integer type
-    elif base == 'uint' or base == 'int':
+    if base == 'uint' or base == 'int':
         assert re.match('^[0-9]+$', sub), \
             "Integer type must have numerical suffix"
         assert 8 <= int(sub) <= 256, \
@@ -264,7 +263,7 @@ def process_type(typ):
         assert int(sub) % 8 == 0, \
             "Integer size must be multiple of 8"
     # Check validity of string type
-    if base == 'string' or base == 'bytes':
+    elif base == 'string' or base == 'bytes':
         assert re.match('^[0-9]*$', sub), \
             "String type must have no suffix or numerical suffix"
         assert not sub or int(sub) <= 32, \
@@ -285,7 +284,9 @@ def process_type(typ):
     # Check validity of address type
     elif base == 'address':
         assert sub == '', "Address cannot have suffix"
-    return base, sub, [ast.literal_eval(x) for x in arrlist]
+    o = base, sub, [ast.literal_eval(x) for x in arrlist]
+    proctype_cache[typ] = o
+    return o
 
 
 # Returns the static size of a type, or None if dynamic
