@@ -53,6 +53,15 @@ class NetworkSimulator():
                     self.objqueue[recv_time] = []
                 self.objqueue[recv_time].append((sender.id, p, obj))
 
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        if random.random() < self.broadcast_success_rate:
+            p = random.choice(self.peers[sender.id])
+            recv_time = self.time + self.latency_distribution_sample()
+            if recv_time not in self.objqueue:
+                self.objqueue[recv_time] = []
+            self.objqueue[recv_time].append((sender.id, p, obj))
+
     def direct_send(self, sender, to_id, obj):
         if random.random() < self.broadcast_success_rate * self.reliability:
             for a in self.agents:

@@ -241,7 +241,7 @@ def apply_msg(ext, msg, code):
     # gas = int(gas)
     # assert utils.is_numeric(gas)
     if res == 0:
-        print 'REVERTING'
+        print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % (msg.gas, msg.sender.encode('hex'), msg.to.encode('hex'), msg.data.extract_all().encode('hex'))
         ext._state.revert(snapshot)
     else:
         pass  # print 'MSG APPLY SUCCESSFUL'

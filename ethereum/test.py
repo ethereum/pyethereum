@@ -32,8 +32,8 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 
 # Generate 12 keys
 keys = [zpad(encode_int(x), 32) for x in range(1, 13)]
-# Create a second set of 6 keys
-secondkeys = [zpad(encode_int(x), 32) for x in range(13, 19)]
+# Create a second set of 3 keys
+secondkeys = [zpad(encode_int(x), 32) for x in range(13, 16)]
 # Initialize 12 keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -81,8 +81,8 @@ def check_correctness(bets):
     mfhs = [bet.my_max_finalized_height for bet in bets]
     print '#'*80
     print 'Max finalized heights: %r' % mfhs
-    # print 'Bets received: %r' % [[len(bet.bets[bet2.id]) for bet2 in bets] for bet in bets]
-    # print 'Probs: %r' % [bet.probs for bet in bets]
+    # print 'Bets received: %r' % [[len(bet.bets[bet2.id] if bet2.id >= 0 else []) for bet2 in bets] for bet in bets]
+    print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
     print 'Verifying finalized block hash equivalence'
     global min_mfh
     min_mfh = min(mfhs)
@@ -95,7 +95,7 @@ def check_correctness(bets):
     for i in range(1, min_mfh + 1):
         block = bets[j].objects[bets[0].finalized_hashes[i]] if j_hashes[i] != '\x00' * 32 else None
         block_state_transition(state, block)
-        assert state.root == bets[0].stateroots[i]
+        assert state.root == bets[0].stateroots[i], (i, state.root, bets[0].stateroots[i])
     print 'Min common finalized height: %d, integrity checks passed' % min_mfh
 
 # Simulate a network
@@ -107,7 +107,7 @@ min_mfh = 0
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh >= 30:
+    if min_mfh >= 15:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -128,7 +128,7 @@ for k in secondkeys:
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 60:
+    if min_mfh > 45:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
