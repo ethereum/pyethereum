@@ -2,6 +2,7 @@ import bitcoin
 from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
+from config import ETHER
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
 
@@ -63,6 +64,22 @@ def proc_identity(ext, msg):
     msg.data.extract_copy(o, 0, 0, len(o))
     return 1, msg.gas - gas_cost, o
 
+def proc_send_ether(ext, msg):
+    OP_GAS = opcodes.GCALLVALUETRANSFER
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    to = utils.int_to_addr(msg.data.extract32(0) % 2**160)
+    value = msg.data.extract32(32)
+    prebal = utils.big_endian_to_int(ext.get_storage(ETHER, msg.sender))
+    if prebal >= value:
+        ext.set_storage(ETHER, to, utils.big_endian_to_int(ext.get_storage(ETHER, to)) + value)
+        ext.set_storage(ETHER, msg.sender, prebal - value)
+        return 1, msg.gas - gas_cost, [0] * 31 + [1]
+    else:
+        return 1, msg.gas - gas_cost, [0] * 32
+    
+
 specials = {
     decode_hex(k): v for k, v in
     {
@@ -70,6 +87,7 @@ specials = {
         '0000000000000000000000000000000000000002': proc_sha256,
         '0000000000000000000000000000000000000003': proc_ripemd160,
         '0000000000000000000000000000000000000004': proc_identity,
+        ETHER.encode('hex'): proc_send_ether,
     }.items()
 }
 

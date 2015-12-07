@@ -434,6 +434,8 @@ def vm_execute(ext, msg, code):
                 else:
                     gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
                     refund = 0
+                if msg.to == CASPER:
+                    gascost /= 3
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost

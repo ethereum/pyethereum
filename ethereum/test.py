@@ -2,13 +2,13 @@ from serenity_blocks import State, tx_state_transition, mk_contract_address, blo
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 import serpent
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER
 from utils import privtoaddr, normalize_address, zpad, encode_int, big_endian_to_int, encode_int32
 import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method, casper_ct, defaultBetStrategy
+from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct
 import time
 import network
 import os
@@ -21,6 +21,10 @@ code = serpent.compile(casper_file)
 tx_state_transition(gc, Transaction(None, 1000000, '', code))
 genesis.set_storage(CASPER, '', gc.get_storage(mk_contract_address(code=code), ''))
 ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
+# Add the bet incentivizer
+code2 = serpent.compile(bet_incentivizer_code)
+tx_state_transition(gc, Transaction(None, 1000000, '', code2))
+genesis.set_storage(BET_INCENTIVIZER, '', gc.get_storage(mk_contract_address(code=code2), ''))
 
 # Get the code for the basic ecrecover account
 genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
@@ -30,11 +34,11 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace'
 # configure_logging(config_string=config_string)
 
-# Generate 12 keys
-keys = [zpad(encode_int(x), 32) for x in range(1, 13)]
+# Generate 8 keys
+keys = [zpad(encode_int(x), 32) for x in range(1, 7)]
 # Create a second set of 3 keys
 secondkeys = [zpad(encode_int(x), 32) for x in range(13, 16)]
-# Initialize 12 keys
+# Initialize the first keys
 for i, k in enumerate(keys):
     # Generate the address
     a = ecdsa_accounts.privtoaddr(k)
@@ -53,13 +57,25 @@ for i, k in enumerate(keys):
     print 'Length of account code:', len(genesis.get_storage(a, ''))
     tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
     v = tx_state_transition(genesis, tx)
+    index = ct.decode('join', ''.join(map(chr, v)))[0]
+    print 'Joined with index', index
+    # Check sequence number
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
-    v = ct.decode('join', ''.join(map(chr, v)))
-    print 'Joined with index', v
     # Check that we actually joined Casper with the right
     # validation code
-    vcode2 = call_method(genesis, CASPER, ct, 'getUserValidationCode', v)
+    vcode2 = call_method(genesis, CASPER, ct, 'getUserValidationCode', [index])
     assert vcode2 == vcode
+    # Make the transaction to send some ether to the bet inclusion
+    # incentivization contract
+    txdata2 = bet_incentivizer_ct.encode('deposit', [index])
+    tx = ecdsa_accounts.mk_transaction(1, 1, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
+    v = bet_incentivizer_ct.decode('deposit', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
+    assert v is True
+    # And set my gasprice to 1
+    txdata2 = bet_incentivizer_ct.encode('setGasprice', [index, 1])
+    tx = ecdsa_accounts.mk_transaction(2, 1, 1000000, BET_INCENTIVIZER, 0, txdata2, k, True)
+    v = bet_incentivizer_ct.decode('setGasprice', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
+    assert v is True
 
 # Give the secondary keys some ether as well
 for i, k in enumerate(secondkeys):
@@ -80,9 +96,15 @@ bets = [defaultBetStrategy(genesis.clone(), k) for k in keys]
 def check_correctness(bets):
     mfhs = [bet.my_max_finalized_height for bet in bets]
     print '#'*80
+    print 'Peers: %r' % [map(lambda x: x.id, n.peers[bet.id]) for bet in bets]
     print 'Max finalized heights: %r' % mfhs
     # print 'Bets received: %r' % [[len(bet.bets[bet2.id] if bet2.id >= 0 else []) for bet2 in bets] for bet in bets]
+    print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
+    print 'Registered withdrawal heights: %r' % [[op.withdrawal_height for op in bet.opinions.values()] for bet in bets]
     print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
+    print 'Probs in opinions: %r' % [[(op.seq, len(bet.bets[op.index]), bet.highest_bet_processed[op.index], op.max_height) for op in bet.opinions.values()] for bet in bets]
+    print 'Indices: %r' % [bet.index for bet in bets]
+    print 'Blocks received: %r' % [len(bet.blocks) for bet in bets]
     print 'Verifying finalized block hash equivalence'
     global min_mfh
     min_mfh = min(mfhs)
@@ -107,7 +129,7 @@ min_mfh = 0
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh >= 15:
+    if min_mfh >= 12:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -128,7 +150,7 @@ for k in secondkeys:
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 45:
+    if min_mfh > 36:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -138,7 +160,7 @@ secondbets = [defaultBetStrategy(state.clone(), k) for k in secondkeys]
 for bet in secondbets:
     bet.network = n
 n.agents.extend(secondbets)
-n.generate_peers()
+n.generate_peers(5)
 print 'Increasing number of peers in the network to %d!' % len(keys + secondkeys)
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 assert call_method(recent_state, CASPER, casper_ct, 'getNextUserId', []) == len(keys + secondkeys)
@@ -148,7 +170,8 @@ print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'g
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
+    print 'Min mfh:', min_mfh
+    print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
     if min_mfh > 60 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
-    print 'Min mfh:', min_mfh

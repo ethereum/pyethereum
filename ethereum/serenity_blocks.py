@@ -1,7 +1,7 @@
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int, safe_ord, encode_int32
+    encode_int, safe_ord, encode_int32, encode_hex
 from config import Env
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
@@ -83,6 +83,8 @@ class State():
         self.state = trie.Trie(db)
         self.state.root_hash = state_root
         self.db = self.state.db
+        self.journal = []
+        self.cache = {}
 
     def set_storage(self, addr, k, v):
         if isinstance(k, (int, long)):
@@ -90,27 +92,45 @@ class State():
         if isinstance(v, (int, long)):
             v = zpad(encode_int(v), 32)
         addr = normalize_address(addr)
-        t = trie.Trie(self.state.db)
-        t.root_hash = self.state.get(addr)
-        t.update(k, v)
-        self.state.update(addr, t.root_hash)
+        self.journal.append((addr, k, self.get_storage(addr, k)))
+        self.cache[addr][k] = v
+
+    def commit(self):
+        rt = self.state.root_hash
+        for addr, subcache in self.cache.items():
+            t = trie.Trie(self.state.db)
+            t.root_hash = self.state.get(addr)
+            modified = False
+            for key, value in subcache.items():
+                if value != t.get(key):
+                    t.update(key, value)
+                    modified = True
+            if modified:
+                self.state.update(addr, t.root_hash)
+        self.journal.append(('~root', self.cache, rt))
+        self.cache = {}
 
     def get_storage(self, addr, k):
         if isinstance(k, (int, long)):
             k = zpad(encode_int(k), 32)
         addr = normalize_address(addr)
+        if addr not in self.cache:
+            self.cache[addr] = {}
+        elif k in self.cache[addr]:
+            return self.cache[addr][k]
         t = trie.Trie(self.state.db)
         t.root_hash = self.state.get(addr)
-        return t.get(k)
-
-    def account_exists(self, addr):
-        return self.state.get(normalize_address(addr)) != trie.BLANK_ROOT
+        v = t.get(k)
+        self.cache[addr][k] = v
+        return v
 
     @property
     def root(self):
+        self.commit()
         return self.state.root_hash
 
     def clone(self):
+        self.commit()
         return State(self.state.root_hash, OverlayDB(self.state.db))
 
     def to_dict(self):
@@ -120,8 +140,16 @@ class State():
             acct_trie = trie.Trie(self.state.db)
             acct_trie.root_hash = v
             for key, v in acct_trie.to_dict().items():
-                acct_dump[encode_hex(k)] = encode_hex(v)
+                acct_dump[encode_hex(key)] = encode_hex(v)
             state_dump[encode_hex(address)] = acct_dump
+        for address, v in self.cache.items():
+            if address not in state_dump:
+                state_dump[encode_hex(address)] = {}
+            for key, val in v.items():
+                if val:
+                    state_dump[encode_hex(address)][encode_hex(key)] = encode_hex(val)
+            if not state_dump[encode_hex(address)]:
+                del state_dump[encode_hex(address)]
         return state_dump
 
     def account_to_dict(self, account):
@@ -133,15 +161,24 @@ class State():
         return acct_dump
 
     def snapshot(self):
-        return self.state.root_hash
+        return len(self.journal)
 
     def revert(self, snapshot):
-        self.state.root_hash = snapshot
+        while len(self.journal) > snapshot:
+            addr, key, preval = self.journal.pop()
+            if addr == '~root':
+                self.state.root_hash = preval
+                self.cache = key
+            else:
+                self.cache[addr][key] = preval
 
 def block_state_transition(state, block):
     blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
     blkproposer = block.proposer if block else '\x00' * 20
     blkhash = block.hash if block else '\x00' * 32
+    # Put the state root in storage
+    if blknumber:
+        state.set_storage(STATEROOTS, encode_int32(blknumber - 1), state.root)
     state.set_storage(PROPOSER, '\x00' * 32, blkproposer)
     if block:
         assert block.number == blknumber, (block.number, blknumber)
@@ -160,8 +197,6 @@ def block_state_transition(state, block):
     newseed = big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
-    # Put the state root in storage
-    state.set_storage(STATEROOTS, encode_int32(blknumber), state.root)
 
 
 def tx_state_transition(state, tx):
@@ -229,7 +264,7 @@ def apply_msg(ext, msg, code):
     if ext.get_storage(ETHER, msg.sender) < msg.value:
         print 'MSG TRANSFER FAILED'
         return 1, msg.gas, []
-    else:
+    elif msg.value:
         ext.set_storage(ETHER, msg.sender, big_endian_to_int(ext.get_storage(ETHER, msg.sender)) - msg.value)
         ext.set_storage(ETHER, msg.to, big_endian_to_int(ext.get_storage(ETHER, msg.to)) + msg.value)
     # Main loop

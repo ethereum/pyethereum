@@ -8,7 +8,7 @@ macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
 
-macro ENTER_EXIT_DELAY: 75
+macro ENTER_EXIT_DELAY: 60
 
 macro WITHDRAWAL_WAITTIME: 10000000
 
@@ -35,15 +35,6 @@ def join(validationCode:bytes):
     return(userIndex:uint256)
 
 
-# Queue up to leave the validator pool
-def startWithdrawal(index:uint256, sig:bytes):
-    if 1: # callStatic(text("withdraw"), sig):
-        self.users[index].withdrawal_height = min(self.users[index].withdrawal_height, block.number + ENTER_EXIT_DELAENTER_EXIT_DELAY)
-        self.validatorsLastUpdated = block.number
-        return(1:bool)
-    return(0:bool)
-
-
 # Leave the validator pool
 def withdraw(index:uint256):
     if self.users[index].withdrawal_height + WITHDRAWAL_WAITTIME <= block.number:
@@ -58,30 +49,41 @@ def withdraw(index:uint256):
 
 
 # Submit a bet
-def submitBet(index:uint256, max_height:uint256, prob:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes, seqnum:uint256, sig:bytes):
+def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes32, seqnum:uint256, sig:bytes):
     # TODO: crypto verify
     # assert cryptoVerify(sig, users[index].validationCode)
+    assert seqnum == self.users[index].seq
     assert prevhash == self.users[index].prevhash
     assert max_height <= block.number
     assert self.users[index].prevsubmission <= block.number - 1
+    assert self.users[index].withdrawal_height > block.number + ENTER_EXIT_DELAY
+    # Bet with max height 2**256 - 1 to start withdrawal
+    if max_height == ~sub(0, 1):
+        self.users[index].withdrawal_height = min(self.users[index].withdrawal_height, block.number + ENTER_EXIT_DELAY)
+        self.validatorsLastUpdated = block.number
     i = 0
-    while i < len(newHashes):
+    while i < len(blockhashes):
         self.users[index].blockhashes[max_height - i] = blockhashes[i]
         i += 1
     i = 0
-    while i < len(newStates):
+    while i < len(stateroots):
         self.users[index].stateroots[max_height - i] = stateroots[i]
         i += 1
     i = 0
     x = self.users[index].probs[max_height / 32]
-    while i < len(newProbs):
+    while i < len(probs):
         with h = max_height - i:
             x = x & -(256**(h % 32)*255) + getch(probs, i)
             if h % 32 == 0:
                 self.users[index].probs[h] = x
         i += 1
     self.users[index].prevsubmission = block.number
-    return(1:bool)
+    self.users[index].seq = seqnum + 1
+    with s = ~msize():
+        ~calldatacopy(s, 0, ~calldatasize())
+        self.users[index].prevhash = ~sha3(s, ~calldatasize())
+        # log2(1, 53, seqnum, msg.gas)
+        return(1:bool)
 
 # Interpret prob as odds in scientific notation: 5 bit exponent
 # (-16….15), 3 bit mantissa (1….1.875). Convert to odds per 2**-30

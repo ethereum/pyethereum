@@ -47,9 +47,11 @@ with minusone = ~sub(0, 1):
 with x = ~msize():
     ~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, x, 1000)
     # Pay for gas
-    ~call(40000, block.coinbase, ~calldataload(128) * (~txexecgas() - msg.gas + 50000), 0, 0, 0, 0)
+    ~mstore(0, ~calldataload(128))
+    ~mstore(32, (~txexecgas() - msg.gas + 50000))
+    ~call(12000, ~sub(0, %d), 0, 0, 64, 0, 0)
     ~return(x, ~msize() - x)
-"""
+""" % (2**160 - big_endian_to_int(ETHER))
 constructor_code = serpent.compile(cc)
 
 s = State('', db.EphemDB())
@@ -113,6 +115,10 @@ def sign_bet(bet, key):
     sigdata = sha3(bet.serialize())
     v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
     bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
+    s = bet.serialize()
+    bet._hash = sha3(s)
+    b = __import__('bet')
+    b.invhash[bet._hash] = s
     return bet
 
 # Creates data for a transaction with the given gasprice, to address,
