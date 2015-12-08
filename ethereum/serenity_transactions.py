@@ -2,7 +2,6 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum.utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int
-from config import Env
 from db import EphemDB
 import opcodes
 import rlp

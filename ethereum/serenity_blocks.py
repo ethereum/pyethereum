@@ -2,7 +2,6 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
     encode_int, safe_ord, encode_int32, encode_hex
-from config import Env
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import vm
@@ -14,6 +13,7 @@ TT255 = 2 ** 255
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 
+# Block header (~150 bytes in the normal case); light clients download these
 class BlockHeader(rlp.Serializable):
     fields = [
         ('number', big_endian_int),
@@ -31,6 +31,9 @@ class BlockHeader(rlp.Serializable):
         return sha3(rlp.encode(self))
 
 
+# The entire block, including the transactions. Note that the concept of
+# extra data is non-existent; if a proposer wants extra data they should
+# just make the first transaction a dummy containing that data
 class Block(rlp.Serializable):
     fields = [
         ('header', BlockHeader),
@@ -77,12 +80,22 @@ class Block(rlp.Serializable):
     def txroot(self): return self.header.txroot
 
 
-
+# An object representing the state. In Serenity, the state will be just a
+# trie of accounts with storage; _all_ intermediate state, including gas
+# used, logs, transaction index, etc, is placed into contracts. This greatly
+# simplifies a large amount of handling code
 class State():
     def __init__(self, state_root, db):
         self.state = trie.Trie(db)
         self.state.root_hash = state_root
         self.db = self.state.db
+        # The state uses a journaling cache data structure in order to
+        # facilitate revert operations while maintaining very high efficiency
+        # for updates. Note that the cache is designed to handle commits
+        # happening at any time; commits can be reverted too. Committing is
+        # done automatically whenever a root is requested; for this reason,
+        # use the State.root method to get the root instead of poking into
+        # State.state.root_hash directly
         self.journal = []
         self.cache = {}
 
@@ -129,10 +142,13 @@ class State():
         self.commit()
         return self.state.root_hash
 
+    # Creates a new state using an overlay of the existing state. Updates to
+    # the cloned state will NOT affect the parent state.
     def clone(self):
         self.commit()
-        return State(self.state.root_hash, OverlayDB(self.state.db))
+        return State(self.root, OverlayDB(self.state.db))
 
+    # Converts the state to a dictionary
     def to_dict(self):
         state_dump = {}
         for address, v in self.state.to_dict().items():
@@ -160,9 +176,12 @@ class State():
             acct_dump[encode_hex(k)] = encode_hex(v)
         return acct_dump
 
+    # Returns a value x, where State.revert(x) at any later point will return
+    # you to the point at which the snapshot was made.
     def snapshot(self):
         return len(self.journal)
 
+    # Reverts to the provided snapshot
     def revert(self, snapshot):
         while len(self.journal) > snapshot:
             addr, key, preval = self.journal.pop()
@@ -172,24 +191,32 @@ class State():
             else:
                 self.cache[addr][key] = preval
 
+# Processes a block on top of a state to reach a new state
 def block_state_transition(state, block):
+    # Determine the current block number, block proposer and block hash
     blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
     blkproposer = block.proposer if block else '\x00' * 20
     blkhash = block.hash if block else '\x00' * 32
     # Put the state root in storage
     if blknumber:
         state.set_storage(STATEROOTS, encode_int32(blknumber - 1), state.root)
+    # Put the proposer in storage
     state.set_storage(PROPOSER, '\x00' * 32, blkproposer)
+    # If the block exists (ie. is not NONE), process every transaction
     if block:
         assert block.number == blknumber, (block.number, blknumber)
-        # Initialize the GAS_CONSUMED variable to _just_ intrinsic gas (ie. tx data consumption)
+        # Initialize the GAS_CONSUMED variable to _just_ the sum of
+        # intrinsic gas of each transaction (ie. tx data consumption
+        # only, not computation)
         state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
+        # Set the txindex to 0 to start off
         state.set_storage(TXINDEX, '\x00' * 32, zpad(encode_int(0), 32))
         # Apply transactions sequentially
         for tx in block.transactions:
             tx_state_transition(state, tx)
     # Put the block hash in storage
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
+    # Put the next block number in storage
     state.set_storage(BLKNUMBER, '\x00' * 32, encode_int32(blknumber + 1))
     # Update the RNG seed (the lower 64 bits contains the number of validators,
     # the upper 192 bits are pseudorandom)
@@ -202,6 +229,7 @@ def block_state_transition(state, block):
 def tx_state_transition(state, tx):
     # Get prior gas used
     gas_used = big_endian_to_int(state.get_storage(GAS_CONSUMED, '\x00' * 32))
+    # If there is not enough gas left for this transaction, it's a no-op
     if gas_used + tx.exec_gas > GASLIMIT:
         state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), '\x00' * 32)
         return None
@@ -229,6 +257,8 @@ def tx_state_transition(state, tx):
     state.set_storage(TXINDEX, '\x00' * 32, encode_int32(big_endian_to_int(state.get_storage(TXINDEX, '\x00' * 32)) + 1))
     return data
 
+# Determines the contract address for a piece of code and a given creator
+# address (contracts created from outside get creator '\x00' * 20)
 def mk_contract_address(sender='\x00'*20, code=''):
     return sha3(sender + code)[12:]
 
@@ -246,6 +276,8 @@ class VMExt():
         self.msg = lambda msg, code: apply_msg(self, msg, code)
 
 
+# An empty VMExt instance that can be used to employ the EVM "purely"
+# without accessing state. This is used for Casper signature verifications
 class _EmptyVMExt():
 
     def __init__(self):
@@ -258,6 +290,7 @@ class _EmptyVMExt():
 EmptyVMExt = _EmptyVMExt()
 
 
+# Processes a message
 def apply_msg(ext, msg, code):
     # Transfer value, instaquit if not enough
     snapshot = ext._state.snapshot()
@@ -268,16 +301,16 @@ def apply_msg(ext, msg, code):
         ext.set_storage(ETHER, msg.sender, big_endian_to_int(ext.get_storage(ETHER, msg.sender)) - msg.value)
         ext.set_storage(ETHER, msg.to, big_endian_to_int(ext.get_storage(ETHER, msg.to)) + msg.value)
     # Main loop
-    # print 'to', msg.to.encode('hex')
     if msg.to in specials.specials:
         res, gas, dat = specials.specials[msg.to](ext, msg)
     else:
         res, gas, dat = vm.vm_execute(ext, msg, code)
-    # gas = int(gas)
-    # assert utils.is_numeric(gas)
+    # If the message failed, revert execution
     if res == 0:
-        print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % (msg.gas, msg.sender.encode('hex'), msg.to.encode('hex'), msg.data.extract_all().encode('hex'))
+        print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % \
+            (msg.gas, msg.sender.encode('hex'), msg.to.encode('hex'), msg.data.extract_all().encode('hex'))
         ext._state.revert(snapshot)
+    # Otherwise, all good
     else:
         pass  # print 'MSG APPLY SUCCESSFUL'
 

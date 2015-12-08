@@ -40,7 +40,7 @@ class NetworkSimulator():
             a = time.time()
             self.tick()
             timedelta = time.time() - a
-            print 'Tick finished in: %.2f' % timedelta
+            # print 'Tick finished in: %.2f' % timedelta
             if sleep > timedelta:
                 time.sleep(sleep - timedelta)
 

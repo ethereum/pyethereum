@@ -331,7 +331,7 @@ def vm_execute(ext, msg, code):
                 data = b''.join(map(ascii_chr, mem[s0: s0 + s1]))
                 stk.append(utils.big_endian_to_int(utils.sha3(data)))
             elif op == 'ADDRESS':
-                stk.append(utils.coerce_to_int(msg.addr))
+                stk.append(utils.coerce_to_int(msg.to))
             elif op == 'BALANCE':
                 addr = utils.int_to_addr(stk.pop() % 2**160)
                 stk.append(ext.get_storage_data(ETHER, addr))
@@ -579,6 +579,8 @@ def vm_execute(ext, msg, code):
             ext.set_storage(msg.to, s0, data)
         elif op == 'SSIZE':
             stk.append(len(ext.get_storage(msg.to, stk.pop())))
+        elif op == 'STATEROOT':
+            stk.append(utils.big_endian_to_int(ext.get_storage(STATEROOTS, stk.pop())))
         elif op == 'TXGAS':
             stk.append(utils.big_endian_to_int(ext.get_storage(TXGAS, '\x00' * 32)))
         elif op == 'SUICIDE':

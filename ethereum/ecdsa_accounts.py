@@ -34,13 +34,15 @@ cc = """
 ~calldatacopy(32, 0, 96)
 # Call ECRECOVER contract to get the sender
 ~call(5000, 1, 0, 0, 128, 0, 32)
-# Check sender correctness
-assert ~mload(0) == 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1
+# Check sender correctness; exception if not
+if ~mload(0) != 0x82a978b3f5962a5b0957d9ee9eef472ee55b42f1:
+    ~invalid()
 # Sequence number operations
 with minusone = ~sub(0, 1):
     with curseq = self.storage[minusone]:
-        # Check sequence number correctness
-        assert ~calldataload(96) == curseq
+        # Check sequence number correctness, exception if not
+        if ~calldataload(96) != curseq:
+            ~invalid()
         # Increment sequence number
         self.storage[minusone] = curseq + 1
 # Make the sub-call and discard output

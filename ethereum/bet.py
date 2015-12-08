@@ -30,6 +30,7 @@ NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
 
+# Network message object
 class NetworkMessage(rlp.Serializable):
     fields = [
         ('typ', big_endian_int),
@@ -50,6 +51,9 @@ def call_method(state, addr, ct, fun, args, gas=1000000):
     return ct.decode(fun, output)[0]
 
 
+# Code for a contract that anyone can send their bets through. Validators
+# should accept transactions to this address because they see that they
+# automatically get paid if the transaction is valid
 bet_incentivizer_code = """
 extern casper.se.py: [getUserAddress:[uint256]:address]
 macro CASPER: ~sub(0, %d)
@@ -98,13 +102,16 @@ def encode_prob(p):
     lastv = '\x00'
     while 1:
         q = p / (1.0 - p)
-        exp = int(math.floor(math.log(q) / math.log(2)))
-        mantissa = int(max(1, q / 2.0**exp) * 8 - 8)
+        exp = 0
+        while q < 1:
+            q *= 2.0
+            exp -= 1
+        while q >= 2:
+            q /= 2.0
+            exp += 1
+        mantissa = int(q * 8 - 7.9999)
         v = chr(max(0, min(255, exp * 8 + 128 + mantissa)))
-        if v == lastv:
-            return v
-        p = decode_prob(v)
-        lastv = v
+        return v
 
 
 # Convert probability from one-byte encoded form to a number
@@ -112,6 +119,11 @@ def decode_prob(c):
     c = ord(c)
     q = 2.0**((c - 128) // 8) * (1 + 0.125 * (c % 8))
     return q / (1.0 + q)
+
+# Be VERY careful about updating the above algorithms; if the assert below
+# fails (ie. encode and decode are not inverses) then bet serialization will
+# break and so casper will break
+assert map(encode_prob, map(decode_prob, map(chr, range(256)))) == map(chr, range(256))
 
 
 invhash = {}
@@ -130,21 +142,30 @@ class Bet():
         self.sig = sig
         self._hash = None
 
+    # Serializes the bet into the function message which can be directly submitted
+    # to the casper contract
     def serialize(self):
-        o = casper_ct.encode('submitBet', [self.index, self.max_height, ''.join(map(encode_prob, self.probs)), self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig])
+        o = casper_ct.encode('submitBet',
+            [self.index, self.max_height, ''.join(map(encode_prob, self.probs)),
+             self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig]
+        )
         self._hash = sha3(o)
         return o
 
+    # Inverse of serialization
     @classmethod
     def deserialize(self, betdata):
-        params = decode_abi(casper_ct.function_data['submitBet']['encode_types'], betdata[4:])
-        o = Bet(params[0], params[1], map(decode_prob, params[2]), params[3], params[4], params[5], params[6], params[7])
+        params = decode_abi(casper_ct.function_data['submitBet']['encode_types'],
+                            betdata[4:])
+        o = Bet(params[0], params[1], map(decode_prob, params[2]), params[3],
+                params[4], params[5], params[6], params[7])
         o._hash = sha3(betdata)
         return o
 
+    # Warning: edit bets very carefully! Make sure hash is always correct 
     @property
-    def hash(self):
-        if not self._hash:
+    def hash(self, recompute=False):
+        if not self._hash or recompute:
             self._hash = sha3(self.serialize())
         return self._hash
 
@@ -158,42 +179,43 @@ class Opinion():
         self.blockhashes = []
         self.stateroots = []
         self.probs = []
-        self.stateroot_probs = []
         self.prevhash = prevhash
         self.seq = seq
         self.induction_height = induction_height
-        self.withdrawal_height = 2**255
+        self.withdrawal_height = 2**100
         self.withdrawn = False
 
     def process_bet(self, bet):
-        # TODO: check crypto and hash
+        # TODO: check crypto
         if bet.seq != self.seq:
-            # print 'Bet sequence number does not match expectation: actual %d desired %d' % (bet.seq, self.seq)
+            sys.stderr.write('Bet sequence number does not match expectation: actual %d desired %d\n' % (bet.seq, self.seq))
             return False
+        if bet.prevhash != self.prevhash:
+            sys.stderr.write('Bet hash does not match prevhash: actual %s desired %s. Seq: %d \n' %
+                             (bet.prevhash.encode('hex'), self.prevhash.encode('hex'), bet.seq))
         if self.withdrawn:
             raise Exception("Bet made after withdrawal! Slashing condition triggered!")
+        # Update seq and hash
         self.seq = bet.seq + 1
-        if bet.max_height == 2**255 - 1:
+        self.prevhash = bet.hash
+        # A bet with max height 2**256 - 1 signals withdrawal
+        if bet.max_height == 2**256 - 1:
             self.withdrawn = True
+            self.withdrawal_height = self.max_height
+            log("Validator leaving!: %d" % bet.index, True)
             return True
+        # Extend probs, blockhashes and state roots arrays as needed
         while len(self.probs) <= bet.max_height:
             self.probs.append(None)
             self.blockhashes.append(None)
             self.stateroots.append(None)
+        # Update probabilities, blockhashes and stateroots
         for i in range(len(bet.probs)):
             self.probs[bet.max_height - i] = bet.probs[i]
         for i in range(len(bet.blockhashes)):
             self.blockhashes[bet.max_height - i] = bet.blockhashes[i]
         for i in range(len(bet.stateroots))[::-1]:
             self.stateroots[bet.max_height - i] = bet.stateroots[i]
-        start_index = bet.max_height - 1
-        while start_index > 0 and (self.probs[start_index] is None or 0.0001 < self.probs[start_index] < 0.9999):
-            start_index -= 1
-        stateprobs = [0.9999]
-        for i in range(start_index, bet.max_height + 1):
-            stateprobs.append(stateprobs[-1] * (max(self.probs[i], 1 - self.probs[i]) if self.probs[i] is not None else 0.5))
-        self.stateroot_probs = self.stateroot_probs[:start_index] + stateprobs[1:][::-1]
-        # print 'Processed bet from index %d with seq %d. Probs are: %r' % (bet.index, bet.seq, self.probs)
         return True
 
     def get_prob(self, h):
@@ -209,17 +231,18 @@ class Opinion():
     def max_height(self):
         return len(self.probs) - 1
 
+# Helper method for calling Casper
 casper_ct = ContractTranslator(serpent.mk_full_signature('casper.se.py'))
 
 def call_casper(state, fun, args):
     return call_method(state, CASPER, casper_ct, fun, args)
 
-# Accepts any state less than 10000 blocks old
+# Accepts any state less than ENTER_EXIT_DELAY blocks old
 def is_block_valid(state, block):
+    # Determine the desired proposer address and the validation code
     validator_index = get_validator_index(state, block.number)
     validator_address = call_casper(state, 'getUserAddress', [validator_index])
     validator_code = call_casper(state, 'getUserValidationCode', [validator_index])
-    desired_block_number = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) + 1
     # Check block proposer correctness
     if block.proposer != normalize_address(validator_address):
         sys.stderr.write('Block proposer check failed: actual %s desired %s\n' %
@@ -234,6 +257,7 @@ def is_block_valid(state, block):
         return False
     return True
 
+# Helper method for getting the validator index for a particular block number
 gvi_cache = {}
 
 def get_validator_index(state, blknumber):
@@ -242,63 +266,114 @@ def get_validator_index(state, blknumber):
         gvi_cache[blknumber] = call_casper(state, 'sampleValidator', [preseed, blknumber])
     return gvi_cache[blknumber]
 
+# Helper for making an ID
 next_id = [0]
+def mkid():
+    next_id[0] += 1
+    return next_id[0] - 1
 
+# The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
     def __init__(self, genesis_state, key):
         log("Initializing betting strategy", True)
-        self.id = next_id[0]
-        next_id[0] += 1
+        # An ID for purposes of the network simulator
+        self.id = mkid()
+        # Validator's private key
         self.key = key
+        # Validator's address on the network
         self.addr = privtoaddr(key)
+        # The bet strategy's database
         self.db = genesis_state.db
-        nextUserId = call_casper(genesis_state, 'getNextUserId', [])
-        self.validators_last_updated = call_casper(genesis_state, 'getValidatorsLastUpdated', [])
-        log('Found %d validators in genesis' % nextUserId, True)
+        # This counter is incremented every time a validator joins;
+        # it allows us to re-process the validator set and refresh
+        # the validators that we have
+        self.validator_signups = call_casper(genesis_state, 'getValidatorSignups', [])
+        # A dict of opinion objects containing the current opinions of all
+        # validators
         self.opinions = {}
+        # A dict of lists of bets received from validators
         self.bets = {}
+        # A dict containing the highest-sequence-number bet processed for
+        # each validator
         self.highest_bet_processed = {}
+        # The time when you received an object
         self.time_received = {}
+        # Hash lookup map; used mainly to check whether or not something has
+        # already been received and processed
         self.objects = {}
+        # List of blocks received
         self.blocks = []
+        # When you last explicitly requested to ask for a block; stored to
+        # prevent excessively frequent lookups
         self.last_asked_for_block = {}
+        # When you last explicitly requested to ask for bets from a given
+        # validator; stored to prevent excessively frequent lookups
         self.last_asked_for_bets = {}
+        # Pool of transactions worth including
         self.txpool = {}
-        self.txindex = {}
+        # Map of hash -> (tx, [(blknum, index), ...]) for transactions that
+        # are in blocks that are not fully confirmed
+        self.unconfirmed_txindex = {}
+        # Map of hash -> (tx, [(blknum, index), ...]) for transactions that
+        # are in blocks that are fully confirmed
         self.finalized_txindex = {}
+        # Last time you made a bet; stored to prevent excessively
+        # frequent betting
         self.last_bet_made = 0
+        # Your validator index
         self.index = -1
+        # Store the genesis block state here
         self.genesis_state = genesis_state
+        # Store the timestamp of the genesis block
         self.genesis_time = big_endian_to_int(genesis_state.get_storage(GENESIS_TIME, '\x00' * 32))
+        # Last block that you produced
         self.last_block_produced = -1
+        # Next height at which you are eligible to produce (could be None)
         self.next_block_to_produce = -1
+        # Prevhash (for betting)
         self.prevhash = '\x00' * 32
+        # Sequence number (for betting)
         self.seq = 0
+        # If we only partially calculate state roots, store the index at which
+        # to start calculating next time you make a bet
         self.calc_state_roots_from = 2**255
         log("My address: %s" % self.addr.encode('hex'), True)
-        for i in range(nextUserId):
+        # Iterate over all validators in the genesis block...
+        for j in range(call_casper(genesis_state, 'getNextUserPos', [])):
+            i = call_casper(self.genesis_state, 'getUserAtPosition', [j])
+            # If they are currently active...
             exists = (call_casper(self.genesis_state, 'getUserStatus', [i]) == 2)
             if exists:
+                # Make sure they have a validation address and code
                 valaddr = call_casper(self.genesis_state, 'getUserAddress', [i])
                 valcode = call_casper(self.genesis_state, 'getUserValidationCode', [i])
                 assert valcode
                 assert valaddr
+                # Initialize opinion and bet objects
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, 0)
                 self.bets[i] = {}
                 self.highest_bet_processed[i] = -1
                 if valaddr == self.addr.encode('hex'):
                     self.index = i
-        self.induction_height = call_casper(self.genesis_state, 'getUserInductionHeight', [self.index]) if self.index >= 0 else 2**255
+        log('Found %d validators in genesis' % len(self.opinions), True)
+        # The height at which this user is added
+        self.induction_height = call_casper(self.genesis_state, 'getUserInductionHeight', [self.index]) if self.index >= 0 else 2**100
         log("My index: %d" % self.index, True)
         log("My induction height: %d" % self.induction_height, True)
+        # Max height which is finalized from your point of view
         self.my_max_finalized_height = -1
+        # The probabilities that you are betting
         self.probs = []
+        # Your finalized block hashes
         self.finalized_hashes = []
+        # Your state roots
         self.stateroots = []
+        # List of proposers for blocks; calculated into the future just-in-time
         self.proposers = []
         self.add_proposers()
         log('Proposers: %r' % self.proposers, True)
 
+    # Compute as many future block proposers as possible
     def add_proposers(self):
         maxh = len(self.finalized_hashes) + ENTER_EXIT_DELAY - 1
         for h in range(len(self.proposers), maxh):
@@ -316,21 +391,27 @@ class defaultBetStrategy():
         self.next_block_to_produce = None
 
     def receive_block(self, block):
+        # If you already processed the block, return
         if block.hash in self.objects:
             return
         log('Received block: %d %s' % (block.number, block.hash.encode('hex')[:16]), self.index == 0 or self.index == 12)
+        # Update the lengths of our main lists to make sure they can store
+        # the data we will be calculating
         while len(self.blocks) <= block.number:
             self.blocks.append(None)
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
             self.probs.append(0.5)
+        # Add transactions to the unconfirmed transaction index
         for i, tx in enumerate(block.transactions):
             if tx.hash not in self.finalized_txindex:
-                if tx.hash not in self.txindex:
-                    self.txindex[tx.hash] = (tx, [])
-                self.txindex[tx.hash][1].append((block.number, i))
+                if tx.hash not in self.unconfirmed_txindex:
+                    self.unconfirmed_txindex[tx.hash] = (tx, [])
+                self.unconfirmed_txindex[tx.hash][1].append((block.number, i))
+        # Store the block as having been received
         self.objects[block.hash] = block
         self.time_received[block.hash] = time.time()
+        # If we are not sufficiently synced, try to sync previous blocks first
         notsynced = False
         if block.number - ENTER_EXIT_DELAY + 1 >= len(self.stateroots):
             notsynced = True
@@ -340,29 +421,39 @@ class defaultBetStrategy():
             sys.stderr.write('Not sufficiently synced to receive this block')
             self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [rlp.encode(self.my_max_finalized_height)])))
             return
+        # If the block is invalid, return
         check_state = State(self.stateroots[block.number - ENTER_EXIT_DELAY + 1], self.db) if block.number >= ENTER_EXIT_DELAY - 1 else self.genesis_state
         if not is_block_valid(check_state, block):
             sys.stderr.write("ERR: Received invalid block: %s\n" % block.hash.encode('hex')[:16])
             return
+        # Try to update the set of validators
         if self.my_max_finalized_height >= 0 and self.stateroots[self.my_max_finalized_height] not in (None, '\x00' * 32):
             check_state2 = State(self.stateroots[self.my_max_finalized_height], self.db)
-            vlu = call_casper(check_state2, 'getValidatorsLastUpdated', [])
-            if vlu > self.validators_last_updated:
-                self.validators_last_updated = vlu
-                print '#' * 80 + '\n' * 10
+            vs = call_casper(check_state2, 'getValidatorSignups', [])
+            if vs > self.validator_signups:
+                self.validator_signups = vs
                 self.update_validator_set(check_state2)
+        # Add the block to our list of blocks
+        if self.blocks[block.number]:
+            raise Exception("Two blocks found at a height! The slashing+"
+                            "adjudication procedure for this case has not "
+                            "yet been implemented...")
         self.blocks[block.number] = block
         time_delay = time.time() - (self.genesis_time + BLKTIME * block.number)
         log("Received good block at height %d with delay %.2f: %s" % (block.number, time_delay, block.hash.encode('hex')[:16]), self.index == 0)
+        # Re-broadcast the block
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
+        # Bet
         self.mkbet()
 
+    # Try to update the set of validators
     def update_validator_set(self, check_state):
         print 'Updating the validator set'
-        for i in range(call_casper(check_state, 'getNextUserId', [])):
-            ih = call_casper(check_state, 'getUserInductionHeight', [i])
-            wh = call_casper(check_state, 'getUserWithdrawalHeight', [i])
+        for j in range(call_casper(check_state, 'getNextUserPos', [])):
+            i = call_casper(self.genesis_state, 'getUserAtPosition', [j])
+            # Ooh, we found a new validator
             if i not in self.opinions:
+                ih = call_casper(check_state, 'getUserInductionHeight', [i])
                 valaddr = call_casper(check_state, 'getUserAddress', [i])
                 valcode = call_casper(check_state, 'getUserValidationCode', [i])
                 prevhash = call_casper(check_state, 'getUserPrevhash', [i])
@@ -370,92 +461,126 @@ class defaultBetStrategy():
                 self.opinions[i] = Opinion(valcode, i, prevhash, seq, ih)
                 print 'Validator inducted at index %d with address %s' % (i, valaddr)
                 print 'Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex'))
-                if i not in self.bets:
-                    self.bets[i] = {}
-                    self.highest_bet_processed[i] = -1
+                assert i not in self.bets
+                assert i not in self.highest_bet_processed
+                self.bets[i] = {}
+                self.highest_bet_processed[i] = -1
+                # Is the new validator me?
                 if valaddr == self.addr.encode('hex'):
                     self.index = i
                     self.add_proposers()
                     self.induction_height = ih
-                    self.withdrawal_height = wh
                     print '#' * 80
-                    print 'I have been inducted! id=%d' % self.index
-            else:
-                self.opinions[i].withdrawal_height = wh
+                    print 'I have been inducted! id=%d\n\n' % self.index
         print 'Have %d opinions' % len(self.opinions)
 
     def receive_bet(self, bet):
+        # Do not process the bet if (i) we already processed it, or (ii) it
+        # comes from a validator not in the current validator set
         if bet.hash in self.objects or bet.index not in self.opinions:
             return
-        log('Node %d receiving bet from node %d with seq %d, max height %d and probs %r' % (self.index, bet.index, bet.seq, bet.max_height, bet.probs), self.index > 6 or bet.index > 6)
+        # Record when the bet came and that it came
         self.objects[bet.hash] = bet
         self.time_received[bet.hash] = time.time()
+        # Re-broadcast it
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])))
-        if bet.index not in self.bets:
-            self.bets[bet.index] = {}
-        if bet.index not in self.highest_bet_processed:
-            self.highest_bet_processed[bet.index] = -1
+        # Record it
         self.bets[bet.index][bet.seq] = bet
+        # Publish it to the blockchain
         self.add_transaction(Transaction(BET_INCENTIVIZER, 600000, bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
+        # If we have an unbroken chain of bets from 0 to N, and last round
+        # we had an unbroken chain only from 0 to M, then process bets
+        # M+1...N. For example, if we had bets 0, 1, 2, 4, 5, 7, now we
+        # receive 3, then we assume bets 0, 1, 2 were already processed
+        # but now process 3, 4, 5 (but NOT 7)
         proc = 0
         while (self.highest_bet_processed[bet.index] + 1) in self.bets[bet.index]:
             assert self.opinions[bet.index].process_bet(self.bets[bet.index][self.highest_bet_processed[bet.index] + 1])
             self.highest_bet_processed[bet.index] += 1
             proc += 1
+        # Sanity check
         for i in range(0, self.highest_bet_processed[bet.index] + 1):
             assert i in self.bets[bet.index]
+        # If we did not process any bets after receiving a bet, that
+        # implies that we are missing some bets. Ask for them.
         if not proc and self.last_asked_for_bets.get(bet.index, 0) < time.time() + 10:
             self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [bet.index, self.highest_bet_processed[bet.index] + 1]))))
             self.last_asked_for_bets[bet.index] = time.time()
-        # print 'Block holding status:', ''.join(['1' if self.blocks[i] else '0' for i in range(len(self.blocks))])
-        # print 'Time deltas:', [self.time_received[self.blocks[i].hash] - self.genesis_time - BLKTIME * i if self.blocks[i] else None for i in range(len(self.blocks))]
-        # print 'broadcasting bet from index %d seq %d as node %d' % (bet.index, bet.seq, self.index)
 
     # Make a default vote on a block based on when you received it
     def default_vote(self, blk_number, blk_hash):
         scheduled_time = BLKTIME * blk_number + self.genesis_time
         received_time = self.time_received.get(blk_hash, None)
+        # If we already received a block...
         if received_time:
-            time_delta = abs(received_time * 0.98 + time.time() * 0.02 - scheduled_time)
+            time_delta = abs(received_time * 0.96 + time.time() * 0.04 - scheduled_time)
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            log('Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 0)
+            # log('Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 0)
             return 0.7 if random.random() < prob else 0.3
+        # If we have not yet received a block...
         else:
             time_delta = time.time() - scheduled_time
             prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
-            log('Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 0)
+            # log('Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 0)
             return 0.5 if random.random() < prob else 0.3
 
     # Vote based on others' votes
     def vote(self, blk_number, blk_hash):
+        # Do we have the block?
+        have_block = blk_hash and blk_hash in self.objects
+        # The list of votes to use when producing one's own vote
         probs = []
+        # My default opinion based on (i) whether or not I have the block,
+        # (ii) when I saw it first if I do, and (iii) the current time
         default_vote = self.default_vote(blk_number, blk_hash)
+        # Go through others' opinions, check if they (i) are eligible to
+        # vote, and (ii) have voted; if they have, add their vote to the
+        # list of votes; otherwise, add the default vote in their place
         opinion_count = 0
         for i in self.opinions.keys():
             if self.opinions[i].induction_height <= blk_number < self.opinions[i].withdrawal_height:
                 p = self.opinions[i].get_prob(blk_number)
                 probs.append(p if p is not None else default_vote)
                 opinion_count += (1 if p is not None else 0)
-            if probs[-1] == default_vote:
-                p = self.opinions[i].get_prob(blk_number)
-                # print 'Vote disallowed: (%d, %r), %d <= %d < %d required. Voter max height: %d' % (i, p, self.opinions[i].induction_height, blk_number, self.opinions[i].withdrawal_height, self.opinions[i].max_height)
-        log('source probs on block %d: %r with %d opinions out of %d' % (blk_number, probs, opinion_count, len(self.opinions)), self.index == 0)
+        # log('source probs on block %d: %r with %d opinions out of %d' % (blk_number, probs, opinion_count, len(self.opinions)), self.index == 0)
+        # The algorithm for producing your own vote based on others' votes;
+        # the intention is to converge toward 0 or 1
         probs = sorted(probs)
-        have_block = blk_hash and blk_hash in self.objects
         if probs[len(probs)/3] > 0.8:
             o = 0.8 + probs[len(probs)/3] * 0.2
         elif probs[len(probs)*2/3] < 0.2:
             o = probs[len(probs)*2/3] * 0.2
         else:
             o = min(0.85, max(0.15, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
+        # If the probability we get is above 0.99 but we do not have the
+        # block, then ask for it explicitly
         if o > 0.99 and not have_block:
             if blk_number not in self.last_asked_for_block or self.last_asked_for_block[blk_number] < time.time() + 12:
-                print 'Suspiciously missing a block: %d. Asking for it explicitly.' % blk_number
+                log('Suspiciously missing a block: %d. Asking for it explicitly.' % blk_number, True)
                 self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCK, [encode_int(blk_number)])))
                 self.last_asked_for_block[blk_number] = time.time()
+        # Cap votes at 0.7 unless we know for sure that we have a block
         res = min(o, 1 if have_block else 0.7)
-        log('result prob: %.5f %s'% (res, ('have block' if blk_hash in self.objects else 'no block')), self.index == 0)
+        # log('result prob: %.5f %s'% (res, ('have block' if blk_hash in self.objects else 'no block')), self.index == 0)
+        # Return the resulting vote
         return res
+
+    # Make a bet that signifies that we do not want to make any more bets
+    def withdraw(self):
+        o = sign_bet(Bet(self.index, 2*255, [], [], [], self.prevhash, self.seq, ''), self.key)
+        self.prevhash = o.hash
+        self.seq += 1
+        payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
+        self.network.broadcast(self, payload)
+        self.receive_bet(o)
+        self.former_index = self.index
+        self.index = -1
+
+    # Take one's ether out
+    def finalizeWithdrawal(self):
+        txdata = casper_ct.encode('withdraw', [self.former_index])
+        tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
+        v = tx_state_transition(genesis, tx)
         
     # Construct a bet
     def mkbet(self):
@@ -463,64 +588,83 @@ class defaultBetStrategy():
         if time.time() < self.last_bet_made + 2:
             return
         self.last_bet_made = time.time()
+        # Height at which to start signing
         sign_from = max(0, self.my_max_finalized_height)
-        log('Bet status: %r' % {k: (self.highest_bet_processed[k], self.bets[k][self.highest_bet_processed[k]].probs[sign_from:] if self.highest_bet_processed[k] >= 0 else None) for k in self.bets}, self.index == 0)
-        log('My highest bet(%d): %d' % (self.index, self.seq), self.index == 0)
-        log('Opinion status: %r' % [[v.probs[i] for v in self.opinions.values() if len(v.probs) > i] for i in range(sign_from, len(self.blocks))], self.index == 0)
-        log('Signing from: %r' % sign_from, self.index == 0)
-        blockhashes = []
+        # Keep track of the lowest state root that we should change
         lowest_changed = min(len(self.blocks), self.calc_state_roots_from)
-        log('Making probs from %d to %d non-inclusive' % (sign_from, len(self.blocks)), self.index >= 6)
+        log('Making probs from %d to %d inclusive' % (sign_from, len(self.blocks) - 1), self.index >= 5)
+        # Vote on each height independently using our voting strategy
         for h in range(sign_from, len(self.blocks)):
             prob = self.vote(h, self.blocks[h].hash if self.blocks[h] else None)
+            # If the probability of a block flips to the other side of 0.5,
+            # that means that we should recalculate the state root at least
+            # from that point (and possibly earlier)
             if (prob - 0.5) * (self.probs[h] - 0.5) <= 0:
                 lowest_changed = min(lowest_changed, h)
             self.probs[h] = prob
+            # Finalized!
             if prob < 0.0001 or prob > 0.9999:
                 log('prob in finality bounds. Current mfh: %d height %d' % (self.my_max_finalized_height, h), self.index == 0)
+                # Set the finalized hash
                 self.finalized_hashes[h] = self.blocks[h].hash if prob > 0.9999 else '\x00' * 32
+                # Try to increase the max finalized height
                 if h == self.my_max_finalized_height + 1:
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 0)
-                assert self.finalized_hashes[h] is not None
-            blockhashes.append(self.blocks[h].hash if self.blocks[h] else None)
-        log('Lowest changed: %r, reprocessing %d blocks' % (lowest_changed, len(self.blocks) - lowest_changed), self.index == 0)
-        log('Recalculating %d out of %d state roots' % (min(len(self.blocks) - lowest_changed, 5), len(self.blocks) - lowest_changed), self.index == 0)
+        log('Recalculating %d out of %d state roots starting from height %d' % 
+            (min(len(self.blocks) - lowest_changed, 5), len(self.blocks) - lowest_changed, lowest_changed), self.index == 0)
+        # Recalculate state roots
+        run_state = State(self.stateroots[lowest_changed-1] if lowest_changed else self.genesis_state.root, self.db)
         for h in range(lowest_changed, len(self.blocks))[:5]:
-            run_state = State(self.stateroots[h-1] if h else self.genesis_state.root, self.db)
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             block_state_transition(run_state, self.blocks[h] if self.probs[h] > 0.5 else None)
             self.stateroots[h] = run_state.root
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
-            assert blknum == h + 1, "Prev: %d, block %r, wanted: %d, actual: %d" % (prevblknum, self.blocks[h] if self.probs[h] > 0.5 else None, h + 1, blknum)
+            assert blknum == h + 1
+        # If there are some state roots that we have not calculated, just leave them empty
         for h in range(lowest_changed + 5, len(self.blocks)):
             self.stateroots[h] = '\x00' * 32
-        if lowest_changed + 5 < len(self.blocks):
-            self.calc_state_roots_from = lowest_changed + 5
-        log('Node %d making bet %d with probabilities from height %d: %r' % (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 0 or self.index > 6)
+        # Where to calculate state roots from next time
+        self.calc_state_roots_from = lowest_changed + 5
+        log('Node %d making bet %d with probabilities from height %d: %r' %
+            (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 0 or self.index > 6)
+        # Sanity check
         assert len(self.probs) == len(self.blocks) == len(self.stateroots)
-        if self.index >= 0:
+        # If we are supposed to actually make a bet... (if not, all the code
+        # above is simply for personal information, ie. for a listening node
+        # to determine its opinion on what the correct chain is)
+        if self.index >= 0 and len(self.blocks) > self.induction_height:
+            # Determine the lowest height from which to change block hashes
             lowest_blockadjust_height = max(sign_from, self.induction_height)
-            while lowest_blockadjust_height < len(self.blocks) and \
-                    (self.blocks[lowest_blockadjust_height].hash if self.blocks[lowest_blockadjust_height] else '\x00' * 32) == self.opinions[self.index].get_blockhash(lowest_blockadjust_height):
+            while lowest_blockadjust_height < len(self.blocks):
+                h = self.blocks[lowest_blockadjust_height].hash if self.blocks[lowest_blockadjust_height] else '\x00' * 32
+                if h != self.opinions[self.index].get_blockhash(lowest_blockadjust_height):
+                    break
                 lowest_blockadjust_height += 1
             log('Changing %d block hashes' % (len(self.blocks) - lowest_blockadjust_height), self.index == 0)
-            lowest_stateadjust_height = max(sign_from, self.induction_height)
-            while lowest_stateadjust_height < len(self.stateroots) and \
-                    self.stateroots[lowest_stateadjust_height] == self.opinions[self.index].get_stateroot(lowest_stateadjust_height):
-                lowest_stateadjust_height += 1
-            log('Changing %d state roots' % (len(self.stateroots) - lowest_stateadjust_height), self.index == 0)
-            o = sign_bet(Bet(self.index, len(self.blocks) - 1, self.probs[max(sign_from, self.induction_height):][::-1], [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1], self.stateroots[lowest_stateadjust_height:][::-1], self.prevhash, self.seq, ''), self.key)
-            log('> making bet with induction height %d, signing from %d, max height %d and probabilities: %r' % (self.induction_height, sign_from, o.max_height, o.probs), self.index > 6)
+            # Create and sign the bet
+            o = sign_bet(Bet(self.index,
+                             len(self.blocks) - 1,
+                             self.probs[max(sign_from, self.induction_height):][::-1],
+                             [x.hash if x else '\x00' * 32 for x in self.blocks[sign_from:]][::-1],
+                             self.stateroots[lowest_changed:][::-1],
+                             self.prevhash,
+                             self.seq, ''),
+                        self.key)
+            # Update my prevhash and seq
             self.prevhash = o.hash
             self.seq += 1
+            # Send the bet over the network
             payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
             self.network.broadcast(self, payload)
+            # Process it myself
             self.receive_bet(o)
 
+    # Upon receiving any kind of network message
+    # Arguments: payload, ID of the node sending the message (used to
+    # direct-send replies back)
     def on_receive(self, objdata, sender_id):
         obj = rlp.decode(objdata, NetworkMessage)
-        # print 'Received network message of type:', obj.typ
         if obj.typ == NM_BLOCK:
             blk = rlp.decode(obj.args[0], Block)
             self.receive_block(blk)
@@ -535,7 +679,6 @@ class defaultBetStrategy():
             bets = [self.bets[index][x] for x in range(seq, self.highest_bet_processed[index] + 1)]
             if len(bets):
                 messages = [rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])) for bet in bets]
-                # print 'Direct sending a response with %d items to %d' % (len(messages), sender_id)
                 self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_LIST, messages)))
         elif obj.typ == NM_TRANSACTION:
             tx = rlp.decode(obj.args[0], Transaction)
@@ -560,7 +703,7 @@ class defaultBetStrategy():
 
     def add_transaction(self, tx):
         if tx.hash not in self.objects:
-            log('Received transaction: %s' % tx.hash.encode('hex'), self.index == 0)
+            # log('Received transaction: %s' % tx.hash.encode('hex'), self.index == 0)
             self.objects[tx.hash] = tx
             self.time_received[tx.hash] = time.time()
             self.txpool[tx.hash] = tx
@@ -572,56 +715,73 @@ class defaultBetStrategy():
         txs = []
         # Try to include transactions in txpool
         for h, tx in self.txpool.items():
-            if h not in self.txindex and h not in self.finalized_txindex:
+            # If a transaction is not in the unconfirmed index AND not in the
+            # finalized index, then add it
+            if h not in self.unconfirmed_txindex and h not in self.finalized_txindex:
                 log('Adding transaction: %s' % tx.hash.encode('hex'), self.index == 0)
                 if tx.gas > gas:
                     break
                 txs.append(tx)
                 gas -= tx.gas
-        for h, (tx, positions) in self.txindex.items():
+        # Process the unconfirmed index for the transaction. Note that a
+        # transaction could theoretically get included in the chain
+        # multiple times even within the same block, though if the account
+        # used to process the transaction is sane the transaction should
+        # fail all but one time
+        for h, (tx, positions) in self.unconfirmed_txindex.items():
             i = 0
             while i < len(positions):
+                # We see this transaction at index `index` of block number `blknum`
                 blknum, index = positions[i]
                 if self.stateroots[blknum] in (None, '\x00' * 32):
                     i += 1
                     continue
+                # Try running it
                 logresult = big_endian_to_int(State(self.stateroots[blknum], self.db).get_storage(LOG, index)[:32])
+                # Probability of the block being included
                 p = self.probs[blknum]
+                # If the transaction passed and the block is finalized...
                 if p > 0.999 and logresult != 0:
                     log('Transaction finalized, hash %s at blknum %d with index %d' % (tx.hash.encode('hex'), blknum, index), self.index == 0)
+                    # Remove it from the txpool
                     if h in self.txpool:
                         del self.txpool[h]
+                    # Add it to the finalized index
                     if h not in self.finalized_txindex:
                         self.finalized_txindex[h] = (tx, [])
                     self.finalized_txindex[h][1].append((blknum, index))
                     positions.pop(i)
+                # If the transaction failed (eg. due to OOG from block gaslimit),
+                # remove it from the unconfirmed index, but not the expool, so
+                # that we can try to add it again
                 elif p < 0.001 or (p > 0.999 and logresult == 0):
                     positions.pop(i)
+                # Otherwise keep the transaction in the unconfirmed index
                 else:
                     i += 1
             if len(positions) == 0:
-                del self.txindex[h]
-        print [self.txindex.get(tx.hash, None) for tx in txs]
+                del self.unconfirmed_txindex[h]
+        # Produce the block
         b = sign_block(Block(transactions=txs, number=self.next_block_to_produce, proposer=self.addr), self.key)
-        time_delay = time.time() - (self.genesis_time + BLKTIME * b.number)
-        self.last_block_produced = self.next_block_to_produce
-        self.add_proposers()
-        log('>> Node %d making block: %d %s with time delay %.2f' % (self.index, b.number, b.hash.encode('hex')[:16], time_delay), True)
+        # Broadcast it
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(b)])))
         self.receive_block(b)
+        # Extend the list of block proposers
+        self.last_block_produced = self.next_block_to_produce
+        self.add_proposers()
+        # Log it
+        time_delay = time.time() - (self.genesis_time + BLKTIME * b.number)
+        log('Node %d making block: %d %s with time delay %.2f' % (self.index, b.number, b.hash.encode('hex')[:16], time_delay), True)
         return b
 
     # Run every tick
     def tick(self):
         mytime = time.time()
+        # If (i) we should be making blocks, and (ii) the time has come to
+        # produce a block, then produce a block
         if self.index >= 0 and self.next_block_to_produce is not None:
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
-            # print 'Node %d ticking. Time: %.2f. Target time: %d (block %d)' % (self.index, mytime, target_time, self.next_block_to_produce)
             if mytime >= target_time:
                 self.make_block()
         elif self.next_block_to_produce is None:
             self.add_proposers()
-        # max_block = int((time.time() - self.genesis_time) / BLKTIME)
-        # for i, opinion in self.opinions.items():
-        #     if opinion.max_height < max_block - 15:
-        #         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, self.highest_bet_processed[bet.index] + 1]))))

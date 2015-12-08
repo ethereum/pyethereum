@@ -8,7 +8,7 @@ import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct
+from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct, Bet
 import time
 import network
 import os
@@ -92,40 +92,61 @@ genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASP
 genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 5))
 # Create betting strategy objects for every validator
 bets = [defaultBetStrategy(genesis.clone(), k) for k in keys]
+# Minimum max finalized height
+min_mfh = -1
 
+# Function to check consistency between everything
 def check_correctness(bets):
-    mfhs = [bet.my_max_finalized_height for bet in bets]
-    print '#'*80
-    print 'Peers: %r' % [map(lambda x: x.id, n.peers[bet.id]) for bet in bets]
-    print 'Max finalized heights: %r' % mfhs
-    # print 'Bets received: %r' % [[len(bet.bets[bet2.id] if bet2.id >= 0 else []) for bet2 in bets] for bet in bets]
-    print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
-    print 'Registered withdrawal heights: %r' % [[op.withdrawal_height for op in bet.opinions.values()] for bet in bets]
-    print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
-    print 'Probs in opinions: %r' % [[(op.seq, len(bet.bets[op.index]), bet.highest_bet_processed[op.index], op.max_height) for op in bet.opinions.values()] for bet in bets]
-    print 'Indices: %r' % [bet.index for bet in bets]
-    print 'Blocks received: %r' % [len(bet.blocks) for bet in bets]
-    print 'Verifying finalized block hash equivalence'
     global min_mfh
-    min_mfh = min(mfhs)
+    print '#'*80
+    # List of peers of each node
+    print 'Peers: %r' % {bet.id: map(lambda x: x.id, n.peers[bet.id]) for bet in bets}
+    # Max finalized heights for each bettor strategy
+    mfhs = [bet.my_max_finalized_height for bet in bets]
+    print 'Max finalized heights: %r' % mfhs
+    # Induction heights of each validator
+    print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
+    # Withdrawal heights of each validator
+    print 'Registered withdrawal heights: %r' % [[op.withdrawal_height for op in bet.opinions.values()] for bet in bets]
+    # Probabilities of each validator on all of the blocks so far
+    print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
+    # Data about bets from each validator according to every other validator
+    print 'Bets processed by each validator according to each validator: %r' % [[(op.seq, len(bet.bets[op.index]), bet.highest_bet_processed[op.index], op.max_height) for op in bet.opinions.values()] for bet in bets]
+    # Indices of validators
+    print 'Indices: %r' % [bet.index for bet in bets]
+    # Number of blocks received by each validator
+    print 'Blocks received: %r' % [len(bet.blocks) for bet in bets]
+    # Makes sure all block hashes for all heights up to the minimum finalized
+    # height are the same
+    print 'Verifying finalized block hash equivalence'
+    new_min_mfh = min(mfhs)
     for j in range(1, len(bets)):
-        j_hashes = bets[j].finalized_hashes[:(min_mfh+1)]
-        jm1_hashes = bets[j-1].finalized_hashes[:(min_mfh+1)]
+        j_hashes = bets[j].finalized_hashes[:(new_min_mfh+1)]
+        jm1_hashes = bets[j-1].finalized_hashes[:(new_min_mfh+1)]
         assert j_hashes == jm1_hashes, (j_hashes, jm1_hashes)
+    # Checks state roots for finalized heights and makes sure that they are
+    # consistent
     print 'Verifying finalized state root correctness'
-    state = State(bets[0].stateroots[0], OverlayDB(bets[0].db))
-    for i in range(1, min_mfh + 1):
+    state = State(genesis.root if min_mfh < 0 else bets[0].stateroots[min_mfh], OverlayDB(bets[0].db))
+    for i in range(min_mfh + 1, new_min_mfh + 1):
         block = bets[j].objects[bets[0].finalized_hashes[i]] if j_hashes[i] != '\x00' * 32 else None
         block_state_transition(state, block)
-        assert state.root == bets[0].stateroots[i], (i, state.root, bets[0].stateroots[i])
-    print 'Min common finalized height: %d, integrity checks passed' % min_mfh
+        assert state.root == bets[0].stateroots[i], (i, state.root, bets[0].stateroots[:(i+1)], [x.hash for x in bets[0].blocks[:(i+1)]], bets[i].stateroots[:(i+1)], [x.hash for x in bets[i].blockhashes[:(i+1)]])
+    min_mfh = new_min_mfh
+    print 'Min common finalized height: %d, integrity checks passed' % new_min_mfh
+    # Validator sequence numbers as seen by themselves
+    print 'Validator seqs online: %r' % [bet.seq for bet in bets]
+    # Validator sequence numbers as recorded in the chain
+    print 'Validator seqs on chain: %r' % [call_method(state, CASPER, ct, 'getUserSeq', [bet.index]) for bet in bets if bet.index >= 0]
+    # Validator deposit sizes (over 1500 * 10**18 means profit)
+    print 'Validator deposit sizes: %r' % [call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
 
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
 for bet in bets:
     bet.network = n
-min_mfh = 0
+# Keep running until the min finalized height reaches 12
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
@@ -135,7 +156,7 @@ while 1:
     print 'Min mfh:', min_mfh
     print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
 
-# Create transactions for old validators to leave and new ones to join
+# Create transactions for a few new validators to join
 print '#' * 80 + '\n' + '#' * 80
 print 'Generating transactions to include new validators'
 for k in secondkeys:
@@ -147,6 +168,8 @@ for k in secondkeys:
     print 'Making transaction: ', tx.hash.encode('hex')
     bets[0].add_transaction(tx)
 
+# Keep running until the min finalized height reaches 36. We expect that by
+# this time all transactions from the previous phase have been included
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
@@ -155,6 +178,7 @@ while 1:
         break
     print 'Min mfh:', min_mfh
 
+# Create bet objects for the new validators
 state = State(genesis.root, bets[0].db)
 secondbets = [defaultBetStrategy(state.clone(), k) for k in secondkeys]
 for bet in secondbets:
@@ -163,10 +187,13 @@ n.agents.extend(secondbets)
 n.generate_peers(5)
 print 'Increasing number of peers in the network to %d!' % len(keys + secondkeys)
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-assert call_method(recent_state, CASPER, casper_ct, 'getNextUserId', []) == len(keys + secondkeys)
+# Check that all signups are successful
+assert call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', []) == len(keys + secondkeys)
 print 'All new validators inducted'
 print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
+# Keep running until the min finalized height reaches ~120. We expect that by
+# this time all validators will be actively betting off of each other's bets
 while 1:
     n.run(100, sleep=0.2)
     check_correctness(bets)
@@ -175,3 +202,25 @@ while 1:
     if min_mfh > 60 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
+
+# Create transactions for old validators to leave
+print '#' * 80 + '\n' + '#' * 80
+print 'Generating transactions to withdraw some validators'
+for bet in bets[:3]:
+    bet.withdraw()
+
+
+# Keep running until the min finalized height reaches ~160.
+while 1:
+    n.run(120, sleep=0.2)
+    check_correctness(bets)
+    print 'Min mfh:', min_mfh
+    print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
+    if min_mfh > 100 + ENTER_EXIT_DELAY:
+        print 'Reached breakpoint'
+        break
+
+recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
+# Check that the only remaining active validators are the ones that have not
+# yet signed out.
+assert len([k for k in bet.keys() if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == len(keys + secondkeys) - 3
