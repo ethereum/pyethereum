@@ -43,7 +43,7 @@ tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '1.0.7'
+version = '1.0.8'
 
 setup(name="ethereum",
       packages=find_packages("."),
