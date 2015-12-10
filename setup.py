@@ -42,6 +42,9 @@ tests_require_replacements = {
     'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1'}
 tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
+# *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
+# see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
+version = '1.0.7'
 
 setup(name="ethereum",
       packages=find_packages("."),
@@ -51,6 +54,6 @@ setup(name="ethereum",
       install_requires=install_requires,
       tests_require=tests_require,
       entry_points=dict(console_scripts=console_scripts),
-      version='1.0.7',
+      version=version,
       cmdclass=cmdclass
       )
