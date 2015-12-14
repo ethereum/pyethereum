@@ -12,6 +12,9 @@ class NetworkSimulator():
         self.peers = {}
         self.reliability = reliability
         self.broadcast_success_rate = broadcast_success_rate
+        self.time_sleeping = 0
+        self.time_running = 0
+        self.sleepdebt = 0
 
     def generate_peers(self, num_peers=5):
         self.peers = {}
@@ -40,9 +43,18 @@ class NetworkSimulator():
             a = time.time()
             self.tick()
             timedelta = time.time() - a
-            # print 'Tick finished in: %.2f' % timedelta
             if sleep > timedelta:
-                time.sleep(sleep - timedelta)
+                tsleep = sleep - timedelta
+                sleepdebt_repayment = min(self.sleepdebt, tsleep * 0.5)
+                time.sleep(tsleep - sleepdebt_repayment)
+                self.time_sleeping += tsleep - sleepdebt_repayment
+                self.sleepdebt -= sleepdebt_repayment
+            else:
+                self.sleepdebt += timedelta - sleep
+            self.time_running += timedelta
+            print 'Tick finished in: %.2f. Total sleep %.2f, running %.2f' % (timedelta, self.time_sleeping, self.time_running)
+            if self.sleepdebt > 0:
+                print 'Sleep debt: %.2f' % self.sleepdebt
 
     def broadcast(self, sender, obj):
         assert isinstance(obj, (str, bytes))

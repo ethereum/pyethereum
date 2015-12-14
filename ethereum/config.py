@@ -22,6 +22,6 @@ LOG = utils.int_to_addr(2**160 - 14)
 BET_INCENTIVIZER = utils.int_to_addr(2**160 - 15)
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = utils.int_to_addr(0)
-BLKTIME = 4
+BLKTIME = 5
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 60

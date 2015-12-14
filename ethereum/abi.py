@@ -6,6 +6,7 @@ from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
 from ethereum.utils import isnumeric
 import ast
+import copy
 
 
 def json_decode(x):
@@ -393,8 +394,13 @@ def decode_single(typ, data):
         return bool(int(data.encode('hex'), 16))
 
 
+decode_abi_cache = {}
+
 # Decodes multiple arguments using the head/tail mechanism
 def decode_abi(types, data):
+    cache_key = str(types) + data
+    if cache_key in decode_abi_cache:
+        return copy.deepcopy(decode_abi_cache[cache_key])
     # Process types
     proctypes = [process_type(typ) for typ in types]
     # Get sizes of everything
@@ -432,7 +438,9 @@ def decode_abi(types, data):
             next_offset = start_positions[i + 1]
             outs[i] = data[offset:next_offset]
     # Recursively decode them all
-    return [dec(proctypes[i], outs[i]) for i in range(len(outs))]
+    o = [dec(proctypes[i], outs[i]) for i in range(len(outs))]
+    decode_abi_cache[cache_key] = copy.deepcopy(o)
+    return o
 
 
 # Decode a single value (static or dynamic)

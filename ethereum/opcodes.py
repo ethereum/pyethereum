@@ -72,6 +72,7 @@ opcodes = {
     0xfa: ['SSIZE', 1, 1, 50],
     0xfb: ['STATEROOT', 1, 1, 50],
     0xfc: ['TXGAS', 0, 1, 50],
+    0xfd: ['CALLSTATIC', 7, 1, 50],
     0xff: ['SUICIDE', 1, 0, 0],
 }
 

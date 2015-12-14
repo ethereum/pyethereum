@@ -191,8 +191,11 @@ class State():
             else:
                 self.cache[addr][key] = preval
 
+bst_log = {}
+
 # Processes a block on top of a state to reach a new state
 def block_state_transition(state, block):
+    pre = state.root
     # Determine the current block number, block proposer and block hash
     blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
     blkproposer = block.proposer if block else '\x00' * 20
@@ -224,6 +227,11 @@ def block_state_transition(state, block):
     newseed = big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
+    bst_key = pre.encode('hex')+'::'+blkhash.encode('hex')
+    if bst_key in bst_log:
+        assert bst_log[bst_key] == state.root.encode('hex')
+    else:
+        bst_log[bst_key] = state.root.encode('hex')
 
 
 def tx_state_transition(state, tx):
@@ -238,9 +246,10 @@ def tx_state_transition(state, tx):
     ext = VMExt(state)
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
-        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, b'')
+        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0))
         result, execution_start_gas, data = apply_msg(ext, message, tx.code)
         if not result:
+            state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), encode_int32(1))
             return None
         state.set_storage(tx.addr, b'', ''.join([chr(x) for x in data]))
     else:
@@ -249,6 +258,7 @@ def tx_state_transition(state, tx):
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
     result, gas_remained, data = apply_msg(ext, message, state.get_storage(tx.addr, b''))
+    assert 0 <= gas_remained <= execution_start_gas <= tx.exec_gas, (gas_remained, execution_start_gas, tx.exec_gas)
     # Set gas used
     state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.exec_gas - gas_remained), 32))
     # Places a log in storage
@@ -274,6 +284,7 @@ class VMExt():
         self.get_storage = state.get_storage
         self.log_storage = state.account_to_dict
         self.msg = lambda msg, code: apply_msg(self, msg, code)
+        self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
 
 
 # An empty VMExt instance that can be used to employ the EVM "purely"
@@ -282,16 +293,21 @@ class _EmptyVMExt():
 
     def __init__(self):
         self._state = State('', EphemDB())
-        self.set_storage = lambda addr, k, v: 0
-        self.get_storage = lambda addr, k: 0
-        self.log_storage = lambda addr: 0
+        self.set_storage = lambda addr, k, v: None
+        self.get_storage = lambda addr, k: ''
+        self.log_storage = lambda addr: None
         self.msg = lambda msg, code: apply_msg(self, msg, code)
+        self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
 
 EmptyVMExt = _EmptyVMExt()
 
+eve_cache = {}
 
 # Processes a message
 def apply_msg(ext, msg, code):
+    cache_key = msg.sender + msg.to + str(msg.value) + msg.data.extract_all() + code
+    if ext is EmptyVMExt and cache_key in eve_cache:
+        return eve_cache[cache_key]
     # Transfer value, instaquit if not enough
     snapshot = ext._state.snapshot()
     if ext.get_storage(ETHER, msg.sender) < msg.value:
@@ -314,4 +330,5 @@ def apply_msg(ext, msg, code):
     else:
         pass  # print 'MSG APPLY SUCCESSFUL'
 
-    return res, gas, dat
+    eve_cache[cache_key] = (res, gas if res else 0, dat)
+    return res, gas if res else 0, dat

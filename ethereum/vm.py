@@ -435,7 +435,7 @@ def vm_execute(ext, msg, code):
                     gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
                     refund = 0
                 if msg.to == CASPER:
-                    gascost /= 3
+                    gascost /= 2
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost
@@ -510,6 +510,7 @@ def vm_execute(ext, msg, code):
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    msg.depth + 1)
                 # print 'CALLING', to.encode('hex'), map(ord, cd.extract_all())
+                assert isinstance(ext.get_storage(to, ''), (str, bytes)), ext.get_storage(to, '')
                 result, gas, data = ext.msg(call_msg, ext.get_storage(to, ''))
                 # print 'CALLRESULT', result, data
                 if result == 0:
@@ -558,6 +559,26 @@ def vm_execute(ext, msg, code):
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
+        elif op == 'CALLSTATIC':
+            submsg_gas, codestart, codesz, datastart, datasz, outstart, outsz = [stk.pop() for i in range(7)]
+            if not mem_extend(mem, compustate, op, codestart, codesz) or \
+                    not mem_extend(mem, compustate, op, datastart, datasz):
+                return vm_exception('OOG EXTENDING MEMORY')
+            if compustate.gas < submsg_gas:
+                return vm_exception('OUT OF GAS', needed=submsg_gas)
+            compustate.gas -= submsg_gas
+            cd = CallData(mem, datastart, datasz)
+            call_msg = Message(msg.sender, msg.to, 0, submsg_gas, cd, msg.depth + 1)
+            result, gas, data = ext.static_msg(call_msg, ''.join([chr(x) for x in mem[codestart:codestart + codesz]]))
+            if result == 0:
+                stk.append(0)
+            else:
+                stk.append(1)
+                compustate.gas += gas
+                if not mem_extend(mem, compustate, op, outstart, outsz):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                for i in range(min(len(data), outsz)):
+                    mem[outstart + i] = data[i]
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):

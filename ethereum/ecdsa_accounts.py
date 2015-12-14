@@ -4,6 +4,7 @@ from utils import privtoaddr as _privtoaddr
 import bitcoin
 from serenity_transactions import Transaction
 from serenity_blocks import mk_contract_address, tx_state_transition, State
+import vm
 import serpent
 import db
 
@@ -114,13 +115,11 @@ def sign_block(block, key):
 # Helper function for signing a bet
 def sign_bet(bet, key):
     bet.sig = ''
-    sigdata = sha3(bet.serialize())
+    sigdata = sha3(bet.serialize()[:-32])
     v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
     bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
     s = bet.serialize()
     bet._hash = sha3(s)
-    b = __import__('bet')
-    b.invhash[bet._hash] = s
     return bet
 
 # Creates data for a transaction with the given gasprice, to address,

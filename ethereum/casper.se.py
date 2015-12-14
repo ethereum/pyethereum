@@ -14,9 +14,25 @@ macro ENTER_EXIT_DELAY: 60
 
 macro WITHDRAWAL_WAITTIME: 20
 
-macro SCORING_REWARD_DIVISOR: 3 * 10**18 # 61440 * 61440 * 10**9 / (3 * 10**18) ~= 1, so a max probability bet gone wrong is a full slashing
+macro SCORING_REWARD_DIVISOR: 10**17 # 300000 * 10**9 * 300000 * 10**9 / 10**12 / 10**17 ~= 1, so a max probability bet gone wrong is a full slashing
 
 macro MAX_INCENTIVIZATION_DEPTH: 160
+
+macro PROFIT_PACKING_NUM: 4
+
+macro PROFIT_PACKING_BYTES: 8 
+
+macro maskinclude($top, $bottom):
+    256**$top - 256**$bottom
+
+macro maskexclude($top, $bottom):
+    ~not(256**$top - 256**$bottom)
+
+macro getProfit($user, $block):
+    mod(div(self.users[$user].profits[div($block, PROFIT_PACKING_NUM)], 256**(PROFIT_PACKING_BYTES * mod($block, PROFIT_PACKING_NUM))), 256**PROFIT_PACKING_BYTES)
+
+macro updateProfit($prevProfitBlock, $pos, $val):
+    (maskexclude($pos * PROFIT_PACKING_BYTES + PROFIT_PACKING_BYTES, $pos * PROFIT_PACKING_BYTES) & $prevProfitBlock) + $val * 256**(PROFIT_PACKING_BYTES * $pos)
 
 
 # Become a validator
@@ -34,9 +50,11 @@ def join(validationCode:bytes):
     self.users[userIndex].address = msg.sender
     self.users[userIndex].pos = userPos
     ~sstorebytes(ref(self.users[userIndex].validationCode), validationCode, len(validationCode))
+    # log(20, ~ssize(self.users[userIndex].validationCode))
     self.users[userIndex].deposit_size = msg.value
     self.users[userIndex].induction_height = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
     self.users[userIndex].withdrawal_height = 2**100
+    log2(32, userIndex, userPos, self.users[userIndex].deposit_size)
     return(userIndex:uint256)
 
 
@@ -62,9 +80,26 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     blksActive = (block.number - self.users[index].prevsubmission)
     assert blksActive >= 1
     assert self.users[index].withdrawal_height > block.number
+    # Compute the signature hash
+    _calldata = string(~calldatasize())
+    ~calldatacopy(_calldata, 0, ~calldatasize())
+    signing_hash = ~sha3(_calldata, ~calldatasize() - 32 - ceil32(len(sig)))
+    self.users[index].prevhash = ~sha3(_calldata, ~calldatasize())
+    # Check the sig against the user validation code
+    user_validation_code = string(~ssize(ref(self.users[index].validationCode)))
+    ~sloadbytes(ref(self.users[index].validationCode), user_validation_code, len(user_validation_code))
+    sig_verified = 0
+    with L = len(sig):
+        sig[-1] = signing_hash
+        ~callstatic(msg.gas - 20000, user_validation_code, len(user_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
+        sig[-1] = L
+    assert sig_verified == 1
     # Bet with max height 2**256 - 1 to start withdrawal
     if max_height == ~sub(0, 1):
-        self.users[index].withdrawal_height = self.users[index].withdrawal_height
+        self.users[index].withdrawal_height = block.number
+        self.users[index].prevsubmission = block.number
+        self.users[index].seq = seqnum + 1
+        return True
     i = 0
     while i < len(blockhashes):
         self.users[index].blockhashes[max_height - i] = blockhashes[i]
@@ -73,76 +108,91 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     while i < len(stateroots):
         self.users[index].stateroots[max_height - i] = stateroots[i]
         i += 1
+    # Update probabilities; paste the probs into the self.users[index].probs
+    # array at the correct positions, assuming the probs array stores probs
+    # in groups of 32
+    h = max_height + 1
     i = 0
-    x = self.users[index].probs[max_height / 32]
     while i < len(probs):
-        with h = max_height - i:
-            x = (x & -(256**(h % 32)*255+1)) + getch(probs, i) * 256**(h % 32)
-            if h % 32 == 0 or (i == len(probs) - 1):
-                self.users[index].probs[h / 32] = x
-                x = self.users[index].probs[(h-1) / 32]
-        i += 1
+        with top = (h % 32) or 32:
+            with bottom = max(top - len(probs) + i, 0):
+                x = (self.users[index].probs[(h - 1) / 32] & maskexclude(top, bottom)) + (~mload(probs + i - 32 + top) & maskinclude(top, bottom))
+                self.users[index].probs[(h - 1) / 32] = x
+                h -= top
+                i += top
 
     self.users[index].prevsubmission = block.number
     self.users[index].seq = seqnum + 1
     minChanged = max_height - max(max(len(blockhashes), len(stateroots)), len(probs)) + 1
-    # log1(51, msg.gas, minChanged)
     # Incentivization
-    i = min(MAX_INCENTIVIZATION_DEPTH, block.number)
+    i = min(min(MAX_INCENTIVIZATION_DEPTH, block.number - self.users[index].induction_height), block.number - minChanged)
     netProb = 10**9
+    CURPROFIT = getProfit(index, block.number - i - 1)
+    PROFITBLOCK = self.users[index].profits[div(block.number - i, PROFIT_PACKING_NUM)]
     while i >= 1:
         H = block.number - i
-        if H >= minChanged:
-            # Determine the byte that was saved as the probability
-            probByte = mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
-            # Convert the byte to odds * 1 billion
-            blockOdds = convertProbReprToOdds(probByte)
-            netProb = netProb * convertOddsToProb(blockOdds) / 10**9
-    
-            # If there is no block at height H, then apply the scoring rule to the inverse odds
-            if blockhash(H) == 0:
-                profitFactor = self.scoreCorrect(10**18 / blockOdds) + self.scoreIncorrect(blockOdds)
-    
-            # If there is a block at height H and we guessed correctly,
-            # then apply the scoring rule based on a TRUE result
-            elif self.users[index].blockhashes[H] == ~blockhash(H):
-                profitFactor = self.scoreCorrect(blockOdds) + self.scoreIncorrect(10**18 / blockOdds)
-    
-            # If there is a block but we guessed wrong on which one it is,
-            # then apply just a scoring rule penalty
+        # Determine the byte that was saved as the probability
+        probByte = getch(probs, max_height - H) # mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
+        # Convert the byte to odds * 1 billion
+        blockOdds = convertProbReprToOdds(probByte)
+        netProb = netProb * convertOddsToProb(blockOdds) / 10**9
+
+        # If there is no block at height H, then apply the scoring rule to the inverse odds
+        if blockhash(H) == 0:
+            profitFactor = scoreCorrect(10**18 / blockOdds) + scoreIncorrect(blockOdds)
+
+        # If there is a block at height H and we guessed correctly,
+        # then apply the scoring rule based on a TRUE result
+        elif self.users[index].blockhashes[H] == ~blockhash(H):
+            profitFactor = scoreCorrect(blockOdds) + scoreIncorrect(10**18 / blockOdds)
+
+        # If there is a block but we guessed wrong on which one it is,
+        # then apply just a scoring rule penalty
+        else:
+            profitFactor = scoreIncorrect(blockOdds)
+
+        # Check if the state root bet that was made is correct.
+        if self.users[index].stateroots[H]:
+            if self.users[index].stateroots[H] == ~stateroot(H):
+                profitFactor2 = scoreCorrect(convertProbToOdds(netProb))
             else:
-                profitFactor = self.scoreIncorrect(blockOdds)
-    
-            # Check if the state root bet that was made is correct.
-            if self.users[index].stateroots[H]:
-                if self.users[index].stateroots[H] == ~stateroot(H):
-                    profitFactor2 = self.scoreCorrect(convertProbToOdds(netProb))
-                else:
-                    profitFactor2 = self.scoreIncorrect(convertProbToOdds(netProb))
-            else:
-                profitFactor2 = 0
-            # log4(1000 * block.number + H, msg.gas, probByte, blockOdds, profitFactor, profitFactor2)
-            self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
+                profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
+        else:
+            profitFactor2 = 0
+        if profitFactor < 0:
+            log2(497, index, H, 0 - profitFactor)
+        if profitFactor2 < 0:
+            log2(498, index, H, 0 - profitFactor2)
+        # Update the profit counter
+        CURPROFIT += profitFactor2 + profitFactor
+        PROFITBLOCK = updateProfit(PROFITBLOCK, mod(H, PROFIT_PACKING_NUM), CURPROFIT)
+        if (mod(H, PROFIT_PACKING_NUM) == (PROFIT_PACKING_NUM - 1) or i == 1):
+            self.users[index].profits[div(H, PROFIT_PACKING_NUM)] = PROFITBLOCK
+            PROFITBLOCK = self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]
+        # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
+        # log4(1000 * block.number + H, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
         i -= 1
-    profit = self.users[index].deposit_size * (self.users[index].profits[block.number - 1] - self.users[index].profits[minChanged]) / SCORING_REWARD_DIVISOR * blksActive
+    profit = self.users[index].deposit_size * (CURPROFIT - getProfit(index, H - MAX_INCENTIVIZATION_DEPTH)) / SCORING_REWARD_DIVISOR * blksActive
+    # Optional verification code
+    # h = max_height
+    # while h >= 0:
+    #     log0(10000 + h, getProfit(index, h))
+    #     h -= 1
+    # log1(51, 54, profit)
     # log0(1000 * block.number, profit)
     # log1(1000 + H, netProb, profitFactor2)
-    self.users[index].deposit_size += profit
-    # log0(51, msg.gas)
-
-
-    with s = ~msize():
-        ~calldatacopy(s, 0, ~calldatasize())
-        self.users[index].prevhash = ~sha3(s, ~calldatasize())
-        # log2(1, 53, seqnum, msg.gas)
-        return(1:bool)
+    if profit < 0:
+        log4(499, profit, getProfit(index, MAX_INCENTIVIZATION_DEPTH), CURPROFIT, SCORING_REWARD_DIVISOR, blksActive) 
+    self.users[index].deposit_size = max(0, self.users[index].deposit_size + profit)
+    log4(500 + index, seqnum, len(probs), len(blockhashes), len(stateroots), txexecgas() - msg.gas)
+    return(1:bool)
 
 # Interpret prob as odds in scientific notation: 5 bit exponent
 # (-16….15), 3 bit mantissa (1….1.875). Convert to odds per billion
 # This allows 3.125% granularity, with odds between 65536:1 against
 # and 1:61440 for
 macro convertProbReprToOdds($probRepr):
-    2**($probRepr / 8) * (8 + $probRepr % 8) * 1907
+    2**(($probRepr + 5) / 7) * (7 + ($probRepr + 5) % 7) * 272
 
 macro convertOddsToProb($odds):
     $odds * 10**9 / (10**9 + $odds)
@@ -152,12 +202,12 @@ macro convertProbToOdds($prob):
 
 
 # This is a simple quadratic scoring rule.
-def scoreCorrect(odds:uint256):
-    return odds
+macro scoreCorrect($odds):
+    $odds / 1000
 
 
-def scoreIncorrect(odds:uint256):
-    return (0 - odds * odds / 2**30)
+macro scoreIncorrect($odds):
+    (0 - $odds * $odds / 10**12)
 
 
 # Randomly select a validator using a las vegas algorithm
@@ -165,7 +215,7 @@ def const sampleValidator(seedhash:bytes32, blknumber:uint256):
     n = mod(seedhash, 2**64)
     seedhash = sha3([seedhash, blknumber]:arr)
     while 1:
-        with index = seedhash % n:
+        with index = mod(seedhash, n):
             if (div(seedhash, 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
                 if blknumber >= self.users[index].induction_height and blknumber <= self.users[index].withdrawal_height:
                     return(self.userPosToIndexMap[index])
