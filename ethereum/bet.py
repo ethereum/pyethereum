@@ -10,7 +10,7 @@ from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet
 from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER
 from db import OverlayDB
-import vm
+import fastvm as vm
 import serpent
 import rlp
 import sys

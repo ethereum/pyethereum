@@ -1,6 +1,6 @@
 import sys
 import rlp
-from utils import int_to_big_endian
+from utils import int_to_big_endian, big_endian_to_int, safe_ord
 import db
 
 
@@ -29,11 +29,51 @@ def length_prefix(length, offset):
         length_string = int_to_big_endian(length)
         return chr(offset + 56 - 1 + len(length_string)) + length_string
 
+def _decode_optimized(rlp):
+    o = []
+    pos = 0
+    _typ, _len, pos = consume_length_prefix(rlp, pos)
+    if _typ != list:
+        return rlp[pos: pos + _len]
+    while pos < len(rlp):
+        _, _l, _p = consume_length_prefix(rlp, pos)
+        o.append(_decode_optimized(rlp[pos: _l + _p]))
+        pos = _l + _p
+    return o
+
+def consume_length_prefix(rlp, start):
+    """Read a length prefix from an RLP string.
+
+    :param rlp: the rlp string to read from
+    :param start: the position at which to start reading
+    :returns: a tuple ``(type, length, end)``, where ``type`` is either ``str``
+              or ``list`` depending on the type of the following payload,
+              ``length`` is the length of the payload in bytes, and ``end`` is
+              the position of the first payload byte in the rlp string
+    """
+    b0 = safe_ord(rlp[start])
+    if b0 < 128:  # single byte
+        return (str, 1, start)
+    elif b0 < 128 + 56:  # short string
+        return (str, b0 - 128, start + 1)
+    elif b0 < 192:  # long string
+        ll = b0 - 128 - 56 + 1
+        l = big_endian_to_int(rlp[start + 1:start + 1 + ll])
+        return (str, l, start + 1 + ll)
+    elif b0 < 192 + 56:  # short list
+        return (list, b0 - 192, start + 1)
+    else:  # long list
+        ll = b0 - 192 - 56 + 1
+        l = big_endian_to_int(rlp[start + 1:start + 1 + ll])
+        return (list, l, start + 1 + ll)
+
 #
 if sys.version_info.major == 2:
     encode_optimized = _encode_optimized
+    decode_optimized = _decode_optimized
 else:
     encode_optimized = rlp.codec.encode_raw
+    decode_optimized = rlp.codec.decode_raw
 
 
 def main():

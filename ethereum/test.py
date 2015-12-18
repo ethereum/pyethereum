@@ -31,7 +31,7 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
     
 # We might want logging
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace'
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
 # configure_logging(config_string=config_string)
 
 # Generate 6 keys

@@ -1,5 +1,5 @@
 import copy
-import ethereum.opcodes as opcodes
+import opcodes
 #  ####### dev hack flags ###############
 
 verify_stack_after_op = False
@@ -10,12 +10,13 @@ import sys
 from ethereum import utils
 from ethereum.abi import is_numeric
 import copy
-from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
 from ethereum.utils import to_string
 import numpy
+
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -89,7 +90,7 @@ class Compustate():
             setattr(self, kw, kwargs[kw])
 
 end_breakpoints = [
-    'JUMP', 'JUMPI', 'CALL', 'CALLCODE', 'CREATE', 'SUICIDE', 'STOP', 'RETURN', 'SUICIDE', 'INVALID', 'GAS', 'PC'
+    'JUMP', 'JUMPI', 'CALL', 'CALLCODE', 'CALLSTATIC', 'CREATE', 'SUICIDE', 'STOP', 'RETURN', 'SUICIDE', 'INVALID', 'GAS', 'PC'
 ]
 
 start_breakpoints = [
@@ -141,7 +142,7 @@ def preprocess_code(code):
             cc_stack_change = 0
             cc_min_req_stack = 0
             cc_max_req_stack = 1024
-    ops[i] = (0, 0, 1024, [0], 0)
+    ops[i] = [0, 0, 1024, i, 0]
     return ops
 
 
@@ -213,6 +214,7 @@ def vm_execute(ext, msg, code):
       # s = time.time()
       # stack size limit error
       if compustate.pc not in processed_code:
+          # print processed_code, map(ord, code), compustate.pc
           return vm_exception('INVALID START POINT')
 
       _data = processed_code[compustate.pc]
@@ -255,8 +257,8 @@ def vm_execute(ext, msg, code):
                                               x in compustate.memory])))
             if _prevop in (op_SSTORE, op_SLOAD) or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
-            # trace_data['gas'] = to_string(compustate.gas + fee)
-            trace_data['inst'] = op
+            trace_data['approx_gas'] = to_string(compustate.gas)
+            trace_data['inst'] = op % 256
             trace_data['pc'] = to_string(compustate.pc - 1)
             if steps == 0:
                 trace_data['depth'] = msg.depth
@@ -367,9 +369,7 @@ def vm_execute(ext, msg, code):
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == op_BALANCE:
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
-                stk.append(ext.get_balance(addr))
-            elif op == op_ORIGIN:
-                stk.append(utils.coerce_to_int(ext.tx_origin))
+                stk.append(utils.big_endian_to_int(ext.get_storage_data(ETHER, addr)))
             elif op == op_CALLER:
                 stk.append(utils.coerce_to_int(msg.sender))
             elif op == op_CALLVALUE:
@@ -398,15 +398,13 @@ def vm_execute(ext, msg, code):
                         mem[start + i] = utils.safe_ord(code[s1 + i])
                     else:
                         mem[start + i] = 0
-            elif op == op_GASPRICE:
-                stk.append(ext.tx_gasprice)
             elif op == op_EXTCODESIZE:
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
-                stk.append(len(ext.get_code(addr) or b''))
+                stk.append(len(ext.get_storage_at(addr, '') or b''))
             elif op == op_EXTCODECOPY:
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
-                extcode = ext.get_code(addr) or b''
+                extcode = ext.get_storage_at(addr, b'') or b''
                 assert utils.is_string(extcode)
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
@@ -417,19 +415,28 @@ def vm_execute(ext, msg, code):
                         mem[start + i] = utils.safe_ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
+            elif op == op_MCOPY:
+                to, frm, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, to, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not mem_extend(mem, compustate, op, frm, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not data_copy(compustate, size):
+                    return vm_exception('OOG COPY DATA')
+                data = mem[frm: frm + size]
+                for i in range(size):
+                    mem[to + i] = data[i]
         elif op < 0x50:
             if op == op_BLOCKHASH:
-                stk.append(utils.big_endian_to_int(ext.block_hash(stk.pop())))
+                stk.append(utils.big_endian_to_int(ext.get_storage(BLOCKHASHES, stk.pop())))
             elif op == op_COINBASE:
-                stk.append(utils.big_endian_to_int(ext.block_coinbase))
-            elif op == op_TIMESTAMP:
-                stk.append(ext.block_timestamp)
+                stk.append(utils.big_endian_to_int(ext.get_storage(PROPOSER, '\x00' * 32)))
             elif op == op_NUMBER:
-                stk.append(ext.block_number)
+                stk.append(utils.big_endian_to_int(ext.get_storage(BLKNUMBER, '\x00' * 32)))
             elif op == op_DIFFICULTY:
                 stk.append(ext.block_difficulty)
             elif op == op_GASLIMIT:
-                stk.append(ext.block_gas_limit)
+                stk.append(GASLIMIT)
         elif op < 0x60:
             if op == op_POP:
                 stk.pop()
@@ -455,20 +462,21 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG EXTENDING MEMORY')
                 mem[s0] = s1 % 256
             elif op == op_SLOAD:
-                stk.append(ext.get_storage_data(msg.to, stk.pop()))
+                stk.append(utils.big_endian_to_int(ext.get_storage(msg.to, stk.pop())))
             elif op == op_SSTORE:
                 s0, s1 = stk.pop(), stk.pop()
-                if ext.get_storage_data(msg.to, s0):
+                if ext.get_storage(msg.to, s0):
                     gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
                     refund = 0 if s1 else opcodes.GSTORAGEREFUND
                 else:
                     gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
                     refund = 0
+                if msg.to == CASPER:
+                    gascost /= 2
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost
-                ext.add_refund(refund)  # adds neg gascost as a refund if below zero
-                ext.set_storage_data(msg.to, s0, s1)
+                ext.set_storage(msg.to, s0, s1)
             elif op == op_JUMP:
                 compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][4] if \
@@ -502,34 +510,16 @@ def vm_execute(ext, msg, code):
             stk[-1] = temp
 
         elif op_LOG0 <= op <= op_LOG4:
-            """
-            0xa0 ... 0xa4, 32/64/96/128/160 + len(data) gas
-            a. Opcodes LOG0...LOG4 are added, takes 2-6 stack arguments
-                    MEMSTART MEMSZ (TOPIC1) (TOPIC2) (TOPIC3) (TOPIC4)
-            b. Logs are kept track of during tx execution exactly the same way as suicides
-               (except as an ordered list, not a set).
-               Each log is in the form [address, [topic1, ... ], data] where:
-               * address is what the ADDRESS opcode would output
-               * data is mem[MEMSTART: MEMSTART + MEMSZ]
-               * topics are as provided by the opcode
-            c. The ordered list of logs in the transaction are expressed as [log0, log1, ..., logN].
-            """
             depth = op - op_LOG0
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
-            compustate.gas -= msz * opcodes.GLOGBYTE
-            if not mem_extend(mem, compustate, op, mstart, msz):
-                return vm_exception('OOG EXTENDING MEMORY')
-            data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
-            ext.log(msg.to, topics, data)
-            log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(utils.safe_ord, data)))
-            # print('LOG', msg.to, topics, list(map(ord, data)))
+            print '###log###', mstart, msz, topics
 
         elif op == op_CREATE:
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+            if utils.big_endian_to_int(ext.get_storage(ETHER, msg.to)) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
                 create_msg = Message(msg.to, b'', value, compustate.gas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
@@ -544,26 +534,26 @@ def vm_execute(ext, msg, code):
         elif op == op_CALL:
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
-                    not mem_extend(mem, compustate, op, memoutstart, memoutsz):
+            if not mem_extend(mem, compustate, op, meminstart, meminsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
-            extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
-                (value > 0) * opcodes.GCALLVALUETRANSFER
+            extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
                 return vm_exception('OUT OF GAS', needed=gas+extra_gas)
-            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+            if utils.big_endian_to_int(ext.get_storage(ETHER, msg.to)) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg)
+                result, gas, data = ext.msg(call_msg, ext.get_storage(to, ''))
                 if result == 0:
                     stk.append(0)
                 else:
                     stk.append(1)
+                    if not mem_extend(mem, compustate, op, memoutstart, min(len(data), memoutsz)):
+                        return vm_exception('OOG EXTENDING MEMORY')
                     compustate.gas += gas
                     for i in range(min(len(data), memoutsz)):
                         mem[memoutstart + i] = data[i]
@@ -587,7 +577,7 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg)
+                result, gas, data = ext.msg(call_msg, ext.get_storage(msg.to, ''))
                 if result == 0:
                     stk.append(0)
                 else:
@@ -598,11 +588,50 @@ def vm_execute(ext, msg, code):
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
+        elif op == op_CALLSTATIC:
+            submsg_gas, codestart, codesz, datastart, datasz, outstart, outsz = [stk.pop() for i in range(7)]
+            if not mem_extend(mem, compustate, op, codestart, codesz) or \
+                    not mem_extend(mem, compustate, op, datastart, datasz):
+                return vm_exception('OOG EXTENDING MEMORY')
+            if compustate.gas < submsg_gas:
+                return vm_exception('OUT OF GAS', needed=submsg_gas)
+            compustate.gas -= submsg_gas
+            cd = CallData(mem, datastart, datasz)
+            call_msg = Message(msg.sender, msg.to, 0, submsg_gas, cd, msg.depth + 1)
+            result, gas, data = ext.static_msg(call_msg, ''.join([chr(x) for x in mem[codestart:codestart + codesz]]))
+            if result == 0:
+                stk.append(0)
+            else:
+                stk.append(1)
+                compustate.gas += gas
+                if not mem_extend(mem, compustate, op, outstart, outsz):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                for i in range(min(len(data), outsz)):
+                    mem[outstart + i] = data[i]
         elif op == op_RETURN:
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
+        elif op == op_SLOADBYTES:
+            s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+            if not mem_extend(mem, compustate, op, s1, s2):
+                return vm_exception('OOG EXTENDING MEMORY')
+            data = map(ord, ext.get_storage(msg.to, s0))
+            for i in range(min(len(data), s2)):
+                mem[s1 + i] = data[i]
+        elif op == op_SSTOREBYTES:
+            s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
+            if not mem_extend(mem, compustate, op, s1, s2):
+                return vm_exception('OOG EXTENDING MEMORY')
+            data = ''.join(map(chr, mem[s1: s1 + s2]))
+            ext.set_storage(msg.to, s0, data)
+        elif op == op_SSIZE:
+            stk.append(len(ext.get_storage(msg.to, stk.pop())))
+        elif op == op_STATEROOT:
+            stk.append(utils.big_endian_to_int(ext.get_storage(STATEROOTS, stk.pop())))
+        elif op == op_TXGAS:
+            stk.append(utils.big_endian_to_int(ext.get_storage(TXGAS, '\x00' * 32)))
         elif op == op_SUICIDE:
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]

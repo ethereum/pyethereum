@@ -4,7 +4,6 @@ from utils import privtoaddr as _privtoaddr
 import bitcoin
 from serenity_transactions import Transaction
 from serenity_blocks import mk_contract_address, tx_state_transition, State
-import vm
 import serpent
 import db
 

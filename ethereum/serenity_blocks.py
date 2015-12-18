@@ -4,7 +4,7 @@ from utils import address, int256, trie_root, hash32, to_string, \
     encode_int, safe_ord, encode_int32, encode_hex
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
-import vm
+import fastvm as vm
 from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG
 import rlp
 import trie
@@ -98,6 +98,7 @@ class State():
         # State.state.root_hash directly
         self.journal = []
         self.cache = {}
+        self.modified = {}
 
     def set_storage(self, addr, k, v):
         if isinstance(k, (int, long)):
@@ -107,6 +108,9 @@ class State():
         addr = normalize_address(addr)
         self.journal.append((addr, k, self.get_storage(addr, k)))
         self.cache[addr][k] = v
+        if addr not in self.modified:
+            self.modified[addr] = {}
+        self.modified[addr][k] = True
 
     def commit(self):
         rt = self.state.root_hash
@@ -115,13 +119,14 @@ class State():
             t.root_hash = self.state.get(addr)
             modified = False
             for key, value in subcache.items():
-                if value != t.get(key):
+                if key in self.modified.get(addr, {}) and value != t.get(key):
                     t.update(key, value)
                     modified = True
             if modified:
                 self.state.update(addr, t.root_hash)
-        self.journal.append(('~root', self.cache, rt))
+        self.journal.append(('~root', (self.cache, self.modified), rt))
         self.cache = {}
+        self.modified = {}
 
     def get_storage(self, addr, k):
         if isinstance(k, (int, long)):
@@ -187,7 +192,7 @@ class State():
             addr, key, preval = self.journal.pop()
             if addr == '~root':
                 self.state.root_hash = preval
-                self.cache = key
+                self.cache, self.modified = key
             else:
                 self.cache[addr][key] = preval
 
@@ -325,6 +330,8 @@ def apply_msg(ext, msg, code):
     if res == 0:
         print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % \
             (msg.gas, msg.sender.encode('hex'), msg.to.encode('hex'), msg.data.extract_all().encode('hex'))
+        if 200000 < msg.gas < 500000:
+            raise Exception("123")
         ext._state.revert(snapshot)
     # Otherwise, all good
     else:

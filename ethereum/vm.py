@@ -365,11 +365,11 @@ def vm_execute(ext, msg, code):
                         mem[start + i] = 0
             elif op == 'EXTCODESIZE':
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
-                stk.append(len(ext.get_code(addr) or b''))
+                stk.append(len(ext.get_storage_at(addr, b'') or b''))
             elif op == 'EXTCODECOPY':
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
-                extcode = ext.get_code(addr) or b''
+                extcode = ext.get_storage_at(addr, b'') or b''
                 assert utils.is_string(extcode)
                 if not mem_extend(mem, compustate, op, start, size):
                     return vm_exception('OOG EXTENDING MEMORY')
@@ -607,9 +607,9 @@ def vm_execute(ext, msg, code):
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
-            xfer = ext.get_balance(msg.to)
-            ext.set_balance(to, ext.get_balance(to) + xfer)
-            ext.set_balance(msg.to, 0)
+            xfer = big_endian_to_int(ext.get_storage(ETHER, msg.to))
+            ext.set_storage(ETHER, to, big_endian_to_int(ext.get_balance(to)) + xfer)
+            ext.set_storage(ETHER, msg.to, 0)
             ext.add_suicide(msg.to)
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
