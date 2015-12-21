@@ -34,10 +34,10 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
 # configure_logging(config_string=config_string)
 
-# Generate 6 keys
-keys = [zpad(encode_int(x), 32) for x in range(1, 7)]
-# Create a second set of 2 keys
-secondkeys = [zpad(encode_int(x), 32) for x in range(13, 15)]
+# Generate 12 keys
+keys = [zpad(encode_int(x), 32) for x in range(1, 10)]
+# Create a second set of 4 keys
+secondkeys = [zpad(encode_int(x), 32) for x in range(13, 16)]
 # Initialize the first keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -115,6 +115,10 @@ def check_correctness(bets):
     # Probabilities of each validator on all of the blocks so far
     print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
     # Data about bets from each validator according to every other validator
+    print 'Now: %.2f' % time.time()
+    print 'According to each validator...'
+    for bet in bets:
+        print '(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [op.seq for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made)
     print 'Bets processed by each validator according to each validator: %r' % [[(op.seq, len(bet.bets[op.index]), bet.highest_bet_processed[op.index], op.max_height) for op in bet.opinions.values()] for bet in bets]
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
@@ -125,7 +129,7 @@ def check_correctness(bets):
     # Makes sure all block hashes for all heights up to the minimum finalized
     # height are the same
     print 'Verifying finalized block hash equivalence'
-    new_min_mfh = min(mfhs)
+    new_min_mfh = min(min(mfhs), min([bet.calc_state_roots_from for bet in bets]))
     for j in range(1, len(bets)):
         j_hashes = bets[j].finalized_hashes[:(new_min_mfh+1)]
         jm1_hashes = bets[j-1].finalized_hashes[:(new_min_mfh+1)]
@@ -134,8 +138,9 @@ def check_correctness(bets):
     # consistent
     print 'Verifying finalized state root correctness'
     state = State(genesis.root if min_mfh < 0 else bets[0].stateroots[min_mfh], OverlayDB(bets[0].db))
-    for i in range(min_mfh + 1, new_min_mfh + 1):
-        block = bets[j].objects[bets[0].finalized_hashes[i]] if j_hashes[i] != '\x00' * 32 else None
+    for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
+        assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
+        block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
         block_state_transition(state, block)
         if state.root != bets[0].stateroots[i]:
             sys.stderr.write('State root mismatch at block %d!\n' % i)
@@ -178,9 +183,9 @@ for bet in bets:
     bet.network = n
 # Keep running until the min finalized height reaches 12
 while 1:
-    n.run(100, sleep=0.2)
+    n.run(20, sleep=0.2)
     check_correctness(bets)
-    if min_mfh >= 12:
+    if min_mfh >= 10:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -212,9 +217,9 @@ for i, k in enumerate(secondkeys):
 # Keep running until the min finalized height reaches 42. We expect that by
 # this time all transactions from the previous phase have been included
 while 1:
-    n.run(100, sleep=0.2)
+    n.run(20, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 42:
+    if min_mfh > 80:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -236,11 +241,11 @@ print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'g
 # Keep running until the min finalized height reaches ~120. We expect that by
 # this time all validators will be actively betting off of each other's bets
 while 1:
-    n.run(100, sleep=0.2)
+    n.run(20, sleep=0.2)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 60 + ENTER_EXIT_DELAY:
+    if min_mfh > 100 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
 
@@ -253,11 +258,11 @@ for bet in bets[:3]:
 
 # Keep running until the min finalized height reaches ~160.
 while 1:
-    n.run(120, sleep=0.2)
+    n.run(20, sleep=0.2)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 100 + ENTER_EXIT_DELAY:
+    if min_mfh > 190 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
 
@@ -265,4 +270,4 @@ recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that the only remaining active validators are the ones that have not
 # yet signed out.
 print [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(8)]
-assert len([i for i in range(8) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == len(keys + secondkeys) - 3
+assert len([i for i in range(20) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == len(keys + secondkeys) - 3

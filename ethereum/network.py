@@ -38,8 +38,9 @@ class NetworkSimulator():
             a.tick()
         self.time += 1
 
-    def run(self, steps, sleep=0):
-        for i in range(steps):
+    def run(self, seconds, sleep=0):
+        t = 0
+        while 1:
             a = time.time()
             self.tick()
             timedelta = time.time() - a
@@ -55,6 +56,9 @@ class NetworkSimulator():
             print 'Tick finished in: %.2f. Total sleep %.2f, running %.2f' % (timedelta, self.time_sleeping, self.time_running)
             if self.sleepdebt > 0:
                 print 'Sleep debt: %.2f' % self.sleepdebt
+            t += time.time() - a
+            if t >= seconds:
+                return
 
     def broadcast(self, sender, obj):
         assert isinstance(obj, (str, bytes))

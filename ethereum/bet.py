@@ -19,6 +19,7 @@ import math
 import copy
 
 FINALITY_LOW, FINALITY_HIGH = 0.00001, 0.99999
+VALIDATOR_ROUNDS = 3
 
 def log(text, condition):
     if condition:
@@ -335,6 +336,9 @@ class defaultBetStrategy():
         # Last time you made a bet; stored to prevent excessively
         # frequent betting
         self.last_bet_made = 0
+        # Last time sent a getblocks message; stored to prevent excessively
+        # frequent getting
+        self.last_time_sent_getblocks = 0
         # Your validator index
         self.index = -1
         self.former_index = None
@@ -410,7 +414,7 @@ class defaultBetStrategy():
         # If you already processed the block, return
         if block.hash in self.objects:
             return
-        log('Received block: %d %s' % (block.number, block.hash.encode('hex')[:16]), self.index == 3 or self.index == 12)
+        log('Received block: %d %s' % (block.number, block.hash.encode('hex')[:16]), self.index >= 8)
         # Update the lengths of our main lists to make sure they can store
         # the data we will be calculating
         while len(self.blocks) <= block.number:
@@ -431,8 +435,11 @@ class defaultBetStrategy():
         elif block.number - ENTER_EXIT_DELAY + 1 >= 0 and self.stateroots[block.number - ENTER_EXIT_DELAY + 1] in (None, '\x00' * 32):
             notsynced = True
         if notsynced:
-            sys.stderr.write('Not sufficiently synced to receive this block\n')
-            self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [rlp.encode(self.my_max_finalized_height)])))
+            sys.stderr.write('Not sufficiently synced to receive this block (%d)\n' % block.number)
+            if self.last_time_sent_getblocks < time.time() - 5:
+                print 'asking for blocks'
+                self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [encode_int(self.my_max_finalized_height+1)])))
+                self.last_time_sent_getblocks = time.time()
             return
         # If the block is invalid, return
         check_state = State(self.stateroots[block.number - ENTER_EXIT_DELAY + 1], self.db) if block.number >= ENTER_EXIT_DELAY - 1 else self.genesis_state
@@ -441,8 +448,10 @@ class defaultBetStrategy():
             return
         # Try to update the set of validators
         if self.my_max_finalized_height >= 0 and self.stateroots[self.my_max_finalized_height] not in (None, '\x00' * 32):
+            log('checking validator signups (%d)' % self.index, self.index >= 9)
             check_state2 = State(self.stateroots[self.my_max_finalized_height], self.db)
             vs = call_casper(check_state2, 'getValidatorSignups', [])
+            log('validator signups: %d vs %d' % (vs, self.validator_signups), self.index >= 9)
             if vs > self.validator_signups:
                 self.validator_signups = vs
                 self.update_validator_set(check_state2)
@@ -461,7 +470,9 @@ class defaultBetStrategy():
         # Re-broadcast the block
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
         # Bet
-        self.mkbet()
+        log('maybe am going to bet: %d, block height %d' % (self.index, block.number), self.index >= 8)
+        if (self.index % VALIDATOR_ROUNDS) == (block.number % VALIDATOR_ROUNDS):
+            self.mkbet()
 
     # Try to update the set of validators
     def update_validator_set(self, check_state):
@@ -508,6 +519,7 @@ class defaultBetStrategy():
         # M+1...N. For example, if we had bets 0, 1, 2, 4, 5, 7, now we
         # receive 3, then we assume bets 0, 1, 2 were already processed
         # but now process 3, 4, 5 (but NOT 7)
+        log('receiving a bet: seq %d, bettor %d recipient %d' % (bet.seq, bet.index, self.index), self.id >= 8)
         proc = 0
         while (self.highest_bet_processed[bet.index] + 1) in self.bets[bet.index]:
             assert self.opinions[bet.index].process_bet(self.bets[bet.index][self.highest_bet_processed[bet.index] + 1])
@@ -630,21 +642,22 @@ class defaultBetStrategy():
                 if h == self.my_max_finalized_height + 1:
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
+        MAX_RECALC = 13
         log('Recalculating %d out of %d state roots starting from height %d' % 
-            (min(len(self.blocks) - lowest_changed, 5), len(self.blocks) - lowest_changed, lowest_changed), self.index == 3)
+            (min(len(self.blocks) - lowest_changed, MAX_RECALC), len(self.blocks) - lowest_changed, lowest_changed), self.index == 3)
         # Recalculate state roots
         run_state = State(self.stateroots[lowest_changed-1] if lowest_changed else self.genesis_state.root, self.db)
-        for h in range(lowest_changed, len(self.blocks))[:5]:
+        for h in range(lowest_changed, len(self.blocks))[:MAX_RECALC]:
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             block_state_transition(run_state, self.blocks[h] if self.probs[h] > 0.5 else None)
             self.stateroots[h] = run_state.root
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             assert blknum == h + 1
         # If there are some state roots that we have not calculated, just leave them empty
-        for h in range(lowest_changed + 5, len(self.blocks)):
+        for h in range(lowest_changed + MAX_RECALC, len(self.blocks)):
             self.stateroots[h] = '\x00' * 32
         # Where to calculate state roots from next time
-        self.calc_state_roots_from = lowest_changed + 5
+        self.calc_state_roots_from = lowest_changed + MAX_RECALC
         log('Node %d making bet %d with probabilities from height %d: %r' %
             (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 3 or self.index > 6)
         # Sanity check
@@ -652,7 +665,7 @@ class defaultBetStrategy():
         # If we are supposed to actually make a bet... (if not, all the code
         # above is simply for personal information, ie. for a listening node
         # to determine its opinion on what the correct chain is)
-        if self.index >= 0 and len(self.blocks) > self.induction_height and not self.withdrawn:
+        if self.index >= 0 and len(self.blocks) > self.induction_height and not self.withdrawn and len(self.recently_discovered_blocks):
             # Create and sign the bet
             o = sign_bet(Bet(self.index,
                              len(self.blocks) - 1,
@@ -701,16 +714,18 @@ class defaultBetStrategy():
             if blknum < len(self.blocks) and self.blocks[blknum]:
                 self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(self.blocks[blknum])])))
         elif obj.typ == NM_GETBLOCKS:
+            log('Replying to GETBLOCKS message', True)
             blknum = big_endian_to_int(obj.args[0])
             messages = []
-            for h in range(blknum, len(self.blocks)):
+            for h in range(blknum, len(self.blocks))[:30]:
                 if self.blocks[h]:
                     messages.append(rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(self.blocks[h])])))
+            log('Sending %d blocks from %d' % (len(messages), blknum), True)
             self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_LIST, messages)))
             if blknum < len(self.blocks) and self.blocks[blknum]:
                 self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(self.blocks[blknum])])))
         elif obj.typ == NM_LIST:
-            # print 'Receiving list with %d items' % len(obj.args)
+            print 'Receiving list with %d items' % len(obj.args)
             for x in obj.args:
                 self.on_receive(x, sender_id)
 
@@ -774,7 +789,7 @@ class defaultBetStrategy():
                 # Probability of the block being included
                 p = self.probs[blknum]
                 # If the transaction passed and the block is finalized...
-                if p > 0.999 and logresult == 2:
+                if p > 0.9999 and logresult == 2:
                     log('Transaction finalized, hash %s at blknum %d with index %d' % (tx.hash.encode('hex'), blknum, index), self.index == 3)
                     # Remove it from the txpool
                     if h in self.txpool:
@@ -785,7 +800,7 @@ class defaultBetStrategy():
                     self.finalized_txindex[h][1].append((blknum, index))
                     positions.pop(i)
                 # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
-                elif p > 0.999 and logresult == 1:
+                elif p > 0.99 and logresult == 1:
                     positions.pop(i)
                     self.tx_exceptions[h] = self.tx_exceptions.get(h, 0) + 1
                     log('Transaction inclusion finalized but transaction failed for the %dth time. p: %.5f, logresult: %d' % (self.tx_exceptions[h], p, logresult), True)
@@ -796,7 +811,7 @@ class defaultBetStrategy():
                 # If the transaction failed (eg. due to OOG from block gaslimit),
                 # remove it from the unconfirmed index, but not the expool, so
                 # that we can try to add it again
-                elif p < 0.001 or (p > 0.999 and logresult == 0):
+                elif p < 0.01 or (p > 0.99 and logresult == 0):
                     log('Transaction finalization attempt failed. p: %.5f, logresult: %d' % (p, logresult), True)
                     positions.pop(i)
                 # Otherwise keep the transaction in the unconfirmed index
@@ -828,3 +843,5 @@ class defaultBetStrategy():
                 self.make_block()
         elif self.next_block_to_produce is None:
             self.add_proposers()
+        if self.last_bet_made < time.time() - BLKTIME * VALIDATOR_ROUNDS * 1.5:
+            self.mkbet()

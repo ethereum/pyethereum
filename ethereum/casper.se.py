@@ -10,7 +10,7 @@ macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
 
-macro ENTER_EXIT_DELAY: 60
+macro ENTER_EXIT_DELAY: 80
 
 macro WITHDRAWAL_WAITTIME: 20
 
@@ -125,53 +125,38 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     self.users[index].seq = seqnum + 1
     minChanged = max_height - max(max(len(blockhashes), len(stateroots)), len(probs)) + 1
     # Incentivization
-    i = min(min(MAX_INCENTIVIZATION_DEPTH, block.number - self.users[index].induction_height), block.number - minChanged)
-    netProb = 10**9
-    CURPROFIT = getProfit(index, block.number - i - 1)
-    PROFITBLOCK = self.users[index].profits[div(block.number - i, PROFIT_PACKING_NUM)]
-    while i >= 1:
-        H = block.number - i
-        # Determine the byte that was saved as the probability
-        probByte = getch(probs, max_height - H) # mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
-        # Convert the byte to odds * 1 billion
-        blockOdds = convertProbReprToOdds(probByte)
-        netProb = netProb * convertOddsToProb(blockOdds) / 10**9
-
-        # If there is no block at height H, then apply the scoring rule to the inverse odds
-        if blockhash(H) == 0:
-            profitFactor = scoreCorrect(10**18 / blockOdds) + scoreIncorrect(blockOdds)
-
-        # If there is a block at height H and we guessed correctly,
-        # then apply the scoring rule based on a TRUE result
-        elif self.users[index].blockhashes[H] == ~blockhash(H):
-            profitFactor = scoreCorrect(blockOdds) + scoreIncorrect(10**18 / blockOdds)
-
-        # If there is a block but we guessed wrong on which one it is,
-        # then apply just a scoring rule penalty
-        else:
-            profitFactor = scoreIncorrect(blockOdds)
-
-        # Check if the state root bet that was made is correct.
-        if self.users[index].stateroots[H]:
-            if self.users[index].stateroots[H] == ~stateroot(H):
-                profitFactor2 = scoreCorrect(convertProbToOdds(netProb))
-            else:
-                profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
-        else:
-            profitFactor2 = 0
-        if profitFactor < 0:
-            log2(497, index, H, 0 - profitFactor)
-        if profitFactor2 < 0:
-            log2(498, index, H, 0 - profitFactor2)
-        # Update the profit counter
-        CURPROFIT += profitFactor2 + profitFactor
-        PROFITBLOCK = updateProfit(PROFITBLOCK, mod(H, PROFIT_PACKING_NUM), CURPROFIT)
-        if (mod(H, PROFIT_PACKING_NUM) == (PROFIT_PACKING_NUM - 1) or i == 1):
-            self.users[index].profits[div(H, PROFIT_PACKING_NUM)] = PROFITBLOCK
-            PROFITBLOCK = self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]
-        # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
-        # log4(1000 * block.number + H, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
-        i -= 1
+    with H = max(max(self.users[index].induction_height, block.number - MAX_INCENTIVIZATION_DEPTH), minChanged):
+        netProb = 10**9
+        CURPROFIT = getProfit(index, H - 1)
+        with PROFITBLOCK = self.users[index].profits[div(H, PROFIT_PACKING_NUM)]:
+            while H <= max_height:
+                # Determine the byte that was saved as the probability
+                # Convert the byte to odds * 1 billion
+                with blockOdds = convertProbReprToOdds(getch(probs, max_height - H)): # mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
+                    netProb = netProb * convertOddsToProb(blockOdds) / 10**9
+            
+                    if blockOdds >= 10**9 and ~blockhash(H):
+                        profitFactor = if(self.users[index].blockhashes[H] == ~blockhash(H), scoreCorrect(blockOdds), scoreIncorrect(blockOdds))
+                    else:
+                        profitFactor = if(~blockhash(H), scoreIncorrect(10**18 / blockOdds), scoreCorrect(10**18 / blockOdds))
+            
+                    # Check if the state root bet that was made is correct.
+                    if self.users[index].stateroots[H]:
+                        if self.users[index].stateroots[H] == ~stateroot(H):
+                            profitFactor2 = scoreCorrect(convertProbToOdds(netProb))
+                        else:
+                            profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
+                    else:
+                        profitFactor2 = 0
+                    # Update the profit counter
+                    CURPROFIT += profitFactor2 + profitFactor
+                    PROFITBLOCK = updateProfit(PROFITBLOCK, mod(H, PROFIT_PACKING_NUM), CURPROFIT)
+                    if (mod(H, PROFIT_PACKING_NUM) == (PROFIT_PACKING_NUM - 1) or H == max_height):
+                        self.users[index].profits[div(H, PROFIT_PACKING_NUM)] = PROFITBLOCK
+                        PROFITBLOCK = self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]
+                    # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
+                    # log4(1000 * block.number + H, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
+                    H += 1
     profit = self.users[index].deposit_size * (CURPROFIT - getProfit(index, H - MAX_INCENTIVIZATION_DEPTH)) / SCORING_REWARD_DIVISOR * blksActive
     # Optional verification code
     # h = max_height
