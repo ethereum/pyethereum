@@ -1,8 +1,5 @@
-try:
-    from keccak import sha3_256  # pypy
-except ImportError:
-    from sha3 import sha3_256 as _sha3_256
-    sha3_256 = lambda x: _sha3_256(x).digest()
+from Crypto.Hash import keccak
+sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
 from bitcoin import privtopub
 import sys
 import rlp
