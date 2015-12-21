@@ -5,13 +5,13 @@ except ImportError:
     from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
 import rlp
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex, encode_hex, str_to_bytes, ascii_chr
 from ethereum import bloom
 from ethereum import utils
-from ethereum.processblock import mk_contract_address, intrinsic_gas_used
-from ethereum.utils import TT256
+from ethereum.utils import TT256, mk_contract_address
 from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import get_logger
+from ethereum import opcodes
 log = get_logger('eth.chain.tx')
 
 # in the yellow paper it is specified that s should be smaller than secpk1n (eq.205)
@@ -61,7 +61,7 @@ class Transaction(rlp.Serializable):
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
             raise InvalidTransaction("Values way too high!")
-        if self.startgas < intrinsic_gas_used(self):
+        if self.startgas < self.intrinsic_gas_used:
             raise InvalidTransaction("Startgas too low")
 
         log.debug('deserialized tx', tx=encode_hex(self.hash)[:8])
@@ -132,6 +132,14 @@ class Transaction(rlp.Serializable):
         d['sender'] = encode_hex(d['sender'] or '')
         d['to'] = encode_hex(d['to'])
         return d
+
+    @property
+    def intrinsic_gas_used(self):
+        num_zero_bytes = str_to_bytes(self.data).count(ascii_chr(0))
+        num_non_zero_bytes = len(self.data) - num_zero_bytes
+        return (opcodes.GTXCOST
+                + opcodes.GTXDATAZERO * num_zero_bytes
+                + opcodes.GTXDATANONZERO * num_non_zero_bytes)
 
     @property
     def creates(self):

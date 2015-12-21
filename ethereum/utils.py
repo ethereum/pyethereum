@@ -58,6 +58,10 @@ else:
 isnumeric = is_numeric
 
 
+def mk_contract_address(sender, nonce):
+    return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
+
+
 def safe_ord(value):
     if isinstance(value, int):
         return value
@@ -139,7 +143,7 @@ def normalize_address(x, allow_blank=False):
         assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
         x = x[:20]
     if len(x) != 20:
-        raise Exception("Invalid address format!")
+        raise Exception("Invalid address format: %r" % x)
     return x
 
 

@@ -7,7 +7,7 @@ from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex
-from ethereum.utils import remove_0x_head, int_to_hex
+from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
 from ethereum.config import Env
 import json
 import os
@@ -26,6 +26,10 @@ env = {
     "currentTimestamp": "1",
     "previousHash": b"5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
 }
+
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace'
+# configure_logging(config_string=config_string)
 
 FILL = 1
 VERIFY = 2
@@ -332,7 +336,7 @@ def run_state_test(params, mode):
             nonce=parse_int_or_hex(exek['nonce'] or b"0"),
             gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
             startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
-            to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
+            to=normalize_address(exek['to'], allow_blank=True),
             value=parse_int_or_hex(exek['value'] or b"0"),
             data=decode_hex(remove_0x_head(exek['data'])))
     except InvalidTransaction:
@@ -352,8 +356,10 @@ def run_state_test(params, mode):
 
         time_pre = time.time()
         try:
+            print 'trying'
             success, output = pb.apply_transaction(blk, tx)
             blk.commit_state()
+            print 'success', blk.get_receipts()[-1].gas_used
         except pb.InvalidTransaction:
             success, output = False, b''
             blk.commit_state()
@@ -372,7 +378,6 @@ def run_state_test(params, mode):
     params2['out'] = b'0x' + encode_hex(output)
     params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
     params2['postStateRoot'] = encode_hex(blk.state.root_hash)
-    assert 'post' in params  # we always have a post state in the tests
 
     if mode == FILL:
         return params2

@@ -8,7 +8,8 @@ from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.exceptions import *
-from ethereum.utils import safe_ord, normalize_address
+from ethereum.utils import safe_ord, normalize_address, mk_contract_address
+from ethereum import transactions
 
 sys.setrecursionlimit(100000)
 
@@ -25,10 +26,6 @@ OUT_OF_GAS = -1
 
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = b''
-
-
-def mk_contract_address(sender, nonce):
-    return utils.sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
 
 
 def verify(block, parent):
@@ -75,14 +72,6 @@ class Log(rlp.Serializable):
             (encode_hex(self.address), self.topics, self.data)
 
 
-def intrinsic_gas_used(tx):
-    num_zero_bytes = str_to_bytes(tx.data).count(ascii_chr(0))
-    num_non_zero_bytes = len(tx.data) - num_zero_bytes
-    return (opcodes.GTXCOST
-            + opcodes.GTXDATAZERO * num_zero_bytes
-            + opcodes.GTXDATANONZERO * num_non_zero_bytes)
-
-
 def validate_transaction(block, tx):
 
     def rp(what, actual, target):
@@ -100,8 +89,8 @@ def validate_transaction(block, tx):
 
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
-    if tx.startgas < intrinsic_gas_used(tx):
-        raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas_used))
+    if tx.startgas < tx.intrinsic_gas_used:
+        raise InsufficientStartGas(rp('startgas', tx.startgas, tx.intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
     # cost, v0, required in up-front payment.
@@ -119,18 +108,22 @@ def validate_transaction(block, tx):
 def apply_transaction(block, tx):
     validate_transaction(block, tx)
 
-    log_tx.debug('TX NEW', tx_dict=tx.log_dict())
-    # start transacting #################
-    block.increment_nonce(tx.sender)
     # print block.get_nonce(tx.sender), '@@@'
 
-    intrinsic_gas = intrinsic_gas_used(tx)
+    def rp(what, actual, target):
+        return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
+
+    intrinsic_gas = tx.intrinsic_gas_used
     if block.number >= block.config['HOMESTEAD_FORK_BLKNUM']:
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
             intrinsic_gas += opcodes.CREATE[3]
             if tx.startgas < intrinsic_gas:
                 raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas))
+
+    log_tx.debug('TX NEW', tx_dict=tx.log_dict())
+    # start transacting #################
+    block.increment_nonce(tx.sender)
                 
     # buy startgas
     assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
@@ -290,6 +283,7 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     code = msg.data.extract_all()
     msg.data = vm.CallData([], 0, 0)
+    snapshot = ext._block.snapshot()
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
 
@@ -301,10 +295,10 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            #print('CONTRACT CREATION OOG', 'have', gas, 'want', gcost)
-            if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
-                return 0, 0, b''
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
+            if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
+                ext._block.revert(snapshot)
+                return 0, 0, b''
         ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:

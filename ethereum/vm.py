@@ -534,8 +534,13 @@ def vm_execute(ext, msg, code):
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
         elif op == 'CALLCODE' or op == 'DELEGATECALL':
-            gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
-                stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+            if op == 'CALLCODE':
+                gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
+                    stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+            else:
+                gas, to, meminstart, meminsz, memoutstart, memoutsz = \
+                    stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+                value = 0
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')

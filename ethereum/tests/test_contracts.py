@@ -1632,6 +1632,34 @@ def test_params_contract():
     c = s.abi_contract(params_code, FOO=4, BAR='horse')
     assert c.garble() == 4
     assert c.marble() == 'horse'
+
+prefix_types_in_functions_code = """
+type fixedp: fp_
+
+macro fixedp($x) * fixedp($y):
+    fixedp($x * $y / 2^64)
+
+macro fixedp($x) / fixedp($y):
+    fixedp($x * 2^64 / $y)
+
+macro raw_unfixedp(fixedp($x)):
+    $x / 2^64
+
+macro set(fixedp($x), $y):
+    $x = 2^64 * $y
+
+macro fixedp($x) = fixedp($y):
+    $x = $y
+
+def sqrdiv(fp_a, fp_b):
+    return(raw_unfixedp((fp_a / fp_b) * (fp_a / fp_b)))
+"""
+
+
+def test_prefix_types_in_functions():
+    s = tester.state()
+    c = s.abi_contract(prefix_types_in_functions_code)
+    assert c.sqrdiv(25, 2) == 156
     
 
 
@@ -1684,3 +1712,4 @@ def test_params_contract():
 # test_abi_address_output = None
 # test_string_logging = None
 # test_params_contract = None
+# test_prefix_types_in_functions = None
