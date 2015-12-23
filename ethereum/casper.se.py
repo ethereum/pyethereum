@@ -165,6 +165,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                             profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
                     else:
                         profitFactor2 = 0
+                    # If we lose a log of money, log it for debug purposes
                     if profitFactor < 0:
                         if blockOdds < 10**8 or blockOdds > 10**10:
                             log3(700 + index, H, blockHashInfo, blockOdds, -profitFactor)

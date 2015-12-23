@@ -19,7 +19,7 @@ import math
 import copy
 
 FINALITY_LOW, FINALITY_HIGH = 0.00001, 0.99999
-VALIDATOR_ROUNDS = 3
+VALIDATOR_ROUNDS = 4
 
 def log(text, condition):
     if condition:

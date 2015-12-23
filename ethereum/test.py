@@ -13,7 +13,7 @@ import time
 import network
 import os
 
-MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 12
+MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 13
 print 'Running with %d maximum nodes' % MAX_NODES
 
 genesis = State('', EphemDB())
@@ -109,10 +109,12 @@ def check_correctness(bets):
     print 'Peers: %r' % {bet.id: map(lambda x: x.id, n.peers[bet.id]) for bet in bets}
     # Max finalized heights for each bettor strategy
     mfhs = [bet.my_max_finalized_height for bet in bets]
-    mchs = [min(bet.my_max_finalized_height, bet.calc_state_roots_from) for bet in bets]
-    new_min_mfh = min(mchs)
+    mchs = [bet.calc_state_roots_from for bet in bets]
+    mfchs = [min(bet.my_max_finalized_height, bet.calc_state_roots_from) for bet in bets]
+    new_min_mfh = min(mfchs)
     print 'Max finalized heights: %r' % mfhs
-    print 'Max finalized and calculated heights: %r' % mchs
+    print 'Max calculated stateroots: %r' % mchs
+    print 'Max height received: %r' % [len(bet.blocks) for bet in bets]
     # Induction heights of each validator
     print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
     # Withdrawn?
@@ -244,14 +246,14 @@ assert call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', []) =
 print 'All new validators inducted'
 print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
-# Keep running until the min finalized height reaches ~180. We expect that by
+# Keep running until the min finalized height reaches ~175. We expect that by
 # this time all validators will be actively betting off of each other's bets
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 80 + ENTER_EXIT_DELAY:
+    if min_mfh > 75 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
 
@@ -261,6 +263,8 @@ print 'Generating transactions to withdraw some validators'
 for bet in bets[:3]:
     bet.withdraw()
 
+BLK_DISTANCE = len(bet.blocks) - min_mfh
+
 
 # Keep running until the min finalized height reaches ~290.
 while 1:
@@ -268,7 +272,7 @@ while 1:
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 190 + ENTER_EXIT_DELAY:
+    if min_mfh > 150 + BLK_DISTANCE + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
 
