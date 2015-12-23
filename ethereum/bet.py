@@ -246,8 +246,8 @@ class Opinion():
 # Helper method for calling Casper
 casper_ct = ContractTranslator(serpent.mk_full_signature('casper.se.py'))
 
-def call_casper(state, fun, args):
-    return call_method(state, CASPER, casper_ct, fun, args)
+def call_casper(state, fun, args, gas=1000000):
+    return call_method(state, CASPER, casper_ct, fun, args, gas)
 
 # Accepts any state less than ENTER_EXIT_DELAY blocks old
 def is_block_valid(state, block):
@@ -276,7 +276,7 @@ gvi_cache = {}
 def get_validator_index(state, blknumber):
     if blknumber not in gvi_cache:
         preseed = state.get_storage(RNGSEEDS, blknumber - ENTER_EXIT_DELAY if blknumber >= ENTER_EXIT_DELAY else 2**256 - 1)
-        gvi_cache[blknumber] = call_casper(state, 'sampleValidator', [preseed, blknumber])
+        gvi_cache[blknumber] = call_casper(state, 'sampleValidator', [preseed, blknumber], gas=3000000)
     return gvi_cache[blknumber]
 
 # Helper for making an ID
@@ -356,7 +356,7 @@ class defaultBetStrategy():
         self.seq = 0
         # If we only partially calculate state roots, store the index at which
         # to start calculating next time you make a bet
-        self.calc_state_roots_from = 2**255
+        self.calc_state_roots_from = 0
         log("My address: %s" % self.addr.encode('hex'), True)
         # Iterate over all validators in the genesis block...
         for j in range(call_casper(genesis_state, 'getNextUserPos', [])):
@@ -448,11 +448,10 @@ class defaultBetStrategy():
             return
         # Try to update the set of validators
         if self.my_max_finalized_height >= 0 and self.stateroots[self.my_max_finalized_height] not in (None, '\x00' * 32):
-            log('checking validator signups (%d)' % self.index, self.index >= 9)
             check_state2 = State(self.stateroots[self.my_max_finalized_height], self.db)
             vs = call_casper(check_state2, 'getValidatorSignups', [])
-            log('validator signups: %d vs %d' % (vs, self.validator_signups), self.index >= 9)
             if vs > self.validator_signups:
+                log('updating validator signups: %d vs %d' % (vs, self.validator_signups), True)
                 self.validator_signups = vs
                 self.update_validator_set(check_state2)
         # Add the block to our list of blocks
@@ -577,14 +576,14 @@ class defaultBetStrategy():
         # the intention is to converge toward 0 or 1
         probs = sorted(probs)
         if probs[len(probs)/3] > 0.8:
-            o = 0.82 + probs[len(probs)/3] * 0.18
+            o = 0.84 + probs[len(probs)/3] * 0.16
         elif probs[len(probs)*2/3] < 0.2:
-            o = probs[len(probs)*2/3] * 0.18
+            o = probs[len(probs)*2/3] * 0.16
         else:
             o = min(0.85, max(0.15, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
         # If the probability we get is above 0.99 but we do not have the
         # block, then ask for it explicitly
-        if o > 0.99 and not have_block:
+        if o > 0.8 and not have_block:
             if blk_number not in self.last_asked_for_block or self.last_asked_for_block[blk_number] < time.time() + 12:
                 log('Suspiciously missing a block: %d. Asking for it explicitly.' % blk_number, True)
                 self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCK, [encode_int(blk_number)])))
@@ -630,7 +629,7 @@ class defaultBetStrategy():
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
-            if (prob - 0.5) * (self.probs[h] - 0.5) <= 0 or h in self.recently_discovered_blocks:
+            if (prob - 0.5) * (self.probs[h] - 0.5) <= 0 or (self.probs[h] >= 0.5 and h in self.recently_discovered_blocks):
                 lowest_changed = min(lowest_changed, h)
             self.probs[h] = prob
             # Finalized!
@@ -657,7 +656,10 @@ class defaultBetStrategy():
         for h in range(lowest_changed + MAX_RECALC, len(self.blocks)):
             self.stateroots[h] = '\x00' * 32
         # Where to calculate state roots from next time
-        self.calc_state_roots_from = lowest_changed + MAX_RECALC
+        self.calc_state_roots_from = min(lowest_changed + MAX_RECALC, len(self.blocks))
+        # Check state root integrity
+        for i in range(self.calc_state_roots_from):
+            assert self.stateroots[i] not in ('\x00' * 32, None)
         log('Node %d making bet %d with probabilities from height %d: %r' %
             (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 3 or self.index > 6)
         # Sanity check
@@ -667,11 +669,14 @@ class defaultBetStrategy():
         # to determine its opinion on what the correct chain is)
         if self.index >= 0 and len(self.blocks) > self.induction_height and not self.withdrawn and len(self.recently_discovered_blocks):
             # Create and sign the bet
+            blockstart = max(min(self.recently_discovered_blocks), self.induction_height)
+            rootstart = max(lowest_changed, self.induction_height)
+            probstart = min(max(sign_from, self.induction_height), blockstart, rootstart)
             o = sign_bet(Bet(self.index,
                              len(self.blocks) - 1,
-                             self.probs[max(sign_from, self.induction_height):][::-1],
-                             [x.hash if x else '\x00' * 32 for x in self.blocks[min(self.recently_discovered_blocks):]][::-1],
-                             self.stateroots[lowest_changed:][::-1],
+                             self.probs[probstart:][::-1],
+                             [x.hash if x else '\x00' * 32 for x in self.blocks[blockstart:]][::-1],
+                             self.stateroots[rootstart:][::-1],
                              self.prevhash,
                              self.seq, ''),
                         self.key)
@@ -752,25 +757,23 @@ class defaultBetStrategy():
                 txs.append(tx)
                 gas -= tx.gas
         # Publish most recent bets to the blockchain
-        print self.calc_state_roots_from - 1
-        if len(self.stateroots):
-            latest_state_root = self.stateroots[min(self.calc_state_roots_from, len(self.stateroots)) - 1]
-        else:
-            latest_state_root = self.genesis_state.root
-        if latest_state_root not in ('\x00' * 32, None):
-            latest_state = State(latest_state_root, self.db)
-            print 'Got latest state at height %d' % big_endian_to_int(latest_state.get_storage(BLKNUMBER, '\x00' * 32))
-            print 'Validator seqs on chain: %r' % {index: call_method(latest_state, CASPER, casper_ct, 'getUserSeq', [index]) for index in self.opinions}
- 
-            for i, o in self.opinions.items():
-                latest_bet = call_casper(latest_state, 'getUserSeq', [i])
-                if self.bets[i].get(latest_bet, None):
-                    print 'Inserting bet %d of validator %d' % (latest_bet, i)
-                    bet = self.bets[i][latest_bet]
-                    txs.insert(0, Transaction(BET_INCENTIVIZER, 200000 + 5000 * len(bet.probs) + 25000 * len(bet.blockhashes + bet.stateroots),
-                               bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
-        else:
-            print 'Didn\'t get latest state'
+        h = 0
+        while h < len(self.stateroots) and self.stateroots[h] not in (None, '\x00' * 32):
+            h += 1
+        latest_state_root = self.stateroots[h-1] if h else self.genesis_state.root
+        assert latest_state_root not in ('\x00' * 32, None)
+        latest_state = State(latest_state_root, self.db)
+        print 'Got latest state at height %d' % big_endian_to_int(latest_state.get_storage(BLKNUMBER, '\x00' * 32))
+        print 'Validator seqs on chain: %r' % {index: call_method(latest_state, CASPER, casper_ct, 'getUserSeq', [index]) for index in self.opinions}
+        ops = self.opinions.items() 
+        random.shuffle(ops)
+        for i, o in ops:
+            latest_bet = call_casper(latest_state, 'getUserSeq', [i])
+            if self.bets[i].get(latest_bet, None):
+                print 'Inserting bet %d of validator %d using state root at height %d' % (latest_bet, i, h-1)
+                bet = self.bets[i][latest_bet]
+                txs.insert(0, Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
+                           bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
         # Process the unconfirmed index for the transaction. Note that a
         # transaction could theoretically get included in the chain
         # multiple times even within the same block, though if the account
@@ -800,7 +803,7 @@ class defaultBetStrategy():
                     self.finalized_txindex[h][1].append((blknum, index))
                     positions.pop(i)
                 # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
-                elif p > 0.99 and logresult == 1:
+                elif p > 0.95 and logresult == 1:
                     positions.pop(i)
                     self.tx_exceptions[h] = self.tx_exceptions.get(h, 0) + 1
                     log('Transaction inclusion finalized but transaction failed for the %dth time. p: %.5f, logresult: %d' % (self.tx_exceptions[h], p, logresult), True)
@@ -811,7 +814,7 @@ class defaultBetStrategy():
                 # If the transaction failed (eg. due to OOG from block gaslimit),
                 # remove it from the unconfirmed index, but not the expool, so
                 # that we can try to add it again
-                elif p < 0.01 or (p > 0.99 and logresult == 0):
+                elif p < 0.05 or (p > 0.95 and logresult == 0):
                     log('Transaction finalization attempt failed. p: %.5f, logresult: %d' % (p, logresult), True)
                     positions.pop(i)
                 # Otherwise keep the transaction in the unconfirmed index

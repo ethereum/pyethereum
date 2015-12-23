@@ -196,8 +196,6 @@ class State():
             else:
                 self.cache[addr][key] = preval
 
-bst_log = {}
-
 # Processes a block on top of a state to reach a new state
 def block_state_transition(state, block):
     pre = state.root
@@ -220,6 +218,7 @@ def block_state_transition(state, block):
         # Set the txindex to 0 to start off
         state.set_storage(TXINDEX, '\x00' * 32, zpad(encode_int(0), 32))
         # Apply transactions sequentially
+        print 'Block contains %d transactions' % len(block.transactions)
         for tx in block.transactions:
             tx_state_transition(state, tx)
     # Put the block hash in storage
@@ -232,11 +231,6 @@ def block_state_transition(state, block):
     newseed = big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
-    bst_key = pre.encode('hex')+'::'+blkhash.encode('hex')
-    if bst_key in bst_log:
-        assert bst_log[bst_key] == state.root.encode('hex')
-    else:
-        bst_log[bst_key] = state.root.encode('hex')
 
 
 def tx_state_transition(state, tx):
@@ -244,6 +238,8 @@ def tx_state_transition(state, tx):
     gas_used = big_endian_to_int(state.get_storage(GAS_CONSUMED, '\x00' * 32))
     # If there is not enough gas left for this transaction, it's a no-op
     if gas_used + tx.exec_gas > GASLIMIT:
+        print 'UNABLE TO EXECUTE transaction due to gas limits: %d pre, %d asked, %d projected post vs %d limit' % \
+            (gas_used, tx.exec_gas, gas_used + tx.exec_gas, GASLIMIT)
         state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), '\x00' * 32)
         return None
     # Set an object in the state for tx gas

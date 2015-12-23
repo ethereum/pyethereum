@@ -13,6 +13,9 @@ import time
 import network
 import os
 
+MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 12
+print 'Running with %d maximum nodes' % MAX_NODES
+
 genesis = State('', EphemDB())
 gc = genesis.clone()
 # Unleash the kraken....err, I mean casper
@@ -34,10 +37,10 @@ genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
 # configure_logging(config_string=config_string)
 
-# Generate 12 keys
-keys = [zpad(encode_int(x), 32) for x in range(1, 10)]
+# Generate the initial set of keys keys
+keys = [zpad(encode_int(x+1), 32) for x in range(0, MAX_NODES - 2)]
 # Create a second set of 4 keys
-secondkeys = [zpad(encode_int(x), 32) for x in range(13, 16)]
+secondkeys = [zpad(encode_int(x+1), 32) for x in range(MAX_NODES - 2, MAX_NODES)]
 # Initialize the first keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -106,20 +109,21 @@ def check_correctness(bets):
     print 'Peers: %r' % {bet.id: map(lambda x: x.id, n.peers[bet.id]) for bet in bets}
     # Max finalized heights for each bettor strategy
     mfhs = [bet.my_max_finalized_height for bet in bets]
+    mchs = [min(bet.my_max_finalized_height, bet.calc_state_roots_from) for bet in bets]
+    new_min_mfh = min(mchs)
     print 'Max finalized heights: %r' % mfhs
+    print 'Max finalized and calculated heights: %r' % mchs
     # Induction heights of each validator
     print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
     # Withdrawn?
-    print 'Withdrawn according to self?: %r' % [(bet.withdrawn, bet.seq) for bet in bets]
-    print 'Withdrawn according to others?: %r' % [[(op.withdrawn, op.seq) for op in bet.opinions.values()] for bet in bets]
-    # Probabilities of each validator on all of the blocks so far
-    print 'Probs: %r' % [[float('%.5f' % p) for p in bet.probs] for bet in bets]
+    print 'Withdrawn?: %r' % [(bet.withdrawn, bet.seq) for bet in bets]
+    # Probabilities
+    print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
     # Data about bets from each validator according to every other validator
     print 'Now: %.2f' % time.time()
     print 'According to each validator...'
     for bet in bets:
-        print '(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [op.seq for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made)
-    print 'Bets processed by each validator according to each validator: %r' % [[(op.seq, len(bet.bets[op.index]), bet.highest_bet_processed[op.index], op.max_height) for op in bet.opinions.values()] for bet in bets]
+        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
     # Number of blocks received by each validator
@@ -129,7 +133,6 @@ def check_correctness(bets):
     # Makes sure all block hashes for all heights up to the minimum finalized
     # height are the same
     print 'Verifying finalized block hash equivalence'
-    new_min_mfh = min(min(mfhs), min([bet.calc_state_roots_from for bet in bets]))
     for j in range(1, len(bets)):
         j_hashes = bets[j].finalized_hashes[:(new_min_mfh+1)]
         jm1_hashes = bets[j-1].finalized_hashes[:(new_min_mfh+1)]
@@ -161,14 +164,17 @@ def check_correctness(bets):
     # Validator sequence numbers as seen by themselves
     print 'Validator seqs online: %r' % {bet.index: bet.seq for bet in bets}
     # Validator sequence numbers as recorded in the chain
-    print 'Validator seqs on finalized chain: %r' % {bet.index: call_method(state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets}
+    print 'Validator seqs on finalized chain (%d): %r' % (new_min_mfh, {bet.index: call_method(state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
     h = 0
     while h < len(bets[0].stateroots) and bets[0].stateroots[h] not in (None, '\x00' * 32):
         h += 1
     speculative_state = State(bets[0].stateroots[h-1] if h else genesis.root, OverlayDB(bets[0].db))
-    print 'Validator seqs on speculative chain: %r' % {bet.index: call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets}
+    print 'Validator seqs on speculative chain (%d): %r' % (h-1, {bet.index: call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
     # Validator deposit sizes (over 1500 * 10**18 means profit)
     print 'Validator deposit sizes: %r' % [call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
+    # for bet in bets:
+    #     if bet.index >= 0:
+    #         assert call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) >= 1500 * 10**18
     # Account signing nonces
     print 'Account signing nonces: %r' % [big_endian_to_int(state.get_storage(bet.addr, encode_int32(2**256 - 1))) for bet in bets]
     # Transaction status
@@ -181,11 +187,11 @@ n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
 for bet in bets:
     bet.network = n
-# Keep running until the min finalized height reaches 12
+# Keep running until the min finalized height reaches 5
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
-    if min_mfh >= 10:
+    if min_mfh >= 5:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -214,12 +220,12 @@ for i, k in enumerate(secondkeys):
     bets[0].add_transaction(tx3)
     check_txs.extend([tx, tx2, tx3])
 
-# Keep running until the min finalized height reaches 42. We expect that by
+# Keep running until the min finalized height reaches 75. We expect that by
 # this time all transactions from the previous phase have been included
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 80:
+    if min_mfh > 75:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -231,21 +237,21 @@ for bet in secondbets:
     bet.network = n
 n.agents.extend(secondbets)
 n.generate_peers(5)
-print 'Increasing number of peers in the network to %d!' % len(keys + secondkeys)
+print 'Increasing number of peers in the network to %d!' % MAX_NODES
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that all signups are successful
-assert call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', []) == len(keys + secondkeys)
+assert call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', []) == MAX_NODES
 print 'All new validators inducted'
 print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
-# Keep running until the min finalized height reaches ~120. We expect that by
+# Keep running until the min finalized height reaches ~180. We expect that by
 # this time all validators will be actively betting off of each other's bets
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 100 + ENTER_EXIT_DELAY:
+    if min_mfh > 80 + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
 
@@ -256,7 +262,7 @@ for bet in bets[:3]:
     bet.withdraw()
 
 
-# Keep running until the min finalized height reaches ~160.
+# Keep running until the min finalized height reaches ~290.
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
@@ -269,5 +275,5 @@ while 1:
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that the only remaining active validators are the ones that have not
 # yet signed out.
-print [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(8)]
-assert len([i for i in range(20) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == len(keys + secondkeys) - 3
+print 'Validator statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(20)]
+assert len([i for i in range(20) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3

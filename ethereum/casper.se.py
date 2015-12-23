@@ -10,7 +10,7 @@ macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
 
-macro ENTER_EXIT_DELAY: 80
+macro ENTER_EXIT_DELAY: 100
 
 macro WITHDRAWAL_WAITTIME: 20
 
@@ -54,7 +54,6 @@ def join(validationCode:bytes):
     self.users[userIndex].deposit_size = msg.value
     self.users[userIndex].induction_height = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
     self.users[userIndex].withdrawal_height = 2**100
-    log2(32, userIndex, userPos, self.users[userIndex].deposit_size)
     return(userIndex:uint256)
 
 
@@ -72,14 +71,14 @@ def withdraw(index:uint256):
 
 # Submit a bet
 def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes32, seqnum:uint256, sig:bytes):
-    # TODO: crypto verify
-    # assert cryptoVerify(sig, users[index].validationCode)
     assert seqnum == self.users[index].seq
     assert prevhash == self.users[index].prevhash
     assert max_height <= block.number
     blksActive = (block.number - self.users[index].prevsubmission)
     assert blksActive >= 1
     assert self.users[index].withdrawal_height > block.number
+    assert len(probs) >= len(blockhashes)
+    assert len(probs) >= len(stateroots)
     # Compute the signature hash
     _calldata = string(~calldatasize())
     ~calldatacopy(_calldata, 0, ~calldatasize())
@@ -100,13 +99,29 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
         self.users[index].prevsubmission = block.number
         self.users[index].seq = seqnum + 1
         return True
+    # Update blockhashes, storing blockhash correctness info in groups of 32
     i = 0
+    v = self.users[index].blockhashes[max_height / 32]
     while i < len(blockhashes):
-        self.users[index].blockhashes[max_height - i] = blockhashes[i]
+        with h = max_height - i:
+            byte = not(not(~blockhash(h))) * 2 + (blockhashes[i] == ~blockhash(h))
+            with offset = h % 32:
+                v = (v & maskexclude(offset + 1, offset)) + byte * 256**offset
+                if offset == 0 or i == len(blockhashes) - 1:
+                    self.users[index].blockhashes[h / 32] = v
+                    v = self.users[index].blockhashes[(h / 32) - 1]
         i += 1
+    # Update stateroots, storing stateroot correctness info in groups of 32
     i = 0
+    v = self.users[index].stateroots[max_height / 32]
     while i < len(stateroots):
-        self.users[index].stateroots[max_height - i] = stateroots[i]
+        with h = max_height - i:
+            byte = not(not(~stateroot(h))) * 2 + (stateroots[i] == ~stateroot(h))
+            with offset = h % 32:
+                v = (v & maskexclude(offset + 1, offset)) + byte * 256**offset
+                if offset == 0 or i == len(stateroots) - 1:
+                    self.users[index].stateroots[h / 32] = v
+                    v = self.users[index].stateroots[(h / 32) - 1]
         i += 1
     # Update probabilities; paste the probs into the self.users[index].probs
     # array at the correct positions, assuming the probs array stores probs
@@ -133,21 +148,34 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                 # Determine the byte that was saved as the probability
                 # Convert the byte to odds * 1 billion
                 with blockOdds = convertProbReprToOdds(getch(probs, max_height - H)): # mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
+                    blockHashInfo = mod(div(self.users[index].blockhashes[H / 32], 256**(H % 32)), 256)
+                    stateRootInfo = mod(div(self.users[index].stateroots[H / 32], 256**(H % 32)), 256)
                     netProb = netProb * convertOddsToProb(blockOdds) / 10**9
             
-                    if blockOdds >= 10**9 and ~blockhash(H):
-                        profitFactor = if(self.users[index].blockhashes[H] == ~blockhash(H), scoreCorrect(blockOdds), scoreIncorrect(blockOdds))
+                    if blockOdds >= 10**9 and blockHashInfo >= 2:
+                        profitFactor = if(blockHashInfo % 2, scoreCorrect(blockOdds), scoreIncorrect(blockOdds))
                     else:
-                        profitFactor = if(~blockhash(H), scoreIncorrect(10**18 / blockOdds), scoreCorrect(10**18 / blockOdds))
+                        profitFactor = if(blockHashInfo % 2 or blockHashInfo == 0, scoreCorrect(10**18 / blockOdds), scoreIncorrect(10**18 / blockOdds))
             
                     # Check if the state root bet that was made is correct.
-                    if self.users[index].stateroots[H]:
-                        if self.users[index].stateroots[H] == ~stateroot(H):
+                    if stateRootInfo >= 2:
+                        if stateRootInfo % 2:
                             profitFactor2 = scoreCorrect(convertProbToOdds(netProb))
                         else:
                             profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
                     else:
                         profitFactor2 = 0
+                    if profitFactor < 0:
+                        if blockOdds < 10**8 or blockOdds > 10**10:
+                            log3(700 + index, H, blockHashInfo, blockOdds, -profitFactor)
+                        if blockOdds < 10000 or blockOdds > 10**14:  
+                            log0(1, 3141592653589)
+                    if profitFactor2 < 0:
+                        stateOdds = convertProbToOdds(netProb)
+                        if stateOdds < 10**8 or stateOdds > 10**10:
+                            log3(800 + index, H, stateRootInfo, stateOdds, -profitFactor2)
+                        if stateOdds < 10000 or stateOdds > 10**14:
+                            log0(1, 3141592653589)
                     # Update the profit counter
                     CURPROFIT += profitFactor2 + profitFactor
                     PROFITBLOCK = updateProfit(PROFITBLOCK, mod(H, PROFIT_PACKING_NUM), CURPROFIT)
@@ -155,7 +183,8 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                         self.users[index].profits[div(H, PROFIT_PACKING_NUM)] = PROFITBLOCK
                         PROFITBLOCK = self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]
                     # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
-                    # log4(1000 * block.number + H, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
+                    # log4(1000, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
+                    # log3(1001, block.number, H, blockHashInfo, stateRootInfo)
                     H += 1
     profit = self.users[index].deposit_size * (CURPROFIT - getProfit(index, H - MAX_INCENTIVIZATION_DEPTH)) / SCORING_REWARD_DIVISOR * blksActive
     # Optional verification code
@@ -166,10 +195,8 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # log1(51, 54, profit)
     # log0(1000 * block.number, profit)
     # log1(1000 + H, netProb, profitFactor2)
-    if profit < 0:
-        log4(499, profit, getProfit(index, MAX_INCENTIVIZATION_DEPTH), CURPROFIT, SCORING_REWARD_DIVISOR, blksActive) 
     self.users[index].deposit_size = max(0, self.users[index].deposit_size + profit)
-    log4(500 + index, seqnum, len(probs), len(blockhashes), len(stateroots), txexecgas() - msg.gas)
+    log4(500 + index, seqnum * 1000000 + block.number, len(probs), len(blockhashes), len(stateroots), txexecgas() - msg.gas)
     return(1:bool)
 
 # Interpret prob as odds in scientific notation: 5 bit exponent
@@ -200,8 +227,8 @@ def const sampleValidator(seedhash:bytes32, blknumber:uint256):
     n = mod(seedhash, 2**64)
     seedhash = sha3([seedhash, blknumber]:arr)
     while 1:
-        with index = mod(seedhash, n):
-            if (div(seedhash, 2**128) * MAX_DEPOSIT < 2**128 * self.users[index].deposit_size):
+        with index = self.userPosToIndexMap[mod(seedhash, n)]:
+            if (div(seedhash, 2**128) * MAX_DEPOSIT / 2**128 < self.users[index].deposit_size):
                 if blknumber >= self.users[index].induction_height and blknumber <= self.users[index].withdrawal_height:
                     return(self.userPosToIndexMap[index])
         seedhash = sha3(seedhash)
