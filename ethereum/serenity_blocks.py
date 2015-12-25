@@ -218,7 +218,7 @@ def block_state_transition(state, block):
         # Set the txindex to 0 to start off
         state.set_storage(TXINDEX, '\x00' * 32, zpad(encode_int(0), 32))
         # Apply transactions sequentially
-        print 'Block contains %d transactions' % len(block.transactions)
+        print 'Block %d contains %d transactions' % (blknumber, len(block.transactions))
         for tx in block.transactions:
             tx_state_transition(state, tx)
     # Put the block hash in storage

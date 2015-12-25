@@ -67,7 +67,7 @@ opcodes = {
     0xf2: ['CALLCODE', 7, 1, 40],
     0xf3: ['RETURN', 2, 0, 0],
     0xf4: ['DELEGATECALL', 2, 0, 0],
-    0xf8: ['SLOADBYTES', 1, 1, 50],
+    0xf8: ['SLOADBYTES', 3, 0, 50],
     0xf9: ['SSTOREBYTES', 2, 0, 2500],
     0xfa: ['SSIZE', 1, 1, 50],
     0xfb: ['STATEROOT', 1, 1, 50],

@@ -168,9 +168,9 @@ def check_correctness(bets):
     # Validator sequence numbers as recorded in the chain
     print 'Validator seqs on finalized chain (%d): %r' % (new_min_mfh, {bet.index: call_method(state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
     h = 0
-    while h < len(bets[0].stateroots) and bets[0].stateroots[h] not in (None, '\x00' * 32):
+    while h < len(bets[3].stateroots) and bets[3].stateroots[h] not in (None, '\x00' * 32):
         h += 1
-    speculative_state = State(bets[0].stateroots[h-1] if h else genesis.root, OverlayDB(bets[0].db))
+    speculative_state = State(bets[3].stateroots[h-1] if h else genesis.root, OverlayDB(bets[3].db))
     print 'Validator seqs on speculative chain (%d): %r' % (h-1, {bet.index: call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
     # Validator deposit sizes (over 1500 * 10**18 means profit)
     print 'Validator deposit sizes: %r' % [call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
@@ -227,7 +227,7 @@ for i, k in enumerate(secondkeys):
 while 1:
     n.run(20, sleep=0.2)
     check_correctness(bets)
-    if min_mfh > 75:
+    if min_mfh > 95:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -242,7 +242,9 @@ n.generate_peers(5)
 print 'Increasing number of peers in the network to %d!' % MAX_NODES
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that all signups are successful
-assert call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', []) == MAX_NODES
+signups = call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', [])
+print 'Validators signed up: %d' % signups
+assert signups == MAX_NODES
 print 'All new validators inducted'
 print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
@@ -279,5 +281,5 @@ while 1:
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that the only remaining active validators are the ones that have not
 # yet signed out.
-print 'Validator statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(20)]
+print 'Validator statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(MAX_NODES)]
 assert len([i for i in range(20) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3

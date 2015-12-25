@@ -8,7 +8,7 @@ from serenity_blocks import tx_state_transition, BLKNUMBER, \
     block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt
 from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER
+from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS
 from db import OverlayDB
 import fastvm as vm
 import serpent
@@ -19,7 +19,7 @@ import math
 import copy
 
 FINALITY_LOW, FINALITY_HIGH = 0.00001, 0.99999
-VALIDATOR_ROUNDS = 4
+MAX_RECALC = 13
 
 def log(text, condition):
     if condition:
@@ -287,7 +287,7 @@ def mkid():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
-    def __init__(self, genesis_state, key):
+    def __init__(self, genesis_state, key, byzantine=False):
         log("Initializing betting strategy", True)
         # An ID for purposes of the network simulator
         self.id = mkid()
@@ -350,6 +350,10 @@ class defaultBetStrategy():
         self.last_block_produced = -1
         # Next height at which you are eligible to produce (could be None)
         self.next_block_to_produce = -1
+        # Am I byzantine?
+        self.byzantine = byzantine
+        # Next submission delay (should be 0 on livenet; nonzero for testing purposes)
+        self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.byzantine else 0
         # Prevhash (for betting)
         self.prevhash = '\x00' * 32
         # Sequence number (for betting)
@@ -437,7 +441,7 @@ class defaultBetStrategy():
         if notsynced:
             sys.stderr.write('Not sufficiently synced to receive this block (%d)\n' % block.number)
             if self.last_time_sent_getblocks < time.time() - 5:
-                print 'asking for blocks'
+                log('asking for blocks', True)
                 self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [encode_int(self.my_max_finalized_height+1)])))
                 self.last_time_sent_getblocks = time.time()
             return
@@ -475,7 +479,7 @@ class defaultBetStrategy():
 
     # Try to update the set of validators
     def update_validator_set(self, check_state):
-        print 'Updating the validator set'
+        log('Updating the validator set', True)
         for j in range(call_casper(check_state, 'getNextUserPos', [])):
             i = call_casper(check_state, 'getUserAtPosition', [j])
             # Ooh, we found a new validator
@@ -486,8 +490,8 @@ class defaultBetStrategy():
                 prevhash = call_casper(check_state, 'getUserPrevhash', [i])
                 seq = call_casper(check_state, 'getUserSeq', [i])
                 self.opinions[i] = Opinion(valcode, i, prevhash, seq, ih)
-                print 'Validator inducted at index %d with address %s' % (i, valaddr)
-                print 'Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex'))
+                log('Validator inducted at index %d with address %s' % (i, valaddr), True)
+                log('Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex')), True)
                 assert i not in self.bets
                 assert i not in self.highest_bet_processed
                 self.bets[i] = {}
@@ -497,9 +501,8 @@ class defaultBetStrategy():
                     self.index = i
                     self.add_proposers()
                     self.induction_height = ih
-                    print '#' * 80
-                    print 'I have been inducted! id=%d\n\n' % self.index
-        print 'Have %d opinions' % len(self.opinions)
+                    log('#' * 80 + '\n' + ('I have been inducted! id=%d\n\n' % self.index), True)
+        log('Have %d opinions' % len(self.opinions), True)
 
     def receive_bet(self, bet):
         # Do not process the bet if (i) we already processed it, or (ii) it
@@ -540,13 +543,13 @@ class defaultBetStrategy():
         # If we already received a block...
         if received_time:
             time_delta = abs(received_time * 0.96 + time.time() * 0.04 - scheduled_time)
-            prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
+            prob = 1 if time_delta < BLKTIME * 2 else 3.0 / (3.0 + time_delta / BLKTIME)
             log('Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 3)
             return 0.7 if random.random() < prob else 0.3
         # If we have not yet received a block...
         else:
             time_delta = time.time() - scheduled_time
-            prob = 1 if time_delta < BLKTIME * 2 else 4.0 / (4.0 + time_delta / BLKTIME)
+            prob = 1 if time_delta < BLKTIME * 2 else 3.0 / (3.0 + time_delta / BLKTIME)
             log('Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 3)
             return 0.5 if random.random() < prob else 0.3
 
@@ -611,6 +614,28 @@ class defaultBetStrategy():
         txdata = casper_ct.encode('withdraw', [self.former_index])
         tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
         v = tx_state_transition(genesis, tx)
+
+    def recalc_state_roots(self):
+        frm = self.calc_state_roots_from
+        run_state = State(self.stateroots[frm-1] if frm else self.genesis_state.root, self.db)
+        for h in range(frm, len(self.blocks))[:MAX_RECALC]:
+            prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
+            if self.probs[h] is None:
+                prob = self.default_vote(h, self.blocks[h])
+            else:
+                prob = self.probs[h]
+            block_state_transition(run_state, self.blocks[h] if prob >= 0.5 else None)
+            self.stateroots[h] = run_state.root
+            blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
+            assert blknum == h + 1
+        # If there are some state roots that we have not calculated, just leave them empty
+        for h in range(frm + MAX_RECALC, len(self.blocks)):
+            self.stateroots[h] = '\x00' * 32
+        # Where to calculate state roots from next time
+        self.calc_state_roots_from = min(frm + MAX_RECALC, len(self.blocks))
+        # Check integrity
+        for i in range(self.calc_state_roots_from):
+            assert self.stateroots[i] not in ('\x00' * 32, None)
         
     # Construct a bet
     def mkbet(self):
@@ -621,7 +646,6 @@ class defaultBetStrategy():
         # Height at which to start signing
         sign_from = max(0, self.my_max_finalized_height)
         # Keep track of the lowest state root that we should change
-        lowest_changed = min(len(self.blocks), self.calc_state_roots_from)
         log('Making probs from %d to %d inclusive' % (sign_from, len(self.blocks) - 1), self.index >= 5)
         # Vote on each height independently using our voting strategy
         for h in range(sign_from, len(self.blocks)):
@@ -630,7 +654,7 @@ class defaultBetStrategy():
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
             if (prob - 0.5) * (self.probs[h] - 0.5) <= 0 or (self.probs[h] >= 0.5 and h in self.recently_discovered_blocks):
-                lowest_changed = min(lowest_changed, h)
+                self.calc_state_roots_from = min(self.calc_state_roots_from, h)
             self.probs[h] = prob
             # Finalized!
             if prob < FINALITY_LOW or prob > FINALITY_HIGH:
@@ -641,25 +665,12 @@ class defaultBetStrategy():
                 if h == self.my_max_finalized_height + 1:
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
-        MAX_RECALC = 13
         log('Recalculating %d out of %d state roots starting from height %d' % 
-            (min(len(self.blocks) - lowest_changed, MAX_RECALC), len(self.blocks) - lowest_changed, lowest_changed), self.index == 3)
+            (min(len(self.blocks) - self.calc_state_roots_from, MAX_RECALC), len(self.blocks) - self.calc_state_roots_from, self.calc_state_roots_from), self.index == 3)
         # Recalculate state roots
-        run_state = State(self.stateroots[lowest_changed-1] if lowest_changed else self.genesis_state.root, self.db)
-        for h in range(lowest_changed, len(self.blocks))[:MAX_RECALC]:
-            prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
-            block_state_transition(run_state, self.blocks[h] if self.probs[h] > 0.5 else None)
-            self.stateroots[h] = run_state.root
-            blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
-            assert blknum == h + 1
-        # If there are some state roots that we have not calculated, just leave them empty
-        for h in range(lowest_changed + MAX_RECALC, len(self.blocks)):
-            self.stateroots[h] = '\x00' * 32
-        # Where to calculate state roots from next time
-        self.calc_state_roots_from = min(lowest_changed + MAX_RECALC, len(self.blocks))
+        rootstart = max(self.calc_state_roots_from, self.induction_height)
+        self.recalc_state_roots()
         # Check state root integrity
-        for i in range(self.calc_state_roots_from):
-            assert self.stateroots[i] not in ('\x00' * 32, None)
         log('Node %d making bet %d with probabilities from height %d: %r' %
             (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 3 or self.index > 6)
         # Sanity check
@@ -670,7 +681,6 @@ class defaultBetStrategy():
         if self.index >= 0 and len(self.blocks) > self.induction_height and not self.withdrawn and len(self.recently_discovered_blocks):
             # Create and sign the bet
             blockstart = max(min(self.recently_discovered_blocks), self.induction_height)
-            rootstart = max(lowest_changed, self.induction_height)
             probstart = min(max(sign_from, self.induction_height), blockstart, rootstart)
             o = sign_bet(Bet(self.index,
                              len(self.blocks) - 1,
@@ -763,17 +773,19 @@ class defaultBetStrategy():
         latest_state_root = self.stateroots[h-1] if h else self.genesis_state.root
         assert latest_state_root not in ('\x00' * 32, None)
         latest_state = State(latest_state_root, self.db)
-        print 'Got latest state at height %d' % big_endian_to_int(latest_state.get_storage(BLKNUMBER, '\x00' * 32))
-        print 'Validator seqs on chain: %r' % {index: call_method(latest_state, CASPER, casper_ct, 'getUserSeq', [index]) for index in self.opinions}
         ops = self.opinions.items() 
         random.shuffle(ops)
+        print 'Producing block %d, know up to %d, using state root after %d' % (self.next_block_to_produce, len(self.blocks)-1, h-1)
         for i, o in ops:
             latest_bet = call_casper(latest_state, 'getUserSeq', [i])
             if self.bets[i].get(latest_bet, None):
-                print 'Inserting bet %d of validator %d using state root at height %d' % (latest_bet, i, h-1)
+                print 'Inserting bet %d of validator %d using state root after height %d' % (latest_bet, i, h-1)
                 bet = self.bets[i][latest_bet]
                 txs.insert(0, Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
                            bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
+            if o.seq < latest_bet:
+                self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, o.seq + 1]))))
+                self.last_asked_for_bets[i] = time.time()
         # Process the unconfirmed index for the transaction. Note that a
         # transaction could theoretically get included in the chain
         # multiple times even within the same block, though if the account
@@ -842,8 +854,10 @@ class defaultBetStrategy():
         # produce a block, then produce a block
         if self.index >= 0 and self.next_block_to_produce is not None:
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
-            if mytime >= target_time:
+            if mytime >= target_time + self.next_submission_delay:
+                self.recalc_state_roots()
                 self.make_block()
+                self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.byzantine else 0
         elif self.next_block_to_produce is None:
             self.add_proposers()
         if self.last_bet_made < time.time() - BLKTIME * VALIDATOR_ROUNDS * 1.5:

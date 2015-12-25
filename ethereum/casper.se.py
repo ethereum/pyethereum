@@ -10,7 +10,7 @@ macro MIN_DEPOSIT: 1500 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
 
-macro ENTER_EXIT_DELAY: 100
+macro ENTER_EXIT_DELAY: 110
 
 macro WITHDRAWAL_WAITTIME: 20
 
@@ -18,9 +18,9 @@ macro SCORING_REWARD_DIVISOR: 10**17 # 300000 * 10**9 * 300000 * 10**9 / 10**12 
 
 macro MAX_INCENTIVIZATION_DEPTH: 160
 
-macro PROFIT_PACKING_NUM: 4
+macro PROFIT_PACKING_NUM: 20
 
-macro PROFIT_PACKING_BYTES: 8 
+macro PROFIT_PACKING_BYTES: 8
 
 macro maskinclude($top, $bottom):
     256**$top - 256**$bottom
@@ -33,6 +33,9 @@ macro getProfit($user, $block):
 
 macro updateProfit($prevProfitBlock, $pos, $val):
     (maskexclude($pos * PROFIT_PACKING_BYTES + PROFIT_PACKING_BYTES, $pos * PROFIT_PACKING_BYTES) & $prevProfitBlock) + $val * 256**(PROFIT_PACKING_BYTES * $pos)
+
+macro mcopy_small($to, $frm, $bytes):
+    ~mstore($to, (~mload($to) & sub(0, 256**$bytes)) + ($frm & (256**$bytes - 1)))
 
 
 # Become a validator
@@ -71,10 +74,14 @@ def withdraw(index:uint256):
 
 # Submit a bet
 def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes32, seqnum:uint256, sig:bytes):
+    if seqnum != self.users[index].seq:
+        log3(20, index, block.number, seqnum, self.users[index].seq)
     assert seqnum == self.users[index].seq
     assert prevhash == self.users[index].prevhash
     assert max_height <= block.number
     blksActive = (block.number - self.users[index].prevsubmission)
+    if blksActive == 0:
+        log2(30, index, block.number, seqnum)
     assert blksActive >= 1
     assert self.users[index].withdrawal_height > block.number
     assert len(probs) >= len(blockhashes)
@@ -84,6 +91,8 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     ~calldatacopy(_calldata, 0, ~calldatasize())
     signing_hash = ~sha3(_calldata, ~calldatasize() - 32 - ceil32(len(sig)))
     self.users[index].prevhash = ~sha3(_calldata, ~calldatasize())
+    self.users[index].prevsubmission = block.number
+    self.users[index].seq = seqnum + 1
     # Check the sig against the user validation code
     user_validation_code = string(~ssize(ref(self.users[index].validationCode)))
     ~sloadbytes(ref(self.users[index].validationCode), user_validation_code, len(user_validation_code))
@@ -96,8 +105,6 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # Bet with max height 2**256 - 1 to start withdrawal
     if max_height == ~sub(0, 1):
         self.users[index].withdrawal_height = block.number
-        self.users[index].prevsubmission = block.number
-        self.users[index].seq = seqnum + 1
         return True
     # Update blockhashes, storing blockhash correctness info in groups of 32
     i = 0
@@ -136,14 +143,14 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                 h -= top
                 i += top
 
-    self.users[index].prevsubmission = block.number
-    self.users[index].seq = seqnum + 1
     minChanged = max_height - max(max(len(blockhashes), len(stateroots)), len(probs)) + 1
     # Incentivization
     with H = max(max(self.users[index].induction_height, block.number - MAX_INCENTIVIZATION_DEPTH), minChanged):
         netProb = 10**9
-        CURPROFIT = getProfit(index, H - 1)
-        with PROFITBLOCK = self.users[index].profits[div(H, PROFIT_PACKING_NUM)]:
+        with PROFITBLOCK = string(PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES):
+            ~sloadbytes(ref(self.users[index].profits[div(H - 1, PROFIT_PACKING_NUM)]), PROFITBLOCK, PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES)
+            CURPROFIT = ~mload(PROFITBLOCK - 32 + PROFIT_PACKING_BYTES + mod(H - 1, PROFIT_PACKING_NUM)) % 256**PROFIT_PACKING_BYTES
+            ~sloadbytes(ref(self.users[index].profits[div(H, PROFIT_PACKING_NUM)]), PROFITBLOCK, PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES)
             while H <= max_height:
                 # Determine the byte that was saved as the probability
                 # Convert the byte to odds * 1 billion
@@ -165,7 +172,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                             profitFactor2 = scoreIncorrect(convertProbToOdds(netProb))
                     else:
                         profitFactor2 = 0
-                    # If we lose a log of money, log it for debug purposes
+                    # If we lose a lot of money, log it for debug purposes
                     if profitFactor < 0:
                         if blockOdds < 10**8 or blockOdds > 10**10:
                             log3(700 + index, H, blockHashInfo, blockOdds, -profitFactor)
@@ -179,15 +186,19 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                             log0(1, 3141592653589)
                     # Update the profit counter
                     CURPROFIT += profitFactor2 + profitFactor
-                    PROFITBLOCK = updateProfit(PROFITBLOCK, mod(H, PROFIT_PACKING_NUM), CURPROFIT)
+                    mcopy_small(PROFITBLOCK + PROFIT_PACKING_BYTES * mod(H, PROFIT_PACKING_NUM) - 32 + PROFIT_PACKING_BYTES, CURPROFIT, PROFIT_PACKING_BYTES)
                     if (mod(H, PROFIT_PACKING_NUM) == (PROFIT_PACKING_NUM - 1) or H == max_height):
-                        self.users[index].profits[div(H, PROFIT_PACKING_NUM)] = PROFITBLOCK
-                        PROFITBLOCK = self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]
+                        ~sstorebytes(ref(self.users[index].profits[div(H, PROFIT_PACKING_NUM)]), PROFITBLOCK, PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES)
+                        ~sloadbytes(ref(self.users[index].profits[(H + 1) / PROFIT_PACKING_NUM]), PROFITBLOCK, PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES)
                     # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
-                    # log4(1000, msg.gas,blockOdds, profitFactor, profitFactor2, self.users[index].profits[H])
+                    # log3(1000 + H, msg.gas, blockOdds, profitFactor, profitFactor2)
                     # log3(1001, block.number, H, blockHashInfo, stateRootInfo)
                     H += 1
-    profit = self.users[index].deposit_size * (CURPROFIT - getProfit(index, H - MAX_INCENTIVIZATION_DEPTH)) / SCORING_REWARD_DIVISOR * blksActive
+            ~sloadbytes(ref(self.users[index].profits[(H - MAX_INCENTIVIZATION_DEPTH) / PROFIT_PACKING_NUM]), PROFITBLOCK, PROFIT_PACKING_NUM * PROFIT_PACKING_BYTES)
+            prevProfit = ~mload(PROFITBLOCK + PROFIT_PACKING_BYTES * mod(H, PROFIT_PACKING_NUM) - 32 + PROFIT_PACKING_BYTES) % 256**PROFIT_PACKING_BYTES
+            # log3(90, prevProfit, CURPROFIT, blksActive, self.users[index].deposit_size)
+            profit = self.users[index].deposit_size * (CURPROFIT - prevProfit) / SCORING_REWARD_DIVISOR * blksActive
+            # log0(100, profit)
     # Optional verification code
     # h = max_height
     # while h >= 0:

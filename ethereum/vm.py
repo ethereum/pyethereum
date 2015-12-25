@@ -476,8 +476,6 @@ def vm_execute(ext, msg, code):
             depth = int(op[3:])
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
-            if 3141592653589 in topics:
-                raise Exception("Testing exception triggered!")
             print '###log###', mstart, msz, topics
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()

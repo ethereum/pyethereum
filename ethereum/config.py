@@ -24,4 +24,5 @@ GASLIMIT = 4712388 # Pau million
 NULL_SENDER = utils.int_to_addr(0)
 BLKTIME = 5
 # Note that this parameter must be set in the Casper contract as well
-ENTER_EXIT_DELAY = 100
+ENTER_EXIT_DELAY = 110
+VALIDATOR_ROUNDS = 5
