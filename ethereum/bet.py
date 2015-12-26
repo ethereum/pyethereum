@@ -778,11 +778,13 @@ class defaultBetStrategy():
         print 'Producing block %d, know up to %d, using state root after %d' % (self.next_block_to_produce, len(self.blocks)-1, h-1)
         for i, o in ops:
             latest_bet = call_casper(latest_state, 'getUserSeq', [i])
-            if self.bets[i].get(latest_bet, None):
+            bet_height = latest_bet
+            while bet_height in self.bets[i]:
                 print 'Inserting bet %d of validator %d using state root after height %d' % (latest_bet, i, h-1)
-                bet = self.bets[i][latest_bet]
+                bet = self.bets[i][bet_height]
                 txs.insert(0, Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
                            bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
+                bet_height += 1
             if o.seq < latest_bet:
                 self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, o.seq + 1]))))
                 self.last_asked_for_bets[i] = time.time()

@@ -587,9 +587,9 @@ def vm_execute(ext, msg, code):
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SLOADBYTES':
             s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, s1, s2):
-                return vm_exception('OOG EXTENDING MEMORY')
             data = map(ord, ext.get_storage(msg.to, s0))
+            if not mem_extend(mem, compustate, op, s1, min(len(data), s2)):
+                return vm_exception('OOG EXTENDING MEMORY')
             for i in range(min(len(data), s2)):
                 mem[s1 + i] = data[i]
         elif op == 'SSTOREBYTES':

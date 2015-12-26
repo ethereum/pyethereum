@@ -174,9 +174,9 @@ def check_correctness(bets):
     print 'Validator seqs on speculative chain (%d): %r' % (h-1, {bet.index: call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
     # Validator deposit sizes (over 1500 * 10**18 means profit)
     print 'Validator deposit sizes: %r' % [call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
-    # for bet in bets:
-    #     if bet.index >= 0:
-    #         assert call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) >= 1500 * 10**18
+    for bet in bets:
+        if bet.index >= 0 and big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) >= bet.induction_height:
+            assert call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) >= 1499 * 10**18
     # Account signing nonces
     print 'Account signing nonces: %r' % [big_endian_to_int(state.get_storage(bet.addr, encode_int32(2**256 - 1))) for bet in bets]
     # Transaction status

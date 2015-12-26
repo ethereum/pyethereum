@@ -25,4 +25,5 @@ NULL_SENDER = utils.int_to_addr(0)
 BLKTIME = 5
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 110
+# Note that this parameter must be set in the Casper contract as well
 VALIDATOR_ROUNDS = 5
