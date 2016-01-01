@@ -45,6 +45,8 @@ class solc_wrapper(object):
         else:
             idx = -1
         if libraries:
+            if cls.compiler_version() < "0.1.2":
+                raise CompileError('Compiler does not support libraries. Please update compiler.')
             for lib_name, lib_address in libraries.iteritems():
                 sorted_contracts[idx][1]['bin'] = sorted_contracts[idx][1]['bin'].replace("__{}{}".format(lib_name, "_" * (38-len(lib_name))), lib_address)
         return sorted_contracts[idx][1]['bin'].decode('hex')
