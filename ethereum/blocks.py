@@ -38,9 +38,10 @@ Log = processblock.Log
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
     config = parent.config
+    print 'cutoff', config['HOMESTEAD_FORK_BLKNUM']
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
-        sign = max(1 - 2 * ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
+        sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     else:
         sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
     # If we enter a special mode where the genesis difficulty starts off below

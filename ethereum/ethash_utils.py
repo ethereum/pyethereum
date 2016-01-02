@@ -1,6 +1,11 @@
-from Crypto.Hash import keccak
-sha3_256 = lambda x: keccak.new(digest_bits=256, data=x)
-sha3_512 = lambda x: keccak.new(digest_bits=512, data=x)
+try:
+    from Crypto.Hash import keccak
+    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
+    sha3_512 = lambda x: keccak.new(digest_bits=512, data=x)
+except:
+    import sha3 as _sha3
+    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
+    sha3_512 = lambda x: _sha3.sha3_512(x).digest()
 from rlp.utils import decode_hex, encode_hex
 import sys
 
