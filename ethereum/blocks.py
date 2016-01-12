@@ -38,7 +38,6 @@ Log = processblock.Log
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
     config = parent.config
-    print 'cutoff', config['HOMESTEAD_FORK_BLKNUM']
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
         sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
@@ -51,6 +50,7 @@ def calc_difficulty(parent, timestamp):
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
         o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+    # print 'Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o)
     return o
 
 
