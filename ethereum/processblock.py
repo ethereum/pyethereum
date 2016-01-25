@@ -228,19 +228,20 @@ def _apply_msg(ext, msg, code):
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
         if log_state.is_active('trace'):
-            log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+            log_state.trace('MSG PRE STATE SENDER', account=msg.sender.encode('hex'),
                             bal=ext.get_balance(msg.sender),
                             state=ext.log_storage(msg.sender))
-            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to.encode('hex'),
                             bal=ext.get_balance(msg.to),
                             state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
     snapshot = ext._block.snapshot()
-    if not ext._block.transfer_value(msg.sender, msg.to, msg.value):
-        log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
-                      want=msg.value)
-        return 1, msg.gas, []
+    if msg.transfers_value:
+        if not ext._block.transfer_value(msg.sender, msg.to, msg.value):
+            log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
+                          want=msg.value)
+            return 1, msg.gas, []
     # Main loop
     if msg.code_address in specials.specials:
         res, gas, dat = specials.specials[msg.code_address](ext, msg)
@@ -252,10 +253,10 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('MSG APPLIED', gas_remained=gas,
                       sender=msg.sender, to=msg.to, data=dat)
         if log_state.is_active('trace'):
-            log_state.trace('MSG PRE STATE SENDER', account=msg.sender,
+            log_state.trace('MSG POST STATE SENDER', account=msg.sender.encode('hex'),
                             bal=ext.get_balance(msg.sender),
                             state=ext.log_storage(msg.sender))
-            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to,
+            log_state.trace('MSG POST STATE RECIPIENT', account=msg.to.encode('hex'),
                             bal=ext.get_balance(msg.to),
                             state=ext.log_storage(msg.to))
 
@@ -267,6 +268,7 @@ def _apply_msg(ext, msg, code):
 
 
 def create_contract(ext, msg):
+    log_msg.debug('CONTRACT CREATION')
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     if ext.tx_origin != msg.sender:
@@ -295,7 +297,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost)
+            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext._block.number)
             if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
                 ext._block.revert(snapshot)
                 return 0, 0, b''

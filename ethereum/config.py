@@ -44,7 +44,7 @@ default_config = dict(
     # Blank account initial nonce
     ACCOUNT_INITIAL_NONCE=0,
     # Homestead fork (500k on livenet?)
-    HOMESTEAD_FORK_BLKNUM=900000,
+    HOMESTEAD_FORK_BLKNUM=1000000,
     HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
 )
 assert default_config['NEPHEW_REWARD'] == \

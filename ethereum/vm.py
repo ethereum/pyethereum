@@ -55,8 +55,8 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data,
-                 depth=0, code_address=None, is_create=False):
+    def __init__(self, sender, to, value, gas, data, depth=0, 
+            code_address=None, is_create=False, transfers_value=True):
         self.sender = sender
         self.to = to
         self.value = value
@@ -66,6 +66,7 @@ class Message(object):
         self.logs = []
         self.code_address = code_address
         self.is_create = is_create
+        self.transfers_value = transfers_value
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -555,7 +556,7 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, meminstart, meminsz)
                 if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to)
+                                       msg.depth + 1, code_address=to, transfers_value=False)
                 elif op == 'DELEGATECALL':
                     return vm_exception('OPCODE INACTIVE')
                 else:

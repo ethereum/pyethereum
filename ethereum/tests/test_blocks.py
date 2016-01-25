@@ -72,6 +72,7 @@ def run_block_test(params, config_overrides = {}):
     old_config = copy.deepcopy(env.config)
     for k, v in config_overrides.items():
         env.config[k] = v
+    b2 = None
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             try:
@@ -91,7 +92,8 @@ def run_block_test(params, config_overrides = {}):
             assert b2.validate_uncles()
             blockmap[b2.hash] = b2
             env.db.put(b2.hash, rlp.encode(b2))
-        print 'Block %d with state root %s' % (b2.number, b2.state.root_hash.encode('hex'))
+        if b2:
+            print 'Block %d with state root %s' % (b2.number, b2.state.root_hash.encode('hex'))
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
@@ -106,7 +108,7 @@ def run_block_test(params, config_overrides = {}):
 
 def do_test_block(filename, testname=None, testdata=None, limit=99999999):
     print('\nrunning test:%r in %r' % (testname, filename))
-    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0} if 'Homestead' in filename else {})
+    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
 
 excludes = [('bcWalletTest.json', u'walletReorganizeOwners'),
             ('bl10251623GO.json', u'randomBlockTest'),
@@ -122,13 +124,13 @@ if __name__ == '__main__':
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0} if 'Homestead' in filename else {})
+                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0} if 'Homestead' in filename else {})
+                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
 else:
     fixtures = testutils.get_tests_from_file_or_dir(
         os.path.join(testutils.fixture_path, 'BlockchainTests'))
