@@ -4,7 +4,7 @@ from utils import normalize_address, zpad, encode_int, big_endian_to_int, \
 from utils import privtoaddr as _privtoaddr
 import bitcoin
 from serenity_transactions import Transaction
-from serenity_blocks import mk_contract_address, tx_state_transition, State, initialize_with_gas_limit
+from serenity_blocks import mk_contract_address, tx_state_transition, State, initialize_with_gas_limit, get_code
 import serpent
 import db
 import abi
@@ -62,7 +62,7 @@ constructor_ct = abi.ContractTranslator(serpent.mk_full_signature(cc))
 s = State('', db.EphemDB())
 initialize_with_gas_limit(s, 10**9)
 tx_state_transition(s, Transaction(None, 1000000, data='', code=constructor_code))
-constructor_output_code = s.get_storage(mk_contract_address(code=constructor_code), '')
+constructor_output_code = get_code(s, mk_contract_address(code=constructor_code))
 index = constructor_output_code.index('\x82\xa9x\xb3\xf5\x96*[\tW\xd9\xee\x9e\xefG.\xe5[B\xf1')
 
 # The init code for an ECDSA account. Calls the constructor storage contract to
@@ -107,7 +107,7 @@ def mk_validation_code(k):
     s = State('', db.EphemDB())
     initialize_with_gas_limit(s, 10**9)
     tx_state_transition(s, Transaction(None, 1000000, data='', code=code3))
-    return s.get_storage(mk_contract_address(code=code3), '')
+    return get_code(s, mk_contract_address(code=code3))
 
 # Helper function for signing a block
 def sign_block(block, key):

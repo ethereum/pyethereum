@@ -5,7 +5,8 @@ from utils import address, int256, trie_root, hash32, to_string, \
     encode_int32, safe_ord, encode_int, shardify
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from serenity_blocks import tx_state_transition, BLKNUMBER, \
-    block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt
+    block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt, \
+    get_code
 from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet
 from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS
@@ -60,7 +61,7 @@ def call_method(state, addr, ct, fun, args, gas=1000000):
     data = ct.encode(fun, args)
     message_data = vm.CallData([safe_ord(x) for x in data], 0, len(data))
     message = vm.Message(NULL_SENDER, addr, 0, gas, message_data)
-    result, gas_remained, data = apply_msg(VMExt(state.clone()), message, state.get_storage(addr, b''))
+    result, gas_remained, data = apply_msg(VMExt(state.clone()), message, get_code(state, addr))
     output = ''.join(map(chr, data))
     return ct.decode(fun, output)[0]
 

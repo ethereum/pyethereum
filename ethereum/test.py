@@ -1,4 +1,5 @@
-from serenity_blocks import State, tx_state_transition, mk_contract_address, block_state_transition, initialize_with_gas_limit
+from serenity_blocks import State, tx_state_transition, mk_contract_address, \
+    block_state_transition, initialize_with_gas_limit, get_code, put_code
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 import serpent
@@ -33,17 +34,17 @@ gc = genesis.clone()
 casper_file = os.path.join(os.path.split(__file__)[0], 'casper.se.py')
 code = serpent.compile(casper_file)
 tx_state_transition(gc, Transaction(None, 2000000, data='', code=code))
-genesis.set_storage(CASPER, '', gc.get_storage(mk_contract_address(code=code), ''))
+put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
 ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
 # Add the bet incentivizer
 code2 = serpent.compile(bet_incentivizer_code)
 tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
-genesis.set_storage(BET_INCENTIVIZER, '', gc.get_storage(mk_contract_address(code=code2), ''))
+put_code(genesis, BET_INCENTIVIZER, get_code(gc, mk_contract_address(code=code2)))
 print 'Bet incentivizer added'
 
 # Get the code for the basic ecrecover account
-genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
+put_code(genesis, ECRECOVERACCT, ecdsa_accounts.constructor_code)
 print 'ECRECOVER account added'
     
 # We might want logging
@@ -71,7 +72,7 @@ for i, k in enumerate(keys):
     print 'Length of validation code:', len(vcode)
     # Make the transaction to join as a Casper validator
     txdata = ct.encode('join', [vcode])
-    print 'Length of account code:', len(genesis.get_storage(a, ''))
+    print 'Length of account code:', len(get_code(genesis, a))
     tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
     print 'Joining'
     v = tx_state_transition(genesis, tx, listeners=[my_listen])
@@ -201,7 +202,7 @@ for bet in bets:
     bet.network = n
 # Keep running until the min finalized height reaches 5
 while 1:
-    n.run(20, sleep=0.2)
+    n.run(20, sleep=0.25)
     check_correctness(bets)
     if min_mfh >= 5:
         print 'Reached breakpoint'
@@ -231,7 +232,7 @@ for i, k in enumerate(secondkeys):
 # Keep running until the min finalized height reaches 75. We expect that by
 # this time all transactions from the previous phase have been included
 while 1:
-    n.run(20, sleep=0.2)
+    n.run(20, sleep=0.25)
     check_correctness(bets)
     if min_mfh > 95:
         print 'Reached breakpoint'
@@ -257,7 +258,7 @@ print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'g
 # Keep running until the min finalized height reaches ~175. We expect that by
 # this time all validators will be actively betting off of each other's bets
 while 1:
-    n.run(20, sleep=0.2)
+    n.run(20, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
@@ -276,7 +277,7 @@ BLK_DISTANCE = len(bet.blocks) - min_mfh
 
 # Keep running until the min finalized height reaches ~290.
 while 1:
-    n.run(20, sleep=0.2)
+    n.run(20, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]

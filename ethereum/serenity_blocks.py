@@ -6,7 +6,7 @@ from utils import address, int256, trie_root, hash32, to_string, \
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import fastvm as vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES
 import rlp
 import trie
 import specials
@@ -311,14 +311,15 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
         if not result:
             state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 1)
             return None
-        state.set_storage(tx.addr, b'', ''.join([chr(x) for x in data]))
+        code = ''.join([chr(x) for x in data])
+        put_code(state, tx.addr, code)
     else:
         execution_start_gas = tx.exec_gas
     # Process VM execution
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
     result, msg_gas_remained, data = \
-        apply_msg(ext, message, state.get_storage(tx.addr, b''))
+        apply_msg(ext, message, get_code(state, tx.addr))
     assert 0 <= msg_gas_remained <= execution_start_gas <= tx.exec_gas
     # Set gas used
     state.set_storage(_GAS_REMAINING, '\x00' * 32, gas_remaining - tx.exec_gas + msg_gas_remained)
@@ -345,6 +346,15 @@ def add_log(state, sender, topics, data, leftbound, listeners):
     for listener in listeners:
         listener(sender, topics, ''.join([chr(x) for x in data]))
 
+def get_code(state, address):
+    codehash = state.get_storage(address, '')
+    return state.db.get(UNHASH_MAGIC_BYTES + codehash) if codehash else ''
+
+def put_code(state, address, code):
+    codehash = sha3(code)
+    state.db.put(UNHASH_MAGIC_BYTES + codehash, code)
+    state.set_storage(address, '', codehash)
+
 # External calls that can be made from inside the VM. To use the EVM with a
 # different blockchain system, database, set parameters for testing, just
 # swap out the functions here
@@ -356,6 +366,7 @@ class VMExt():
         self.get_storage = state.get_storage
         self.log = lambda sender, topics, data, leftbound: add_log(state, sender, topics, data, leftbound, listeners)
         self.log_storage = state.account_to_dict
+        self.unhash = lambda x: state.db.get(UNHASH_MAGIC_BYTES + x)
         self.msg = lambda msg, code: apply_msg(self, msg, code)
         self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
 
@@ -370,6 +381,7 @@ class _EmptyVMExt():
         self.get_storage = lambda addr, k: ''
         self.log = lambda topics, mem: None
         self.log_storage = lambda addr: None
+        self.unhash = lambda x: ''
         self.msg = lambda msg, code: apply_msg(self, msg, code)
         self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
 

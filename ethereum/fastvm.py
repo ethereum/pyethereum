@@ -482,7 +482,14 @@ def vm_execute(ext, msg, code):
                 mem[s0] = s1 % 256
             elif op == op_SLOAD:
                 stk.append(utils.big_endian_to_int(ext.get_storage(msg.to, stk.pop())))
-            elif op == op_SSTORE:
+            elif op == op_SSTORE or op == op_SSTOREEXT:
+                if op == op_SSTOREEXT:
+                    shard = stk.pop()
+                    if not validate_and_get_address(256**ADDR_BYTES * shard):
+                        return vm_exception('OUT OF RANGE')
+                    toaddr = shardify(msg.to, shard)
+                else:   
+                    toaddr = msg.to
                 s0, s1 = stk.pop(), stk.pop()
                 if ext.get_storage(msg.to, s0):
                     gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
@@ -490,12 +497,16 @@ def vm_execute(ext, msg, code):
                 else:
                     gascost = opcodes.GSTORAGEADD if s1 else opcodes.GSTORAGEMOD
                     refund = 0
-                if msg.to == CASPER:
+                if toaddr == CASPER:
                     gascost /= 2
                 if compustate.gas < gascost:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost
-                ext.set_storage(msg.to, s0, s1)
+                ext.set_storage(toaddr, s0, s1)
+                # Copy code to new shard
+                if op == op_SSTOREEXT:
+                    if not ext.get_storage(toaddr, ''):
+                        ext.set_storage(toaddr, ext.get_storage(msg.to))
             elif op == op_JUMP:
                 compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][4] if \
@@ -516,6 +527,14 @@ def vm_execute(ext, msg, code):
                 stk.append(len(mem))
             elif op == op_GAS:
                 stk.append(compustate.gas)  # AFTER subtracting cost 1
+            elif op == op_SLOADEXT:
+                shard, key = stk.pop(), stk.pop()
+                if not validate_and_get_address(256**ADDR_BYTES * shard):
+                    return vm_exception('OUT OF RANGE')
+                toaddr = shardify(msg.to, shard)
+                stk.append(utils.big_endian_to_int(ext.get_storage(toaddr, key)))
+                if not ext.get_storage(toaddr, ''):
+                    ext.set_storage(toaddr, ext.get_storage(msg.to))
         elif op_PUSH1 <= (op & 255) <= op_PUSH32:
             # Hide push value in high-order bytes of op
             stk.append(op >> 8)
@@ -570,7 +589,8 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    depth=msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg, ext.get_storage(to, ''))
+                codehash = ext.get_storage(to, '')
+                result, gas, data = ext.msg(call_msg, ext.unhash(codehash) if codehash else '')
                 if result == 0:
                     stk.append(0)
                 else:
@@ -601,7 +621,8 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                    depth=msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg, ext.get_storage(msg.to, ''))
+                codehash = ext.get_storage(msg.to, '')
+                result, gas, data = ext.msg(call_msg, ext.unhash(codehash) if codehash else '')
                 if result == 0:
                     stk.append(0)
                 else:
@@ -637,19 +658,49 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
-        elif op == op_SLOADBYTES:
+        elif op == op_SLOADBYTES or op == op_SLOADEXTBYTES:
+            if op == op_SLOADEXTBYTES:
+                shard = stk.pop()
+                if not validate_and_get_address(256**ADDR_BYTES * shard):
+                    return vm_exception('OUT OF RANGE')
+                toaddr = shardify(msg.to, shard)
+            else:
+                toaddr = msg.to
             s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
-            data = map(ord, ext.get_storage(msg.to, s0))
+            data = map(ord, ext.get_storage(toaddr, s0))
             if not mem_extend(mem, compustate, op, s1, min(len(data), s2)):
                 return vm_exception('OOG EXTENDING MEMORY')
             for i in range(min(len(data), s2)):
                 mem[s1 + i] = data[i]
-        elif op == op_SSTOREBYTES:
+            # Copy code to new shard
+            if op == op_SLOADEXTBYTES:
+                if not ext.get_storage(toaddr, ''):
+                    ext.set_storage(toaddr, ext.get_storage(msg.to))
+        elif op == op_SSIZEEXT:
+            shard, key = stk.pop(), stk.pop()
+            if not validate_and_get_address(256**ADDR_BYTES * shard):
+                return vm_exception('OUT OF RANGE')
+            toaddr = shardify(msg.to, shard)
+            stk.append(len(ext.get_storage(toaddr, key)))
+            if not ext.get_storage(toaddr, ''):
+                ext.set_storage(toaddr, ext.get_storage(msg.to))
+        elif op == op_SSTOREBYTES or op == op_SSTOREEXTBYTES:
+            if op == op_SSTOREEXTBYTES:
+                shard = stk.pop()
+                if not validate_and_get_address(256**ADDR_BYTES * shard):
+                    return vm_exception('OUT OF RANGE')
+                toaddr = shardify(msg.to, shard)
+            else:
+                toaddr = msg.to
             s0, s1, s2 = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s1, s2):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = ''.join(map(chr, mem[s1: s1 + s2]))
-            ext.set_storage(msg.to, s0, data)
+            ext.set_storage(toaddr, s0, data)
+            # Copy code to new shard
+            if op == op_SSTOREEXTBYTES:
+                if not ext.get_storage(toaddr, ''):
+                    ext.set_storage(toaddr, ext.get_storage(msg.to))
         elif op == op_SSIZE:
             stk.append(len(ext.get_storage(msg.to, stk.pop())))
         elif op == op_STATEROOT:

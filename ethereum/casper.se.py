@@ -143,7 +143,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # Bet with max height 2**256 - 1 to start withdrawal
     if max_height == ~sub(0, 1):
         self.users[index].withdrawal_height = block.number
-        return True
+        return(1:bool)
     # Update blockhashes, storing blockhash correctness info in groups of 32
     with i = 0:
         with v = self.users[index].blockhashes[max_height / 32]:
