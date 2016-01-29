@@ -157,6 +157,8 @@ def check_correctness(bets):
     for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
         assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
         block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
+        block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
+        assert block0 == block
         block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i]:
             sys.stderr.write('State root mismatch at block %d!\n' % i)

@@ -35,7 +35,7 @@ NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
 
-COURAGE = 0.97
+COURAGE = 0.84
 
 rlp_dict = {}
 

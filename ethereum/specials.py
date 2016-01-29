@@ -1,6 +1,6 @@
 import bitcoin
 from ethereum import utils, opcodes
-from utils import safe_ord, decode_hex, big_endian_to_int
+from utils import safe_ord, decode_hex, big_endian_to_int, encode_int32
 from rlp.utils import ascii_chr
 from config import ETHER
 
@@ -27,6 +27,53 @@ def proc_ecrecover(ext, msg):
     pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
+
+
+def proc_ecadd(ext, msg):
+    OP_GAS = opcodes.GECADD
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    x1 = msg.data.extract32(0)
+    y1 = msg.data.extract32(32)
+    x2 = msg.data.extract32(64)
+    y2 = msg.data.extract32(96)
+    # point not on curve
+    if (x1*x1*x1+x1-y1*y1) % bitcoin.P != 0:
+        return 0, 0, []
+    # point not on curve
+    if (x2*x2*x2+x2-y2*y2) % bitcoin.P != 0:
+        return 0, 0, []
+    c, d = bitcoin.fast_add((x1, y1), (x2, y2))
+    c2, d2 = encode_int32(c), encode_int32(d)
+    return 1, msg.gas - gas_cost, map(ord, c2 + d2)
+
+
+def proc_ecmul(ext, msg):
+    OP_GAS = opcodes.GECMUL
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    x1 = msg.data.extract32(0)
+    y1 = msg.data.extract32(32)
+    n = msg.data.extract32(64)
+    # point not on curve
+    if (x1*x1*x1+x1-y1*y1) % bitcoin.P != 0:
+        return 0, 0, []
+    c, d = bitcoin.fast_multiply((x1, y1), n)
+    c2, d2 = encode_int32(c), encode_int32(d)
+    return 1, msg.gas - gas_cost, map(ord, c2 + d2)
+
+
+def proc_modexp(ext, msg):
+    OP_GAS = opcodes.GMODEXP
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    b = msg.data.extract32(0)
+    e = msg.data.extract32(32)
+    m = msg.data.extract32(64)
+    return 1, msg.gas - gas_cost, map(ord, encode_int32(pow(b, e, m)))
 
 
 def proc_sha256(ext, msg):
@@ -85,6 +132,9 @@ specials = {
     2: proc_sha256,
     3: proc_ripemd160,
     4: proc_identity,
+    5: proc_ecadd,
+    6: proc_ecmul,
+    7: proc_modexp,
     big_endian_to_int(ETHER): proc_send_ether,
 }
 

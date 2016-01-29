@@ -242,6 +242,8 @@ def initialize_with_gas_limit(state, gas_limit, left_bound=0):
     state.set_storage(shardify(GAS_REMAINING, left_bound), '\x00' * 32, zpad(encode_int(gas_limit), 32))
     
 
+transition_cache_map = {}
+
 # Processes a block on top of a state to reach a new state
 def block_state_transition(state, block, listeners=[]):
     pre = state.root
@@ -279,7 +281,12 @@ def block_state_transition(state, block, listeners=[]):
     newseed = big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
-
+    # Consistency checking
+    check_key = pre+(block.hash if block else 'NONE')
+    if check_key not in transition_cache_map:
+        transition_cache_map[check_key] = state.root
+    else:
+        assert transition_cache_map[check_key] == state.root
 
 def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[]):
     _TXINDEX = shardify(TXINDEX, left_bound)

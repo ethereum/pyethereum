@@ -118,6 +118,9 @@ GRIPEMD160WORD = 120  # Cost of RIPEMD160 per word
 GIDENTITYBASE = 15    # Base cost of indentity
 GIDENTITYWORD = 3     # Cost of identity per word
 GECRECOVER = 3000     # Cost of ecrecover op
+GECADD = 200          # Cost of ecadd op
+GECMUL = 1000         # Cost of ecmul op
+GMODEXP = 200         # Cost of modexp op
 
 GSTIPEND = 2300
 
