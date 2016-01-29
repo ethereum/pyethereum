@@ -14,9 +14,16 @@ big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
 
+
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
+
+# Number of shards
+MAXSHARDS = 65536
+SHARD_BYTES = len(int_to_big_endian(MAXSHARDS - 1))
+ADDR_BYTES = 20 + SHARD_BYTES
+ADDR_BASE_BYTES = 20
 
 if sys.version_info.major == 2:
     is_numeric = lambda x: isinstance(x, (int, long))
@@ -113,32 +120,15 @@ def privtoaddr(x, extended=False):
     return add_checksum(o) if extended else o
 
 
-def add_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    if len(x) == 24:
-        return x
-    return x + sha3(x)[:4]
-
-
-def check_and_strip_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
-    return x[:20]
-
-
 def normalize_address(x, allow_blank=False):
     if allow_blank and x == '':
         return ''
-    if len(x) in (42, 50) and x[:2] == '0x':
+    if x[:2] == '0x':
         x = x[2:]
-    if len(x) in (40, 48):
+    if len(x) == 2 * ADDR_BYTES:
         x = decode_hex(x)
-    if len(x) == 24:
-        assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
-        x = x[:20]
-    if len(x) != 20:
+    if len(x) != ADDR_BYTES:
+        print x.encode('hex')
         raise Exception("Invalid address format!")
     return x
 
@@ -155,35 +145,35 @@ def zunpad(x):
 
 
 def int_to_addr(x):
-    o = [''] * 20
-    for i in range(20):
-        o[19 - i] = ascii_chr(x & 0xff)
+    o = [''] * ADDR_BYTES
+    for i in range(ADDR_BYTES):
+        o[ADDR_BYTES - 1 - i] = ascii_chr(x & 0xff)
         x >>= 8
     return b''.join(o)
 
 
 def coerce_addr_to_bin(x):
     if is_numeric(x):
-        return encode_hex(zpad(big_endian_int.serialize(x), 20))
-    elif len(x) == 40 or len(x) == 0:
+        return encode_hex(zpad(big_endian_int.serialize(x), ADDR_BYTES))
+    elif len(x) == ADDR_BYTES * 2 or len(x) == 0:
         return decode_hex(x)
     else:
-        return zpad(x, 20)[-20:]
+        return zpad(x, ADDR_BYTES)[-ADDR_BYTES:]
 
 
 def coerce_addr_to_hex(x):
     if is_numeric(x):
-        return encode_hex(zpad(big_endian_int.serialize(x), 20))
-    elif len(x) == 40 or len(x) == 0:
+        return encode_hex(zpad(big_endian_int.serialize(x), ADDR_BYTES))
+    elif len(x) == ADDR_BYTES * 2 or len(x) == 0:
         return x
     else:
-        return encode_hex(zpad(x, 20)[-20:])
+        return encode_hex(zpad(x, ADDR_BYTES)[-ADDR_BYTES:])
 
 
 def coerce_to_int(x):
     if is_numeric(x):
         return x
-    elif len(x) == 40:
+    elif len(x) == ADDR_BYTES * 2:
         return big_endian_to_int(decode_hex(x))
     else:
         return big_endian_to_int(x)
@@ -192,7 +182,7 @@ def coerce_to_int(x):
 def coerce_to_bytes(x):
     if is_numeric(x):
         return big_endian_int.serialize(x)
-    elif len(x) == 40:
+    elif len(x) == ADDR_BYTES * 2:
         return decode_hex(x)
     else:
         return x
@@ -233,8 +223,8 @@ def decode_bin(v):
 
 def decode_addr(v):
     '''decodes an address from serialization'''
-    if len(v) not in [0, 20]:
-        raise Exception("Serialized addresses must be empty or 20 bytes long!")
+    if len(v) not in [0, ADDR_BYTES]:
+        raise Exception("Serialized addresses must be empty or %d bytes long!" % ADDR_BYTES)
     return encode_hex(v)
 
 
@@ -390,6 +380,17 @@ def dump_state(trie):
         res += '%r:%r\n' % (encode_hex(k), encode_hex(v))
     return res
 
+def shardify(address, shard):
+    assert len(address) in (ADDR_BYTES - SHARD_BYTES, ADDR_BYTES)
+    return encode_int32(shard)[-SHARD_BYTES:] + address[-ADDR_BASE_BYTES:]
+
+def get_shard(address):
+    assert len(address) == ADDR_BYTES
+    return big_endian_to_int(address[:SHARD_BYTES])
+
+def match_shard(addr, shard_source):
+    return shard_source[:SHARD_BYTES] + addr[SHARD_BYTES:]
+
 
 class Denoms():
 
@@ -406,7 +407,7 @@ class Denoms():
 denoms = Denoms()
 
 
-address = Binary.fixed_length(20, allow_empty=True)
+address = Binary.fixed_length(ADDR_BYTES, allow_empty=True)
 int20 = BigEndianInt(20)
 int32 = BigEndianInt(32)
 int256 = BigEndianInt(256)

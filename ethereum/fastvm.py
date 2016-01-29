@@ -7,16 +7,16 @@ verify_stack_after_op = False
 #  ######################################
 import sys
 
-from ethereum import utils
 from ethereum.abi import is_numeric
 import copy
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string
+from utils import to_string, shardify, int_to_addr
+import utils
 import numpy
 
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -64,6 +64,7 @@ class CallData(object):
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data,
+                 left_bound=0, right_bound=MAXSHARDS,
                  depth=0, code_address=None, is_create=False):
         self.sender = sender
         self.to = to
@@ -71,6 +72,8 @@ class Message(object):
         self.gas = gas
         self.data = data
         self.depth = depth
+        self.left_bound = left_bound
+        self.right_bound = right_bound
         self.logs = []
         self.code_address = code_address
         self.is_create = is_create
@@ -88,6 +91,12 @@ class Compustate():
         self.gas = 0
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
+
+def validate_and_get_address(addr_int, msg):
+    if msg.left_bound <= (addr_int // 2**160) % MAXSHARDS < msg.right_bound:
+        return int_to_addr(addr_int)
+    print 'FAIL, left: %d, at: %d, right: %d' % (msg.left_bound, (addr_int // 2**160), msg.right_bound)
+    return False
 
 end_breakpoints = [
     'JUMP', 'JUMPI', 'CALL', 'CALLCODE', 'CALLSTATIC', 'CREATE', 'SUICIDE', 'STOP', 'RETURN', 'SUICIDE', 'INVALID', 'GAS', 'PC'
@@ -178,6 +187,7 @@ def data_copy(compustate, size):
 
 
 def vm_exception(error, **kargs):
+    print 'EXCEPTION', error, kargs
     log_vm_exit.trace('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
 
@@ -208,6 +218,8 @@ def vm_execute(ext, msg, code):
     op = None
     steps = 0
     _prevop = None  # for trace only
+
+    _TXGAS = shardify(TXGAS, msg.left_bound)
 
     while 1:
       # print 'op: ', op, time.time() - s
@@ -267,6 +279,7 @@ def vm_execute(ext, msg, code):
             trace_data['steps'] = steps
             # if op[:4] == 'PUSH':
             #     trace_data['pushvalue'] = pushval
+            print trace_data
             log_vm_op.trace('vm', **trace_data)
             steps += 1
             _prevop = op
@@ -368,7 +381,9 @@ def vm_execute(ext, msg, code):
             elif op == op_ADDRESS:
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == op_BALANCE:
-                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                addr = validate_and_get_address(stk.pop(), msg)
+                if addr is False:
+                    return vm_exception('OUT OF RANGE')
                 stk.append(utils.big_endian_to_int(ext.get_storage_data(ETHER, addr)))
             elif op == op_CALLER:
                 stk.append(utils.coerce_to_int(msg.sender))
@@ -399,10 +414,14 @@ def vm_execute(ext, msg, code):
                     else:
                         mem[start + i] = 0
             elif op == op_EXTCODESIZE:
-                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                addr = validate_and_get_address(stk.pop(), msg)
+                if addr is False:
+                    return vm_exception('OUT OF RANGE')
                 stk.append(len(ext.get_storage_at(addr, '') or b''))
             elif op == op_EXTCODECOPY:
-                addr = utils.coerce_addr_to_hex(stk.pop() % 2**160)
+                addr = validate_and_get_address(stk.pop(), msg)
+                if addr is False:
+                    return vm_exception('OUT OF RANGE')
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
                 extcode = ext.get_storage_at(addr, b'') or b''
                 assert utils.is_string(extcode)
@@ -513,7 +532,8 @@ def vm_execute(ext, msg, code):
             depth = op - op_LOG0
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
-            print '###log###', mstart, msz, topics
+            ext.log(msg.sender, topics, mem[mstart: mstart + msz], msg.left_bound)
+            # print '###log###', mstart, msz, topics
             if 3141592653589 in [mstart, msz] + topics:
                 raise Exception("Testing exception triggered!")
 
@@ -538,8 +558,9 @@ def vm_execute(ext, msg, code):
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, meminstart, meminsz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            to = utils.encode_int(to)
-            to = ((b'\x00' * (32 - len(to))) + to)[12:]
+            to = validate_and_get_address(to, msg)
+            if to is False:
+                return vm_exception('OUT OF RANGE')
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if compustate.gas < gas + extra_gas:
@@ -548,7 +569,7 @@ def vm_execute(ext, msg, code):
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
-                                   msg.depth + 1, code_address=to)
+                                   depth=msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg, ext.get_storage(to, ''))
                 if result == 0:
                     stk.append(0)
@@ -574,11 +595,12 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
-                to = utils.encode_int(to)
-                to = ((b'\x00' * (32 - len(to))) + to)[12:]
+                to = validate_and_get_address(to, msg)
+                if to is False:
+                    return vm_exception('OUT OF RANGE')
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
-                                   msg.depth + 1, code_address=to)
+                                   depth=msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg, ext.get_storage(msg.to, ''))
                 if result == 0:
                     stk.append(0)
@@ -599,7 +621,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OUT OF GAS', needed=submsg_gas)
             compustate.gas -= submsg_gas
             cd = CallData(mem, datastart, datasz)
-            call_msg = Message(msg.sender, msg.to, 0, submsg_gas, cd, msg.depth + 1)
+            call_msg = Message(msg.sender, msg.to, 0, submsg_gas, cd, depth=msg.depth + 1)
             result, gas, data = ext.static_msg(call_msg, ''.join([chr(x) for x in mem[codestart:codestart + codesz]]))
             if result == 0:
                 stk.append(0)
@@ -633,10 +655,11 @@ def vm_execute(ext, msg, code):
         elif op == op_STATEROOT:
             stk.append(utils.big_endian_to_int(ext.get_storage(STATEROOTS, stk.pop())))
         elif op == op_TXGAS:
-            stk.append(utils.big_endian_to_int(ext.get_storage(TXGAS, '\x00' * 32)))
+            stk.append(utils.big_endian_to_int(ext.get_storage(_TXGAS, '\x00' * 32)))
         elif op == op_SUICIDE:
-            to = utils.encode_int(stk.pop())
-            to = ((b'\x00' * (32 - len(to))) + to)[12:]
+            to = validate_and_get_address(stk.pop(), msg)
+            if to is False:
+                return vm_exception('OUT OF RANGE')
             xfer = ext.get_balance(msg.to)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)

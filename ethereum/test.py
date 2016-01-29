@@ -1,9 +1,10 @@
-from serenity_blocks import State, tx_state_transition, mk_contract_address, block_state_transition
+from serenity_blocks import State, tx_state_transition, mk_contract_address, block_state_transition, initialize_with_gas_limit
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 import serpent
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER
-from utils import privtoaddr, normalize_address, zpad, encode_int, big_endian_to_int, encode_int32
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING
+from utils import privtoaddr, normalize_address, zpad, encode_int, \
+    big_endian_to_int, encode_int32, shardify
 import ecdsa_accounts
 import abi
 import sys
@@ -13,24 +14,37 @@ import time
 import network
 import os
 
+def my_listen(sender, topics, data):
+    jsondata = ct.listen(sender, topics, data)
+    if jsondata and jsondata["_event_type"] in ('BlockLoss', 'StateLoss'):
+        if jsondata['odds'] < 10**7:
+            raise Exception("Odds waaaay too low! %r" % jsondata)
+        if jsondata['odds'] > 10**11:
+            raise Exception("Odds waaaay too high! %r" % jsondata)
+    ecdsa_accounts.constructor_ct.listen(sender, topics, data)
+
 MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 13
 print 'Running with %d maximum nodes' % MAX_NODES
 
 genesis = State('', EphemDB())
+initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
 # Unleash the kraken....err, I mean casper
 casper_file = os.path.join(os.path.split(__file__)[0], 'casper.se.py')
 code = serpent.compile(casper_file)
-tx_state_transition(gc, Transaction(None, 1000000, '', code))
+tx_state_transition(gc, Transaction(None, 2000000, data='', code=code))
 genesis.set_storage(CASPER, '', gc.get_storage(mk_contract_address(code=code), ''))
+print 'Casper added'
 ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
 # Add the bet incentivizer
 code2 = serpent.compile(bet_incentivizer_code)
-tx_state_transition(gc, Transaction(None, 1000000, '', code2))
+tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
 genesis.set_storage(BET_INCENTIVIZER, '', gc.get_storage(mk_contract_address(code=code2), ''))
+print 'Bet incentivizer added'
 
 # Get the code for the basic ecrecover account
 genesis.set_storage(ECRECOVERACCT, '', ecdsa_accounts.constructor_code)
+print 'ECRECOVER account added'
     
 # We might want logging
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
@@ -59,7 +73,8 @@ for i, k in enumerate(keys):
     txdata = ct.encode('join', [vcode])
     print 'Length of account code:', len(genesis.get_storage(a, ''))
     tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
-    v = tx_state_transition(genesis, tx)
+    print 'Joining'
+    v = tx_state_transition(genesis, tx, listeners=[my_listen])
     index = ct.decode('join', ''.join(map(chr, v)))[0]
     print 'Joined with index', index
     # Check sequence number
@@ -73,11 +88,6 @@ for i, k in enumerate(keys):
     txdata2 = bet_incentivizer_ct.encode('deposit', [index])
     tx = ecdsa_accounts.mk_transaction(1, 1, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
     v = bet_incentivizer_ct.decode('deposit', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
-    assert v is True
-    # And set my gasprice to 1
-    txdata3 = bet_incentivizer_ct.encode('setGasprice', [index, 1])
-    tx = ecdsa_accounts.mk_transaction(2, 1, 1000000, BET_INCENTIVIZER, 0, txdata3, k, True)
-    v = bet_incentivizer_ct.decode('setGasprice', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
     assert v is True
 
 # Give the secondary keys some ether as well
@@ -146,7 +156,7 @@ def check_correctness(bets):
     for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
         assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
         block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
-        block_state_transition(state, block)
+        block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i]:
             sys.stderr.write('State root mismatch at block %d!\n' % i)
             sys.stderr.write('bet 0 stateroots %r\n' % bets[0].stateroots[:(i+1)])
@@ -214,13 +224,9 @@ for i, k in enumerate(secondkeys):
     # incentivization contract
     txdata2 = bet_incentivizer_ct.encode('deposit', [index])
     tx2 = ecdsa_accounts.mk_transaction(1, 1, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
-    # And set my gasprice to 1
-    txdata3 = bet_incentivizer_ct.encode('setGasprice', [index, 1])
-    tx3 = ecdsa_accounts.mk_transaction(2, 1, 1000000, BET_INCENTIVIZER, 0, txdata3, k, True)
     bets[0].add_transaction(tx)
     bets[0].add_transaction(tx2)
-    bets[0].add_transaction(tx3)
-    check_txs.extend([tx, tx2, tx3])
+    check_txs.extend([tx, tx2])
 
 # Keep running until the min finalized height reaches 75. We expect that by
 # this time all transactions from the previous phase have been included

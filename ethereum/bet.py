@@ -2,7 +2,7 @@ import time
 from abi import ContractTranslator, decode_abi
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int32, safe_ord, encode_int
+    encode_int32, safe_ord, encode_int, shardify
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from serenity_blocks import tx_state_transition, BLKNUMBER, \
     block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt
@@ -33,6 +33,8 @@ NM_TRANSACTION = 4
 NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
+
+COURAGE = 0.97
 
 rlp_dict = {}
 
@@ -68,8 +70,8 @@ def call_method(state, addr, ct, fun, args, gas=1000000):
 # automatically get paid if the transaction is valid
 bet_incentivizer_code = """
 extern casper.se.py: [getUserAddress:[uint256]:address]
-macro CASPER: ~sub(0, %d)
-macro ETHER: ~sub(0, %d)
+macro CASPER: %d
+macro ETHER: %d
 data accounts[2**100](balance, gasprice)
 
 def deposit(index):
@@ -84,15 +86,10 @@ def withdraw(index, val):
     else:
         return(0:bool)
 
-def setGasprice(index, price):
-    if msg.sender == CASPER.getUserAddress(index):
-        self.accounts[index].gasprice = price
-        return(1:bool)
-    else:
-        return(0:bool)
-
-def submitBet(bet:bytes):
-    gasprice = self.accounts[index].gasprice
+def finally():
+    bet = string(~calldatasize())
+    ~calldatacopy(bet, 0, ~calldatasize())
+    gasprice = ~calldataload(~calldatasize() - 32)
     if self.accounts[~mload(bet + 4)].balance > gasprice * ~txexecgas():
         output = 0
         ~call(msg.gas - 40000, CASPER, 0, bet, len(bet), ref(output), 32)
@@ -101,7 +98,7 @@ def submitBet(bet:bytes):
                 ~call(12000, ETHER, 0, [block.coinbase, fee], 64, 0, 0)
                 self.accounts[~mload(bet + 4)].balance -= fee
 
-""" % (2**160 - big_endian_to_int(CASPER), 2**160 - big_endian_to_int(ETHER))
+""" % (big_endian_to_int(CASPER), big_endian_to_int(ETHER))
 
 bet_incentivizer_ct = ContractTranslator(serpent.mk_full_signature(bet_incentivizer_code))
 
@@ -427,11 +424,12 @@ class defaultBetStrategy():
             self.finalized_hashes.append(None)
             self.probs.append(0.5)
         # Add transactions to the unconfirmed transaction index
-        for i, tx in enumerate(block.transactions):
-            if tx.hash not in self.finalized_txindex:
-                if tx.hash not in self.unconfirmed_txindex:
-                    self.unconfirmed_txindex[tx.hash] = (tx, [])
-                self.unconfirmed_txindex[tx.hash][1].append((block.number, i))
+        for i, g in enumerate(block.transaction_groups):
+            for j, tx in enumerate(g):
+                if tx.hash not in self.finalized_txindex:
+                    if tx.hash not in self.unconfirmed_txindex:
+                        self.unconfirmed_txindex[tx.hash] = (tx, [])
+                    self.unconfirmed_txindex[tx.hash][1].append((block.number, i, j))
         # If we are not sufficiently synced, try to sync previous blocks first
         notsynced = False
         if block.number - ENTER_EXIT_DELAY + 1 >= len(self.stateroots):
@@ -579,9 +577,9 @@ class defaultBetStrategy():
         # the intention is to converge toward 0 or 1
         probs = sorted(probs)
         if probs[len(probs)/3] > 0.8:
-            o = 0.84 + probs[len(probs)/3] * 0.16
+            o = COURAGE + probs[len(probs)/3] * (1 - COURAGE)
         elif probs[len(probs)*2/3] < 0.2:
-            o = probs[len(probs)*2/3] * 0.16
+            o = probs[len(probs)*2/3] * (1 - COURAGE)
         else:
             o = min(0.85, max(0.15, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
         # If the probability we get is above 0.99 but we do not have the
@@ -783,7 +781,7 @@ class defaultBetStrategy():
                 print 'Inserting bet %d of validator %d using state root after height %d' % (latest_bet, i, h-1)
                 bet = self.bets[i][bet_height]
                 txs.insert(0, Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
-                           bet_incentivizer_ct.encode('submitBet', [bet.serialize()])))
+                           data=bet.serialize()))
                 bet_height += 1
             if o.seq < latest_bet:
                 self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, o.seq + 1]))))
@@ -797,24 +795,25 @@ class defaultBetStrategy():
             i = 0
             while i < len(positions):
                 # We see this transaction at index `index` of block number `blknum`
-                blknum, index = positions[i]
+                blknum, groupindex, txindex = positions[i]
                 if self.stateroots[blknum] in (None, '\x00' * 32):
                     i += 1
                     continue
                 # Try running it
-                logresult = big_endian_to_int(State(self.stateroots[blknum], self.db).get_storage(LOG, index)[:32])
+                grp_shard = self.blocks[blknum].summaries[groupindex].left_bound
+                logresult = big_endian_to_int(State(self.stateroots[blknum], self.db).get_storage(shardify(LOG, grp_shard), txindex)[:32])
                 # Probability of the block being included
                 p = self.probs[blknum]
                 # If the transaction passed and the block is finalized...
                 if p > 0.9999 and logresult == 2:
-                    log('Transaction finalized, hash %s at blknum %d with index %d' % (tx.hash.encode('hex'), blknum, index), self.index == 3)
+                    log('Transaction finalized, hash %s at blknum %d with index (%d, %d)' % (tx.hash.encode('hex'), blknum, groupindex, txindex), self.index == 3)
                     # Remove it from the txpool
                     if h in self.txpool:
                         del self.txpool[h]
                     # Add it to the finalized index
                     if h not in self.finalized_txindex:
                         self.finalized_txindex[h] = (tx, [])
-                    self.finalized_txindex[h][1].append((blknum, index))
+                    self.finalized_txindex[h][1].append((blknum, groupindex, txindex))
                     positions.pop(i)
                 # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
                 elif p > 0.95 and logresult == 1:

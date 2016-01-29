@@ -1,17 +1,19 @@
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int, safe_ord, encode_int32, encode_hex
+    encode_int, safe_ord, encode_int32, encode_hex, shardify, \
+    get_shard, match_shard
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import fastvm as vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_CONSUMED, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS
 import rlp
 import trie
 import specials
 TT255 = 2 ** 255
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
+
 
 # Block header (~150 bytes in the normal case); light clients download these
 class BlockHeader(rlp.Serializable):
@@ -31,32 +33,72 @@ class BlockHeader(rlp.Serializable):
         return sha3(rlp.encode(self))
 
 
+class TransactionGroupSummary(rlp.Serializable):
+    fields = [
+        ('gas_limit', big_endian_int),
+        ('left_bound', big_endian_int),
+        ('right_bound', big_endian_int),
+        ('transaction_hash', binary)
+    ]
+
+    def __init__(self, gas_limit=GASLIMIT, left_bound=0, right_bound=2**160, txgroup=[], transaction_hash=None):
+        self.gas_limit = gas_limit
+        self.left_bound = left_bound
+        self.right_bound = right_bound
+        self.transaction_hash = transaction_hash or sha3(rlp.encode(txgroup))
+
+
 # The entire block, including the transactions. Note that the concept of
 # extra data is non-existent; if a proposer wants extra data they should
 # just make the first transaction a dummy containing that data
 class Block(rlp.Serializable):
     fields = [
         ('header', BlockHeader),
-        ('transactions', CountableList(Transaction))
+        ('summaries', CountableList(TransactionGroupSummary)),
+        ('transaction_groups', CountableList(CountableList(Transaction)))
     ]
 
-    def __init__(self, header=None, transactions=[], number=None, proposer='\x00' * 20, sig=b''):
-        self.transactions = transactions
-        self.transaction_trie = trie.Trie(EphemDB())
-        self.intrinsic_gas = sum([tx.intrinsic_gas for tx in transactions])
-        assert self.intrinsic_gas <= GASLIMIT
-        for i, tx in enumerate(self.transactions):
-            self.transaction_trie.update(encode_int32(i), rlp.encode(tx))
-        if header:
-            assert header.txroot == self.transaction_trie.root_hash
-            self.header = header
+    def __init__(self, header=None, transactions=[], transaction_groups=None, summaries=None, number=None, proposer='\x00' * 20, sig=b''):
+        if transaction_groups is None or summaries is None or header is None:
+            if transaction_groups is not None or summaries is not None or header is not None:
+                raise Exception("If you supply one of txgroups/summaries/header you must supply all of them!")
+            # TODO: Later, create a smarter algorithm for this
+            # For now, we just create a big super-group with a global range
+            # containing all of the desired transactions
+            self.transaction_groups = [transactions]
+            for tx in transactions:
+                assert tx.left_bound % (tx.right_bound - tx.left_bound) == 0
+                assert 0 <= tx.left_bound < tx.right_bound <= MAXSHARDS
+            self.summaries = [TransactionGroupSummary(GASLIMIT, 0, MAXSHARDS, transactions)]
+            self.summaries[0].intrinsic_gas = sum([tx.intrinsic_gas for tx in transactions]) 
+            assert self.summaries[0].intrinsic_gas < GASLIMIT
+            self.header = BlockHeader(number, sha3(rlp.encode(self.summaries)), proposer, sig)
         else:
-            self.header = BlockHeader(number, self.transaction_trie.root_hash, proposer, sig)
+            prevright = 0
+            for s, g in zip(summaries, transaction_groups):
+                # Check tx hash matches
+                assert s.transaction_hash == sha3(rlp.encode(g))
+                # Bounds must reflect a node in the binary tree (eg. 12-14 is valid,
+                # so is 13-14 or 14-15, but 13-15 is not)
+                assert s.left_bound % (s.right_bound - s.left_bound) == 0
+                # Summaries must be disjoint and in sorted order with bounds valid and
+                # within the global bounds
+                assert 0 <= prevright <= s.left_bound < s.right_bound <= MAXSHARDS
+                # Check that all transaction bounds are a subset of the summary
+                for tx in g:
+                    assert s.left_bound <= tx.left_bound < tx.right_bound <= s.right_bound
+                s.intrinsic_gas = sum([tx.intrinsic_gas for tx in g])
+                prevright = s.right_bound
+            # Check gas limit condition
+            assert sum([s.intrinsic_gas for s in summaries]) < GASLIMIT
+            # Check header transaction root matches
+            assert header.txroot == sha3(rlp.encode(summaries))
+            self.summaries, self.transaction_groups, self.header = summaries, transaction_groups, header
 
-    def add_transaction(tx):
-        self.transaction_trie.update(zpad(rlp.encode(len(self.transactions), 32)), rlp.encode(tx))
-        self.transactions.append(tx)
-        self.header.txroot = self.transaction_trie.root_hash
+    def add_transaction(tx, group_id=0):
+        self.transaction_groups[group_id].append(tx)
+        self.summaries[group_id].transaction_hash = sha3(rlp.encode(self.transaction_groups[group_id]))
+        self.header.txroot = sha3(rlp.encode(self.summaries[group_id]))
 
     @property
     def hash(self): return self.header.hash
@@ -196,8 +238,12 @@ class State():
             else:
                 self.cache[addr][key] = preval
 
+def initialize_with_gas_limit(state, gas_limit, left_bound=0):
+    state.set_storage(shardify(GAS_REMAINING, left_bound), '\x00' * 32, zpad(encode_int(gas_limit), 32))
+    
+
 # Processes a block on top of a state to reach a new state
-def block_state_transition(state, block):
+def block_state_transition(state, block, listeners=[]):
     pre = state.root
     # Determine the current block number, block proposer and block hash
     blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
@@ -214,13 +260,15 @@ def block_state_transition(state, block):
         # Initialize the GAS_CONSUMED variable to _just_ the sum of
         # intrinsic gas of each transaction (ie. tx data consumption
         # only, not computation)
-        state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(block.intrinsic_gas), 32))
-        # Set the txindex to 0 to start off
-        state.set_storage(TXINDEX, '\x00' * 32, zpad(encode_int(0), 32))
-        # Apply transactions sequentially
-        print 'Block %d contains %d transactions and %d intrinsic gas' % (blknumber, len(block.transactions), block.intrinsic_gas)
-        for tx in block.transactions:
-            tx_state_transition(state, tx)
+        for s, g in zip(block.summaries, block.transaction_groups):
+            left_shard = s.left_bound // 2**160
+            state.set_storage(shardify(GAS_REMAINING, left_shard), '\x00' * 32, zpad(encode_int(s.gas_limit - s.intrinsic_gas), 32))
+            # Set the txindex to 0 to start off
+            state.set_storage(shardify(TXINDEX, left_shard), '\x00' * 32, zpad(encode_int(0), 32))
+            # Apply transactions sequentially
+            print 'Block %d contains %d transactions and %d intrinsic gas' % (blknumber, sum([len(g) for g in block.transaction_groups]), sum([summ.intrinsic_gas for summ in block.summaries]))
+            for tx in g:
+                tx_state_transition(state, tx, s.left_bound, s.right_bound, listeners=listeners)
     # Put the block hash in storage
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
     # Put the next block number in storage
@@ -233,24 +281,35 @@ def block_state_transition(state, block):
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
 
 
-def tx_state_transition(state, tx):
+def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[]):
+    _TXINDEX = shardify(TXINDEX, left_bound)
+    _LOG = shardify(LOG, left_bound)
+    _GAS_REMAINING = shardify(GAS_REMAINING, left_bound)
+    _TXGAS = shardify(TXGAS, left_bound)
     # Get prior gas used
-    gas_used = big_endian_to_int(state.get_storage(GAS_CONSUMED, '\x00' * 32))
+    gas_remaining = big_endian_to_int(state.get_storage(_GAS_REMAINING, '\x00' * 32))
     # If there is not enough gas left for this transaction, it's a no-op
-    if gas_used + tx.exec_gas > GASLIMIT:
-        print 'UNABLE TO EXECUTE transaction due to gas limits: %d pre, %d asked, %d projected post vs %d limit' % \
-            (gas_used, tx.exec_gas, gas_used + tx.exec_gas, GASLIMIT)
-        state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), '\x00' * 32)
+    if gas_remaining - tx.exec_gas < 0:
+        print 'UNABLE TO EXECUTE transaction due to gas limits: %d have, %d required' % \
+            (gas_remaining, tx.exec_gas)
+        state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 0)
+        return None
+    # If the recipient is out of range, it's a no-op
+    if not (left_bound <= get_shard(tx.addr) < right_bound):
+        print 'UNABLE TO EXECUTE transaction due to out-of-range'
+        state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 0)
         return None
     # Set an object in the state for tx gas
-    state.set_storage(TXGAS, '\x00' * 32, encode_int32(tx.gas))
-    ext = VMExt(state)
+    state.set_storage(_TXGAS, '\x00' * 32, encode_int32(tx.gas))
+    ext = VMExt(state, listeners=listeners)
+    # Empty the log store
+    state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), '')
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
-        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0))
+        message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0), left_bound, right_bound)
         result, execution_start_gas, data = apply_msg(ext, message, tx.code)
         if not result:
-            state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), encode_int32(1))
+            state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 1)
             return None
         state.set_storage(tx.addr, b'', ''.join([chr(x) for x in data]))
     else:
@@ -258,31 +317,44 @@ def tx_state_transition(state, tx):
     # Process VM execution
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
-    result, gas_remained, data = apply_msg(ext, message, state.get_storage(tx.addr, b''))
-    assert 0 <= gas_remained <= execution_start_gas <= tx.exec_gas, (gas_remained, execution_start_gas, tx.exec_gas)
+    result, msg_gas_remained, data = \
+        apply_msg(ext, message, state.get_storage(tx.addr, b''))
+    assert 0 <= msg_gas_remained <= execution_start_gas <= tx.exec_gas
     # Set gas used
-    state.set_storage(GAS_CONSUMED, '\x00' * 32, zpad(encode_int(gas_used + tx.exec_gas - gas_remained), 32))
+    state.set_storage(_GAS_REMAINING, '\x00' * 32, gas_remaining - tx.exec_gas + msg_gas_remained)
     # Places a log in storage
-    state.set_storage(LOG, state.get_storage(TXINDEX, '\x00' * 32), encode_int32(2 if result else 1) + ''.join([chr(x) for x in data]))
+    logs = state.get_storage(_LOG, state.get_storage(_TXINDEX, 0))
+    state.set_storage(_LOG, state.get_storage(_TXINDEX, 0),
+                      encode_int32(2 if result else 1) + logs)
     # Increments the txindex
-    state.set_storage(TXINDEX, '\x00' * 32, encode_int32(big_endian_to_int(state.get_storage(TXINDEX, '\x00' * 32)) + 1))
+    state.set_storage(_TXINDEX, 0, big_endian_to_int(state.get_storage(_TXINDEX, 0)) + 1)
     return data
 
 # Determines the contract address for a piece of code and a given creator
 # address (contracts created from outside get creator '\x00' * 20)
-def mk_contract_address(sender='\x00'*20, code=''):
-    return sha3(sender + code)[12:]
+def mk_contract_address(sender='\x00'*20, left_bound=0, code=''):
+    return shardify(sha3(sender + code)[12:], left_bound)
 
+RLPEMPTYLIST = rlp.encode([])
+# Save a log in the state
+def add_log(state, sender, topics, data, leftbound, listeners):
+    # print big_endian_to_int(state.get_storage(TXINDEX, 0)), state.get_storage(LOG, state.get_storage(TXINDEX, 0)).encode('hex')
+    old_storage = state.get_storage(LOG, state.get_storage(shardify(TXINDEX, leftbound), 0)) or RLPEMPTYLIST
+    new_storage = rlp.append(old_storage, [sender, map(encode_int32, topics), data])
+    state.set_storage(LOG, state.get_storage(shardify(TXINDEX, leftbound), 0), new_storage)
+    for listener in listeners:
+        listener(sender, topics, ''.join([chr(x) for x in data]))
 
 # External calls that can be made from inside the VM. To use the EVM with a
 # different blockchain system, database, set parameters for testing, just
 # swap out the functions here
 class VMExt():
 
-    def __init__(self, state):
+    def __init__(self, state, listeners=[]):
         self._state = state
         self.set_storage = state.set_storage
         self.get_storage = state.get_storage
+        self.log = lambda sender, topics, data, leftbound: add_log(state, sender, topics, data, leftbound, listeners)
         self.log_storage = state.account_to_dict
         self.msg = lambda msg, code: apply_msg(self, msg, code)
         self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
@@ -296,6 +368,7 @@ class _EmptyVMExt():
         self._state = State('', EphemDB())
         self.set_storage = lambda addr, k, v: None
         self.get_storage = lambda addr, k: ''
+        self.log = lambda topics, mem: None
         self.log_storage = lambda addr: None
         self.msg = lambda msg, code: apply_msg(self, msg, code)
         self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
@@ -306,20 +379,23 @@ eve_cache = {}
 
 # Processes a message
 def apply_msg(ext, msg, code):
+    _SENDER_ETHER = match_shard(ETHER, msg.sender)
+    _RECIPIENT_ETHER = match_shard(ETHER, msg.to)
     cache_key = msg.sender + msg.to + str(msg.value) + msg.data.extract_all() + code
     if ext is EmptyVMExt and cache_key in eve_cache:
         return eve_cache[cache_key]
     # Transfer value, instaquit if not enough
     snapshot = ext._state.snapshot()
-    if ext.get_storage(ETHER, msg.sender) < msg.value:
+    if big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) < msg.value:
         print 'MSG TRANSFER FAILED'
         return 1, msg.gas, []
     elif msg.value:
-        ext.set_storage(ETHER, msg.sender, big_endian_to_int(ext.get_storage(ETHER, msg.sender)) - msg.value)
-        ext.set_storage(ETHER, msg.to, big_endian_to_int(ext.get_storage(ETHER, msg.to)) + msg.value)
+        ext.set_storage(_SENDER_ETHER, msg.sender, big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) - msg.value)
+        ext.set_storage(_RECIPIENT_ETHER, msg.to, big_endian_to_int(ext.get_storage(_RECIPIENT_ETHER, msg.to)) + msg.value)
     # Main loop
-    if msg.to in specials.specials:
-        res, gas, dat = specials.specials[msg.to](ext, msg)
+    msg_to_raw = big_endian_to_int(msg.to)
+    if msg_to_raw in specials.specials:
+        res, gas, dat = specials.specials[msg_to_raw](ext, msg)
     else:
         res, gas, dat = vm.vm_execute(ext, msg, code)
     # If the message failed, revert execution

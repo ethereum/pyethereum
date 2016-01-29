@@ -1,6 +1,6 @@
 import bitcoin
 from ethereum import utils, opcodes
-from ethereum.utils import safe_ord, decode_hex
+from utils import safe_ord, decode_hex, big_endian_to_int
 from rlp.utils import ascii_chr
 from config import ETHER
 
@@ -81,14 +81,11 @@ def proc_send_ether(ext, msg):
     
 
 specials = {
-    decode_hex(k): v for k, v in
-    {
-        '0000000000000000000000000000000000000001': proc_ecrecover,
-        '0000000000000000000000000000000000000002': proc_sha256,
-        '0000000000000000000000000000000000000003': proc_ripemd160,
-        '0000000000000000000000000000000000000004': proc_identity,
-        ETHER.encode('hex'): proc_send_ether,
-    }.items()
+    1: proc_ecrecover,
+    2: proc_sha256,
+    3: proc_ripemd160,
+    4: proc_identity,
+    big_endian_to_int(ETHER): proc_send_ether,
 }
 
 if __name__ == '__main__':
