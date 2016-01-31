@@ -20,7 +20,8 @@ import math
 import copy
 
 FINALITY_LOW, FINALITY_HIGH = 0.00001, 0.99999
-MAX_RECALC = 13
+MAX_RECALC = 9
+MAX_LONG_RECALC = 14
 
 def log(text, condition):
     if condition:
@@ -424,13 +425,6 @@ class defaultBetStrategy():
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
             self.probs.append(0.5)
-        # Add transactions to the unconfirmed transaction index
-        for i, g in enumerate(block.transaction_groups):
-            for j, tx in enumerate(g):
-                if tx.hash not in self.finalized_txindex:
-                    if tx.hash not in self.unconfirmed_txindex:
-                        self.unconfirmed_txindex[tx.hash] = (tx, [])
-                    self.unconfirmed_txindex[tx.hash][1].append((block.number, i, j))
         # If we are not sufficiently synced, try to sync previous blocks first
         notsynced = False
         if block.number - ENTER_EXIT_DELAY + 1 >= len(self.stateroots):
@@ -469,6 +463,13 @@ class defaultBetStrategy():
         self.recently_discovered_blocks.append(block.number)
         time_delay = time.time() - (self.genesis_time + BLKTIME * block.number)
         log("Received good block at height %d with delay %.2f: %s" % (block.number, time_delay, block.hash.encode('hex')[:16]), self.index == 3)
+        # Add transactions to the unconfirmed transaction index
+        for i, g in enumerate(block.transaction_groups):
+            for j, tx in enumerate(g):
+                if tx.hash not in self.finalized_txindex:
+                    if tx.hash not in self.unconfirmed_txindex:
+                        self.unconfirmed_txindex[tx.hash] = (tx, [])
+                    self.unconfirmed_txindex[tx.hash][1].append((block.number, i, j))
         # Re-broadcast the block
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
         # Bet
@@ -486,9 +487,7 @@ class defaultBetStrategy():
                 ih = call_casper(check_state, 'getUserInductionHeight', [i])
                 valaddr = call_casper(check_state, 'getUserAddress', [i])
                 valcode = call_casper(check_state, 'getUserValidationCode', [i])
-                prevhash = call_casper(check_state, 'getUserPrevhash', [i])
-                seq = call_casper(check_state, 'getUserSeq', [i])
-                self.opinions[i] = Opinion(valcode, i, prevhash, seq, ih)
+                self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, ih)
                 log('Validator inducted at index %d with address %s' % (i, valaddr), True)
                 log('Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex')), True)
                 assert i not in self.bets
@@ -520,15 +519,16 @@ class defaultBetStrategy():
         # M+1...N. For example, if we had bets 0, 1, 2, 4, 5, 7, now we
         # receive 3, then we assume bets 0, 1, 2 were already processed
         # but now process 3, 4, 5 (but NOT 7)
-        log('receiving a bet: seq %d, bettor %d recipient %d' % (bet.seq, bet.index, self.index), self.id >= 8)
+        log('receiving a bet: seq %d, bettor %d recipient %d' % (bet.seq, bet.index, self.index), self.id < 5)
         proc = 0
         while (self.highest_bet_processed[bet.index] + 1) in self.bets[bet.index]:
-            assert self.opinions[bet.index].process_bet(self.bets[bet.index][self.highest_bet_processed[bet.index] + 1])
+            assert self.opinions[bet.index].process_bet(self.bets[bet.index][self.highest_bet_processed[bet.index] + 1]), (self.index, bet.index, self.highest_bet_processed[bet.index], self.bets[bet.index], self.opinions[bet.index].seq)
             self.highest_bet_processed[bet.index] += 1
             proc += 1
         # Sanity check
         for i in range(0, self.highest_bet_processed[bet.index] + 1):
             assert i in self.bets[bet.index]
+        assert self.opinions[bet.index].seq == self.highest_bet_processed[bet.index] + 1
         # If we did not process any bets after receiving a bet, that
         # implies that we are missing some bets. Ask for them.
         if not proc and self.last_asked_for_bets.get(bet.index, 0) < time.time() + 10:
@@ -615,9 +615,11 @@ class defaultBetStrategy():
         v = tx_state_transition(genesis, tx)
 
     def recalc_state_roots(self):
+        recalc_limit = MAX_RECALC if self.calc_state_roots_from > len(self.blocks) - 20 else MAX_LONG_RECALC
         frm = self.calc_state_roots_from
+        print 'recalc limit: ', recalc_limit, 'want to recalculate: ', len(self.blocks) - frm
         run_state = State(self.stateroots[frm-1] if frm else self.genesis_state.root, self.db)
-        for h in range(frm, len(self.blocks))[:MAX_RECALC]:
+        for h in range(frm, len(self.blocks))[:recalc_limit]:
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             if self.probs[h] is None:
                 prob = self.default_vote(h, self.blocks[h])
@@ -628,10 +630,10 @@ class defaultBetStrategy():
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             assert blknum == h + 1
         # If there are some state roots that we have not calculated, just leave them empty
-        for h in range(frm + MAX_RECALC, len(self.blocks)):
+        for h in range(frm + recalc_limit, len(self.blocks)):
             self.stateroots[h] = '\x00' * 32
         # Where to calculate state roots from next time
-        self.calc_state_roots_from = min(frm + MAX_RECALC, len(self.blocks))
+        self.calc_state_roots_from = min(frm + recalc_limit, len(self.blocks))
         # Check integrity
         for i in range(self.calc_state_roots_from):
             assert self.stateroots[i] not in ('\x00' * 32, None)
@@ -652,7 +654,9 @@ class defaultBetStrategy():
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
-            if (prob - 0.5) * (self.probs[h] - 0.5) <= 0 or (self.probs[h] >= 0.5 and h in self.recently_discovered_blocks):
+            if ((prob - 0.5) * (self.probs[h] - 0.5) <= 0 or (self.probs[h] >= 0.5 and \
+                    h in self.recently_discovered_blocks)) and h < self.calc_state_roots_from:
+                print 'Rewinding %d blocks' % (self.calc_state_roots_from - h)
                 self.calc_state_roots_from = min(self.calc_state_roots_from, h)
             self.probs[h] = prob
             # Finalized!
@@ -664,8 +668,6 @@ class defaultBetStrategy():
                 if h == self.my_max_finalized_height + 1:
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
-        log('Recalculating %d out of %d state roots starting from height %d' % 
-            (min(len(self.blocks) - self.calc_state_roots_from, MAX_RECALC), len(self.blocks) - self.calc_state_roots_from, self.calc_state_roots_from), self.index == 3)
         # Recalculate state roots
         rootstart = max(self.calc_state_roots_from, self.induction_height)
         self.recalc_state_roots()
@@ -781,8 +783,12 @@ class defaultBetStrategy():
             while bet_height in self.bets[i]:
                 print 'Inserting bet %d of validator %d using state root after height %d' % (latest_bet, i, h-1)
                 bet = self.bets[i][bet_height]
-                txs.insert(0, Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
-                           data=bet.serialize()))
+                new_tx = Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
+                                     data=bet.serialize())
+                if new_tx.gas > gas:
+                    break
+                txs.append(new_tx)
+                gas -= new_tx.gas
                 bet_height += 1
             if o.seq < latest_bet:
                 self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, o.seq + 1]))))

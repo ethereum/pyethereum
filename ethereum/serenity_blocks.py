@@ -160,10 +160,16 @@ class State():
             t = trie.Trie(self.state.db)
             t.root_hash = self.state.get(addr)
             modified = False
+            # updates = []
             for key, value in subcache.items():
                 if key in self.modified.get(addr, {}) and value != t.get(key):
+                    # updates.append((key, value))
                     t.update(key, value)
                     modified = True
+            # if len(updates) > 10:
+            #     print 'Saving %d key/value pairs in address %s' % (len(updates), addr.encode('hex'))
+            #     for update in updates:
+            #         print update
             if modified:
                 self.state.update(addr, t.root_hash)
         self.journal.append(('~root', (self.cache, self.modified), rt))

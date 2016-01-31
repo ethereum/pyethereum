@@ -23,11 +23,11 @@ LOG = int_to_addr(140)
 BET_INCENTIVIZER = int_to_addr(150)
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = int_to_addr(0)
-BLKTIME = 5
+BLKTIME = 7.5
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 110
 # Note that this parameter must be set in the Casper contract as well
-VALIDATOR_ROUNDS = 5
+VALIDATOR_ROUNDS = 6
 # Number of shards
 MAXSHARDS = 65536
 SHARD_BYTES = len(int_to_big_endian(MAXSHARDS - 1))

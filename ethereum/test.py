@@ -18,7 +18,7 @@ import os
 def my_listen(sender, topics, data):
     jsondata = ct.listen(sender, topics, data)
     if jsondata and jsondata["_event_type"] in ('BlockLoss', 'StateLoss'):
-        if jsondata['odds'] < 10**7:
+        if jsondata['odds'] < 10**7 and jsondata["_event_type"] == 'BlockLoss':
             raise Exception("Odds waaaay too low! %r" % jsondata)
         if jsondata['odds'] > 10**11:
             raise Exception("Odds waaaay too high! %r" % jsondata)
@@ -177,14 +177,14 @@ def check_correctness(bets):
     for i in range(1, len(bets)):
         assert bets[i].proposers[:min_proposer_length] == bets[0].proposers[:min_proposer_length]
     # Validator sequence numbers as seen by themselves
-    print 'Validator seqs online: %r' % {bet.index: bet.seq for bet in bets}
+    print 'Validator seqs online: %r' % [bet.seq for bet in bets]
     # Validator sequence numbers as recorded in the chain
-    print 'Validator seqs on finalized chain (%d): %r' % (new_min_mfh, {bet.index: call_method(state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
+    print 'Validator seqs on finalized chain (%d): %r' % (new_min_mfh, [call_method(state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     h = 0
     while h < len(bets[3].stateroots) and bets[3].stateroots[h] not in (None, '\x00' * 32):
         h += 1
     speculative_state = State(bets[3].stateroots[h-1] if h else genesis.root, OverlayDB(bets[3].db))
-    print 'Validator seqs on speculative chain (%d): %r' % (h-1, {bet.index: call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets})
+    print 'Validator seqs on speculative chain (%d): %r' % (h-1, [call_method(speculative_state, CASPER, ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     # Validator deposit sizes (over 1500 * 10**18 means profit)
     print 'Validator deposit sizes: %r' % [call_method(state, CASPER, ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
     for bet in bets:
@@ -204,7 +204,7 @@ for bet in bets:
     bet.network = n
 # Keep running until the min finalized height reaches 5
 while 1:
-    n.run(20, sleep=0.25)
+    n.run(25, sleep=0.25)
     check_correctness(bets)
     if min_mfh >= 5:
         print 'Reached breakpoint'
@@ -234,9 +234,9 @@ for i, k in enumerate(secondkeys):
 # Keep running until the min finalized height reaches 75. We expect that by
 # this time all transactions from the previous phase have been included
 while 1:
-    n.run(20, sleep=0.25)
+    n.run(25, sleep=0.25)
     check_correctness(bets)
-    if min_mfh > 95:
+    if min_mfh > 75:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -260,7 +260,7 @@ print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'g
 # Keep running until the min finalized height reaches ~175. We expect that by
 # this time all validators will be actively betting off of each other's bets
 while 1:
-    n.run(20, sleep=0.25)
+    n.run(25, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
@@ -279,7 +279,7 @@ BLK_DISTANCE = len(bet.blocks) - min_mfh
 
 # Keep running until the min finalized height reaches ~290.
 while 1:
-    n.run(20, sleep=0.25)
+    n.run(25, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
@@ -291,4 +291,4 @@ recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that the only remaining active validators are the ones that have not
 # yet signed out.
 print 'Validator statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(MAX_NODES)]
-assert len([i for i in range(20) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3
+assert len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3
