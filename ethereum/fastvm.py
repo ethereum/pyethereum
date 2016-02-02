@@ -16,7 +16,7 @@ from utils import to_string, shardify, int_to_addr
 import utils
 import numpy
 
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS, EXECUTION_STATE
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -219,7 +219,7 @@ def vm_execute(ext, msg, code):
     steps = 0
     _prevop = None  # for trace only
 
-    _TXGAS = shardify(TXGAS, msg.left_bound)
+    _EXSTATE = shardify(EXECUTION_STATE, msg.left_bound)
 
     while 1:
       # print 'op: ', op, time.time() - s
@@ -706,7 +706,7 @@ def vm_execute(ext, msg, code):
         elif op == op_STATEROOT:
             stk.append(utils.big_endian_to_int(ext.get_storage(STATEROOTS, stk.pop())))
         elif op == op_TXGAS:
-            stk.append(utils.big_endian_to_int(ext.get_storage(_TXGAS, '\x00' * 32)))
+            stk.append(utils.big_endian_to_int(ext.get_storage(_EXSTATE, TXGAS)))
         elif op == op_SUICIDE:
             to = validate_and_get_address(stk.pop(), msg)
             if to is False:

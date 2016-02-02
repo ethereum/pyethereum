@@ -6,7 +6,7 @@ from utils import address, int256, trie_root, hash32, to_string, \
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import fastvm as vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES, EXECUTION_STATE
 import rlp
 import trie
 import specials
@@ -245,7 +245,7 @@ class State():
                 self.cache[addr][key] = preval
 
 def initialize_with_gas_limit(state, gas_limit, left_bound=0):
-    state.set_storage(shardify(GAS_REMAINING, left_bound), '\x00' * 32, zpad(encode_int(gas_limit), 32))
+    state.set_storage(shardify(EXECUTION_STATE, left_bound), GAS_REMAINING, gas_limit)
     
 
 transition_cache_map = {}
@@ -269,10 +269,11 @@ def block_state_transition(state, block, listeners=[]):
         # intrinsic gas of each transaction (ie. tx data consumption
         # only, not computation)
         for s, g in zip(block.summaries, block.transaction_groups):
-            left_shard = s.left_bound // 2**160
-            state.set_storage(shardify(GAS_REMAINING, left_shard), '\x00' * 32, zpad(encode_int(s.gas_limit - s.intrinsic_gas), 32))
+            _EXSTATE = shardify(EXECUTION_STATE, s.left_bound)
             # Set the txindex to 0 to start off
-            state.set_storage(shardify(TXINDEX, left_shard), '\x00' * 32, zpad(encode_int(0), 32))
+            state.set_storage(_EXSTATE, TXINDEX, 0)
+            # Initialize the gas remaining variable
+            initialize_with_gas_limit(state, s.gas_limit - s.intrinsic_gas, s.left_bound)
             # Apply transactions sequentially
             print 'Block %d contains %d transactions and %d intrinsic gas' % (blknumber, sum([len(g) for g in block.transaction_groups]), sum([summ.intrinsic_gas for summ in block.summaries]))
             for tx in g:
@@ -294,35 +295,38 @@ def block_state_transition(state, block, listeners=[]):
     else:
         assert transition_cache_map[check_key] == state.root
 
+
+RLPEMPTYLIST = rlp.encode([])
+
 def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[]):
-    _TXINDEX = shardify(TXINDEX, left_bound)
+    _EXSTATE = shardify(EXECUTION_STATE, left_bound)
     _LOG = shardify(LOG, left_bound)
-    _GAS_REMAINING = shardify(GAS_REMAINING, left_bound)
-    _TXGAS = shardify(TXGAS, left_bound)
+    # Get index
+    txindex = big_endian_to_int(state.get_storage(_EXSTATE, TXINDEX))
     # Get prior gas used
-    gas_remaining = big_endian_to_int(state.get_storage(_GAS_REMAINING, '\x00' * 32))
+    gas_remaining = big_endian_to_int(state.get_storage(_EXSTATE, GAS_REMAINING))
     # If there is not enough gas left for this transaction, it's a no-op
     if gas_remaining - tx.exec_gas < 0:
         print 'UNABLE TO EXECUTE transaction due to gas limits: %d have, %d required' % \
             (gas_remaining, tx.exec_gas)
-        state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 0)
+        state.set_storage(_LOG, txindex, 0)
         return None
     # If the recipient is out of range, it's a no-op
     if not (left_bound <= get_shard(tx.addr) < right_bound):
         print 'UNABLE TO EXECUTE transaction due to out-of-range'
-        state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 0)
+        state.set_storage(_LOG, txindex, 0)
         return None
     # Set an object in the state for tx gas
-    state.set_storage(_TXGAS, '\x00' * 32, encode_int32(tx.gas))
+    state.set_storage(_EXSTATE, TXGAS, encode_int32(tx.gas))
     ext = VMExt(state, listeners=listeners)
     # Empty the log store
-    state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), '')
+    state.set_storage(_LOG, txindex, RLPEMPTYLIST)
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
         message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0), left_bound, right_bound)
         result, execution_start_gas, data = apply_msg(ext, message, tx.code)
         if not result:
-            state.set_storage(_LOG, state.get_storage(_TXINDEX, 0), 1)
+            state.set_storage(_LOG, txindex, 1)
             return None
         code = ''.join([chr(x) for x in data])
         put_code(state, tx.addr, code)
@@ -335,13 +339,12 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
         apply_msg(ext, message, get_code(state, tx.addr))
     assert 0 <= msg_gas_remained <= execution_start_gas <= tx.exec_gas
     # Set gas used
-    state.set_storage(_GAS_REMAINING, '\x00' * 32, gas_remaining - tx.exec_gas + msg_gas_remained)
+    state.set_storage(_EXSTATE, GAS_REMAINING, gas_remaining - tx.exec_gas + msg_gas_remained)
     # Places a log in storage
-    logs = state.get_storage(_LOG, state.get_storage(_TXINDEX, 0))
-    state.set_storage(_LOG, state.get_storage(_TXINDEX, 0),
-                      encode_int32(2 if result else 1) + logs)
+    logs = state.get_storage(_LOG, txindex)
+    state.set_storage(_LOG, txindex, rlp.insert(logs, 0, encode_int(2 if result else 1)))
     # Increments the txindex
-    state.set_storage(_TXINDEX, 0, big_endian_to_int(state.get_storage(_TXINDEX, 0)) + 1)
+    state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
     return data
 
 # Determines the contract address for a piece of code and a given creator
@@ -349,13 +352,14 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
 def mk_contract_address(sender='\x00'*20, left_bound=0, code=''):
     return shardify(sha3(sender + code)[12:], left_bound)
 
-RLPEMPTYLIST = rlp.encode([])
 # Save a log in the state
 def add_log(state, sender, topics, data, leftbound, listeners):
+    _LOG = shardify(LOG, leftbound)
+    _EXSTATE = shardify(EXECUTION_STATE, leftbound)
     # print big_endian_to_int(state.get_storage(TXINDEX, 0)), state.get_storage(LOG, state.get_storage(TXINDEX, 0)).encode('hex')
-    old_storage = state.get_storage(LOG, state.get_storage(shardify(TXINDEX, leftbound), 0)) or RLPEMPTYLIST
+    old_storage = state.get_storage(_LOG, state.get_storage(_EXSTATE, TXINDEX))
     new_storage = rlp.append(old_storage, [sender, map(encode_int32, topics), data])
-    state.set_storage(LOG, state.get_storage(shardify(TXINDEX, leftbound), 0), new_storage)
+    state.set_storage(_LOG, state.get_storage(_EXSTATE, TXINDEX), new_storage)
     for listener in listeners:
         listener(sender, topics, ''.join([chr(x) for x in data]))
 

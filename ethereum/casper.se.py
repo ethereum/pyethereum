@@ -30,7 +30,7 @@ macro PPN: 32
 macro PROFIT_PACKING_BYTES: 10
 macro PPB: 10
 
-macro VALIDATOR_ROUNDS: 6
+macro VALIDATOR_ROUNDS: 5
 
 macro maskinclude($top, $bottom):
     256**$top - 256**$bottom
@@ -105,13 +105,15 @@ def withdraw(index:uint256):
         return(1:bool)
     return(0:bool)
 
+event LogPre(hash:bytes32)
+event LogPost(hash:bytes32)
 
 # Submit a bet
 def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes32, seqnum:uint256, sig:bytes):
-    # if seqnum != self.users[index].seq:
-    #     log3(20, index, block.number, seqnum, self.users[index].seq)
+    # Load basic user information
     basicinfo = array(10)
     ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
+    # Check validity
     assert seqnum == basicinfo[SEQ_POS]
     assert prevhash == basicinfo[PREVHASH_POS]
     assert max_height <= block.number
@@ -122,6 +124,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     _calldata = string(~calldatasize())
     ~calldatacopy(_calldata, 0, ~calldatasize())
     signing_hash = ~sha3(_calldata, ~calldatasize() - 32 - ceil32(len(sig)))
+    # Set seq and prevhash
     basicinfo[PREVHASH_POS] = ~sha3(_calldata, ~calldatasize())
     basicinfo[SEQ_POS] = seqnum + 1
     # Check the sig against the user validation code
@@ -136,7 +139,6 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # Process profits from last bet
     userBalance = basicinfo[DEPOSIT_SIZE_POS]
     with bmh = basicinfo[BET_MAXHEIGHT_POS]:
-        # log(type=ProcessingBet, index, seqnum, block.number, pbp, bmh, max_height)
         with CURPROFITBLOCK = newArrayChunk(PPB, PPN):
             loadArrayChunk(PPB, PPN, self.users[index].profits, CURPROFITBLOCK, bmh)
             with profit = loadArrayValue(PPB, PPN, CURPROFITBLOCK, bmh):
@@ -149,9 +151,10 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                                 i += 1
                         userBalance = max(0, userBalance + userBalance * totProfit / SCORING_REWARD_DIVISOR)
                         # log(type=Reward, i, profit, blockdiff, totProfit, bmh)
+        # Update the maximum height of the previous bet, profits and the user deposit size
         basicinfo[BET_MAXHEIGHT_POS] = max(bmh, max_height)
-    basicinfo[PROFITS_PROCESSED_TO_POS] = block.number
-    basicinfo[DEPOSIT_SIZE_POS] = userBalance
+        basicinfo[PROFITS_PROCESSED_TO_POS] = block.number
+        basicinfo[DEPOSIT_SIZE_POS] = userBalance
     # Bet with max height 2**256 - 1 to start withdrawal
     if max_height == ~sub(0, 1):
         self.users[index].withdrawal_height = block.number
@@ -174,7 +177,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
         with v = self.users[index].stateroots[max_height / 32]:
             while i < len(stateroots):
                 with h = max_height - i:
-                    byte = not(not(~stateroot(h))) * 2 + (stateroots[i] == ~stateroot(h))
+                    byte = not(not(stateroots[i])) * 2 + (stateroots[i] == ~stateroot(h))
                     with offset = h % 32:
                         v = (v & maskexclude(offset + 1, offset)) + byte * 256**offset
                         if offset == 0 or i == len(stateroots) - 1:
@@ -229,9 +232,10 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                             if stateRootInfo % 2:
                                 profitFactor += scoreCorrect(convertProbToOdds(netProb))
                             else:
-                                negs = scoreIncorrect(convertProbToOdds(netProb))
-                                log(type=StateLoss, convertProbToOdds(netProb), profitFactor, H)
-                                profitFactor += negs
+                                odds = convertProbToOdds(netProb)
+                                # log(type=StateLoss, convertProbToOdds(netProb), profitFactor, H, ~stateroot(H), index, self.users[index].stateroots[H / 32], probs, max_height)
+                                log(type=StateLoss, odds, profitFactor, H)
+                                profitFactor += scoreIncorrect(odds)
                         else:
                             netProb = 0
                     # Update the profit counter
@@ -242,24 +246,10 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                     if (mod(H, PROFIT_PACKING_NUM) == (PROFIT_PACKING_NUM - 1) or H == max_height):
                         saveArrayChunk(PPB, PPN, self.users[index].profits, PROFITBLOCK, H)
                         loadArrayChunk(PPB, PPN, self.users[index].profits, PROFITBLOCK, H + 1)
-                    # self.users[index].profits[H] = profitFactor + profitFactor2 + self.users[index].profits[H - 1]
-                    # log3(1000 + H, msg.gas, blockOdds, profitFactor, profitFactor2)
-                    # log3(1001, block.number, H, blockHashInfo, stateRootInfo)
                     H += 1
-            # log0(100, profit)
-            # Optional verification code
-            # h = max_height
-            # while h >= 0:
-            #     log0(10000 + h, getProfit(index, h))
-            #     h -= 1
-            # log1(51, 54, profit)
-            # log0(1000 * block.number, profit)
-            # log1(1000 + H, netProb, profitFactor2)
-            # log3(500 + index, block.number, profitFactor + profitFactor2, CURPROFIT, prevProfit)
-            loadArrayChunk(PPB, PPN, self.users[index].profits, PROFITBLOCK, H - 1)
+            # loadArrayChunk(PPB, PPN, self.users[index].profits, PROFITBLOCK, H - 1)
             # log(type=DebugPB, PROFITBLOCK)
             # log(type=RecordingTotProfit, index, H, loadArrayValue(PPB, PPN, PROFITBLOCK, H - 1))
-            # log4(500 + index, seqnum, len(probs), len(blockhashes), len(stateroots), txexecgas() - msg.gas)
             ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
             return(1:bool)
 
@@ -269,6 +259,7 @@ event Progress(stage)
 event ProgressWithData(stage, h, mh)
 event ProgressWithDataArray(stage, data:arr)
 event BlockLoss(odds, loss)
+# event StateLoss(odds, loss, height, actualRoot:bytes32, index, stateRootCorrectness:bytes32, probs:bytes, maxHeight)
 event StateLoss(odds, loss, height)
 
 # Interpret prob as odds in scientific notation: 5 bit exponent

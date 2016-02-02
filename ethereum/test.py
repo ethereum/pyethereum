@@ -21,10 +21,16 @@ def my_listen(sender, topics, data):
         if jsondata['odds'] < 10**7 and jsondata["_event_type"] == 'BlockLoss':
             raise Exception("Odds waaaay too low! %r" % jsondata)
         if jsondata['odds'] > 10**11:
+            index = jsondata['index']
+            height = jsondata['height']
+            print 'bettor stateroots:', bets[index].stateroots
+            print 'bettor opinion:', bets[index].opinions[index].stateroots
+            if len(bets[0].stateroots) < height:
+                print 'in bettor 0 stateroots:', repr(bets[0].stateroots[height])
             raise Exception("Odds waaaay too high! %r" % jsondata)
     ecdsa_accounts.constructor_ct.listen(sender, topics, data)
 
-MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 13
+MAX_NODES = int(sys.argv[1]) if len(sys.argv) >= 2 else 10
 print 'Running with %d maximum nodes' % MAX_NODES
 
 genesis = State('', EphemDB())
@@ -162,10 +168,8 @@ def check_correctness(bets):
         block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i]:
             sys.stderr.write('State root mismatch at block %d!\n' % i)
-            sys.stderr.write('bet 0 stateroots %r\n' % bets[0].stateroots[:(i+1)])
-            sys.stderr.write('bet 0 blocks %r\n' % [x.hash if x else None for x in bets[0].blocks[:(i+1)]])
-            sys.stderr.write('%r\n' % bets[j].stateroots[:(i+1)])
-            sys.stderr.write('%r\n' % [x.hash if x else None for x in bets[j].blocks[:(i+1)]])
+            sys.stderr.write('state.root: %s' % state.root.encode('hex'))
+            sys.stderr.write('bet: %s' % bets[0].stateroots[i].encode('hex'))
             raise Exception(" ")
     min_mfh = new_min_mfh
     print 'Min common finalized height: %d, integrity checks passed' % new_min_mfh
