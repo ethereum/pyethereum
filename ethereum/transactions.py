@@ -1,17 +1,24 @@
-from bitcoin import encode_pubkey, N, P
-try:
-    from c_secp256k1 import ecdsa_raw_sign, ecdsa_raw_recover
-except ImportError:
-    from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
+# -*- coding: utf8 -*-
 import rlp
+from bitcoin import encode_pubkey, N, P
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import decode_hex, encode_hex, str_to_bytes, ascii_chr
-from ethereum import bloom
-from ethereum import utils
-from ethereum.utils import TT256, mk_contract_address
+
 from ethereum.exceptions import InvalidTransaction
-from ethereum.slogging import get_logger
+from ethereum import bloom
 from ethereum import opcodes
+from ethereum import utils
+from ethereum.slogging import get_logger
+from ethereum.utils import TT256, mk_contract_address
+
+try:
+    from c_secp256k1 import ecdsa_sign_raw, ecdsa_recover_raw
+except ImportError:
+    import warnings
+    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
+
+    from bitcoin import ecdsa_raw_sign as ecdsa_sign_raw, ecdsa_raw_recover as ecdsa_recover_raw
+
 log = get_logger('eth.chain.tx')
 
 # in the yellow paper it is specified that s should be smaller than secpk1n (eq.205)
@@ -78,7 +85,7 @@ class Transaction(rlp.Serializable):
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
                 rawhash = utils.sha3(rlpdata)
-                pub = ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
+                pub = ecdsa_recover_raw(rawhash, (self.v, self.r, self.s))
                 if pub is False:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
                 if pub == (0, 0):
@@ -102,7 +109,7 @@ class Transaction(rlp.Serializable):
         if key in (0, '', '\x00' * 32):
             raise InvalidTransaction("Zero privkey cannot sign")
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
-        self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
+        self.v, self.r, self.s = ecdsa_sign_raw(rawhash, key)
         self.sender = utils.privtoaddr(key)
         return self
 

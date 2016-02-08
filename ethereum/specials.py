@@ -1,7 +1,17 @@
+# -*- coding: utf8 -*-
 import bitcoin
 from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
+
+try:
+    from c_secp256k1 import ecdsa_recover_raw
+except ImportError:
+    import warnings
+    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
+
+    from bitcoin import ecdsa_raw_recover as ecdsa_recover_raw
+
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
 
@@ -20,7 +30,7 @@ def proc_ecrecover(ext, msg):
     s = msg.data.extract32(96)
     if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, []
-    recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
+    recovered_addr = ecdsa_recover_raw(h, (v, r, s))
     if recovered_addr in (False, (0, 0)):
         return 1, msg.gas - gas_cost, []
     pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
