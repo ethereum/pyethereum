@@ -1,8 +1,11 @@
 import bitcoin
-from ethereum import utils, opcodes
-from utils import safe_ord, decode_hex, big_endian_to_int, encode_int32
+import utils
+import opcodes
+from utils import safe_ord, decode_hex, big_endian_to_int, \
+    encode_int32, match_shard, shardify, sha3
 from rlp.utils import ascii_chr
-from config import ETHER
+from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX
+import rlp
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
 
@@ -112,19 +115,48 @@ def proc_identity(ext, msg):
     return 1, msg.gas - gas_cost, o
 
 def proc_send_ether(ext, msg):
+    SENDER_ETHER = match_shard(ETHER, msg.sender)
+    TO_ETHER = match_shard(ETHER, msg.to)
     OP_GAS = opcodes.GCALLVALUETRANSFER
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
     to = utils.int_to_addr(msg.data.extract32(0) % 2**160)
     value = msg.data.extract32(32)
-    prebal = utils.big_endian_to_int(ext.get_storage(ETHER, msg.sender))
+    prebal = utils.big_endian_to_int(ext.get_storage(SENDER_ETHER, msg.sender))
     if prebal >= value:
-        ext.set_storage(ETHER, to, utils.big_endian_to_int(ext.get_storage(ETHER, to)) + value)
-        ext.set_storage(ETHER, msg.sender, prebal - value)
+        print 'xferring %d wei from %s to %s' % (value, msg.sender.encode('hex'), to.encode('hex'))
+        ext.set_storage(TO_ETHER, to, utils.big_endian_to_int(ext.get_storage(TO_ETHER, to)) + value)
+        ext.set_storage(SENDER_ETHER, msg.sender, prebal - value)
         return 1, msg.gas - gas_cost, [0] * 31 + [1]
     else:
         return 1, msg.gas - gas_cost, [0] * 32
+
+def proc_log(ext, msg):
+    _LOG = shardify(LOG, msg.left_bound)
+    _EXSTATE = shardify(EXECUTION_STATE, msg.left_bound)
+    data = msg.data.extract_all()
+    topics = [data[i*32:i*32+32] for i in range(0, 128, 32)]
+    OP_GAS = opcodes.GLOGBYTE * max(len(data) - 128, 0) + \
+        opcodes.GLOGBASE + len([t for t in topics if t]) * opcodes.GLOGTOPIC
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    bloom = big_endian_to_int(ext.get_storage(_LOG, BLOOM)) or 0
+    for t in topics:
+        if t:
+            t += '\x00' * (32 - len(t))
+            h = sha3(t)
+            for i in range(5):
+                bloom |= 2**ord(h[i])
+    ext.set_storage(_LOG, BLOOM, encode_int32(bloom))
+    # print big_endian_to_int(state.get_storage(TXINDEX, 0)), state.get_storage(LOG, state.get_storage(TXINDEX, 0)).encode('hex')
+    old_storage = ext.get_storage(_LOG, ext.get_storage(_EXSTATE, TXINDEX))
+    new_storage = rlp.append(old_storage, data)
+    ext.set_storage(_LOG, ext.get_storage(_EXSTATE, TXINDEX), new_storage)
+    for listener in ext._listeners:
+        listener(msg.sender, map(big_endian_to_int, topics), data[128:])
+    return 1, msg.gas - gas_cost, [0] * 32
     
 
 specials = {
@@ -136,6 +168,7 @@ specials = {
     6: proc_ecmul,
     7: proc_modexp,
     big_endian_to_int(ETHER): proc_send_ether,
+    big_endian_to_int(LOG): proc_log,
 }
 
 if __name__ == '__main__':

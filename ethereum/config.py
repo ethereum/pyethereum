@@ -19,12 +19,14 @@ GENESIS_TIME = int_to_addr(110)
 LOG = int_to_addr(120)
 BET_INCENTIVIZER = int_to_addr(150)
 EXECUTION_STATE = int_to_addr(160)
+TX_ENTRY_POINT = int_to_addr(2**160 - 1)
 TXGAS = 1
 TXINDEX = 2
 GAS_REMAINING = 3
+BLOOM = 2**32
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = int_to_addr(0)
-BLKTIME = 2.7
+BLKTIME = 3.5
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 110
 # Note that this parameter must be set in the Casper contract as well

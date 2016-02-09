@@ -61,11 +61,11 @@ opcodes = {
     0x5d: ['SSTOREEXT', 3, 0, 0],
     0x5e: ['SLOADEXTBYTES', 3, 0, 50],
     0x5f: ['SSTOREEXTBYTES', 2, 0, 2500],
-    0xa0: ['LOG0', 2, 0, 375],
-    0xa1: ['LOG1', 3, 0, 750],
-    0xa2: ['LOG2', 4, 0, 1125],
-    0xa3: ['LOG3', 5, 0, 1500],
-    0xa4: ['LOG4', 6, 0, 1875],
+    0xa0: ['LOG0', 2, 0, 0],
+    0xa1: ['LOG1', 3, 0, 0],
+    0xa2: ['LOG2', 4, 0, 0],
+    0xa3: ['LOG3', 5, 0, 0],
+    0xa4: ['LOG4', 6, 0, 0],
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40],
     0xf2: ['CALLCODE', 7, 1, 40],
@@ -106,6 +106,8 @@ GCOPY = 3             # cost to copy one 32 byte word
 GCONTRACTBYTE = 200   # one byte of code in contract creation
 GCALLVALUETRANSFER = 9000   # non-zero-valued call
 GLOGBYTE = 8          # cost of a byte of logdata
+GLOGBASE = 375        # basic log
+GLOGTOPIC = 375       # log topic
 
 GTXCOST = 21000       # TX BASE GAS COST
 GTXDATAZERO = 4       # TX DATA ZERO BYTE GAS COST

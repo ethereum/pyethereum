@@ -1,10 +1,11 @@
 data nextUserPos # map to storage index 0
-data users[2**50](address, orig_deposit_size, induction_height, withdrawal_height, validationCode, pos, blockhashes[2**50], stateroots[2**50], probs[2**50], profits[2**50], basicinfo)
+data users[2**50](address, orig_deposit_size, induction_height, withdrawal_height, validationCode, pos, blockhashes[2**50], stateroots[2**50], probs[2**50], profits[2**50], basicinfo, max_seq)
 data deletedUserPositions[2**50]
 data nextDeletedUserPos
 data userPosToIndexMap[2**50]
 data nextUserIndex
 data activeValidators
+data slashed[]
 
 macro SEQ_POS: 0
 macro PREVHASH_POS: 1
@@ -17,6 +18,8 @@ macro MIN_DEPOSIT: 1500 * 10**18
 macro MAX_DEPOSIT: 60000 * 10**18
 
 macro ENTER_EXIT_DELAY: 110
+
+macro ETHER: 50
 
 macro WITHDRAWAL_WAITTIME: 20
 
@@ -64,6 +67,7 @@ event Reward(blockNumber, profit, blockdiff, totProfit, bmh)
 event ProcessingBet(bettor, seq, curBlock, prevBlock, maxHeightProcessed, max_height)
 event RecordingTotProfit(bettor, block, totProfit)
 event Joined(userIndex)
+event BetSlashed(userIndex:uint256, bet1:str, bet2:str)
 
 # Become a validator
 def join(validationCode:bytes):
@@ -82,7 +86,6 @@ def join(validationCode:bytes):
     ~sstorebytes(ref(self.users[userIndex].validationCode), validationCode, len(validationCode))
     # log(20, ~ssize(self.users[userIndex].validationCode))
     basicinfo = array(10)
-    ~sloadbytes(ref(self.users[userIndex].basicinfo), basicinfo, 320)
     basicinfo[DEPOSIT_SIZE_POS] = msg.value
     self.users[userIndex].orig_deposit_size = msg.value
     self.users[userIndex].induction_height = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
@@ -107,14 +110,22 @@ def withdraw(index:uint256):
 
 event LogPre(hash:bytes32)
 event LogPost(hash:bytes32)
+event SubmitBet(seq, prevhash:bytes32, index, stateroot_prob_from:bytes1)
+event ExcessRewardEvent(index, profit, blockdiff, totProfit, newBalance)
 
 # Submit a bet
-def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], prevhash:bytes32, seqnum:uint256, sig:bytes):
+def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], stateroot_prob_from:bytes1, prevhash:bytes32, seqnum:uint256, sig:bytes):
     # Load basic user information
     basicinfo = array(10)
     ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
+    # log(type=SubmitBet, basicinfo[SEQ_POS], basicinfo[PREVHASH_POS], index, stateroot_prob_from)
     # Check validity
-    assert seqnum == basicinfo[SEQ_POS]
+    if seqnum != basicinfo[SEQ_POS]:
+        # If someone submits a higher-seq bet, register that it has been
+        # submitted; we will later force the user to supply all bets up
+        # to and including this seq in order to withdraw
+        self.users[index].max_seq = max(self.users[index].max_seq, seqnum)
+        return(0:bool)
     assert prevhash == basicinfo[PREVHASH_POS]
     assert max_height <= block.number
     assert self.users[index].withdrawal_height > block.number
@@ -136,12 +147,13 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
         ~callstatic(msg.gas - 20000, user_validation_code, len(user_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
         sig[-1] = L
     assert sig_verified == 1
+    # log(type=ProcessingBet, index, seqnum, 1, 2, 3, 4)
     # Process profits from last bet
     userBalance = basicinfo[DEPOSIT_SIZE_POS]
     with bmh = basicinfo[BET_MAXHEIGHT_POS]:
         with CURPROFITBLOCK = newArrayChunk(PPB, PPN):
             loadArrayChunk(PPB, PPN, self.users[index].profits, CURPROFITBLOCK, bmh)
-            with profit = loadArrayValue(PPB, PPN, CURPROFITBLOCK, bmh):
+            with profit = ~signextend(PPB-1, loadArrayValue(PPB, PPN, CURPROFITBLOCK, bmh)):
                 with blockdiff = block.number - basicinfo[PROFITS_PROCESSED_TO_POS]:
                     with totProfit = 0:
                         with i = 0:
@@ -150,7 +162,8 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                                 profit = profit * (INCENTIVIZATION_EMA_COEFF - 1) / INCENTIVIZATION_EMA_COEFF
                                 i += 1
                         userBalance = max(0, userBalance + userBalance * totProfit / SCORING_REWARD_DIVISOR)
-                        # log(type=Reward, i, profit, blockdiff, totProfit, bmh)
+                        if userBalance > 3000 * 10**18:
+                            log(type=ExcessRewardEvent, i, profit, blockdiff, totProfit, userBalance)
         # Update the maximum height of the previous bet, profits and the user deposit size
         basicinfo[BET_MAXHEIGHT_POS] = max(bmh, max_height)
         basicinfo[PROFITS_PROCESSED_TO_POS] = block.number
@@ -159,6 +172,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     if max_height == ~sub(0, 1):
         self.users[index].withdrawal_height = block.number
         ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        assert self.users[index].max_seq <= seqnum
         return(1:bool)
     # Update blockhashes, storing blockhash correctness info in groups of 32
     with i = 0:
@@ -201,7 +215,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # Incentivization
     with H = max(self.users[index].induction_height, minChanged):
         # log(type=ProgressWithDataArray, 1, [minChanged, H, max_height, len(blockhashes), len(stateroots), len(probs)])
-        netProb = 10**9
+        netProb = 10**9 * convertOddsToProb(convertProbReprToOdds(~byte(0, stateroot_prob_from)))
         with PROFITBLOCK = newArrayChunk(PPB, PPN):
             loadArrayChunk(PPB, PPN, self.users[index].profits, PROFITBLOCK, H - 1)
             CURPROFIT = loadArrayValue(PPB, PPN, PROFITBLOCK, H - 1)
@@ -214,14 +228,16 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                 with blockOdds = convertProbReprToOdds(getch(probs, max_height - H)): # mod((self.users[index].probs[H / 32] / 256**(H % 32)), 256) or 128
                     # log(type=Progress, 3)
                     blockHashInfo = mod(div(self.users[index].blockhashes[H / 32], 256**(H % 32)), 256)
-            
-                    if blockOdds >= 10**9 and blockHashInfo >= 2:
-                        profitFactor = if(blockHashInfo % 2, scoreCorrect(blockOdds), scoreIncorrect(blockOdds))
-                    else:
-                        profitFactor = if(blockHashInfo % 2 or blockHashInfo == 0, scoreCorrect(10**18 / blockOdds), scoreIncorrect(10**18 / blockOdds))
+                    with invBlockOdds = 10**18 / blockOdds: 
+                        if blockHashInfo >= 2 and blockHashInfo % 2: # block hashes match, and there is a block
+                            profitFactor = scoreCorrect(blockOdds) + scoreIncorrect(invBlockOdds)
+                        elif blockHashInfo < 2: # there is no block
+                            profitFactor = scoreCorrect(invBlockOdds) + scoreIncorrect(blockOdds)
+                        else: # block hashes do not match, there is a block
+                            profitFactor = scoreIncorrect(blockOdds) + scoreIncorrect(invBlockOdds)
 
-                    if profitFactor < 0:
-                        log(type=BlockLoss, blockOdds, profitFactor)
+                    # if profitFactor < 0 and (blockOdds < 10**8 or blockOdds > 10**10):
+                    #     log(type=BlockLoss, blockOdds, profitFactor, H, index, blockHashInfo)
             
                     # Check if the state root bet that was made is correct.
                     # log(type=Progress, 4)
@@ -233,8 +249,8 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                                 profitFactor += scoreCorrect(convertProbToOdds(netProb))
                             else:
                                 odds = convertProbToOdds(netProb)
-                                # log(type=StateLoss, convertProbToOdds(netProb), profitFactor, H, ~stateroot(H), index, self.users[index].stateroots[H / 32], probs, max_height)
-                                log(type=StateLoss, odds, profitFactor, H)
+                                if odds > 10**10:
+                                    log(type=StateLoss, odds, scoreIncorrect(odds), H, index, stateRootInfo)
                                 profitFactor += scoreIncorrect(odds)
                         else:
                             netProb = 0
@@ -258,9 +274,9 @@ event DebugPBForBlock(pblock:str, blocknum, curprofit)
 event Progress(stage)
 event ProgressWithData(stage, h, mh)
 event ProgressWithDataArray(stage, data:arr)
-event BlockLoss(odds, loss)
+event BlockLoss(odds, loss, height, index, blockHashInfo)
 # event StateLoss(odds, loss, height, actualRoot:bytes32, index, stateRootCorrectness:bytes32, probs:bytes, maxHeight)
-event StateLoss(odds, loss, height)
+event StateLoss(odds, loss, height, index, stateRootInfo)
 
 # Interpret prob as odds in scientific notation: 5 bit exponent
 # (-16….15), 3 bit mantissa (1….1.875). Convert to odds per billion
@@ -345,3 +361,61 @@ def const getUserDeposit(index:uint256):
     basicinfo = array(10)
     ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
     return(basicinfo[DEPOSIT_SIZE_POS]:uint256)
+
+# Get information about a bet (internal method for slashing purposes)
+def getBetInfo(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], stateroot_prob_from:bytes1, prevhash:bytes32, seqnum:uint256, sig:bytes):
+    _calldata = string(~calldatasize())
+    ~calldatacopy(_calldata, 0, ~calldatasize())
+    my_prefix = prefix(self.submitBet)
+    _calldata[0] = (_calldata[0] & ~sub(2**224, 1)) + my_prefix
+    signing_hash = ~sha3(_calldata, ~calldatasize() - 32 - ceil32(len(sig)))
+    # Check the sig against the user validation code
+    user_validation_code = string(~ssize(ref(self.users[index].validationCode)))
+    ~sloadbytes(ref(self.users[index].validationCode), user_validation_code, len(user_validation_code))
+    sig_verified = 0
+    with L = len(sig):
+        sig[-1] = signing_hash
+        ~callstatic(msg.gas - 20000, user_validation_code, len(user_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
+        sig[-1] = L
+    assert sig_verified == 1
+    return([signing_hash, index, seqnum]:arr)
+
+event Diagnostic(data:str)
+event ListOfNumbers(foo:arr)
+
+def slashBets(bytes1:bytes, bytes2:bytes):
+    log(type=TryingToSlashBets, bytes1, bytes2)
+    assert len(bytes1) > 32
+    assert len(bytes2) > 32
+    my_prefix = prefix(self.getBetInfo)
+    my_old_prefix = prefix(self.submitBet)
+    bytes1[0] = (bytes1[0] & ~sub(2**224, 1)) + my_prefix
+    output1 = array(5)
+    ~call(msg.gas - 200000, self, 0, bytes1, len(bytes1), output1, 160)
+    bytes2[0] = (bytes2[0] & ~sub(2**224, 1)) + my_prefix
+    output2 = array(5)
+    ~call(msg.gas - 200000, self, 0, bytes2, len(bytes2), output2, 160)
+    assert output1[0] == 32
+    assert output2[0] == 32
+    assert output1[1] == 3
+    assert output2[1] == 3
+    assert not self.slashed[output1[2]]
+    assert not self.slashed[output2[2]]
+    # Two distinct signatures with the same index and seqnum...
+    if output1[3] == output2[3] and output1[4] == output2[4] and output1[2] != output2[2]:
+        self.slashed[output1[2]] = 1
+        self.slashed[output2[2]] = 1
+        basicinfo = array(10)
+        index = output1[3]
+        ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        deposit = basicinfo[DEPOSIT_SIZE_POS]
+        basicinfo[DEPOSIT_SIZE_POS] /= 2
+        ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        ~mstore(0, block.coinbase)
+        ~mstore(32, deposit / 10)
+        ~call(12000, (self - self % 2**160) + ETHER, 0, 0, 64, 0, 0)
+        bytes1[0] = (bytes1[0] & ~sub(2**224, 1)) + my_old_prefix
+        bytes2[0] = (bytes2[0] & ~sub(2**224, 1)) + my_old_prefix
+        log(type=BetSlashed, output1[1], bytes1, bytes2)
+
+event TryingToSlashBets(bytes1:str, bytes2:str)

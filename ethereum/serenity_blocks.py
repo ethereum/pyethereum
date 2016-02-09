@@ -6,7 +6,7 @@ from utils import address, int256, trie_root, hash32, to_string, \
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import fastvm as vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES, EXECUTION_STATE
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES, EXECUTION_STATE, ADDR_BYTES
 import rlp
 import trie
 import specials
@@ -144,9 +144,9 @@ class State():
 
     def set_storage(self, addr, k, v):
         if isinstance(k, (int, long)):
-            k = zpad(encode_int(k), 32)
+            k = encode_int32(k)
         if isinstance(v, (int, long)):
-            v = zpad(encode_int(v), 32)
+            v = encode_int32(v)
         addr = normalize_address(addr)
         self.journal.append((addr, k, self.get_storage(addr, k)))
         self.cache[addr][k] = v
@@ -178,7 +178,7 @@ class State():
 
     def get_storage(self, addr, k):
         if isinstance(k, (int, long)):
-            k = zpad(encode_int(k), 32)
+            k = encode_int32(k)
         addr = normalize_address(addr)
         if addr not in self.cache:
             self.cache[addr] = {}
@@ -223,10 +223,11 @@ class State():
 
     def account_to_dict(self, account):
         acct_trie = trie.Trie(self.state.db)
-        acct_trie.root = self.state.get(normalize_address(account))
+        acct_trie.root_hash = self.state.get(normalize_address(account))
+        print 'rt', repr(acct_trie.root_hash)
         acct_dump = {}
-        for key, v in acct_trie.to_dict().items():
-            acct_dump[encode_hex(k)] = encode_hex(v)
+        for key, val in acct_trie.to_dict().items():
+            acct_dump[encode_hex(key)] = encode_hex(val)
         return acct_dump
 
     # Returns a value x, where State.revert(x) at any later point will return
@@ -254,14 +255,14 @@ transition_cache_map = {}
 def block_state_transition(state, block, listeners=[]):
     pre = state.root
     # Determine the current block number, block proposer and block hash
-    blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32))
-    blkproposer = block.proposer if block else '\x00' * 20
+    blknumber = big_endian_to_int(state.get_storage(BLKNUMBER, 0))
+    blkproposer = block.proposer if block else '\x00' * ADDR_BYTES
     blkhash = block.hash if block else '\x00' * 32
     # Put the state root in storage
     if blknumber:
         state.set_storage(STATEROOTS, encode_int32(blknumber - 1), state.root)
     # Put the proposer in storage
-    state.set_storage(PROPOSER, '\x00' * 32, blkproposer)
+    state.set_storage(PROPOSER, 0, blkproposer)
     # If the block exists (ie. is not NONE), process every transaction
     if block:
         assert block.number == blknumber, (block.number, blknumber)
@@ -270,6 +271,7 @@ def block_state_transition(state, block, listeners=[]):
         # only, not computation)
         for s, g in zip(block.summaries, block.transaction_groups):
             _EXSTATE = shardify(EXECUTION_STATE, s.left_bound)
+            _LOG = shardify(LOG, s.left_bound)
             # Set the txindex to 0 to start off
             state.set_storage(_EXSTATE, TXINDEX, 0)
             # Initialize the gas remaining variable
@@ -278,10 +280,13 @@ def block_state_transition(state, block, listeners=[]):
             print 'Block %d contains %d transactions and %d intrinsic gas' % (blknumber, sum([len(g) for g in block.transaction_groups]), sum([summ.intrinsic_gas for summ in block.summaries]))
             for tx in g:
                 tx_state_transition(state, tx, s.left_bound, s.right_bound, listeners=listeners)
+            assert big_endian_to_int(state.get_storage(_EXSTATE, TXINDEX)) == len(g)
+            for i in range(len(g)):
+                assert state.get_storage(_LOG, i)
     # Put the block hash in storage
     state.set_storage(BLOCKHASHES, encode_int32(blknumber), blkhash)
     # Put the next block number in storage
-    state.set_storage(BLKNUMBER, '\x00' * 32, encode_int32(blknumber + 1))
+    state.set_storage(BLKNUMBER, 0, encode_int32(blknumber + 1))
     # Update the RNG seed (the lower 64 bits contains the number of validators,
     # the upper 192 bits are pseudorandom)
     prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) if blknumber else '\x00' * 32 
@@ -309,12 +314,14 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
     if gas_remaining - tx.exec_gas < 0:
         print 'UNABLE TO EXECUTE transaction due to gas limits: %d have, %d required' % \
             (gas_remaining, tx.exec_gas)
-        state.set_storage(_LOG, txindex, 0)
+        state.set_storage(_LOG, txindex, rlp.encode([encode_int(0)]))
+        state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
         return None
     # If the recipient is out of range, it's a no-op
     if not (left_bound <= get_shard(tx.addr) < right_bound):
         print 'UNABLE TO EXECUTE transaction due to out-of-range'
-        state.set_storage(_LOG, txindex, 0)
+        state.set_storage(_LOG, txindex, rlp.encode([encode_int(0)]))
+        state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
         return None
     # Set an object in the state for tx gas
     state.set_storage(_EXSTATE, TXGAS, encode_int32(tx.gas))
@@ -326,7 +333,8 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
         message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0), left_bound, right_bound)
         result, execution_start_gas, data = apply_msg(ext, message, tx.code)
         if not result:
-            state.set_storage(_LOG, txindex, 1)
+            state.set_storage(_LOG, txindex, rlp.encode([encode_int(1)]))
+            state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
             return None
         code = ''.join([chr(x) for x in data])
         put_code(state, tx.addr, code)
@@ -342,7 +350,7 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
     state.set_storage(_EXSTATE, GAS_REMAINING, gas_remaining - tx.exec_gas + msg_gas_remained)
     # Places a log in storage
     logs = state.get_storage(_LOG, txindex)
-    state.set_storage(_LOG, txindex, rlp.insert(logs, 0, encode_int(2 if result else 1)))
+    state.set_storage(_LOG, txindex, rlp.insert(logs, 0, encode_int(2)))
     # Increments the txindex
     state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
     return data
@@ -351,17 +359,6 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
 # address (contracts created from outside get creator '\x00' * 20)
 def mk_contract_address(sender='\x00'*20, left_bound=0, code=''):
     return shardify(sha3(sender + code)[12:], left_bound)
-
-# Save a log in the state
-def add_log(state, sender, topics, data, leftbound, listeners):
-    _LOG = shardify(LOG, leftbound)
-    _EXSTATE = shardify(EXECUTION_STATE, leftbound)
-    # print big_endian_to_int(state.get_storage(TXINDEX, 0)), state.get_storage(LOG, state.get_storage(TXINDEX, 0)).encode('hex')
-    old_storage = state.get_storage(_LOG, state.get_storage(_EXSTATE, TXINDEX))
-    new_storage = rlp.append(old_storage, [sender, map(encode_int32, topics), data])
-    state.set_storage(_LOG, state.get_storage(_EXSTATE, TXINDEX), new_storage)
-    for listener in listeners:
-        listener(sender, topics, ''.join([chr(x) for x in data]))
 
 def get_code(state, address):
     codehash = state.get_storage(address, '')
@@ -379,9 +376,9 @@ class VMExt():
 
     def __init__(self, state, listeners=[]):
         self._state = state
+        self._listeners = listeners
         self.set_storage = state.set_storage
         self.get_storage = state.get_storage
-        self.log = lambda sender, topics, data, leftbound: add_log(state, sender, topics, data, leftbound, listeners)
         self.log_storage = state.account_to_dict
         self.unhash = lambda x: state.db.get(UNHASH_MAGIC_BYTES + x)
         self.msg = lambda msg, code: apply_msg(self, msg, code)
@@ -431,8 +428,8 @@ def apply_msg(ext, msg, code):
     if res == 0:
         print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % \
             (msg.gas, msg.sender.encode('hex'), msg.to.encode('hex'), msg.data.extract_all().encode('hex'))
-        if 200000 < msg.gas < 500000:
-            raise Exception("123")
+        # if 200000 < msg.gas < 500000:
+        #     raise Exception("123")
         ext._state.revert(snapshot)
     # Otherwise, all good
     else:

@@ -12,11 +12,11 @@ import copy
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from utils import to_string, shardify, int_to_addr
+from utils import to_string, shardify, int_to_addr, encode_int32
 import utils
 import numpy
 
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS, EXECUTION_STATE
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS, EXECUTION_STATE, LOG
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -220,6 +220,7 @@ def vm_execute(ext, msg, code):
     _prevop = None  # for trace only
 
     _EXSTATE = shardify(EXECUTION_STATE, msg.left_bound)
+    _LOG = shardify(LOG, msg.left_bound)
 
     while 1:
       # print 'op: ', op, time.time() - s
@@ -550,8 +551,18 @@ def vm_execute(ext, msg, code):
         elif op_LOG0 <= op <= op_LOG4:
             depth = op - op_LOG0
             mstart, msz = stk.pop(), stk.pop()
-            topics = [stk.pop() for x in range(depth)]
-            ext.log(msg.sender, topics, mem[mstart: mstart + msz], msg.left_bound)
+            topics = [stk.pop() if i < depth else 0 for i in range(4)]
+            log_data = map(ord, ''.join(map(encode_int32, topics))) + mem[mstart: mstart + msz]
+            # print 'ld', log_data, msz
+            log_data = CallData(log_data, 0, len(log_data))
+            log_gas = opcodes.GLOGBYTE * msz + opcodes.GLOGBASE + \
+                len(topics) * opcodes.GLOGTOPIC
+            compustate.gas -= log_gas
+            if compustate.gas < log_gas:
+                return vm_exception('OUT OF GAS', needed=log_gas)
+            log_msg = Message(msg.to, _LOG, 0, log_gas, log_data,
+                              depth=msg.depth + 1, code_address=_LOG)
+            result, gas, data = ext.msg(log_msg, '')
             # print '###log###', mstart, msz, topics
             if 3141592653589 in [mstart, msz] + topics:
                 raise Exception("Testing exception triggered!")

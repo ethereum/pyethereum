@@ -8,8 +8,8 @@ from serenity_blocks import tx_state_transition, BLKNUMBER, \
     block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt, \
     get_code
 from serenity_transactions import Transaction
-from ecdsa_accounts import sign_block, privtoaddr, sign_bet
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS
+from ecdsa_accounts import sign_block, privtoaddr, sign_bet, mk_transaction
+from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES
 from db import OverlayDB
 import fastvm as vm
 import serpent
@@ -36,8 +36,6 @@ NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
 
-COURAGE = 0.84
-
 rlp_dict = {}
 
 def rlp_decode(*args):
@@ -45,6 +43,14 @@ def rlp_decode(*args):
     if cache_key not in rlp_dict:
         rlp_dict[cache_key] = rlp.decode(*args)
     return copy.deepcopy(rlp_dict[cache_key])
+
+def weighted_percentile(values, weights, frac):
+    zipvals = sorted(zip(values, weights))
+    target = sum(weights) * frac
+    while target > zipvals[0][1]:
+        target -= zipvals[0][1]
+        zipvals.pop(0)
+    return zipvals[0][0]
 
 # Network message object
 class NetworkMessage(rlp.Serializable):
@@ -142,12 +148,13 @@ invhash = {}
 
 # An object that stores a bet made by a validator
 class Bet():
-    def __init__(self, index, max_height, probs, blockhashes, stateroots, prevhash, seq, sig):
+    def __init__(self, index, max_height, probs, blockhashes, stateroots, stateroot_prob_from, prevhash, seq, sig):
         self.index = index
         self.max_height = max_height
         self.probs = probs
         self.blockhashes = blockhashes
         self.stateroots = stateroots
+        self.stateroot_prob_from = stateroot_prob_from
         self.prevhash = prevhash
         self.seq = seq
         self.sig = sig
@@ -158,7 +165,8 @@ class Bet():
     def serialize(self):
         o = casper_ct.encode('submitBet',
             [self.index, self.max_height, ''.join(map(encode_prob, self.probs)),
-             self.blockhashes, self.stateroots, self.prevhash, self.seq, self.sig]
+             self.blockhashes, self.stateroots, encode_prob(self.stateroot_prob_from),
+             self.prevhash, self.seq, self.sig]
         )
         self._hash = sha3(o)
         return o
@@ -169,7 +177,7 @@ class Bet():
         params = decode_abi(casper_ct.function_data['submitBet']['encode_types'],
                             betdata[4:])
         o = Bet(params[0], params[1], map(decode_prob, params[2]), params[3],
-                params[4], params[5], params[6], params[7])
+                params[4], decode_prob(params[5]), params[6], params[7], params[8])
         o._hash = sha3(betdata)
         return o
 
@@ -286,7 +294,8 @@ def mkid():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
-    def __init__(self, genesis_state, key, byzantine=False):
+    def __init__(self, genesis_state, key, clockwrong=False, bravery=0.84,
+                 crazy_bet=False, double_block_suicide=2**200, double_bet_suicide=2**200):
         log("Initializing betting strategy", True)
         # An ID for purposes of the network simulator
         self.id = mkid()
@@ -305,6 +314,8 @@ class defaultBetStrategy():
         self.opinions = {}
         # A dict of lists of bets received from validators
         self.bets = {}
+        # Deposit sizes of all validators
+        self.deposit_sizes = {}
         # A dict containing the highest-sequence-number bet processed for
         # each validator
         self.highest_bet_processed = {}
@@ -313,8 +324,10 @@ class defaultBetStrategy():
         # Hash lookup map; used mainly to check whether or not something has
         # already been received and processed
         self.objects = {}
-        # List of blocks received
+        # Blocks selected for each height
         self.blocks = []
+        # Blocks received at each height
+        self.candidate_blocks = []
         # When you last explicitly requested to ask for a block; stored to
         # prevent excessively frequent lookups
         self.last_asked_for_block = {}
@@ -349,14 +362,27 @@ class defaultBetStrategy():
         self.last_block_produced = -1
         # Next height at which you are eligible to produce (could be None)
         self.next_block_to_produce = -1
-        # Am I byzantine?
-        self.byzantine = byzantine
+        # Deliberately sabotage my clock? (for testing purposes)
+        self.clockwrong = clockwrong
+        # How quickly to converge toward finalization?
+        self.bravery = bravery
+        assert 0 < self.bravery <= 1
+        # Am I making crazy bets? (for testing purposes)
+        self.crazy_bet = crazy_bet
+        # What block number to create two blocks at, destroying my validator
+        # slot (for testing purposes; for non-byzantine nodes set to some really
+        # high number)
+        self.double_block_suicide = double_block_suicide
+        # What seq to create two bets at (also destructively, for testing purposes)
+        self.double_bet_suicide = double_bet_suicide
         # Next submission delay (should be 0 on livenet; nonzero for testing purposes)
-        self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.byzantine else 0
+        self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         # Prevhash (for betting)
         self.prevhash = '\x00' * 32
         # Sequence number (for betting)
         self.seq = 0
+        # Transactions I want to track
+        self.tracked_tx_hashes = []
         # If we only partially calculate state roots, store the index at which
         # to start calculating next time you make a bet
         self.calc_state_roots_from = 0
@@ -372,6 +398,7 @@ class defaultBetStrategy():
                 valcode = call_casper(self.genesis_state, 'getUserValidationCode', [i])
                 assert valcode
                 assert valaddr
+                self.deposit_sizes[i] = call_casper(self.genesis_state, 'getUserDeposit', [i])
                 # Initialize opinion and bet objects
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, 0)
                 self.bets[i] = {}
@@ -398,6 +425,14 @@ class defaultBetStrategy():
         self.proposers = []
         self.add_proposers()
         log('Proposers: %r' % self.proposers, True)
+        # When will I suicide?
+        if self.double_block_suicide < 2**40:
+            if self.double_block_suicide < self.next_block_to_produce:
+                log("Suiciding at block %d" % self.next_block_to_produce, True)
+            else:
+                log("Suiciding at some block after %d" % self.double_block_suicide, True)
+        # Am I byzantine?
+        self.byzantine = self.crazy_bet or self.double_block_suicide < 2**80 or self.double_bet_suicide < 2**80
 
     # Compute as many future block proposers as possible
     def add_proposers(self):
@@ -422,6 +457,7 @@ class defaultBetStrategy():
         # the data we will be calculating
         while len(self.blocks) <= block.number:
             self.blocks.append(None)
+            self.candidate_blocks.append([])
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
             self.probs.append(0.5)
@@ -452,14 +488,14 @@ class defaultBetStrategy():
                 self.validator_signups = vs
                 self.update_validator_set(check_state2)
         # Add the block to our list of blocks
-        if self.blocks[block.number]:
-            raise Exception("Two blocks found at a height! The slashing+"
-                            "adjudication procedure for this case has not "
-                            "yet been implemented...")
+        if not self.blocks[block.number]:
+            self.blocks[block.number] = block
+        self.candidate_blocks[block.number].append(block)
+        if len(self.candidate_blocks[block.number]) >= 2:
+            log('MULTIPLE CANDIDATE BLOCKS AT HEIGHT %d' % block.number, True)
         # Store the block as having been received
         self.objects[block.hash] = block
         self.time_received[block.hash] = time.time()
-        self.blocks[block.number] = block
         self.recently_discovered_blocks.append(block.number)
         time_delay = time.time() - (self.genesis_time + BLKTIME * block.number)
         log("Received good block at height %d with delay %.2f: %s" % (block.number, time_delay, block.hash.encode('hex')[:16]), self.index == 3)
@@ -469,7 +505,7 @@ class defaultBetStrategy():
                 if tx.hash not in self.finalized_txindex:
                     if tx.hash not in self.unconfirmed_txindex:
                         self.unconfirmed_txindex[tx.hash] = (tx, [])
-                    self.unconfirmed_txindex[tx.hash][1].append((block.number, i, j))
+                    self.unconfirmed_txindex[tx.hash][1].append((block.number, block.hash, i, j))
         # Re-broadcast the block
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(block)])))
         # Bet
@@ -487,6 +523,7 @@ class defaultBetStrategy():
                 ih = call_casper(check_state, 'getUserInductionHeight', [i])
                 valaddr = call_casper(check_state, 'getUserAddress', [i])
                 valcode = call_casper(check_state, 'getUserValidationCode', [i])
+                self.deposit_sizes[i] = call_casper(check_state, 'getUserDeposit', [i])
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, ih)
                 log('Validator inducted at index %d with address %s' % (i, valaddr), True)
                 log('Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex')), True)
@@ -512,6 +549,14 @@ class defaultBetStrategy():
         self.time_received[bet.hash] = time.time()
         # Re-broadcast it
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])))
+        # Do we have a duplicate? If so, slash it
+        if bet.seq in self.bets[bet.index]:
+            log('Caught a double bet!\n\n', True)
+            bytes1 = self.bets[bet.index][bet.seq].serialize()
+            bytes2 = bet.serialize()
+            new_tx = Transaction(CASPER, 500000 + 1000 * len(bytes1) + 1000 * len(bytes2),
+                                 data=casper_ct.encode('slashBets', [bytes1, bytes2]))
+            self.add_transaction(new_tx, track=True)
         # Record it
         self.bets[bet.index][bet.seq] = bet
         # If we have an unbroken chain of bets from 0 to N, and last round
@@ -558,6 +603,8 @@ class defaultBetStrategy():
         have_block = blk_hash and blk_hash in self.objects
         # The list of votes to use when producing one's own vote
         probs = []
+        # Weights for each validator
+        weights = []
         # My default opinion based on (i) whether or not I have the block,
         # (ii) when I saw it first if I do, and (iii) the current time
         default_vote = self.default_vote(blk_number, blk_hash)
@@ -569,20 +616,34 @@ class defaultBetStrategy():
         for i in self.opinions.keys():
             if self.opinions[i].induction_height <= blk_number < self.opinions[i].withdrawal_height and not self.opinions[i].withdrawn:
                 p = self.opinions[i].get_prob(blk_number)
-                probs.append(p if p is not None else default_vote)
+                # If this validator has not yet voted, then add our default vote
+                if p is None:
+                    probs.append(default_vote)
+                # If they voted for a different block as the block hash currently being processed, then:
+                # * if their probability is low, that means they are voting for the null case, so take their vote as is
+                # * if their probability is high, that means that they are voting for a different block, so for this
+                # block hash flip the vote as it's a vote against this particular block hash
+                elif self.opinions[i].blockhashes[blk_number] != blk_hash:
+                    probs.append(min(p, max(1 - p, 0.25)))
+                # If they voted for the same block as is currently being processed, then take their vote as is
+                else:
+                    probs.append(p)
+                weights.append(self.deposit_sizes[i])
                 opinion_count += (1 if p is not None else 0)
             elif self.opinions[i].withdrawn:
                 withdrawn += 1
         log('source probs on block %d: %r with %d opinions out of %d with %d withdrawn' % (blk_number, probs, opinion_count, len(self.opinions), withdrawn), self.index == 3)
         # The algorithm for producing your own vote based on others' votes;
         # the intention is to converge toward 0 or 1
-        probs = sorted(probs)
-        if probs[len(probs)/3] > 0.8:
-            o = COURAGE + probs[len(probs)/3] * (1 - COURAGE)
-        elif probs[len(probs)*2/3] < 0.2:
-            o = probs[len(probs)*2/3] * (1 - COURAGE)
+        p33 = weighted_percentile(probs, weights, 1/3.)
+        p50 = weighted_percentile(probs, weights, 1/2.)
+        p67 = weighted_percentile(probs, weights, 2/3.)
+        if p33 > 0.8:
+            o = self.bravery + p33 * (1 - self.bravery)
+        elif p67 < 0.2:
+            o = p67 * (1 - self.bravery)
         else:
-            o = min(0.85, max(0.15, probs[len(probs)/2] * 3 - (0.8 if have_block else 1.2)))
+            o = min(0.85, max(0.15, p50 * 3 - (0.8 if have_block else 1.2)))
         # If the probability we get is above 0.99 but we do not have the
         # block, then ask for it explicitly
         if o > 0.8 and not have_block:
@@ -592,13 +653,15 @@ class defaultBetStrategy():
                 self.last_asked_for_block[blk_number] = time.time()
         # Cap votes at 0.7 unless we know for sure that we have a block
         res = min(o, 1 if have_block else 0.7)
+        if self.crazy_bet and FINALITY_LOW < res < FINALITY_HIGH:
+            res = 1 / (1 + FINALITY_LOW ** (random.random() * 1.8 - 0.9))
         log('result prob: %.5f %s'% (res, ('have block' if blk_hash in self.objects else 'no block')), self.index == 3)
         # Return the resulting vote
         return res
 
     # Make a bet that signifies that we do not want to make any more bets
     def withdraw(self):
-        o = sign_bet(Bet(self.index, 2**256 - 1, [], [], [], self.prevhash, self.seq, ''), self.key)
+        o = sign_bet(Bet(self.index, 2**256 - 1, [], [], [], FINALITY_HIGH, self.prevhash, self.seq, ''), self.key)
         payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
         self.prevhash = o.hash
         self.seq += 1
@@ -611,7 +674,7 @@ class defaultBetStrategy():
     # Take one's ether out
     def finalizeWithdrawal(self):
         txdata = casper_ct.encode('withdraw', [self.former_index])
-        tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
+        tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
         v = tx_state_transition(genesis, tx)
 
     def recalc_state_roots(self):
@@ -650,7 +713,22 @@ class defaultBetStrategy():
         log('Making probs from %d to %d inclusive' % (sign_from, len(self.blocks) - 1), self.index >= 5)
         # Vote on each height independently using our voting strategy
         for h in range(sign_from, len(self.blocks)):
-            prob = self.vote(h, self.blocks[h].hash if self.blocks[h] else None)
+            # No block, base case vote
+            if not self.blocks[h]:
+                prob = self.vote(h, None)
+            # One or more blocks: take highest probability
+            else:
+                probs = [(self.vote(h, b.hash), b.hash) for b in self.candidate_blocks[h]]
+                prob, new_block_hash = sorted(probs)[-1]
+                if len(probs) >= 2:
+                    log('Voting on multiple candidates: %r, selected %r' %
+                        ([(a, b[:8].encode('hex')) for a, b in probs], (prob, new_block_hash[:8].encode('hex'))), True)
+                if new_block_hash != self.blocks[h].hash:
+                    log('Flipping block at height %d from %s to %s' %
+                        (h, self.blocks[h].hash[:8].encode('hex'), new_block_hash[:8].encode('hex')), True)
+                    assert self.objects[new_block_hash].number == h
+                    self.blocks[h] = self.objects[new_block_hash]
+                    self.recently_discovered_blocks.append(h)
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
@@ -665,15 +743,19 @@ class defaultBetStrategy():
                 # Set the finalized hash
                 self.finalized_hashes[h] = self.blocks[h].hash if prob > FINALITY_HIGH else '\x00' * 32
                 # Try to increase the max finalized height
-                if h == self.my_max_finalized_height + 1:
+                while h == self.my_max_finalized_height + 1:
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
+                    if not h % 10:
+                        check_state = State(self.stateroots[h-1], self.db) if h else self.genesis_state
+                        for i in self.opinions.keys():
+                            self.deposit_sizes[i] = call_casper(check_state, 'getUserDeposit', [i])
         # Recalculate state roots
         rootstart = max(self.calc_state_roots_from, self.induction_height)
         self.recalc_state_roots()
         # Check state root integrity
         log('Node %d making bet %d with probabilities from height %d: %r' %
-            (self.index, self.seq, sign_from, self.probs[sign_from:]), self.index == 3 or self.index > 6)
+            (self.index, self.seq, sign_from, self.probs[sign_from:]), self.crazy_bet)
         # Sanity check
         assert len(self.probs) == len(self.blocks) == len(self.stateroots)
         # If we are supposed to actually make a bet... (if not, all the code
@@ -688,6 +770,7 @@ class defaultBetStrategy():
                              self.probs[probstart:][::-1],
                              [x.hash if x else '\x00' * 32 for x in self.blocks[blockstart:]][::-1],
                              self.stateroots[rootstart:][::-1],
+                             FINALITY_HIGH,
                              self.prevhash,
                              self.seq, ''),
                         self.key)
@@ -701,6 +784,13 @@ class defaultBetStrategy():
             self.network.broadcast(self, payload)
             # Process it myself
             self.receive_bet(o)
+            # Create two bets of the same seq (for testing purposes)
+            if self.seq > self.double_bet_suicide and len(o.probs):
+                log('MOO HA HA DOUBLE BETTING\n\n', True)
+                o.probs[0] *= 0.9
+                o = sign_bet(o, self.key)
+                payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
+                self.network.broadcast(self, payload)
 
     # Upon receiving any kind of network message
     # Arguments: payload, ID of the node sending the message (used to
@@ -745,13 +835,23 @@ class defaultBetStrategy():
             for x in obj.args:
                 self.on_receive(x, sender_id)
 
-    def add_transaction(self, tx):
+    def add_transaction(self, tx, track=False):
         if tx.hash not in self.objects:
             log('Received transaction: %s' % tx.hash.encode('hex'), self.index == 3)
             self.objects[tx.hash] = tx
             self.time_received[tx.hash] = time.time()
             self.txpool[tx.hash] = tx
+            if track:
+                self.tracked_tx_hashes.append(tx.hash)
             self.network.broadcast(self, rlp.encode(NetworkMessage(NM_TRANSACTION, [rlp.encode(tx)])))
+
+    def get_transaction_status(self, h):
+        if h in self.finalized_txindex:
+            return 'finalized: %r' % [[x[0], x[1][:8].encode('hex'), x[2], x[3]] for x in [self.finalized_txindex[h][1][0]]][0]
+        elif h in self.unconfirmed_txindex:
+            return 'unconfirmed: %r' % [(x[0], self.probs[x[0]], x[1][:8].encode('hex'), x[2], x[3]) for x in self.unconfirmed_txindex[h][1]]
+        else:
+            return None
 
     def make_block(self):
         # Transaction inclusion algorithm
@@ -783,8 +883,10 @@ class defaultBetStrategy():
             while bet_height in self.bets[i]:
                 print 'Inserting bet %d of validator %d using state root after height %d' % (latest_bet, i, h-1)
                 bet = self.bets[i][bet_height]
-                new_tx = Transaction(BET_INCENTIVIZER, 160000 + 3300 * len(bet.probs) + 5000 * len(bet.blockhashes + bet.stateroots),
+                new_tx = Transaction(BET_INCENTIVIZER, 200000 + 6600 * len(bet.probs) + 10000 * len(bet.blockhashes + bet.stateroots),
                                      data=bet.serialize())
+                if bet.max_height == 2**256 - 1:
+                    self.tracked_tx_hashes.append(new_tx.hash)
                 if new_tx.gas > gas:
                     break
                 txs.append(new_tx)
@@ -802,40 +904,52 @@ class defaultBetStrategy():
             i = 0
             while i < len(positions):
                 # We see this transaction at index `index` of block number `blknum`
-                blknum, groupindex, txindex = positions[i]
+                blknum, blkhash, groupindex, txindex = positions[i]
                 if self.stateroots[blknum] in (None, '\x00' * 32):
                     i += 1
                     continue
-                # Try running it
-                grp_shard = self.blocks[blknum].summaries[groupindex].left_bound
-                logresult = big_endian_to_int(State(self.stateroots[blknum], self.db).get_storage(shardify(LOG, grp_shard), txindex)[:32])
                 # Probability of the block being included
                 p = self.probs[blknum]
-                # If the transaction passed and the block is finalized...
-                if p > 0.9999 and logresult == 2:
-                    log('Transaction finalized, hash %s at blknum %d with index (%d, %d)' % (tx.hash.encode('hex'), blknum, groupindex, txindex), self.index == 3)
-                    # Remove it from the txpool
-                    if h in self.txpool:
-                        del self.txpool[h]
-                    # Add it to the finalized index
-                    if h not in self.finalized_txindex:
-                        self.finalized_txindex[h] = (tx, [])
-                    self.finalized_txindex[h][1].append((blknum, groupindex, txindex))
-                    positions.pop(i)
-                # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
-                elif p > 0.95 and logresult == 1:
-                    positions.pop(i)
-                    self.tx_exceptions[h] = self.tx_exceptions.get(h, 0) + 1
-                    log('Transaction inclusion finalized but transaction failed for the %dth time. p: %.5f, logresult: %d' % (self.tx_exceptions[h], p, logresult), True)
-                    # 10 strikes and we're out
-                    if self.tx_exceptions[h] >= 10:
+                # Try running it
+                if p > 0.95:
+                    grp_shard = self.blocks[blknum].summaries[groupindex].left_bound
+                    logdata = State(self.stateroots[blknum], self.db).get_storage(shardify(LOG, grp_shard), txindex)
+                    logresult = big_endian_to_int(rlp.decode(rlp.descend(logdata, 0)))
+                    # If the transaction passed and the block is finalized...
+                    if p > 0.9999 and logresult == 2:
+                        log('Transaction finalized, hash %s at blknum %d blkhash %s with index (%d, %d)' %
+                            (tx.hash.encode('hex'), blknum, blkhash[:8].encode('hex'), groupindex, txindex), self.index == 3)
+                        # Remove it from the txpool
                         if h in self.txpool:
                             del self.txpool[h]
-                # If the transaction failed (eg. due to OOG from block gaslimit),
+                        # Add it to the finalized index
+                        if h not in self.finalized_txindex:
+                            self.finalized_txindex[h] = (tx, [])
+                        self.finalized_txindex[h][1].append((blknum, blkhash, groupindex, txindex))
+                        positions.pop(i)
+                    # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
+                    elif p > 0.95 and logresult == 1:
+                        positions.pop(i)
+                        self.tx_exceptions[h] = self.tx_exceptions.get(h, 0) + 1
+                        log('Transaction inclusion finalized but transaction failed for the %dth time. p: %.5f, logresult: %d' %
+                            (self.tx_exceptions[h], p, logresult), True)
+                        # 10 strikes and we're out
+                        if self.tx_exceptions[h] >= 10:
+                            if h in self.txpool:
+                                del self.txpool[h]
+                    # If the transaction failed (eg. due to OOG from block gaslimit),
+                    # remove it from the unconfirmed index, but not the expool, so
+                    # that we can try to add it again
+                    elif logresult == 0:
+                        log('Transaction finalization attempt failed. p: %.5f, logresult: %d' % (p, logresult), True)
+                        positions.pop(i)
+                    else:
+                        i += 1
+                # If the block that the transaction was in didn't pass through,
                 # remove it from the unconfirmed index, but not the expool, so
                 # that we can try to add it again
-                elif p < 0.05 or (p > 0.95 and logresult == 0):
-                    log('Transaction finalization attempt failed. p: %.5f, logresult: %d' % (p, logresult), True)
+                elif p < 0.05:
+                    log('Transaction finalization attempt failed. p: %.5f' % p, True)
                     positions.pop(i)
                 # Otherwise keep the transaction in the unconfirmed index
                 else:
@@ -847,6 +961,13 @@ class defaultBetStrategy():
         # Broadcast it
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(b)])))
         self.receive_block(b)
+        # If byzantine, produce two blocks
+        if b.number >= self.double_block_suicide:
+            log('## Being evil and making two blocks!!\n\n', True)
+            new_tx = mk_transaction(1, 1, 1000000, '\x33' * ADDR_BYTES, 1, '', self.key, True)
+            txs2 = [tx for tx in txs] + [new_tx]
+            b2 = sign_block(Block(transactions=txs2, number=self.next_block_to_produce, proposer=self.addr), self.key)
+            self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(b2)])))
         # Extend the list of block proposers
         self.last_block_produced = self.next_block_to_produce
         self.add_proposers()
@@ -865,7 +986,7 @@ class defaultBetStrategy():
             if mytime >= target_time + self.next_submission_delay:
                 self.recalc_state_roots()
                 self.make_block()
-                self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.byzantine else 0
+                self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         elif self.next_block_to_produce is None:
             self.add_proposers()
         if self.last_bet_made < time.time() - BLKTIME * VALIDATOR_ROUNDS * 1.5:
