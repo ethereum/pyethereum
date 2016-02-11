@@ -255,6 +255,8 @@ def process_type(typ):
     if base == 'string' or base == 'bytes':
         assert re.match('^[0-9]*$', sub), \
             "String type must have no suffix or numerical suffix"
+        assert not sub or int(sub) <= 32, \
+            "Maximum 32 bytes for fixed-length str or bytes"
     # Check validity of integer type
     elif base == 'uint' or base == 'int':
         assert re.match('^[0-9]+$', sub), \
@@ -263,12 +265,6 @@ def process_type(typ):
             "Integer size out of bounds"
         assert int(sub) % 8 == 0, \
             "Integer size must be multiple of 8"
-    # Check validity of string type
-    if base == 'string' or base == 'bytes':
-        assert re.match('^[0-9]*$', sub), \
-            "String type must have no suffix or numerical suffix"
-        assert not sub or int(sub) <= 32, \
-            "Maximum 32 bytes for fixed-length str or bytes"
     # Check validity of real type
     elif base == 'ureal' or base == 'real':
         assert re.match('^[0-9]+x[0-9]+$', sub), \
