@@ -1,12 +1,20 @@
-import random, sys, time
+import random
+import sys
+import time
+import simpy
+from utils import DEBUG
 
 # A network simulator
 
-class NetworkSimulator():
+
+class NetworkSimulatorBase():
+
+    start_time = time.time()
 
     def __init__(self, latency=50, agents=[], reliability=0.9, broadcast_success_rate=1.0):
         self.agents = agents
-        self.latency_distribution_sample = transform(normal_distribution(latency, (latency * 2) // 5), lambda x: max(x, 0))
+        self.latency_distribution_sample = transform(
+            normal_distribution(latency, (latency * 2) // 5), lambda x: max(x, 0))
         self.time = 0
         self.objqueue = {}
         self.peers = {}
@@ -108,6 +116,9 @@ class NetworkSimulator():
             else:
                 self.peers[c.id] = [x for x in self.peers[c.id] if x.id not in a]
 
+    @property
+    def now(self):
+        return time.time()
 
 
 def normal_distribution(mean, standev):
@@ -144,3 +155,61 @@ def transform(dist, xformer):
         return xformer(dist())
 
     return f
+
+
+class SimPyNetworkSimulator(NetworkSimulatorBase):
+
+    start_time = 0
+
+    def __init__(self, latency=50, agents=[], reliability=0.9, broadcast_success_rate=1.0):
+        NetworkSimulatorBase.__init__(self, latency, agents, reliability, broadcast_success_rate)
+        self.simenv = simpy.Environment()
+
+    @property
+    def now(self):
+        return self.simenv.now
+
+    def tick_loop(self, agent, tick_delay):
+        ASYNC_CLOCKS = True
+        if ASYNC_CLOCKS:
+            deviation = id(self) % 1000  # ms
+            yield self.simenv.timeout(deviation / 1000.)
+
+        while True:
+            DEBUG('ticking agent', at=self.now, id=agent.id)
+            yield self.simenv.timeout(tick_delay)
+            agent.tick()
+
+    def run(self, seconds, sleep=0):
+        self.simenv._queue = []
+        assert len(self.agents) < 20
+        for a in self.agents:
+            self.simenv.process(self.tick_loop(a, sleep))
+        self.simenv.run(until=self.now + seconds)
+
+    def receive_later(self, sender_id, recipient, obj):
+        delay = self.latency_distribution_sample()
+        yield self.simenv.timeout(delay)
+        recipient.on_receive(obj, sender_id)
+
+    def broadcast(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        if random.random() < self.broadcast_success_rate:
+            for p in self.peers[sender.id]:
+                self.receive_later(sender.id, p, obj)
+
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        if random.random() < self.broadcast_success_rate:
+            p = random.choice(self.peers[sender.id])
+            self.receive_later(sender.id, p, obj)
+
+    def direct_send(self, sender, to_id, obj):
+        if random.random() < self.broadcast_success_rate * self.reliability:
+            for p in self.agents:
+                if p.id == to_id:
+                    self.receive_later(sender.id, p, obj)
+
+
+#NetworkSimulator = NetworkSimulatorBase
+NetworkSimulator = SimPyNetworkSimulator

@@ -109,7 +109,7 @@ for i, k in enumerate(secondkeys):
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
-genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 5))
+genesis.set_storage(GENESIS_TIME, encode_int32(0), int(network.NetworkSimulator.start_time + 5))
 # Create betting strategy objects for every validator
 bets = [defaultBetStrategy(genesis.clone(), k) for k in keys]
 # Minimum max finalized height
@@ -137,12 +137,16 @@ def check_correctness(bets):
     # Withdrawn?
     print 'Withdrawn?: %r' % [(bet.withdrawn, bet.seq) for bet in bets]
     # Probabilities
-    print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
+    try:
+        print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
+    except IndexError:
+        print "WARNING: not bet.probs[i]"
     # Data about bets from each validator according to every other validator
-    print 'Now: %.2f' % time.time()
+    print 'Now: %.2f' % n.now
     print 'According to each validator...'
     for bet in bets:
-        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
+        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [
+               ((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
     # Number of blocks received by each validator
@@ -204,8 +208,8 @@ def check_correctness(bets):
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
-for bet in bets:
-    bet.network = n
+for _bet in bets:
+    _bet.network = n
 # Keep running until the min finalized height reaches 5
 while 1:
     n.run(25, sleep=0.25)
