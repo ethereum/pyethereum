@@ -16,7 +16,7 @@ from utils import to_string, shardify, int_to_addr, encode_int32
 import utils
 import numpy
 
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS, EXECUTION_STATE, LOG
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, TXGAS, MAXSHARDS, EXECUTION_STATE, LOG, RNGSEEDS
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -687,6 +687,8 @@ def vm_execute(ext, msg, code):
             if op == op_SLOADEXTBYTES:
                 if not ext.get_storage(toaddr, ''):
                     ext.set_storage(toaddr, ext.get_storage(msg.to))
+        elif op == op_RNGSEED:
+            stk.append(utils.big_endian_to_int(ext.get_storage(RNGSEEDS, stk.pop())))
         elif op == op_SSIZEEXT:
             shard, key = stk.pop(), stk.pop()
             if not validate_and_get_address(256**ADDR_BYTES * shard):

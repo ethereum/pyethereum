@@ -492,7 +492,11 @@ class defaultBetStrategy():
             self.blocks[block.number] = block
         self.candidate_blocks[block.number].append(block)
         if len(self.candidate_blocks[block.number]) >= 2:
-            log('MULTIPLE CANDIDATE BLOCKS AT HEIGHT %d' % block.number, True)
+            log('Caught a double block!\n\n', True)
+            bytes1, bytes2 = [rlp.encode(x.header) for x in self.candidate_blocks[block.number][:2]]
+            new_tx = Transaction(CASPER, 500000 + 1000 * len(bytes1) + 1000 * len(bytes2),
+                                 data=casper_ct.encode('slashBlocks', [bytes1, bytes2]))
+            self.add_transaction(new_tx, track=True)
         # Store the block as having been received
         self.objects[block.hash] = block
         self.time_received[block.hash] = time.time()

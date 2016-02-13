@@ -71,6 +71,7 @@ opcodes = {
     0xf2: ['CALLCODE', 7, 1, 40],
     0xf3: ['RETURN', 2, 0, 0],
     0xf4: ['DELEGATECALL', 6, 0, 0],
+    0xf6: ['RNGSEED', 1, 1, 50],
     0xf7: ['SSIZEEXT', 2, 1, 50],
     0xf8: ['SLOADBYTES', 3, 0, 50],
     0xf9: ['SSTOREBYTES', 2, 0, 2500],
@@ -123,6 +124,8 @@ GECRECOVER = 3000     # Cost of ecrecover op
 GECADD = 200          # Cost of ecadd op
 GECMUL = 1000         # Cost of ecmul op
 GMODEXP = 200         # Cost of modexp op
+GRLPBASE = 30         # Base cost of RLP decoding
+GRLPWORD = 6          # Cost of RLP decoding per word
 
 GSTIPEND = 2300
 

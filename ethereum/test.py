@@ -5,7 +5,7 @@ from db import EphemDB, OverlayDB
 import serpent
 from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING
 from utils import privtoaddr, normalize_address, zpad, encode_int, \
-    big_endian_to_int, encode_int32, shardify
+    big_endian_to_int, encode_int32, shardify, sha3
 import ecdsa_accounts
 import abi
 import sys
@@ -65,16 +65,27 @@ def mk_bet_strategy(state, index, key):
                               clockwrong=(1 <= index < CLOCKWRONG_CUMUL),
                               bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.84),
                               crazy_bet=(BRAVE_CUMUL <= index < CRAZYBET_CUMUL),
-                              double_block_suicide=(10 if CRAZYBET_CUMUL <= index < DBL_BLK_SUICIDE_CUMUL else 2**80),
-                              double_bet_suicide=(2 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
+                              double_block_suicide=(5 if CRAZYBET_CUMUL <= index < DBL_BLK_SUICIDE_CUMUL else 2**80),
+                              double_bet_suicide=(1 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
 
 genesis = State('', EphemDB())
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
 # Unleash the kraken....err, I mean casper
 casper_file = os.path.join(os.path.split(__file__)[0], 'casper.se.py')
-code = serpent.compile(casper_file)
-tx_state_transition(gc, Transaction(None, 2000000, data='', code=code))
+casper_hash_file = os.path.join(os.path.split(__file__)[0], '_casper.hash')
+casper_evm_file = os.path.join(os.path.split(__file__)[0], '_casper.evm')
+# Cache compilation of Casper to save time
+try:
+    h = sha3(open(casper_file).read()).encode('hex')
+    assert h == open(casper_hash_file).read()
+    code = open(casper_evm_file).read()
+except:
+    h = sha3(open(casper_file).read()).encode('hex')
+    code = serpent.compile(casper_file)
+    open(casper_evm_file, 'w').write(code)
+    open(casper_hash_file, 'w').write(h)
+tx_state_transition(gc, Transaction(None, 3000000, data='', code=code))
 put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
 casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))

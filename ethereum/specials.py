@@ -157,7 +157,32 @@ def proc_log(ext, msg):
     for listener in ext._listeners:
         listener(msg.sender, map(big_endian_to_int, topics), data[128:])
     return 1, msg.gas - gas_cost, [0] * 32
-    
+
+def proc_rlp_get(ext, msg, output_string=0):
+    # print('rlpget proc', msg.gas)
+    OP_GAS = opcodes.GRLPBASE + \
+        (utils.ceil32(msg.data.size) // 32) * opcodes.GRLPWORD
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    try:
+        data = msg.data.extract_all()
+        rlpdata = rlp.decode(data[32:])
+        index = big_endian_to_int(data[:32])
+        assert isinstance(rlpdata[index], str)
+        if output_string:
+            return 1, msg.gas - gas_cost, map(ord, encode_int32(len(rlpdata[index])) + rlpdata[index])
+        else:
+            assert len(rlpdata[index]) <= 32
+            return 1, msg.gas - gas_cost, [0] * (32 - len(rlpdata[index])) + map(ord, rlpdata[index])
+    except:
+        return 0, 0, []
+
+def proc_rlp_get_bytes32(ext, msg):
+    return proc_rlp_get(ext, msg, False)
+
+def proc_rlp_get_string(ext, msg):
+    return proc_rlp_get(ext, msg, True)
 
 specials = {
     1: proc_ecrecover,
@@ -167,6 +192,8 @@ specials = {
     5: proc_ecadd,
     6: proc_ecmul,
     7: proc_modexp,
+    8: proc_rlp_get_bytes32,
+    9: proc_rlp_get_string,
     big_endian_to_int(ETHER): proc_send_ether,
     big_endian_to_int(LOG): proc_log,
 }

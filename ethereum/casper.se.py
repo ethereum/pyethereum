@@ -21,6 +21,10 @@ macro ENTER_EXIT_DELAY: 110
 
 macro ETHER: 50
 
+macro RLPGETBYTES32: 8
+
+macro RLPGETSTRING: 9
+
 macro WITHDRAWAL_WAITTIME: 20
 
 macro SCORING_REWARD_DIVISOR: 10**16 # 300000 * 10**9 * 300000 * 10**9 / 10**13 / 10**16 ~= 1, so a max probability bet gone wrong is a full slashing
@@ -34,6 +38,8 @@ macro PROFIT_PACKING_BYTES: 10
 macro PPB: 10
 
 macro VALIDATOR_ROUNDS: 5
+
+macro ADDRBYTES: 23
 
 macro maskinclude($top, $bottom):
     256**$top - 256**$bottom
@@ -68,6 +74,7 @@ event ProcessingBet(bettor, seq, curBlock, prevBlock, maxHeightProcessed, max_he
 event RecordingTotProfit(bettor, block, totProfit)
 event Joined(userIndex)
 event BetSlashed(userIndex:uint256, bet1:str, bet2:str)
+event BlockSlashed(userIndex:uint256, bet1:str, bet2:str)
 
 # Become a validator
 def join(validationCode:bytes):
@@ -382,7 +389,10 @@ def getBetInfo(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes
 
 event Diagnostic(data:str)
 event ListOfNumbers(foo:arr)
+event TryingToSlashBets(bytes1:str, bytes2:str)
+event TryingToSlashBlocks(bytes1:str, bytes2:str)
 
+# Slash two bets from the same validator at the same height
 def slashBets(bytes1:bytes, bytes2:bytes):
     log(type=TryingToSlashBets, bytes1, bytes2)
     assert len(bytes1) > 32
@@ -416,6 +426,67 @@ def slashBets(bytes1:bytes, bytes2:bytes):
         ~call(12000, (self - self % 2**160) + ETHER, 0, 0, 64, 0, 0)
         bytes1[0] = (bytes1[0] & ~sub(2**224, 1)) + my_old_prefix
         bytes2[0] = (bytes2[0] & ~sub(2**224, 1)) + my_old_prefix
-        log(type=BetSlashed, output1[1], bytes1, bytes2)
+        log(type=BetSlashed, output1[3], bytes1, bytes2)
 
-event TryingToSlashBets(bytes1:str, bytes2:str)
+# Get information about a block (internal method for slashing purposes)
+def getBlockInfo(block:bytes):
+    sz = len(block)
+    block[-1] = 0
+    o = string(sz)
+    ~call(msg.gas - 20000, RLPGETBYTES32, 0, block - 32, sz + 32, o, sz)
+    blknumber = o[0]
+    assert blknumber <= block.number
+    block[-1] = 1
+    ~call(msg.gas - 20000, RLPGETBYTES32, 0, block - 32, sz + 32, o, sz)
+    txroot = o[0]
+    block[-1] = 2
+    ~call(msg.gas - 20000, RLPGETBYTES32, 0, block - 32, sz + 32, o, sz)
+    proposer = o[0]
+    if blknumber >= ENTER_EXIT_DELAY:
+        preseed = ~rngseed(blknumber - ENTER_EXIT_DELAY)
+    else:
+        preseed = ~rngseed(-1)
+    index = self.sampleValidator(preseed, blknumber)
+    assert proposer == self.users[index].address
+    block[-1] = 3
+    ~call(msg.gas - 20000, RLPGETSTRING, 0, block - 32, sz + 32, o, sz)
+    sig = o + 32
+    # Check the sig against the user validation code
+    user_validation_code = string(~ssize(ref(self.users[index].validationCode)))
+    ~sloadbytes(ref(self.users[index].validationCode), user_validation_code, len(user_validation_code))
+    sig_verified = 0
+    signing_hash = sha3([blknumber, txroot]:arr)
+    with L = len(sig):
+        sig[-1] = signing_hash
+        ~callstatic(msg.gas - 20000, user_validation_code, len(user_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
+        sig[-1] = L
+    assert sig_verified == 1
+    return([signing_hash, index, blknumber]:arr)
+
+# Slash two blocks from the same validator at the same height
+def slashBlocks(bytes1:bytes, bytes2:bytes):
+    log(type=TryingToSlashBlocks, bytes1, bytes2)
+    assert len(bytes1) > 32
+    assert len(bytes2) > 32
+    output1 = self.getBlockInfo(bytes1, outitems=3)
+    output2 = self.getBlockInfo(bytes2, outitems=3)
+    assert not self.slashed[output1[0]]
+    assert not self.slashed[output2[0]]
+    # Two distinct signatures with the same index and seqnum...
+    if output1[1] == output2[1] and output1[2] == output2[2] and output1[0] != output2[0]:
+        self.slashed[output1[0]] = 1
+        self.slashed[output2[0]] = 1
+        basicinfo = array(10)
+        index = output1[1]
+        ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        deposit = basicinfo[DEPOSIT_SIZE_POS]
+        basicinfo[DEPOSIT_SIZE_POS] /= 2
+        ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        ~mstore(0, block.coinbase)
+        ~mstore(32, deposit / 10)
+        ~call(12000, (self - self % 2**160) + ETHER, 0, 0, 64, 0, 0)
+        bytes1[0] = (bytes1[0] & ~sub(2**224, 1)) + my_old_prefix
+        bytes2[0] = (bytes2[0] & ~sub(2**224, 1)) + my_old_prefix
+        log(type=BlockSlashed, output1[1], bytes1, bytes2)
+
+
