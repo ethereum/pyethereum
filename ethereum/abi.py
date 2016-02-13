@@ -186,7 +186,7 @@ def encode_single(typ, arg):
     elif base == 'int':
         sub = int(sub)
         i = decint(arg)
-        if not -2**(sub - 1) <= i < 2**sub:
+        if not -2**(sub - 1) <= i < 2**(sub - 1):
             raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
