@@ -221,9 +221,9 @@ def encode_single(typ, arg):
             raise EncodingError("too long: %r" % arg)
         if isnumeric(arg):
             return zpad(encode_int(arg), 32)
-        elif len(arg) == len(sub):
+        elif len(arg) == int(sub):
             return zpad(arg, 32)
-        elif len(arg) == len(sub) * 2:
+        elif len(arg) == int(sub) * 2:
             return zpad(decode_hex(arg), 32)
         else:
             raise EncodingError("Could not parse hash: %r" % arg)
