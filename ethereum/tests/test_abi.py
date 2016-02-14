@@ -14,6 +14,9 @@ def test_abi_encode_signed_int():
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [1]))[0] == 1
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [-1]))[0] == -1
 
+def test_abi_encode_single_hash():
+    assert abi.encode_single(['hash', '8', []], b'\x00'*8) == b'\x00'*32
+    assert abi.encode_single(['hash', '8', []], '00'*8) == b'\x00'*32
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
