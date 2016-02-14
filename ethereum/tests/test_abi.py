@@ -28,8 +28,13 @@ def test_abi_encode_single_int():
     with pytest.raises(abi.ValueOutOfBounds):
         assert abi.encode_single(['int', '8', []], 128)
 
+def test_abi_encode_single_ureal():
+    assert abi.encode_single(['ureal', '128x128', []], 0) == (b'\x00'*32)
+    assert abi.encode_single(['ureal', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + '\x00'*15)
+    assert abi.encode_single(['ureal', '128x128', []], 2**127-1) == (b'\x7f' + b'\xff'*15 + b'\x00'*16)
+
 def test_abi_encode_single_real():
-    assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01' + b'\x20' + b'\x00'*15)
+    assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + b'\x00'*15)
     assert abi.encode_single(['real', '128x128', []], -1.125) == (b'\xff'*15 + b'\xfe' + b'\xe0' + b'\x00'*15)
 
 def test_abi_encode_single_hash():
