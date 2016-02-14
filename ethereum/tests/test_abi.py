@@ -14,6 +14,9 @@ def test_abi_encode_signed_int():
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [1]))[0] == 1
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [-1]))[0] == -1
 
+def test_abi_encode_single_prefixed_address():
+    prefixed_address = '0x' + '0'*40
+    assert abi.encode_single(['address', '', []], prefixed_address) == b'\x00' * 32
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
