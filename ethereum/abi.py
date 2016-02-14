@@ -389,7 +389,9 @@ def decode_single(typ, data):
         return big_endian_to_int(data) * 1.0 / 2**low
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
-        return (big_endian_to_int(data) * 1.0 / 2**low) % 2**high
+        o = big_endian_to_int(data)
+        i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
+        return (i * 1.0 / 2**low)
     elif base == 'bool':
         return bool(int(data.encode('hex'), 16))
 
