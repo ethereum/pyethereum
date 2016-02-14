@@ -41,6 +41,10 @@ def test_abi_decode_single_bytes():
     typ = ['bytes', '', []]
     assert b'\x01\x02' == abi.decode_single(typ, abi.encode_single(typ, '\x01\x02'))
 
+def test_abi_encode_single_prefixed_address():
+    prefixed_address = '0x' + '0'*40
+    assert abi.encode_single(['address', '', []], prefixed_address) == b'\x00' * 32
+
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
     return lambda: do_test_state(filename, testname, testdata)
