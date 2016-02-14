@@ -200,7 +200,7 @@ def encode_single(typ, arg):
         high, low = [int(x) for x in sub.split('x')]
         if not -2**(high - 1) <= arg < 2**(high - 1):
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int((arg % 2**high) * 2**low), 32)
+        return zpad(encode_int(int((arg % 2**high) * 2**low)), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
         if not is_string(arg):

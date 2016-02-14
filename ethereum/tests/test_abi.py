@@ -2,6 +2,7 @@ import os
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger
 import ethereum.abi as abi
+import ethereum.utils as utils
 logger = get_logger()
 
 def test_abi_encode_var_sized_array():
@@ -16,6 +17,9 @@ def test_abi_encode_signed_int():
 
 def test_abi_encode_single_int():
     assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
+
+def test_abi_encode_single_real():
+    assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01' + b'\x20' + b'\x00'*15)
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
