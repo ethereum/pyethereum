@@ -149,7 +149,7 @@ class ValueOutOfBounds(EncodingError):
 def decint(n):
     if isinstance(n, str):
         n = utils.to_string(n)
-    if is_numeric(n) and n < 2**256 and n > -2**255:
+    if is_numeric(n) and n < 2**256 and n >= -2**255:
         return n
     elif is_numeric(n):
         raise EncodingError("Number out of range: %r" % n)
