@@ -105,11 +105,23 @@ def finally():
             with fee = gasprice * (~txexecgas() - msg.gas + 50000):
                 ~call(12000, ETHER, 0, [block.coinbase, fee], 64, 0, 0)
                 self.accounts[~mload(bet + 4)].balance -= fee
+                return(1:bool)
 
 """ % (big_endian_to_int(CASPER), big_endian_to_int(ETHER))
 
 bet_incentivizer_ct = ContractTranslator(serpent.mk_full_signature(bet_incentivizer_code))
 
+mandatory_account_subcode = """
+~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, ~mload(96), 1000)
+# Pay for gas
+~mstore(32, block.coinbase)
+~mstore(64, ~mload(0) * (~txexecgas() - msg.gas + 50000))
+~call(12000, %d, 0, 32, 64, 0, 0)
+~return(~mload(96), ~msize() - ~mload(96))
+""" % big_endian_to_int(ETHER)
+mandatory_account_evm = serpent.compile(mandatory_account_subcode)
+mandatory_account_evm = mandatory_account_evm[mandatory_account_evm.find('\x56')+1:]
+mandatory_account_evm = mandatory_account_evm[:mandatory_account_evm[:-1].rfind('\xf3')+1]
 
 # Convert probability from a number to one-byte encoded form
 # using scientific notation on odds with a 3-bit mantissa;
@@ -295,7 +307,7 @@ def mkid():
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.84,
-                 crazy_bet=False, double_block_suicide=2**200, double_bet_suicide=2**200):
+                 crazy_bet=False, double_block_suicide=2**200, double_bet_suicide=2**200, min_gas_price=10**9):
         log("Initializing betting strategy", True)
         # An ID for purposes of the network simulator
         self.id = mkid()
@@ -326,8 +338,6 @@ class defaultBetStrategy():
         self.objects = {}
         # Blocks selected for each height
         self.blocks = []
-        # Blocks received at each height
-        self.candidate_blocks = []
         # When you last explicitly requested to ask for a block; stored to
         # prevent excessively frequent lookups
         self.last_asked_for_block = {}
@@ -386,6 +396,8 @@ class defaultBetStrategy():
         # If we only partially calculate state roots, store the index at which
         # to start calculating next time you make a bet
         self.calc_state_roots_from = 0
+        # Minimum gas price that I accept
+        self.min_gas_price = min_gas_price
         log("My address: %s" % self.addr.encode('hex'), True)
         # Iterate over all validators in the genesis block...
         for j in range(call_casper(genesis_state, 'getNextUserPos', [])):
@@ -457,7 +469,6 @@ class defaultBetStrategy():
         # the data we will be calculating
         while len(self.blocks) <= block.number:
             self.blocks.append(None)
-            self.candidate_blocks.append([])
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
             self.probs.append(0.5)
@@ -490,10 +501,10 @@ class defaultBetStrategy():
         # Add the block to our list of blocks
         if not self.blocks[block.number]:
             self.blocks[block.number] = block
-        self.candidate_blocks[block.number].append(block)
-        if len(self.candidate_blocks[block.number]) >= 2:
+        else:
             log('Caught a double block!\n\n', True)
-            bytes1, bytes2 = [rlp.encode(x.header) for x in self.candidate_blocks[block.number][:2]]
+            bytes1 = rlp.encode(self.blocks[block.number].header)
+            bytes2 = rlp.encode(block.header)
             new_tx = Transaction(CASPER, 500000 + 1000 * len(bytes1) + 1000 * len(bytes2),
                                  data=casper_ct.encode('slashBlocks', [bytes1, bytes2]))
             self.add_transaction(new_tx, track=True)
@@ -627,7 +638,7 @@ class defaultBetStrategy():
                 # * if their probability is low, that means they are voting for the null case, so take their vote as is
                 # * if their probability is high, that means that they are voting for a different block, so for this
                 # block hash flip the vote as it's a vote against this particular block hash
-                elif self.opinions[i].blockhashes[blk_number] != blk_hash:
+                elif self.opinions[i].blockhashes[blk_number] != blk_hash and blk_hash is not None:
                     probs.append(min(p, max(1 - p, 0.25)))
                 # If they voted for the same block as is currently being processed, then take their vote as is
                 else:
@@ -648,13 +659,14 @@ class defaultBetStrategy():
             o = p67 * (1 - self.bravery)
         else:
             o = min(0.85, max(0.15, p50 * 3 - (0.8 if have_block else 1.2)))
-        # If the probability we get is above 0.99 but we do not have the
+        # If the probability we get is above 0.8 but we do not have the
         # block, then ask for it explicitly
-        if o > 0.8 and not have_block:
-            if blk_number not in self.last_asked_for_block or self.last_asked_for_block[blk_number] < time.time() + 12:
-                log('Suspiciously missing a block: %d. Asking for it explicitly.' % blk_number, True)
-                self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCK, [encode_int(blk_number)])))
-                self.last_asked_for_block[blk_number] = time.time()
+        if o > 0.8 and not have_block and blk_hash not in (None, '\x00' * 32):
+            if blk_hash not in self.last_asked_for_block or self.last_asked_for_block[blk_hash] < time.time() + 12:
+                log('Suspiciously missing a block: %d %s. Asking for it explicitly.' %
+                    (blk_number, blk_hash[:8].encode('hex')), True)
+                self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCK, [blk_hash])))
+                self.last_asked_for_block[blk_hash] = time.time()
         # Cap votes at 0.7 unless we know for sure that we have a block
         res = min(o, 1 if have_block else 0.7)
         if self.crazy_bet and FINALITY_LOW < res < FINALITY_HIGH:
@@ -714,25 +726,28 @@ class defaultBetStrategy():
         # Height at which to start signing
         sign_from = max(0, self.my_max_finalized_height)
         # Keep track of the lowest state root that we should change
-        log('Making probs from %d to %d inclusive' % (sign_from, len(self.blocks) - 1), self.index >= 5)
+        log('Making probs from %d to %d inclusive' % (sign_from, len(self.blocks) - 1), True)
         # Vote on each height independently using our voting strategy
         for h in range(sign_from, len(self.blocks)):
-            # No block, base case vote
-            if not self.blocks[h]:
-                prob = self.vote(h, None)
-            # One or more blocks: take highest probability
-            else:
-                probs = [(self.vote(h, b.hash), b.hash) for b in self.candidate_blocks[h]]
-                prob, new_block_hash = sorted(probs)[-1]
-                if len(probs) >= 2:
-                    log('Voting on multiple candidates: %r, selected %r' %
-                        ([(a, b[:8].encode('hex')) for a, b in probs], (prob, new_block_hash[:8].encode('hex'))), True)
-                if new_block_hash != self.blocks[h].hash:
-                    log('Flipping block at height %d from %s to %s' %
-                        (h, self.blocks[h].hash[:8].encode('hex'), new_block_hash[:8].encode('hex')), True)
-                    assert self.objects[new_block_hash].number == h
-                    self.blocks[h] = self.objects[new_block_hash]
-                    self.recently_discovered_blocks.append(h)
+            candidates = [o.blockhashes[h] for o in self.opinions.values()
+                          if len(o.blockhashes) > h and o.blockhashes[h]]
+            if self.blocks[h]:
+                candidates.append(self.blocks[h].hash)
+            elif not len(candidates):
+                candidates.append(None)
+            candidates = list(set(candidates))
+            # Locate highest probability
+            probs = [(self.vote(h, c), c) for c in candidates]
+            prob, new_block_hash = sorted(probs)[-1]
+            if len(probs) >= 2:
+                log('Voting on multiple candidates (height %d): %r, selected %r' %
+                    (h, [(a, b[:8].encode('hex')) for a, b in probs], (prob, new_block_hash[:8].encode('hex'))), True)
+            if self.blocks[h] and new_block_hash != self.blocks[h].hash:
+                log('Flipping block at height %d from %s to %s' %
+                    (h, self.blocks[h].hash[:8].encode('hex'), new_block_hash[:8].encode('hex')), True)
+                assert self.objects[new_block_hash].number == h
+                self.blocks[h] = self.objects[new_block_hash]
+                self.recently_discovered_blocks.append(h)
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
@@ -751,7 +766,7 @@ class defaultBetStrategy():
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
                     if not h % 10:
-                        check_state = State(self.stateroots[h-1], self.db) if h else self.genesis_state
+                        check_state = State(self.stateroots[self.calc_state_roots_from-1], self.db) if self.calc_state_roots_from else self.genesis_state
                         for i in self.opinions.keys():
                             self.deposit_sizes[i] = call_casper(check_state, 'getUserDeposit', [i])
         # Recalculate state roots
@@ -818,11 +833,21 @@ class defaultBetStrategy():
                 self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_LIST, messages)))
         elif obj.typ == NM_TRANSACTION:
             tx = rlp_decode(obj.args[0], Transaction)
-            self.add_transaction(tx)
+            if self.should_i_include_transaction(tx):
+                self.add_transaction(tx)
         elif obj.typ == NM_GETBLOCK:
-            blknum = big_endian_to_int(obj.args[0])
-            if blknum < len(self.blocks) and self.blocks[blknum]:
-                self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(self.blocks[blknum])])))
+            # Asking for block by number:
+            if len(obj.args[0]) < 32:
+                blknum = big_endian_to_int(obj.args[0])
+                log('Returning block by number: %d' % blknum, True)
+                if blknum < len(self.blocks) and self.blocks[blknum]:
+                    self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(self.blocks[blknum])])))
+            # Asking for block by hash
+            else:
+                o = self.objects.get(obj.args[0], None)
+                if isinstance(o, Block):
+                    log('Returning block by hash: %s, %r (%d)' % (obj.args[0][:8].encode('hex'), o, o.number), True)
+                    self.network.direct_send(self, sender_id, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(o)])))
         elif obj.typ == NM_GETBLOCKS:
             log('Replying to GETBLOCKS message', True)
             blknum = big_endian_to_int(obj.args[0])
@@ -839,8 +864,45 @@ class defaultBetStrategy():
             for x in obj.args:
                 self.on_receive(x, sender_id)
 
+    def should_i_include_transaction(self, tx):
+        check_state = State(self.stateroots[self.calc_state_roots_from-1], OverlayDB(self.db)) if self.calc_state_roots_from else self.genesis_state
+        def my_listen(sender, topics, data):
+            pass
+            # print 't', topics
+
+        if tx.addr == BET_INCENTIVIZER:
+            o = tx_state_transition(check_state, tx)
+            if not o:
+                log('No output from running transaction to bet incentivizer', True)
+                return False
+            output = ''.join(map(chr, o))
+            if len(output) < 32 or big_endian_to_int(output) != 1:
+                log('Transaction to bet incentivizer fails', True)
+                return False
+            return True
+        else:
+            o = tx_state_transition(check_state, tx, override_gas=150000, breaking=True, listeners=[my_listen])
+            if not o:
+                log('No output from running transaction', True)
+                return False
+            output = ''.join(map(chr, o))
+            # Make sure that the right bits are at the end of the account code
+            if get_code(check_state, tx.addr).rstrip('\x00')[-len(mandatory_account_evm):] != mandatory_account_evm:
+                log('Account EVM mismatch: %r %r' % (get_code(check_state, tx.addr).rstrip('\x00')[-len(mandatory_account_evm):], mandatory_account_evm), True)
+                return False
+            # Make sure that the right gas price is in memory (and implicitly that the tx succeeded)
+            if len(output) < 32:
+                log('Min gas price not found in output, not including transaction', True)
+                return False
+            # Make sure that the gas price is sufficient
+            if big_endian_to_int(output[:32]) < self.min_gas_price:
+                log('Gas price too low: shouldbe %d reallyis %d' % (self.min_gas_price, big_endian_to_int(output[:32])), True)
+                return False
+            log('Transaction passes, should be included', True)
+            return True
+    
     def add_transaction(self, tx, track=False):
-        if tx.hash not in self.objects:
+        if tx.hash not in self.objects or self.time_received.get(tx.hash, 0) < time.time() - 15:
             log('Received transaction: %s' % tx.hash.encode('hex'), self.index == 3)
             self.objects[tx.hash] = tx
             self.time_received[tx.hash] = time.time()

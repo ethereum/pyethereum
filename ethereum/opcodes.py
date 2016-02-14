@@ -71,6 +71,7 @@ opcodes = {
     0xf2: ['CALLCODE', 7, 1, 40],
     0xf3: ['RETURN', 2, 0, 0],
     0xf4: ['DELEGATECALL', 6, 0, 0],
+    0xf5: ['BREAKPOINT', 0, 0, 1],
     0xf6: ['RNGSEED', 1, 1, 50],
     0xf7: ['SSIZEEXT', 2, 1, 50],
     0xf8: ['SLOADBYTES', 3, 0, 50],

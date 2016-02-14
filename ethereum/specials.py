@@ -2,7 +2,7 @@ import bitcoin
 import utils
 import opcodes
 from utils import safe_ord, decode_hex, big_endian_to_int, \
-    encode_int32, match_shard, shardify, sha3
+    encode_int32, match_shard, shardify, sha3, zpad
 from rlp.utils import ascii_chr
 from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX
 import rlp
@@ -151,7 +151,7 @@ def proc_log(ext, msg):
                 bloom |= 2**ord(h[i])
     ext.set_storage(_LOG, BLOOM, encode_int32(bloom))
     # print big_endian_to_int(state.get_storage(TXINDEX, 0)), state.get_storage(LOG, state.get_storage(TXINDEX, 0)).encode('hex')
-    old_storage = ext.get_storage(_LOG, ext.get_storage(_EXSTATE, TXINDEX))
+    old_storage = ext.get_storage(_LOG, zpad(ext.get_storage(_EXSTATE, TXINDEX), 32))
     new_storage = rlp.append(old_storage, data)
     ext.set_storage(_LOG, ext.get_storage(_EXSTATE, TXINDEX), new_storage)
     for listener in ext._listeners:

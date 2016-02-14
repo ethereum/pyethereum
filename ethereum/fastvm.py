@@ -99,11 +99,11 @@ def validate_and_get_address(addr_int, msg):
     return False
 
 end_breakpoints = [
-    'JUMP', 'JUMPI', 'CALL', 'CALLCODE', 'CALLSTATIC', 'CREATE', 'SUICIDE', 'STOP', 'RETURN', 'SUICIDE', 'INVALID', 'GAS', 'PC'
+    'JUMP', 'JUMPI', 'CALL', 'CALLCODE', 'CALLSTATIC', 'CREATE', 'SUICIDE', 'STOP', 'RETURN', 'SUICIDE', 'INVALID', 'GAS', 'PC', 'BREAKPOINT'
 ]
 
 start_breakpoints = [
-    'JUMPDEST', 'GAS', 'PC'
+    'JUMPDEST', 'GAS', 'PC', 'BREAKPOINT'
 ]
 
 
@@ -199,7 +199,7 @@ def peaceful_exit(cause, gas, data, **kargs):
 code_cache = {}
 
 
-def vm_execute(ext, msg, code):
+def vm_execute(ext, msg, code, breaking=False):
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
     trace_vm = log_vm_op.is_active('trace')
@@ -687,6 +687,11 @@ def vm_execute(ext, msg, code):
             if op == op_SLOADEXTBYTES:
                 if not ext.get_storage(toaddr, ''):
                     ext.set_storage(toaddr, ext.get_storage(msg.to))
+        elif op == op_BREAKPOINT:
+            if breaking:
+                return peaceful_exit('RETURN', compustate.gas, mem)
+            else:
+                pass
         elif op == op_RNGSEED:
             stk.append(utils.big_endian_to_int(ext.get_storage(RNGSEEDS, stk.pop())))
         elif op == op_SSIZEEXT:

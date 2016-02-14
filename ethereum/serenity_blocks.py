@@ -303,7 +303,7 @@ def block_state_transition(state, block, listeners=[]):
 
 RLPEMPTYLIST = rlp.encode([])
 
-def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[]):
+def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[], breaking=False, override_gas=2**255):
     _EXSTATE = shardify(EXECUTION_STATE, left_bound)
     _LOG = shardify(LOG, left_bound)
     # Get index
@@ -331,7 +331,8 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
     # Create the account if it does not yet exist
     if tx.code and not state.get_storage(tx.addr, b''):
         message = vm.Message(NULL_SENDER, tx.addr, 0, tx.exec_gas, vm.CallData([], 0, 0), left_bound, right_bound)
-        result, execution_start_gas, data = apply_msg(ext, message, tx.code)
+        message.gas = min(message.gas, override_gas)
+        result, execution_start_gas, data = apply_msg(ext, message, tx.code, breaking=breaking)
         if not result:
             state.set_storage(_LOG, txindex, rlp.encode([encode_int(1)]))
             state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
@@ -339,12 +340,13 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
         code = ''.join([chr(x) for x in data])
         put_code(state, tx.addr, code)
     else:
-        execution_start_gas = tx.exec_gas
+        execution_start_gas = min(tx.exec_gas, override_gas)
     # Process VM execution
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(NULL_SENDER, tx.addr, 0, execution_start_gas, message_data)
+    assert state.get_storage(_LOG, txindex) == RLPEMPTYLIST
     result, msg_gas_remained, data = \
-        apply_msg(ext, message, get_code(state, tx.addr))
+        apply_msg(ext, message, get_code(state, tx.addr), breaking=breaking)
     assert 0 <= msg_gas_remained <= execution_start_gas <= tx.exec_gas
     # Set gas used
     state.set_storage(_EXSTATE, GAS_REMAINING, gas_remaining - tx.exec_gas + msg_gas_remained)
@@ -404,7 +406,7 @@ EmptyVMExt = _EmptyVMExt()
 eve_cache = {}
 
 # Processes a message
-def apply_msg(ext, msg, code):
+def apply_msg(ext, msg, code, breaking=False):
     _SENDER_ETHER = match_shard(ETHER, msg.sender)
     _RECIPIENT_ETHER = match_shard(ETHER, msg.to)
     cache_key = msg.sender + msg.to + str(msg.value) + msg.data.extract_all() + code
@@ -423,7 +425,7 @@ def apply_msg(ext, msg, code):
     if msg_to_raw in specials.specials:
         res, gas, dat = specials.specials[msg_to_raw](ext, msg)
     else:
-        res, gas, dat = vm.vm_execute(ext, msg, code)
+        res, gas, dat = vm.vm_execute(ext, msg, code, breaking=breaking)
     # If the message failed, revert execution
     if res == 0:
         print 'REVERTING %d gas from account 0x%s to account 0x%s with data 0x%s' % \

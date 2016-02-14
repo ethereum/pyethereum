@@ -48,13 +48,15 @@ with minusone = ~sub(0, 1):
         # Increment sequence number
         self.storage[minusone] = curseq + 1
 # Make the sub-call and discard output
-with x = ~msize():
-    ~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, x, 1000)
-    # Pay for gas
-    ~mstore(0, ~calldataload(128))
-    ~mstore(32, (~txexecgas() - msg.gas + 50000))
-    ~call(12000, %d, 0, 0, 64, 0, 0)
-    ~return(x, ~msize() - x)
+~mstore(96, ~msize())
+~mstore(0, ~calldataload(128))
+~breakpoint()
+~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, ~mload(96), 1000)
+# Pay for gas
+~mstore(32, block.coinbase)
+~mstore(64, ~mload(0) * (~txexecgas() - msg.gas + 50000))
+~call(12000, %d, 0, 32, 64, 0, 0)
+~return(~mload(96), ~msize() - ~mload(96))
 """ % big_endian_to_int(ETHER)
 constructor_code = serpent.compile(cc)
 constructor_ct = abi.ContractTranslator(serpent.mk_full_signature(cc))

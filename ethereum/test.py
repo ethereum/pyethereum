@@ -10,7 +10,7 @@ import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct, Bet
+from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct, Bet, mandatory_account_evm
 import time
 import network
 import os
@@ -118,7 +118,7 @@ for i, k in enumerate(keys):
     # Give them 1600 ether
     genesis.set_storage(ETHER, a, 1600 * 10**18)
     # Make a dummy transaction to initialize the account
-    # tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 0, '', k, create=True)
+    # tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 0, '', k, create=True)
     # v = tx_state_transition(genesis, tx)
     # assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Make their validation code
@@ -126,12 +126,15 @@ for i, k in enumerate(keys):
     print 'Length of validation code:', len(vcode)
     # Make the transaction to join as a Casper validator
     txdata = casper_ct.encode('join', [vcode])
-    print 'Length of account code:', len(get_code(genesis, a))
-    tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
+    tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
     print 'Joining'
     v = tx_state_transition(genesis, tx, listeners=[my_listen])
     index = casper_ct.decode('join', ''.join(map(chr, v)))[0]
     print 'Joined with index', index
+    print 'Length of account code:', len(get_code(genesis, a))
+    # Check that the EVM that each account must have at the end
+    # to get transactions included by default is there
+    assert mandatory_account_evm == get_code(genesis, a).rstrip('\x00')[-len(mandatory_account_evm):]
     # Check sequence number
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Check that we actually joined Casper with the right
@@ -141,7 +144,7 @@ for i, k in enumerate(keys):
     # Make the transaction to send some ether to the bet inclusion
     # incentivization contract
     txdata2 = bet_incentivizer_ct.encode('deposit', [index])
-    tx = ecdsa_accounts.mk_transaction(1, 1, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
+    tx = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
     v = bet_incentivizer_ct.decode('deposit', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
     assert v is True
 
@@ -190,7 +193,7 @@ def check_correctness(bets):
     print 'Now: %.2f' % time.time()
     print 'According to each validator...'
     for bet in bets:
-        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
+        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f. Views of deposit sizes: %r' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made, bet.deposit_sizes))
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
     # Number of blocks received by each validator
@@ -282,12 +285,12 @@ for i, k in enumerate(secondkeys):
     vcode = ecdsa_accounts.mk_validation_code(k)
     # Make the transaction to join as a Casper validator
     txdata = casper_ct.encode('join', [vcode])
-    tx = ecdsa_accounts.mk_transaction(0, 1, 1000000, CASPER, 1500 * 10**18, txdata, k, create=True)
+    tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 1500 * 10**18, txdata, k, create=True)
     print 'Making transaction: ', tx.hash.encode('hex')
     # Make the transaction to send some ether to the bet inclusion
     # incentivization contract
     txdata2 = bet_incentivizer_ct.encode('deposit', [index])
-    tx2 = ecdsa_accounts.mk_transaction(1, 1, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
+    tx2 = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
     bets[0].add_transaction(tx)
     bets[0].add_transaction(tx2)
     check_txs.extend([tx, tx2])
