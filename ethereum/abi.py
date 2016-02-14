@@ -194,7 +194,7 @@ def encode_single(typ, arg):
         high, low = [int(x) for x in sub.split('x')]
         if not 0 <= arg < 2**high:
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int(arg * 2**low), 32)
+        return zpad(encode_int(int(arg * 2**low)), 32)
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]

@@ -18,8 +18,13 @@ def test_abi_encode_signed_int():
 def test_abi_encode_single_int():
     assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
 
+def test_abi_encode_single_ureal():
+    assert abi.encode_single(['ureal', '128x128', []], 0) == (b'\x00'*32)
+    assert abi.encode_single(['ureal', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + '\x00'*15)
+    assert abi.encode_single(['ureal', '128x128', []], 2**127-1) == (b'\x7f' + b'\xff'*15 + b'\x00'*16)
+
 def test_abi_encode_single_real():
-    assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01' + b'\x20' + b'\x00'*15)
+    assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + b'\x00'*15)
     assert abi.encode_single(['real', '128x128', []], -1.125) == (b'\xff'*15 + b'\xfe' + b'\xe0' + b'\x00'*15)
 
 # SETUP TESTS IN GLOBAL NAME SPACE
