@@ -20,6 +20,7 @@ def test_abi_encode_single_int():
 
 def test_abi_encode_single_real():
     assert abi.encode_single(['real', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01' + b'\x20' + b'\x00'*15)
+    assert abi.encode_single(['real', '128x128', []], -1.125) == (b'\xff'*15 + b'\xfe' + b'\xe0' + b'\x00'*15)
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
