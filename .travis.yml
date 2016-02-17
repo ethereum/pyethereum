@@ -15,3 +15,13 @@ script:
 
 after_success:
 - coveralls
+
+deploy:
+  provider: pypi
+  user: ethereum_pypi_automated
+  password:
+    secure: "FvkEn1xULi9mGxAL9sKlTuxJZvk0Uyd2GaDPAHN5ZAfaJUNwzA6+m7PRAMPd44Uy/LOw0+Ah9X1rxAxZc+7yx+FJjwH1Nl8MjtqYTWp+Ue6TFUNdJXNHjekC5ce4rbULudrqlmwmaWzi5iRC7qhpxuTg1y3iBw3Fsd8E82qbDac="
+  on:
+    tags: true
+    repo: ethereum/pyethereum
+    branch: develop

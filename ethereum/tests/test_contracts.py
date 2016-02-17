@@ -1,11 +1,22 @@
-import bitcoin
+# -*- coding: utf8 -*-
 import os
+
+import bitcoin
 import pytest
-from ethereum import tester, utils, abi
 import serpent
 from rlp.utils import decode_hex, encode_hex
-from ethereum.utils import safe_ord
+
+from ethereum import tester, utils, abi
 from ethereum.slogging import set_level
+from ethereum.utils import safe_ord
+
+try:
+    from c_secp256k1 import ecdsa_sign_raw
+except ImportError:
+    import warnings
+    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
+
+    from bitcoin import ecdsa_raw_sign as ecdsa_sign_raw
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -1207,7 +1218,7 @@ def test_ecrecover():
     pub = bitcoin.privtopub(priv)
 
     msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
+    V, R, S = ecdsa_sign_raw(msghash, priv)
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
@@ -1632,7 +1643,35 @@ def test_params_contract():
     c = s.abi_contract(params_code, FOO=4, BAR='horse')
     assert c.garble() == 4
     assert c.marble() == 'horse'
-    
+
+prefix_types_in_functions_code = """
+type fixedp: fp_
+
+macro fixedp($x) * fixedp($y):
+    fixedp($x * $y / 2^64)
+
+macro fixedp($x) / fixedp($y):
+    fixedp($x * 2^64 / $y)
+
+macro raw_unfixedp(fixedp($x)):
+    $x / 2^64
+
+macro set(fixedp($x), $y):
+    $x = 2^64 * $y
+
+macro fixedp($x) = fixedp($y):
+    $x = $y
+
+def sqrdiv(fp_a, fp_b):
+    return(raw_unfixedp((fp_a / fp_b) * (fp_a / fp_b)))
+"""
+
+
+def test_prefix_types_in_functions():
+    s = tester.state()
+    c = s.abi_contract(prefix_types_in_functions_code)
+    assert c.sqrdiv(25, 2) == 156
+
 
 
 # test_evm = None
@@ -1684,3 +1723,4 @@ def test_params_contract():
 # test_abi_address_output = None
 # test_string_logging = None
 # test_params_contract = None
+# test_prefix_types_in_functions = None

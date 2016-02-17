@@ -2,6 +2,7 @@ from ethereum import ethash, ethash_utils, utils
 import time
 import sys
 import sha3
+import warnings
 from collections import OrderedDict
 from ethereum.slogging import get_logger
 
@@ -15,10 +16,9 @@ else:
 try:
     import pyethash
     ETHASH_LIB = 'pyethash'  # the C++ based implementation
-    log.warn('using C++ implementation')
 except ImportError:
     ETHASH_LIB = 'ethash'
-    log.warn('using pure python implementation')
+    warnings.warn('using pure python implementation', ImportWarning)
 
 if ETHASH_LIB == 'ethash':
     mkcache = ethash.mkcache

@@ -460,84 +460,223 @@ class Trie(object):
             return new_node
 
     def _getany(self, node, reverse=False, path=[]):
+        # print 'getany', node, 'reverse=', reverse, path
         node_type = self._get_node_type(node)
         if node_type == NODE_TYPE_BLANK:
             return None
         if node_type == NODE_TYPE_BRANCH:
-            if node[16]:
+            if node[16] and not reverse:
+                # print 'found!', [16], path
                 return [16]
             scan_range = list(range(16))
             if reverse:
                 scan_range.reverse()
             for i in scan_range:
-                o = self._getany(self._decode_to_node(node[i]), path=path + [i])
-                if o:
+                o = self._getany(self._decode_to_node(node[i]), reverse=reverse, path=path + [i])
+                if o is not None:
+                    # print 'found@', [i] + o, path
                     return [i] + o
+            if node[16] and reverse:
+                # print 'found!', [16], path
+                return [16]
             return None
         curr_key = without_terminator(unpack_to_nibbles(node[0]))
         if node_type == NODE_TYPE_LEAF:
+            # print 'found#', curr_key, path
             return curr_key
 
         if node_type == NODE_TYPE_EXTENSION:
             curr_key = without_terminator(unpack_to_nibbles(node[0]))
             sub_node = self._decode_to_node(node[1])
-            return self._getany(sub_node, path=path + curr_key)
+            return curr_key + self._getany(sub_node, reverse=reverse, path=path + curr_key)
+
+    def _split(self, node, key):
+        node_type = self._get_node_type(node)
+        if node_type == NODE_TYPE_BLANK:
+            return BLANK_NODE, BLANK_NODE
+        elif not key:
+            return BLANK_NODE, node
+        elif node_type == NODE_TYPE_BRANCH:
+            b1 = node[:key[0]]
+            b1 += [''] * (17 - len(b1))
+            b2 = node[key[0]+1:]
+            b2 = [''] * (17 - len(b2)) + b2
+            b1[16], b2[16] = b2[16], b1[16]
+            sub = self._decode_to_node(node[key[0]])
+            sub1, sub2 = self._split(sub, key[1:])
+            b1[key[0]] = self._encode_node(sub1) if sub1 else ''
+            b2[key[0]] = self._encode_node(sub2) if sub2 else ''
+            return self._normalize_branch_node(b1) if len([x for x in b1 if x]) else BLANK_NODE, \
+                 self._normalize_branch_node(b2) if len([x for x in b2 if x]) else BLANK_NODE
+
+        descend_key = without_terminator(unpack_to_nibbles(node[0]))
+        if node_type == NODE_TYPE_LEAF:
+            if descend_key < key:
+                return node, BLANK_NODE
+            else:
+                return BLANK_NODE, node
+        elif node_type == NODE_TYPE_EXTENSION:
+            sub_node = self._decode_to_node(node[1])
+            sub_key = key[len(descend_key):]
+            if starts_with(key, descend_key):
+                sub1, sub2 = self._split(sub_node, sub_key)
+                subtype1 = self._get_node_type(sub1)
+                subtype2 = self._get_node_type(sub2)
+                if not sub1:
+                    o1 = BLANK_NODE
+                elif subtype1 in (NODE_TYPE_LEAF, NODE_TYPE_EXTENSION):
+                    new_key = key[:len(descend_key)] + unpack_to_nibbles(sub1[0])
+                    o1 = [pack_nibbles(new_key), sub1[1]]
+                else:
+                    o1 = [pack_nibbles(key[:len(descend_key)]), self._encode_node(sub1)]
+                if not sub2:
+                    o2 = BLANK_NODE
+                elif subtype2 in (NODE_TYPE_LEAF, NODE_TYPE_EXTENSION):
+                    new_key = key[:len(descend_key)] + unpack_to_nibbles(sub2[0])
+                    o2 = [pack_nibbles(new_key), sub2[1]]
+                else:
+                    o2 = [pack_nibbles(key[:len(descend_key)]), self._encode_node(sub2)]
+                return o1, o2
+            elif descend_key < key[:len(descend_key)]:
+                return node, BLANK_NODE
+            elif descend_key > key[:len(descend_key)]:
+                return BLANK_NODE, node
+            else:
+                return BLANK_NODE, BLANK_NODE
+
+    def split(self, key):
+        key = bin_to_nibbles(key)
+        r1, r2 = self._split(self.root_node, key)
+        t1, t2 = Trie(self.db), Trie(self.db)
+        t1.root_node, t2.root_node = r1, r2
+        return t1, t2
+
+    def _merge(self, node1, node2):
+        assert isinstance(node1, list) or not node1
+        assert isinstance(node2, list) or not node2
+        node_type1 = self._get_node_type(node1)
+        node_type2 = self._get_node_type(node2)
+        if not node1:
+            return node2
+        if not node2:
+            return node1
+        if node_type1 != NODE_TYPE_BRANCH and node_type2 != NODE_TYPE_BRANCH:
+            descend_key1 = unpack_to_nibbles(node1[0])
+            descend_key2 = unpack_to_nibbles(node2[0])
+            # find longest common prefix
+            prefix_length = 0
+            for i in range(min(len(descend_key1), len(descend_key2))):
+                if descend_key1[i] != descend_key2[i]:
+                    break
+                prefix_length = i + 1
+            if prefix_length:
+                sub1 = self._decode_to_node(node1[1]) if node_type1 == NODE_TYPE_EXTENSION else node1[1]
+                new_sub1 = [
+                    pack_nibbles(descend_key1[prefix_length:]),
+                    sub1
+                ] if descend_key1[prefix_length:] else sub1
+                sub2 = self._decode_to_node(node2[1]) if node_type2 == NODE_TYPE_EXTENSION else node2[1]
+                new_sub2 = [
+                    pack_nibbles(descend_key2[prefix_length:]),
+                    sub2
+                ] if descend_key2[prefix_length:] else sub2
+                return [pack_nibbles(descend_key1[:prefix_length]),
+                        self._encode_node(self._merge(new_sub1, new_sub2))]
+            
+        nodes = [[node1], [node2]]
+        for (node, node_type) in zip(nodes, [node_type1, node_type2]):
+            if node_type != NODE_TYPE_BRANCH:
+                new_node = [BLANK_NODE] * 17
+                curr_key = unpack_to_nibbles(node[0][0])
+                new_node[curr_key[0]] = self._encode_node([
+                    pack_nibbles(curr_key[1:]),
+                    node[0][1]
+                ]) if curr_key[0] < 16 and curr_key[1:] else node[0][1]
+                node[0] = new_node
+        node1, node2 = nodes[0][0], nodes[1][0]
+        assert len([i for i in range(17) if node1[i] and node2[i]]) <= 1
+        new_node = [self._encode_node(self._merge(self._decode_to_node(node1[i]), self._decode_to_node(node2[i]))) if node1[i] and node2[i] else node1[i] or node2[i] for i in range(17)]
+        return new_node
+
+    @classmethod
+    def unsafe_merge(cls, trie1, trie2): 
+        t = Trie(trie1.db)
+        t.root_node = t._merge(trie1.root_node, trie2.root_node)
+        return t
 
     def _iter(self, node, key, reverse=False, path=[]):
+        # print 'iter', node, key, 'reverse =', reverse, 'path =', path
         node_type = self._get_node_type(node)
 
         if node_type == NODE_TYPE_BLANK:
             return None
 
         elif node_type == NODE_TYPE_BRANCH:
+            # print 'b'
             if len(key):
                 sub_node = self._decode_to_node(node[key[0]])
                 o = self._iter(sub_node, key[1:], reverse, path + [key[0]])
-                if o:
+                if o is not None:
+                    # print 'returning', [key[0]] + o, path
                     return [key[0]] + o
             if reverse:
-                scan_range = list(range(key[0] if len(key) else 0))
+                scan_range = reversed(list(range(key[0] if len(key) else 0)))
             else:
                 scan_range = list(range(key[0] + 1 if len(key) else 0, 16))
             for i in scan_range:
                 sub_node = self._decode_to_node(node[i])
+                # print 'prelim getany', path+[i]
                 o = self._getany(sub_node, reverse, path + [i])
-                if o:
+                if o is not None:
+                    # print 'returning', [i] + o, path
                     return [i] + o
-            if reverse and node[16]:
+            if reverse and key and node[16]:
+                # print 'o'
                 return [16]
             return None
 
         descend_key = without_terminator(unpack_to_nibbles(node[0]))
         if node_type == NODE_TYPE_LEAF:
             if reverse:
+                # print 'L', descend_key, key, descend_key if descend_key < key else None, path
                 return descend_key if descend_key < key else None
             else:
+                # print 'L', descend_key, key, descend_key if descend_key > key else None, path
                 return descend_key if descend_key > key else None
 
         if node_type == NODE_TYPE_EXTENSION:
             # traverse child nodes
             sub_node = self._decode_to_node(node[1])
             sub_key = key[len(descend_key):]
+            # print 'amhere', key, descend_key, descend_key > key[:len(descend_key)]
             if starts_with(key, descend_key):
                 o = self._iter(sub_node, sub_key, reverse, path + descend_key)
             elif descend_key > key[:len(descend_key)] and not reverse:
-                o = self._getany(sub_node, sub_key, False, path + descend_key)
+                # print 1
+                # print 'prelim getany', path+descend_key
+                o = self._getany(sub_node, False, path + descend_key)
             elif descend_key < key[:len(descend_key)] and reverse:
-                o = self._getany(sub_node, sub_key, True, path + descend_key)
+                # print 2
+                # print 'prelim getany', path+descend_key
+                o = self._getany(sub_node, True, path + descend_key)
             else:
                 o = None
+            # print 'returning@', descend_key + o if o else None, path
             return descend_key + o if o else None
 
     def next(self, key):
+        # print 'nextting'
         key = bin_to_nibbles(key)
         o = self._iter(self.root_node, key)
-        return nibbles_to_bin(o) if o else None
+        # print 'answer', o
+        return nibbles_to_bin(without_terminator(o)) if o else None
 
     def prev(self, key):
+        # print 'prevving'
         key = bin_to_nibbles(key)
         o = self._iter(self.root_node, key, reverse=True)
-        return nibbles_to_bin(o) if o else None
+        # print 'answer', o
+        return nibbles_to_bin(without_terminator(o)) if o else None
 
     def _delete_node_storage(self, node):
         '''delete storage

@@ -167,6 +167,10 @@ class state():
         _abi = language.mk_full_signature(code, **cn_args)
         return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
 
+    def clear_listeners(self):
+        while len(self.block.log_listeners):
+            self.block.log_listeners.pop()
+
     def evm(self, evm, sender=k0, endowment=0, gas=None):
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         tx = t.contract(sendnonce, gas_price, gas_limit, endowment, evm)
@@ -195,7 +199,9 @@ class state():
         tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
-        recorder = LogRecorder() if profiling > 1 else None
+        if profiling > 1:
+            set_logging_level(3)
+            recorder = LogRecorder()
         (s, o) = pb.apply_transaction(self.block, tx)
         if not s:
             raise TransactionFailed()
@@ -203,13 +209,15 @@ class state():
         if profiling > 0:
             zero_bytes = tx.data.count(ascii_chr(0))
             non_zero_bytes = len(tx.data) - zero_bytes
-            intrinsic_gas_used = opcodes.GTXDATAZERO * zero_bytes + \
+            intrinsic_gas_used = opcodes.GTXCOST + \
+                opcodes.GTXDATAZERO * zero_bytes + \
                 opcodes.GTXDATANONZERO * non_zero_bytes
             ntm, ng = time.time(), self.block.gas_used
             out["time"] = ntm - tm
             out["gas"] = ng - g - intrinsic_gas_used
         if profiling > 1:
             trace = recorder.pop_records()
+            set_logging_level(0)
             ops = [x['op'] for x in trace if x['event'] == 'vm']
             opdict = {}
             for op in ops:

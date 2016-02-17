@@ -16,6 +16,7 @@ TRACE = 5
 known_loggers = set()
 
 log_listeners = []
+print_logs=True
 
 
 # add level trace into logging
@@ -38,12 +39,17 @@ class LogRecorder(object):
     def __init__(self):
         self._records = []
         log_listeners.append(self._add_log_record)
+        global print_logs
+        self.prev_print_logs = print_logs
+        print_logs = False
 
     def pop_records(self):
         # can only be called once
         r = self._records[:]
         self._records = None
         log_listeners.remove(self._add_log_record)
+        global print_logs
+        print_logs = self.prev_print_logs
         return r
 
     def _add_log_record(self, msg):
@@ -126,13 +132,17 @@ class SLogger(logging.Logger):
         return BoundLogger(self, kwargs)
 
     def _log(self, level, msg, args, **kwargs):
+        for listener in log_listeners:
+            kwargs['event'] = msg
+            listener(kwargs)
         exc_info = kwargs.pop('exc_info', None)
         extra = kwargs.pop('extra', {})
         highlight = kwargs.pop('highlight', False)
         extra['kwargs'] = kwargs
         extra['original_msg'] = msg
         msg = self.format_message(msg, kwargs, highlight)
-        super(SLogger, self)._log(level, msg, args, exc_info, extra)
+        if print_logs:
+            super(SLogger, self)._log(level, msg, args, exc_info, extra)
 
     def DEV(self, msg, *args, **kwargs):
         """Shortcut to output highlighted log text"""

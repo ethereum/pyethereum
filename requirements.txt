@@ -3,7 +3,7 @@ pysha3
 PyYAML
 repoze.lru
 pbkdf2
-pycrypto
+pycryptodome>=3.3.1
 scrypt
-https://github.com/ethereum/pyrlp/tarball/develop
+rlp==0.4.4
 https://github.com/ethereum/ethash/tarball/master

@@ -1,8 +1,9 @@
 try:
-    from keccak import sha3_256  # pypy
-except ImportError:
-    from sha3 import sha3_256 as _sha3_256
-    sha3_256 = lambda x: _sha3_256(x).digest()
+    from Crypto.Hash import keccak
+    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
+except:
+    import sha3 as _sha3
+    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
 from bitcoin import privtopub
 import sys
 import rlp
@@ -63,6 +64,10 @@ else:
     unicode = str
 
 isnumeric = is_numeric
+
+
+def mk_contract_address(sender, nonce):
+    return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
 
 
 def safe_ord(value):
@@ -129,7 +134,7 @@ def normalize_address(x, allow_blank=False):
         x = decode_hex(x)
     if len(x) != ADDR_BYTES:
         print x.encode('hex')
-        raise Exception("Invalid address format!")
+        raise Exception("Invalid address format: %r" % x)
     return x
 
 
