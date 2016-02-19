@@ -16,6 +16,9 @@ script:
 after_success:
 - coveralls
 
+notifications:
+  slack: chainbot:JWZ6ykcmr5JKlDW6Uu6wNOT0
+
 deploy:
   provider: pypi
   user: ethereum_pypi_automated
