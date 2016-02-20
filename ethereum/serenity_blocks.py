@@ -2,11 +2,11 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
     encode_int, safe_ord, encode_int32, encode_hex, shardify, \
-    get_shard, match_shard
+    get_shard, match_shard, mk_contract_address
 from db import EphemDB, OverlayDB
 from serenity_transactions import Transaction
 import fastvm as vm
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES, EXECUTION_STATE, ADDR_BYTES
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GAS_REMAINING, GASLIMIT, NULL_SENDER, ETHER, PROPOSER, RNGSEEDS, TXGAS, TXINDEX, LOG, MAXSHARDS, UNHASH_MAGIC_BYTES, EXECUTION_STATE, ADDR_BYTES, ADDR_BASE_BYTES
 import rlp
 import trie
 import specials
@@ -228,6 +228,12 @@ class State():
         acct_dump = {}
         for key, val in acct_trie.to_dict().items():
             acct_dump[encode_hex(key)] = encode_hex(val)
+        if account in self.cache:
+            for key, val in self.cache[account].items():
+                if val:
+                    acct_dump[key] = val
+                elif key in acct_dump:
+                    del acct_dump[key]
         return acct_dump
 
     # Returns a value x, where State.revert(x) at any later point will return
@@ -295,6 +301,7 @@ def block_state_transition(state, block, listeners=[]):
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
     # Consistency checking
     check_key = pre+(block.hash if block else 'NONE')
+    # print '(block', blknumber, ') pre', repr(pre), 'block', repr(block.hash if block else None), 'post', state.root
     if check_key not in transition_cache_map:
         transition_cache_map[check_key] = state.root
     else:
@@ -357,11 +364,6 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
     state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
     return data
 
-# Determines the contract address for a piece of code and a given creator
-# address (contracts created from outside get creator '\x00' * 20)
-def mk_contract_address(sender='\x00'*20, left_bound=0, code=''):
-    return shardify(sha3(sender + code)[12:], left_bound)
-
 def get_code(state, address):
     codehash = state.get_storage(address, '')
     return state.db.get(UNHASH_MAGIC_BYTES + codehash) if codehash else ''
@@ -383,6 +385,7 @@ class VMExt():
         self.get_storage = state.get_storage
         self.log_storage = state.account_to_dict
         self.unhash = lambda x: state.db.get(UNHASH_MAGIC_BYTES + x)
+        self.puthashdata = lambda d: state.db.put(UNHASH_MAGIC_BYTES + sha3(d), d)
         self.msg = lambda msg, code: apply_msg(self, msg, code)
         self.static_msg = lambda msg, code: apply_msg(EmptyVMExt, msg, code)
 
@@ -414,12 +417,13 @@ def apply_msg(ext, msg, code, breaking=False):
         return eve_cache[cache_key]
     # Transfer value, instaquit if not enough
     snapshot = ext._state.snapshot()
-    if big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) < msg.value:
-        print 'MSG TRANSFER FAILED'
-        return 1, msg.gas, []
-    elif msg.value:
-        ext.set_storage(_SENDER_ETHER, msg.sender, big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) - msg.value)
-        ext.set_storage(_RECIPIENT_ETHER, msg.to, big_endian_to_int(ext.get_storage(_RECIPIENT_ETHER, msg.to)) + msg.value)
+    if msg.transfers_value:
+        if big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) < msg.value:
+            print 'MSG TRANSFER FAILED'
+            return 1, msg.gas, []
+        elif msg.value:
+            ext.set_storage(_SENDER_ETHER, msg.sender, big_endian_to_int(ext.get_storage(_SENDER_ETHER, msg.sender)) - msg.value)
+            ext.set_storage(_RECIPIENT_ETHER, msg.to, big_endian_to_int(ext.get_storage(_RECIPIENT_ETHER, msg.to)) + msg.value)
     # Main loop
     msg_to_raw = big_endian_to_int(msg.to)
     if msg_to_raw in specials.specials:

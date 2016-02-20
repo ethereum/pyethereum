@@ -430,3 +430,9 @@ def DEBUG(msg, *args, **kwargs):
     from ethereum import slogging
 
     slogging.DEBUG(msg, *args, **kwargs)
+
+
+# Determines the contract address for a piece of code and a given creator
+# address (contracts created from outside get creator '\x00' * 20)
+def mk_contract_address(sender='\x00'*ADDR_BASE_BYTES, left_bound=0, code=''):
+    return shardify(sha3(sender + code)[32-ADDR_BASE_BYTES:], left_bound)

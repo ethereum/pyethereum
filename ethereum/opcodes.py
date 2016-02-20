@@ -110,6 +110,8 @@ GCALLVALUETRANSFER = 9000   # non-zero-valued call
 GLOGBYTE = 8          # cost of a byte of logdata
 GLOGBASE = 375        # basic log
 GLOGTOPIC = 375       # log topic
+GCREATE = 32000       # contract creation base cost
+GGASDEPOSIT = 2000    # cost of using gas deposit process
 
 GTXCOST = 21000       # TX BASE GAS COST
 GTXDATAZERO = 4       # TX DATA ZERO BYTE GAS COST

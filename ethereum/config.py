@@ -6,7 +6,6 @@ from utils import address, int256, trie_root, hash32, to_string, \
     int_to_big_endian
 
 # List of system addresses and global parameters
-SYS = int_to_addr(10)
 STATEROOTS = int_to_addr(20)
 BLKNUMBER = int_to_addr(30)
 ETHER = int_to_addr(50)
@@ -19,6 +18,10 @@ GENESIS_TIME = int_to_addr(110)
 LOG = int_to_addr(120)
 BET_INCENTIVIZER = int_to_addr(150)
 EXECUTION_STATE = int_to_addr(160)
+CREATOR = int_to_addr(170)
+GAS_DEPOSIT = int_to_addr(180)
+BASICSENDER = int_to_addr(190)
+SYS = int_to_addr(200)
 TX_ENTRY_POINT = int_to_addr(2**160 - 1)
 TXGAS = 1
 TXINDEX = 2
@@ -26,7 +29,7 @@ GAS_REMAINING = 3
 BLOOM = 2**32
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = int_to_addr(0)
-BLKTIME = 3
+BLKTIME = 2.7
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 110
 # Note that this parameter must be set in the Casper contract as well

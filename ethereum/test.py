@@ -3,17 +3,26 @@ from serenity_blocks import State, tx_state_transition, mk_contract_address, \
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 import serpent
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING
+import ringsig_tester
+from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, BASICSENDER, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING, CREATOR, GAS_DEPOSIT
 from utils import privtoaddr, normalize_address, zpad, encode_int, \
-    big_endian_to_int, encode_int32, shardify, sha3
+    big_endian_to_int, encode_int32, shardify, sha3, int_to_addr
 import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method, casper_ct, defaultBetStrategy, bet_incentivizer_code, bet_incentivizer_ct, Bet, mandatory_account_evm
+from bet import call_method, casper_ct, defaultBetStrategy, Bet
+from bet_incentivizer import bet_incentivizer_code, bet_incentivizer_ct
+from mandatory_account_code import mandatory_account_ct, mandatory_account_evm
 import time
 import network
 import os
+import bitcoin
+
+# Maybe add logging
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
+# configure_logging(config_string=config_string)
 
 def my_listen(sender, topics, data):
     jsondata = casper_ct.listen(sender, topics, data)
@@ -36,6 +45,8 @@ def my_listen(sender, topics, data):
     if jsondata and jsondata["_event_type"] == 'ExcessRewardEvent':
         raise Exception("Excess reward event: %r" % jsondata)
     ecdsa_accounts.constructor_ct.listen(sender, topics, data)
+    mandatory_account_ct.listen(sender, topics, data)
+    jsondata = ringsig_ct.listen(sender, topics, data)
 
 def get_arg(flag, typ, default):
     if flag in sys.argv:
@@ -89,6 +100,10 @@ tx_state_transition(gc, Transaction(None, 3000000, data='', code=code))
 put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
 casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
+# Ringsig file and ct
+ringsig_file = os.path.join(os.path.split(__file__)[0], 'ringsig.se.py')
+ringsig_code = serpent.compile(open(ringsig_file).read())
+ringsig_ct = abi.ContractTranslator(serpent.mk_full_signature(open(ringsig_file).read()))
 # print {x: casper_ct.function_data[x]['prefix'] for x in casper_ct.function_data}
 # sys.exit()
 # Add the bet incentivizer
@@ -98,13 +113,21 @@ put_code(genesis, BET_INCENTIVIZER, get_code(gc, mk_contract_address(code=code2)
 print 'Bet incentivizer added'
 
 # Get the code for the basic ecrecover account
-put_code(genesis, ECRECOVERACCT, ecdsa_accounts.constructor_code)
+code2 = ecdsa_accounts.constructor_code
+tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
+put_code(genesis, ECRECOVERACCT, get_code(gc, mk_contract_address(code=code2)))
 print 'ECRECOVER account added'
+
+code2 = ecdsa_accounts.runner_code
+tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
+put_code(genesis, BASICSENDER, get_code(gc, mk_contract_address(code=code2)))
+print 'Basic sender account added'
+
+# code2 = serpent.compile('gas_depositor.se.py')
+# tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
+# put_code(genesis, GAS_DEPOSIT, get_code(gc, mk_contract_address(code=code2)))
+# print 'Gas depositor account added'
     
-# We might want logging
-# from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
-# configure_logging(config_string=config_string)
 
 # Generate the initial set of keys keys
 keys = [zpad(encode_int(x+1), 32) for x in range(0, MAX_NODES - 2)]
@@ -134,7 +157,7 @@ for i, k in enumerate(keys):
     print 'Length of account code:', len(get_code(genesis, a))
     # Check that the EVM that each account must have at the end
     # to get transactions included by default is there
-    assert mandatory_account_evm == get_code(genesis, a).rstrip('\x00')[-len(mandatory_account_evm):]
+    assert mandatory_account_evm == get_code(genesis, a).rstrip('\x00')
     # Check sequence number
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Check that we actually joined Casper with the right
@@ -193,7 +216,7 @@ def check_correctness(bets):
     print 'Now: %.2f' % time.time()
     print 'According to each validator...'
     for bet in bets:
-        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f. Views of deposit sizes: %r' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made, bet.deposit_sizes))
+        print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f.' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
     # Number of blocks received by each validator
@@ -217,15 +240,22 @@ def check_correctness(bets):
             for i in range(new_min_mfh):
                 assert b.stateroots[i] not in ('\x00' * 32, None), (b.stateroots[:max(min_mfh + 1, new_min_mfh + 1)], min_mfh, new_min_mfh, b.my_max_finalized_height, b.calc_state_roots_from)
     print 'Executing blocks %d to %d' % (min_mfh + 1, max(min_mfh, new_min_mfh) + 1)
+    # if max(min_mfh, new_min_mfh) > 0:
+
     for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
         assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
         block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
         block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
+        # assert block.hash == bets[0].predicted_hashes[i]
         assert block0 == block
         block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i] and i != max(min_mfh, new_min_mfh):
             print bets[0].calc_state_roots_from, bets[j].calc_state_roots_from
             print bets[0].my_max_finalized_height, bets[j].my_max_finalized_height
+            print 'my state', state.to_dict()
+            print 'given state', State(bets[0].stateroots[i], bets[0].db).to_dict()
+            import rlp
+            print 'block', repr(rlp.encode(block))
             sys.stderr.write('State root mismatch at block %d!\n' % i)
             sys.stderr.write('state.root: %s\n' % state.root.encode('hex'))
             sys.stderr.write('bet: %s\n' % bets[0].stateroots[i].encode('hex'))
@@ -266,15 +296,31 @@ n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
 for bet in bets:
     bet.network = n
+
+# We might want logging
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
+# configure_logging(config_string=config_string)
+# Submitting ring sig contract as a transaction
+print 'Submitting ring sig contract\n\n'
+ringsig_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_code)
+print 'Ringsig address', ringsig_addr.encode('hex')
+tx3 = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 2000000, CREATOR, 0, ringsig_code, bets[0].key)
+bets[0].add_transaction(tx3)
+check_txs.extend([tx3])
 # Keep running until the min finalized height reaches 5
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
-    if min_mfh >= 5:
+    if min_mfh >= 8:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
     print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+
+recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
+assert get_code(recent_state, ringsig_addr)
+print 'Length of ringsig contract: %d' % len(get_code(recent_state, ringsig_addr))
 
 # Create transactions for a few new validators to join
 print '#' * 80 + '\n' + '#' * 80
@@ -297,6 +343,15 @@ for i, k in enumerate(secondkeys):
 
 THRESHOLD1 = 75 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
+
+# Publish submits to ringsig contract
+print 'Sending to ringsig contract\n\n'
+for bet in bets[1:6]:
+    x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
+    data = ringsig_ct.encode('submit', [x, y])
+    tx = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 750000, ringsig_addr, 10**17, data, bet.key)
+    bet.add_transaction(tx, True)
+    check_txs.extend([tx])
 # Keep running until the min finalized height reaches 75. We expect that by
 # this time all transactions from the previous phase have been included
 while 1:
@@ -306,6 +361,25 @@ while 1:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
+
+
+recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
+next_index = call_method(recent_state, ringsig_addr, ringsig_ct, 'getNextIndex', [])
+assert next_index == 5
+ring_pubs = call_method(recent_state, ringsig_addr, ringsig_ct, 'getPubs', [0])
+print 'Submitted public keys:', ring_pubs
+
+# Create ringsig withdrawal transactions
+for i, bet in enumerate(bets[1:6]):
+    x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
+    target_addr = 2000 + i
+    x0, s, _I = ringsig_tester.ringsig_sign_substitute(target_addr, bitcoin.decode_privkey(bet.key), ring_pubs)
+    data = ringsig_ct.encode('withdraw', [x, y])
+    tx = ecdsa_accounts.mk_transaction(3, 25 * 10**9, 1000000, ringsig_addr, 10**17, data, bet.key)
+    bet.add_transaction(tx)
+    check_txs.extend([tx])
+
+    # data = ringsig_ct.encode('
 
 # Create bet objects for the new validators
 state = State(genesis.root, bets[0].db)

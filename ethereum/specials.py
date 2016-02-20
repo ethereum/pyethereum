@@ -2,16 +2,17 @@ import bitcoin
 import utils
 import opcodes
 from utils import safe_ord, decode_hex, big_endian_to_int, \
-    encode_int32, match_shard, shardify, sha3, zpad
+    encode_int32, match_shard, shardify, sha3, zpad, ADDR_BASE_BYTES, \
+    mk_contract_address
 from rlp.utils import ascii_chr
-from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX
+from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX, CREATOR, NULL_SENDER, GAS_DEPOSIT
 import rlp
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
 
 
 def proc_ecrecover(ext, msg):
-    # print('ecrecover proc', msg.gas)
+    # print('ecrecover proc', msg.gas, msg.data.extract_all())
     OP_GAS = opcodes.GECRECOVER
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
@@ -184,6 +185,53 @@ def proc_rlp_get_bytes32(ext, msg):
 def proc_rlp_get_string(ext, msg):
     return proc_rlp_get(ext, msg, True)
 
+def proc_create(ext, msg):
+    import fastvm as vm
+    OP_GAS = opcodes.GCREATE
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    code = msg.data.extract_all()
+    addr = mk_contract_address(sender=msg.sender, code=code, left_bound=msg.left_bound)
+    exec_gas = msg.gas - gas_cost
+    # Create the account if it does not yet exist
+    if not ext.get_storage(addr, b''):
+        message = vm.Message(NULL_SENDER, addr, msg.value, exec_gas, vm.CallData([], 0, 0), msg.left_bound, msg.right_bound)
+        result, execution_start_gas, data = ext.msg(message, code)
+        if not result:
+            return 0, 0, []
+        code = ''.join([chr(x) for x in data])
+        ext.puthashdata(code)
+        ext.set_storage(addr, '', sha3(code))
+        print 'POST CREATION STATE', ext._state.account_to_dict(addr), 'addr', addr.encode('hex'), '\n\n\n'
+        return 1, execution_start_gas, map(ord, zpad(addr, 32))
+    else:
+        # Contract already exists
+        return 0, 0, []
+
+def proc_gas_deposit(ext, msg):
+    OP_GAS = opcodes.GGASDEPOSIT
+    gas_cost = OP_GAS
+    if msg.gas < gas_cost:
+        return 0, 0, []
+    if msg.value > 0:
+        ext.set_storage(msg.to, msg.sender, big_endian_to_int(ext.get_storage(msg.to, msg.sender)) + msg.value)
+        return 1, 0, []
+    else:
+        refund = msg.data.extract32(0)
+        curbal = big_endian_to_int(ext.get_storage(msg.to, msg.sender))
+        if refund <= curbal:
+            return 0, 0, []
+        msg1 = vm.Message(msg.to, msg.sender, refund, 0, 0, 0, 0)
+        result, _, _ = ext.msg(message, code)
+        assert result # This should never fail
+        coinbase = ext.get_storage(PROPOSER, '\x00' * 32)
+        msg2 = vm.Message(msg.to, coinbase, curbal - refund, 0, 0, 0, 0)
+        result, _, _ = ext.msg(message, code)
+        assert result # This should never fail
+        ext.set_storage(msg.to, msg.sender, 0)
+        return 1, 0, []
+
 specials = {
     1: proc_ecrecover,
     2: proc_sha256,
@@ -196,6 +244,8 @@ specials = {
     9: proc_rlp_get_string,
     big_endian_to_int(ETHER): proc_send_ether,
     big_endian_to_int(LOG): proc_log,
+    big_endian_to_int(CREATOR): proc_create,
+    big_endian_to_int(GAS_DEPOSIT): proc_gas_deposit,
 }
 
 if __name__ == '__main__':

@@ -9,7 +9,8 @@ from serenity_blocks import tx_state_transition, BLKNUMBER, \
     get_code
 from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet, mk_transaction
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES
+from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT
+from mandatory_account_code import mandatory_account_evm
 from db import OverlayDB
 import fastvm as vm
 import serpent
@@ -71,57 +72,6 @@ def call_method(state, addr, ct, fun, args, gas=1000000):
     result, gas_remained, data = apply_msg(VMExt(state.clone()), message, get_code(state, addr))
     output = ''.join(map(chr, data))
     return ct.decode(fun, output)[0]
-
-
-# Code for a contract that anyone can send their bets through. Validators
-# should accept transactions to this address because they see that they
-# automatically get paid if the transaction is valid
-bet_incentivizer_code = """
-extern casper.se.py: [getUserAddress:[uint256]:address]
-macro CASPER: %d
-macro ETHER: %d
-data accounts[2**100](balance, gasprice)
-
-def deposit(index):
-    self.accounts[index].balance += msg.value
-    return(1:bool)
-
-def withdraw(index, val):
-    if self.accounts[index].balance >= val and msg.sender == CASPER.getUserAddress(index):
-        send(msg.sender, val)
-        self.accounts[index].balance -= val
-        return(1:bool)
-    else:
-        return(0:bool)
-
-def finally():
-    bet = string(~calldatasize())
-    ~calldatacopy(bet, 0, ~calldatasize())
-    gasprice = ~calldataload(~calldatasize() - 32)
-    if self.accounts[~mload(bet + 4)].balance > gasprice * ~txexecgas():
-        output = 0
-        ~call(msg.gas - 40000, CASPER, 0, bet, len(bet), ref(output), 32)
-        if output:
-            with fee = gasprice * (~txexecgas() - msg.gas + 50000):
-                ~call(12000, ETHER, 0, [block.coinbase, fee], 64, 0, 0)
-                self.accounts[~mload(bet + 4)].balance -= fee
-                return(1:bool)
-
-""" % (big_endian_to_int(CASPER), big_endian_to_int(ETHER))
-
-bet_incentivizer_ct = ContractTranslator(serpent.mk_full_signature(bet_incentivizer_code))
-
-mandatory_account_subcode = """
-~call(msg.gas - 50000, ~calldataload(160), ~calldataload(192), 160, ~calldatasize() - 224, ~mload(96), 1000)
-# Pay for gas
-~mstore(32, block.coinbase)
-~mstore(64, ~mload(0) * (~txexecgas() - msg.gas + 50000))
-~call(12000, %d, 0, 32, 64, 0, 0)
-~return(~mload(96), ~msize() - ~mload(96))
-""" % big_endian_to_int(ETHER)
-mandatory_account_evm = serpent.compile(mandatory_account_subcode)
-mandatory_account_evm = mandatory_account_evm[mandatory_account_evm.find('\x56')+1:]
-mandatory_account_evm = mandatory_account_evm[:mandatory_account_evm[:-1].rfind('\xf3')+1]
 
 # Convert probability from a number to one-byte encoded form
 # using scientific notation on odds with a 3-bit mantissa;
@@ -365,7 +315,7 @@ class defaultBetStrategy():
         self.index = -1
         self.former_index = None
         # Store the genesis block state here
-        self.genesis_state = genesis_state
+        self.genesis_state_root = genesis_state.root
         # Store the timestamp of the genesis block
         self.genesis_time = big_endian_to_int(genesis_state.get_storage(GENESIS_TIME, '\x00' * 32))
         # Last block that you produced
@@ -401,16 +351,16 @@ class defaultBetStrategy():
         log("My address: %s" % self.addr.encode('hex'), True)
         # Iterate over all validators in the genesis block...
         for j in range(call_casper(genesis_state, 'getNextUserPos', [])):
-            i = call_casper(self.genesis_state, 'getUserAtPosition', [j])
+            i = call_casper(genesis_state, 'getUserAtPosition', [j])
             # If they are currently active...
-            exists = (call_casper(self.genesis_state, 'getUserStatus', [i]) == 2)
+            exists = (call_casper(genesis_state, 'getUserStatus', [i]) == 2)
             if exists:
                 # Make sure they have a validation address and code
-                valaddr = call_casper(self.genesis_state, 'getUserAddress', [i])
-                valcode = call_casper(self.genesis_state, 'getUserValidationCode', [i])
+                valaddr = call_casper(genesis_state, 'getUserAddress', [i])
+                valcode = call_casper(genesis_state, 'getUserValidationCode', [i])
                 assert valcode
                 assert valaddr
-                self.deposit_sizes[i] = call_casper(self.genesis_state, 'getUserDeposit', [i])
+                self.deposit_sizes[i] = call_casper(genesis_state, 'getUserDeposit', [i])
                 # Initialize opinion and bet objects
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, 0)
                 self.bets[i] = {}
@@ -419,7 +369,7 @@ class defaultBetStrategy():
                     self.index = i
         log('Found %d validators in genesis' % len(self.opinions), True)
         # The height at which this user is added
-        self.induction_height = call_casper(self.genesis_state, 'getUserInductionHeight', [self.index]) if self.index >= 0 else 2**100
+        self.induction_height = call_casper(genesis_state, 'getUserInductionHeight', [self.index]) if self.index >= 0 else 2**100
         log("My index: %d" % self.index, True)
         log("My induction height: %d" % self.induction_height, True)
         self.withdrawn = False
@@ -429,6 +379,8 @@ class defaultBetStrategy():
         self.probs = []
         # Your finalized block hashes
         self.finalized_hashes = []
+        # Your predicted block hashes
+        self.predicted_hashes = []
         # Your state roots
         self.stateroots = []
         # Recently discovered blocks
@@ -451,7 +403,7 @@ class defaultBetStrategy():
         h = len(self.finalized_hashes) - 1
         while h >= 0 and self.stateroots[h] in (None, '\x00' * 32):
             h -= 1
-        state = State(self.stateroots[h], self.db) if h >= 0 else self.genesis_state
+        state = State(self.stateroots[h] if h >= 0 else self.genesis_state_root, self.db)
         maxh = h + ENTER_EXIT_DELAY - 1
         for h in range(len(self.proposers), maxh):
             self.proposers.append(get_validator_index(state, h))
@@ -471,6 +423,7 @@ class defaultBetStrategy():
             self.blocks.append(None)
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
+            self.predicted_hashes.append(None)
             self.probs.append(0.5)
         # If we are not sufficiently synced, try to sync previous blocks first
         notsynced = False
@@ -486,7 +439,8 @@ class defaultBetStrategy():
                 self.last_time_sent_getblocks = time.time()
             return
         # If the block is invalid, return
-        check_state = State(self.stateroots[block.number - ENTER_EXIT_DELAY + 1], self.db) if block.number >= ENTER_EXIT_DELAY - 1 else self.genesis_state
+        check_state = State(self.stateroots[block.number - ENTER_EXIT_DELAY + 1]
+                            if block.number >= ENTER_EXIT_DELAY - 1 else self.genesis_state_root, self.db)
         if not is_block_valid(check_state, block):
             sys.stderr.write("ERR: Received invalid block: %d %s\n" % (block.number, block.hash.encode('hex')[:16]))
             return
@@ -697,13 +651,18 @@ class defaultBetStrategy():
         recalc_limit = MAX_RECALC if self.calc_state_roots_from > len(self.blocks) - 20 else MAX_LONG_RECALC
         frm = self.calc_state_roots_from
         print 'recalc limit: ', recalc_limit, 'want to recalculate: ', len(self.blocks) - frm
-        run_state = State(self.stateroots[frm-1] if frm else self.genesis_state.root, self.db)
+        run_state = State(self.stateroots[frm-1] if frm else self.genesis_state_root, self.db)
         for h in range(frm, len(self.blocks))[:recalc_limit]:
+            # from ethereum.slogging import LogRecorder, configure_logging, set_level
+            # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
+            # configure_logging(config_string=config_string)
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
+            assert prevblknum == h
             if self.probs[h] is None:
                 prob = self.default_vote(h, self.blocks[h])
             else:
                 prob = self.probs[h]
+            self.predicted_hashes[h] = self.blocks[h].hash if prob >= 0.5 and self.blocks[h] else '\x00' * 32
             block_state_transition(run_state, self.blocks[h] if prob >= 0.5 else None)
             self.stateroots[h] = run_state.root
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
@@ -716,6 +675,8 @@ class defaultBetStrategy():
         # Check integrity
         for i in range(self.calc_state_roots_from):
             assert self.stateroots[i] not in ('\x00' * 32, None)
+        for i in range(min(self.calc_state_roots_from, self.my_max_finalized_height)):
+            assert self.finalized_hashes[i] == self.predicted_hashes[i]
         
     # Construct a bet
     def mkbet(self):
@@ -745,9 +706,10 @@ class defaultBetStrategy():
             if self.blocks[h] and new_block_hash != self.blocks[h].hash:
                 log('Flipping block at height %d from %s to %s' %
                     (h, self.blocks[h].hash[:8].encode('hex'), new_block_hash[:8].encode('hex')), True)
-                assert self.objects[new_block_hash].number == h
-                self.blocks[h] = self.objects[new_block_hash]
-                self.recently_discovered_blocks.append(h)
+                if new_block_hash not in (None, '\x00' * 32):
+                    assert self.objects[new_block_hash].number == h
+                    self.blocks[h] = self.objects[new_block_hash]
+                    self.recently_discovered_blocks.append(h)
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
@@ -766,7 +728,7 @@ class defaultBetStrategy():
                     self.my_max_finalized_height = h
                     log('Increasing max finalized height to %d' % h, self.index == 3)
                     if not h % 10:
-                        check_state = State(self.stateroots[self.calc_state_roots_from-1], self.db) if self.calc_state_roots_from else self.genesis_state
+                        check_state = State(self.stateroots[self.calc_state_roots_from-1] if self.calc_state_roots_from else self.genesis_state_root, self.db)
                         for i in self.opinions.keys():
                             self.deposit_sizes[i] = call_casper(check_state, 'getUserDeposit', [i])
         # Recalculate state roots
@@ -865,7 +827,7 @@ class defaultBetStrategy():
                 self.on_receive(x, sender_id)
 
     def should_i_include_transaction(self, tx):
-        check_state = State(self.stateroots[self.calc_state_roots_from-1], OverlayDB(self.db)) if self.calc_state_roots_from else self.genesis_state
+        check_state = State(self.stateroots[self.calc_state_roots_from-1] if self.calc_state_roots_from else self.genesis_state_root, OverlayDB(self.db))
         def my_listen(sender, topics, data):
             pass
             # print 't', topics
@@ -879,16 +841,18 @@ class defaultBetStrategy():
             if len(output) < 32 or big_endian_to_int(output) != 1:
                 log('Transaction to bet incentivizer fails', True)
                 return False
+            log('Transaction to bet incentivizer passes, should be included', True)
             return True
         else:
-            o = tx_state_transition(check_state, tx, override_gas=150000, breaking=True, listeners=[my_listen])
+            o = tx_state_transition(check_state, tx, override_gas=150000+tx.intrinsic_gas, breaking=True, listeners=[my_listen])
             if not o:
                 log('No output from running transaction', True)
                 return False
             output = ''.join(map(chr, o))
-            # Make sure that the right bits are at the end of the account code
-            if get_code(check_state, tx.addr).rstrip('\x00')[-len(mandatory_account_evm):] != mandatory_account_evm:
-                log('Account EVM mismatch: %r %r' % (get_code(check_state, tx.addr).rstrip('\x00')[-len(mandatory_account_evm):], mandatory_account_evm), True)
+            # Make sure that the account code matches
+            if get_code(check_state, tx.addr).rstrip('\x00') != mandatory_account_evm:
+                log('Account EVM mismatch: %r %r' %
+                    (get_code(check_state, tx.addr), mandatory_account_evm), True)
                 return False
             # Make sure that the right gas price is in memory (and implicitly that the tx succeeded)
             if len(output) < 32:
@@ -937,7 +901,7 @@ class defaultBetStrategy():
         h = 0
         while h < len(self.stateroots) and self.stateroots[h] not in (None, '\x00' * 32):
             h += 1
-        latest_state_root = self.stateroots[h-1] if h else self.genesis_state.root
+        latest_state_root = self.stateroots[h-1] if h else self.genesis_state_root
         assert latest_state_root not in ('\x00' * 32, None)
         latest_state = State(latest_state_root, self.db)
         ops = self.opinions.items() 
@@ -991,7 +955,7 @@ class defaultBetStrategy():
                         # Add it to the finalized index
                         if h not in self.finalized_txindex:
                             self.finalized_txindex[h] = (tx, [])
-                        self.finalized_txindex[h][1].append((blknum, blkhash, groupindex, txindex))
+                        self.finalized_txindex[h][1].append((blknum, blkhash, groupindex, txindex, rlp.decode(logdata)))
                         positions.pop(i)
                     # If the transaction was included but exited with an error (eg. due to a sequence number mismatch)
                     elif p > 0.95 and logresult == 1:
