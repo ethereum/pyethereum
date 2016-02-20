@@ -13,7 +13,7 @@ of each value.
 
 bloom(0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6)
 sha3: bd2b01afcd27800b54d2179edc49e2bffde5078bb6d0b204694169b1643fb108
-first double-bytes: bd2b, 01af, cd27 -- which leads to bits in bloom --> 299, 431, 295
+first double-bytes: bd2b, 01af, cd27 -- which leads to bits in bloom --> 1323, 431, 1319
 
 blooms in this module are of type 'int'
 """
