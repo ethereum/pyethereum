@@ -13,7 +13,7 @@ import sys
 import bet
 from bet import call_method, casper_ct, defaultBetStrategy, Bet
 from bet_incentivizer import bet_incentivizer_code, bet_incentivizer_ct
-from mandatory_account_code import mandatory_account_ct, mandatory_account_evm
+from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
 import network
 import os
@@ -308,6 +308,16 @@ print 'Ringsig address', ringsig_addr.encode('hex')
 tx3 = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 2000000, CREATOR, 0, ringsig_code, bets[0].key)
 bets[0].add_transaction(tx3)
 check_txs.extend([tx3])
+ringsig_account_code = serpent.compile(("""
+def init():
+    sstore(0, %d)
+    sstore(1, %d)
+""" % (big_endian_to_int(ringsig_addr), big_endian_to_int(ringsig_addr))) + '\n' + mandatory_account_code)
+ringsig_account_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_account_code)
+tx4 = ecdsa_accounts.mk_transaction(3, 25 * 10**9, 2000000, CREATOR, 0, ringsig_account_code, bets[0].key)
+bets[0].add_transaction(tx4)
+check_txs.extend([tx4])
+print 'Ringsig account address', ringsig_account_addr.encode('hex')
 # Keep running until the min finalized height reaches 5
 while 1:
     n.run(25, sleep=0.25)
@@ -320,6 +330,7 @@ while 1:
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 assert get_code(recent_state, ringsig_addr)
+assert get_code(recent_state, ringsig_account_addr)
 print 'Length of ringsig contract: %d' % len(get_code(recent_state, ringsig_addr))
 
 # Create transactions for a few new validators to join
@@ -349,7 +360,7 @@ print 'Sending to ringsig contract\n\n'
 for bet in bets[1:6]:
     x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
     data = ringsig_ct.encode('submit', [x, y])
-    tx = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 750000, ringsig_addr, 10**17, data, bet.key)
+    tx = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 750000, ringsig_account_addr, 10**17, data, bet.key)
     bet.add_transaction(tx, True)
     check_txs.extend([tx])
 # Keep running until the min finalized height reaches 75. We expect that by
@@ -365,7 +376,7 @@ while 1:
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 next_index = call_method(recent_state, ringsig_addr, ringsig_ct, 'getNextIndex', [])
-assert next_index == 5
+assert next_index == 5, ("Next index: %d, should be 5" % next_index)
 ring_pubs = call_method(recent_state, ringsig_addr, ringsig_ct, 'getPubs', [0])
 print 'Submitted public keys:', ring_pubs
 
