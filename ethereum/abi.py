@@ -371,6 +371,8 @@ def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
         return encode_hex(data[12:])
+    elif base == 'hash':
+        return data[32-int(sub):]
     elif base == 'string' or base == 'bytes' or base == 'hash':
         return data[:int(sub)] if len(sub) else data
     elif base == 'uint':
