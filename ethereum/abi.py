@@ -373,8 +373,12 @@ def decode_single(typ, data):
         return encode_hex(data[12:])
     elif base == 'hash':
         return data[32-int(sub):]
-    elif base == 'string' or base == 'bytes' or base == 'hash':
-        return data[:int(sub)] if len(sub) else data
+    elif base == 'string' or base == 'bytes':
+        if len(sub):
+            return data[:int(sub)]
+        else:
+            l = big_endian_to_int(data[0:32])
+            return data[32:][:l]
     elif base == 'uint':
         return big_endian_to_int(data)
     elif base == 'int':

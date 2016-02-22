@@ -34,6 +34,13 @@ def test_abi_decode_single_hash():
     typ = ['hash', '8', []]
     assert b'\x01'*8 == abi.decode_single(typ, abi.encode_single(typ, b'\x01'*8))
 
+def test_abi_decode_single_bytes():
+    typ = ['bytes', '8', []]
+    assert (b'\x01\x02' + b'\x00'*6) == abi.decode_single(typ, abi.encode_single(typ, '\x01\x02'))
+
+    typ = ['bytes', '', []]
+    assert b'\x01\x02' == abi.decode_single(typ, abi.encode_single(typ, '\x01\x02'))
+
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
     return lambda: do_test_state(filename, testname, testdata)
