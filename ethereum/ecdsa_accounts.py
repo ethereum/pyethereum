@@ -16,40 +16,41 @@ import abi
 # The "signature checker" code for ECDSA accounts
 cc = """
 # We assume that data takes the following schema:
-# bytes 0-31: gasprice
-# bytes 32-63: v (ECDSA sig)
-# bytes 64-96: r (ECDSA sig)
-# bytes 96-127: s (ECDSA sig)
+# bytes 0-31: v (ECDSA sig)
+# bytes 32-63: r (ECDSA sig)
+# bytes 64-95: s (ECDSA sig)
+# bytes 96-127: gasprice
 # bytes 128-159: sequence number (formerly called "nonce")
 # bytes 172-191: to
 # bytes 192-223: value
 # bytes 224+: data
 # ~calldatacopy(0, 0, ~calldatasize())
-# ~log1(0, ~calldatasize(), 6)
-# Prepare the transaction data for hashing: gas + gasprice + non-sig data
+# Prepare the transaction data for hashing: gas + non-sig data
 ~mstore(128, ~txexecgas())
-~calldatacopy(160, 0, 32)
-~calldatacopy(192, 128, ~calldatasize() - 128)
+~calldatacopy(160, 96, ~calldatasize() - 96)
 # Hash it
 ~mstore(0, ~sha3(128, ~calldatasize() - 64))
-~calldatacopy(32, 32, 96)
+~calldatacopy(32, 0, 96)
 # Call ECRECOVER contract to get the sender
 ~call(5000, 1, 0, 0, 128, 0, 32)
 # Check sender correctness; exception if not
 if ~mload(0) != self.storage[2]:
+    ~log1(0, 0, 51)
     ~invalid()
 # Check value sufficiency
 if self.balance < ~calldataload(192) + ~calldataload(0) * ~txexecgas():
+    ~log1(0, 0, 52)
     ~invalid()
 # Sequence number operations
 with minusone = ~sub(0, 1):
     with curseq = self.storage[minusone]:
         # Check sequence number correctness, exception if not
         if ~calldataload(128) != curseq:
+            ~log1(0, 0, 53)
             ~invalid()
         # Increment sequence number
         self.storage[minusone] = curseq + 1
-        return(1)
+        return(~calldataload(96))
 """
 constructor_code = serpent.compile(cc)
 constructor_ct = abi.ContractTranslator(serpent.mk_full_signature(cc))
@@ -146,7 +147,7 @@ def mk_txdata(seq, gasprice, to, value, data):
 # Signs data+startgas
 def sign_txdata(data, gas, key):
     v, r, s = bitcoin.ecdsa_raw_sign(sha3(encode_int32(gas) + data), key)
-    return data[:32] + encode_int32(v) + encode_int32(r) + encode_int32(s) + data[32:]
+    return encode_int32(v) + encode_int32(r) + encode_int32(s) + data
 
 # The equivalent of transactions.Transaction(nonce, gasprice, startgas,
 # to, value, data).sign(key) in 1.0

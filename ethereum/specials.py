@@ -5,7 +5,8 @@ from utils import safe_ord, decode_hex, big_endian_to_int, \
     encode_int32, match_shard, shardify, sha3, zpad, ADDR_BASE_BYTES, \
     mk_contract_address
 from rlp.utils import ascii_chr
-from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX, CREATOR, NULL_SENDER, GAS_DEPOSIT
+from config import ETHER, BLOOM, LOG, EXECUTION_STATE, TXINDEX, CREATOR, \
+    NULL_SENDER, GAS_DEPOSIT, ADDR_BYTES
 import rlp
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
@@ -29,11 +30,12 @@ def proc_ecrecover(ext, msg):
     if recovered_addr in (False, (0, 0)):
         return 1, msg.gas - gas_cost, []
     pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
-    o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
+    o = [0] * (32 - ADDR_BASE_BYTES) + [safe_ord(x) for x in utils.sha3(pub[1:])[-ADDR_BASE_BYTES:]]
     return 1, msg.gas - gas_cost, o
 
 
 def proc_ecadd(ext, msg):
+    # print 'proc ecadd'
     OP_GAS = opcodes.GECADD
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
@@ -43,10 +45,10 @@ def proc_ecadd(ext, msg):
     x2 = msg.data.extract32(64)
     y2 = msg.data.extract32(96)
     # point not on curve
-    if (x1*x1*x1+x1-y1*y1) % bitcoin.P != 0:
+    if (x1*x1*x1+7-y1*y1) % bitcoin.P != 0:
         return 0, 0, []
     # point not on curve
-    if (x2*x2*x2+x2-y2*y2) % bitcoin.P != 0:
+    if (x2*x2*x2+7-y2*y2) % bitcoin.P != 0:
         return 0, 0, []
     c, d = bitcoin.fast_add((x1, y1), (x2, y2))
     c2, d2 = encode_int32(c), encode_int32(d)
@@ -54,22 +56,27 @@ def proc_ecadd(ext, msg):
 
 
 def proc_ecmul(ext, msg):
+    # print 'proc ecmul'
     OP_GAS = opcodes.GECMUL
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
+        # print 'insufficient gas'
         return 0, 0, []
     x1 = msg.data.extract32(0)
     y1 = msg.data.extract32(32)
     n = msg.data.extract32(64)
     # point not on curve
-    if (x1*x1*x1+x1-y1*y1) % bitcoin.P != 0:
+    if (x1*x1*x1+7-y1*y1) % bitcoin.P != 0:
+        # print 'bad point', x1, y1
         return 0, 0, []
     c, d = bitcoin.fast_multiply((x1, y1), n)
     c2, d2 = encode_int32(c), encode_int32(d)
+    # print 'returning from ecmul'
     return 1, msg.gas - gas_cost, map(ord, c2 + d2)
 
 
 def proc_modexp(ext, msg):
+    # print 'proc modexp'
     OP_GAS = opcodes.GMODEXP
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
@@ -126,7 +133,7 @@ def proc_send_ether(ext, msg):
     value = msg.data.extract32(32)
     prebal = utils.big_endian_to_int(ext.get_storage(SENDER_ETHER, msg.sender))
     if prebal >= value:
-        print 'xferring %d wei from %s to %s' % (value, msg.sender.encode('hex'), to.encode('hex'))
+        # print 'xferring %d wei from %s to %s' % (value, msg.sender.encode('hex'), to.encode('hex'))
         ext.set_storage(TO_ETHER, to, utils.big_endian_to_int(ext.get_storage(TO_ETHER, to)) + value)
         ext.set_storage(SENDER_ETHER, msg.sender, prebal - value)
         return 1, msg.gas - gas_cost, [0] * 31 + [1]
@@ -203,7 +210,6 @@ def proc_create(ext, msg):
         code = ''.join([chr(x) for x in data])
         ext.puthashdata(code)
         ext.set_storage(addr, '', sha3(code))
-        print 'POST CREATION STATE', ext._state.account_to_dict(addr), 'addr', addr.encode('hex'), '\n\n\n'
         return 1, execution_start_gas, map(ord, zpad(addr, 32))
     else:
         # Contract already exists

@@ -9,7 +9,7 @@ from serenity_blocks import tx_state_transition, BLKNUMBER, \
     get_code
 from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet, mk_transaction
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT
+from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT, CONST_CALL_SENDER
 from mandatory_account_code import mandatory_account_evm
 from db import OverlayDB
 import fastvm as vm
@@ -68,7 +68,7 @@ class NetworkMessage(rlp.Serializable):
 def call_method(state, addr, ct, fun, args, gas=1000000):
     data = ct.encode(fun, args)
     message_data = vm.CallData([safe_ord(x) for x in data], 0, len(data))
-    message = vm.Message(NULL_SENDER, addr, 0, gas, message_data)
+    message = vm.Message(CONST_CALL_SENDER, addr, 0, gas, message_data)
     result, gas_remained, data = apply_msg(VMExt(state.clone()), message, get_code(state, addr))
     output = ''.join(map(chr, data))
     return ct.decode(fun, output)[0]
@@ -691,12 +691,14 @@ class defaultBetStrategy():
         # Vote on each height independently using our voting strategy
         for h in range(sign_from, len(self.blocks)):
             candidates = [o.blockhashes[h] for o in self.opinions.values()
-                          if len(o.blockhashes) > h and o.blockhashes[h]]
+                          if len(o.blockhashes) > h and o.blockhashes[h] not in (None, '\x00' * 32)]
             if self.blocks[h]:
                 candidates.append(self.blocks[h].hash)
             elif not len(candidates):
-                candidates.append(None)
+                candidates.append('\x00' * 32)
             candidates = list(set(candidates))
+            for c in candidates:
+                assert isinstance(c, str) and len(c) == 32
             # Locate highest probability
             probs = [(self.vote(h, c), c) for c in candidates]
             prob, new_block_hash = sorted(probs)[-1]
@@ -844,7 +846,7 @@ class defaultBetStrategy():
             log('Transaction to bet incentivizer passes, should be included', True)
             return True
         else:
-            o = tx_state_transition(check_state, tx, override_gas=150000+tx.intrinsic_gas, breaking=True, listeners=[my_listen])
+            o = tx_state_transition(check_state, tx, override_gas=250000+tx.intrinsic_gas, breaking=True, listeners=[my_listen])
             if not o:
                 log('No output from running transaction', True)
                 return False

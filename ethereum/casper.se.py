@@ -4,7 +4,7 @@ data deletedUserPositions[2**50]
 data nextDeletedUserPos
 data userPosToIndexMap[2**50]
 data nextUserIndex
-data activeValidators
+data numActiveValidators
 data slashed[]
 
 macro SEQ_POS: 0
@@ -13,9 +13,11 @@ macro DEPOSIT_SIZE_POS: 2
 macro BET_MAXHEIGHT_POS: 3
 macro PROFITS_PROCESSED_TO_POS: 4
 
-macro MIN_DEPOSIT: 1500 * 10**18
+macro MIN_DEPOSIT: 1250 * 10**18
 
 macro MAX_DEPOSIT: 60000 * 10**18
+
+macro MAX_VALIDATORS: 100
 
 macro ENTER_EXIT_DELAY: 110
 
@@ -24,6 +26,10 @@ macro ETHER: 50
 macro RLPGETBYTES32: 8
 
 macro RLPGETSTRING: 9
+
+macro MAX_VALIDATION_DURATION: 1000000 # number of blocks
+
+macro EXCESS_VALIDATION_TAX: 20 # parts per billion per block
 
 macro WITHDRAWAL_WAITTIME: 20
 
@@ -76,9 +82,17 @@ event Joined(userIndex)
 event BetSlashed(userIndex:uint256, bet1:str, bet2:str)
 event BlockSlashed(userIndex:uint256, bet1:str, bet2:str)
 
+# To help distinguish positions and indices
+def init():
+    self.nextUserPos = 2000
+
+def const getMinDeposit():
+    return self.numActiveValidators
+
 # Become a validator
 def join(validationCode:bytes):
-    assert msg.value >= MIN_DEPOSIT and msg.value <= MAX_DEPOSIT
+    min_deposit = MIN_DEPOSIT * MAX_VALIDATORS / (MAX_VALIDATORS - self.numActiveValidators)
+    assert self.numActiveValidators < MAX_VALIDATORS and msg.value >= min_deposit and msg.value <= MAX_DEPOSIT
     if self.nextDeletedUserPos:
         userPos = self.deletedUserPositions[self.nextDeletedUserPos - 1]
         self.nextDeletedUserPos -= 1
@@ -97,6 +111,7 @@ def join(validationCode:bytes):
     self.users[userIndex].orig_deposit_size = msg.value
     self.users[userIndex].induction_height = if(block.number, block.number + ENTER_EXIT_DELAY, 0)
     self.users[userIndex].withdrawal_height = 2**100
+    self.numActiveValidators += 1
     ~sstorebytes(ref(self.users[userIndex].basicinfo), basicinfo, 320)
     return(userIndex:uint256)
 
@@ -104,6 +119,7 @@ def join(validationCode:bytes):
 # Leave the validator pool
 def withdraw(index:uint256):
     if self.users[index].withdrawal_height + WITHDRAWAL_WAITTIME <= block.number:
+        # Load the validator's info
         basicinfo = array(10)
         ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
         send(self.users[index].address, basicinfo[DEPOSIT_SIZE_POS])
@@ -111,6 +127,7 @@ def withdraw(index:uint256):
         basicinfo[DEPOSIT_SIZE_POS] = 0
         self.deletedUserPositions[self.nextDeletedUserPos] = self.users[index].pos
         self.nextDeletedUserPos += 1
+        self.numActiveValidators -= 1
         ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
         return(1:bool)
     return(0:bool)
@@ -177,9 +194,18 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
         basicinfo[DEPOSIT_SIZE_POS] = userBalance
     # Bet with max height 2**256 - 1 to start withdrawal
     if max_height == ~sub(0, 1):
-        self.users[index].withdrawal_height = block.number
-        ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
+        # Make sure that the validator has submitted all bets
         assert self.users[index].max_seq <= seqnum
+        # Register the validator as having withdrawn
+        self.users[index].withdrawal_height = block.number
+        # Compute how many blocks the validator has validated for
+        user_validated_for = block.number - self.users[index].induction_height
+        # Compute a tax for validating too long
+        if user_validated_for > MAX_VALIDATION_DURATION:
+            taxrate = (user_validated_for - MAX_VALIDATION_DURATION) * EXCESS_VALIDATION_TAX
+            basicinfo[DEPOSIT_SIZE_POS] = max(0, basicinfo[DEPOSIT_SIZE_POS] - basicinfo[DEPOSIT_SIZE_POS] * taxrate / 10**9)
+        # Store validator data
+        ~sstorebytes(ref(self.users[index].basicinfo), basicinfo, 320)
         return(1:bool)
     # Update blockhashes, storing blockhash correctness info in groups of 32
     with i = 0:

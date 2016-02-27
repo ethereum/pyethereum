@@ -625,7 +625,7 @@ def vm_execute(ext, msg, code, breaking=False):
             else:
                 gas, to, meminstart, meminsz, memoutstart, memoutsz = \
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-                value = 0
+                value = msg.value
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
@@ -742,10 +742,10 @@ def vm_execute(ext, msg, code, breaking=False):
             to = validate_and_get_address(stk.pop(), msg)
             if to is False:
                 return vm_exception('OUT OF RANGE')
-            xfer = ext.get_balance(msg.to)
-            ext.set_balance(to, ext.get_balance(to) + xfer)
-            ext.set_balance(msg.to, 0)
-            ext.add_suicide(msg.to)
+            xfer = utils.big_endian_to_int(ext.get_storage(ETHER, msg.to))
+            ext.set_storage(ETHER, to, utils.big_endian_to_int(ext.get_storage(ETHER, to)) + xfer)
+            ext.set_storage(ETHER, msg.to, 0)
+            ext.set_storage(msg.to, '', '')
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
 

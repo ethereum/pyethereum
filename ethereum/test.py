@@ -96,7 +96,7 @@ except:
     code = serpent.compile(casper_file)
     open(casper_evm_file, 'w').write(code)
     open(casper_hash_file, 'w').write(h)
-tx_state_transition(gc, Transaction(None, 3000000, data='', code=code))
+tx_state_transition(gc, Transaction(None, 4000000, data='', code=code))
 put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
 casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
@@ -322,7 +322,7 @@ print 'Ringsig account address', ringsig_account_addr.encode('hex')
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
-    if min_mfh >= 8:
+    if min_mfh >= 20:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -355,12 +355,15 @@ for i, k in enumerate(secondkeys):
 THRESHOLD1 = 75 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
 
+orig_ring_pubs = []
 # Publish submits to ringsig contract
 print 'Sending to ringsig contract\n\n'
 for bet in bets[1:6]:
     x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
+    orig_ring_pubs.append((x, y))
     data = ringsig_ct.encode('submit', [x, y])
     tx = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 750000, ringsig_account_addr, 10**17, data, bet.key)
+    assert bet.should_i_include_transaction(tx)
     bet.add_transaction(tx, True)
     check_txs.extend([tx])
 # Keep running until the min finalized height reaches 75. We expect that by
@@ -375,22 +378,27 @@ while 1:
 
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-next_index = call_method(recent_state, ringsig_addr, ringsig_ct, 'getNextIndex', [])
+next_index = call_method(recent_state, ringsig_account_addr, ringsig_ct, 'getNextIndex', [])
 assert next_index == 5, ("Next index: %d, should be 5" % next_index)
-ring_pubs = call_method(recent_state, ringsig_addr, ringsig_ct, 'getPubs', [0])
+ring_pub_data = call_method(recent_state, ringsig_account_addr, ringsig_ct, 'getPubs', [0])
+ring_pubs = [(ring_pub_data[i] % 2**256, ring_pub_data[i+1] % 2**256) for i in range(0, len(ring_pub_data), 2)]
+print sorted(ring_pubs), sorted(orig_ring_pubs)
+assert sorted(ring_pubs) == sorted(orig_ring_pubs)
 print 'Submitted public keys:', ring_pubs
 
 # Create ringsig withdrawal transactions
 for i, bet in enumerate(bets[1:6]):
     x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
     target_addr = 2000 + i
-    x0, s, _I = ringsig_tester.ringsig_sign_substitute(target_addr, bitcoin.decode_privkey(bet.key), ring_pubs)
-    data = ringsig_ct.encode('withdraw', [x, y])
-    tx = ecdsa_accounts.mk_transaction(3, 25 * 10**9, 1000000, ringsig_addr, 10**17, data, bet.key)
+    x0, s, Ix, Iy = ringsig_tester.ringsig_sign_substitute(encode_int32(target_addr), bitcoin.decode_privkey(bet.key), ring_pubs)
+    print 'Verifying ring signature using python code'
+    assert ringsig_tester.ringsig_verify_substitute(encode_int32(target_addr), x0, s, Ix, Iy, ring_pubs)
+    data = ringsig_ct.encode('withdraw', [int_to_addr(target_addr), x0, s, Ix, Iy, 0])
+    tx = Transaction(ringsig_account_addr, 1000000, data=data, code=b'')
+    print 'Verifying tx includability'
+    assert bet.should_i_include_transaction(tx)
     bet.add_transaction(tx)
     check_txs.extend([tx])
-
-    # data = ringsig_ct.encode('
 
 # Create bet objects for the new validators
 state = State(genesis.root, bets[0].db)
@@ -436,6 +444,10 @@ while 1:
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
     if min_mfh > 150 + BLK_DISTANCE + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
+        break
+    # Exit early if the withdrawal step already completed
+    recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
+    if len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3:
         break
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)

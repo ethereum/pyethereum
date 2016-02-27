@@ -29,7 +29,8 @@ GAS_REMAINING = 3
 BLOOM = 2**32
 GASLIMIT = 4712388 # Pau million
 NULL_SENDER = int_to_addr(0)
-BLKTIME = 2.7
+CONST_CALL_SENDER = int_to_addr(31415)
+BLKTIME = 3.3
 # Note that this parameter must be set in the Casper contract as well
 ENTER_EXIT_DELAY = 110
 # Note that this parameter must be set in the Casper contract as well
