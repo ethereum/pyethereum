@@ -11,7 +11,7 @@ import ecdsa_accounts
 import abi
 import sys
 import bet
-from bet import call_method, casper_ct, defaultBetStrategy, Bet
+from bet import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
 from bet_incentivizer import bet_incentivizer_code, bet_incentivizer_ct
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
@@ -24,6 +24,7 @@ import bitcoin
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
 # configure_logging(config_string=config_string)
 
+# Listener; prints out logs in json format
 def my_listen(sender, topics, data):
     jsondata = casper_ct.listen(sender, topics, data)
     if jsondata and jsondata["_event_type"] in ('BlockLoss', 'StateLoss'):
@@ -48,6 +49,7 @@ def my_listen(sender, topics, data):
     mandatory_account_ct.listen(sender, topics, data)
     jsondata = ringsig_ct.listen(sender, topics, data)
 
+# Get command line parameters
 def get_arg(flag, typ, default):
     if flag in sys.argv:
         return typ(sys.argv[sys.argv.index(flag) + 1])
@@ -74,11 +76,12 @@ print 'Running with %d maximum nodes: %d with wonky clocks, %d brave, %d crazy-b
 def mk_bet_strategy(state, index, key):
     return defaultBetStrategy(state.clone(), key,
                               clockwrong=(1 <= index < CLOCKWRONG_CUMUL),
-                              bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.84),
+                              bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.915),
                               crazy_bet=(BRAVE_CUMUL <= index < CRAZYBET_CUMUL),
                               double_block_suicide=(5 if CRAZYBET_CUMUL <= index < DBL_BLK_SUICIDE_CUMUL else 2**80),
                               double_bet_suicide=(1 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
 
+# Create the genesis
 genesis = State('', EphemDB())
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
@@ -96,6 +99,7 @@ except:
     code = serpent.compile(casper_file)
     open(casper_evm_file, 'w').write(code)
     open(casper_hash_file, 'w').write(h)
+# Add Casper contract to blockchain
 tx_state_transition(gc, Transaction(None, 4000000, data='', code=code))
 put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
@@ -104,8 +108,6 @@ casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
 ringsig_file = os.path.join(os.path.split(__file__)[0], 'ringsig.se.py')
 ringsig_code = serpent.compile(open(ringsig_file).read())
 ringsig_ct = abi.ContractTranslator(serpent.mk_full_signature(open(ringsig_file).read()))
-# print {x: casper_ct.function_data[x]['prefix'] for x in casper_ct.function_data}
-# sys.exit()
 # Add the bet incentivizer
 code2 = serpent.compile(bet_incentivizer_code)
 tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
@@ -118,18 +120,13 @@ tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
 put_code(genesis, ECRECOVERACCT, get_code(gc, mk_contract_address(code=code2)))
 print 'ECRECOVER account added'
 
+# Get the code for the basic EC sender account
 code2 = ecdsa_accounts.runner_code
 tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
 put_code(genesis, BASICSENDER, get_code(gc, mk_contract_address(code=code2)))
 print 'Basic sender account added'
 
-# code2 = serpent.compile('gas_depositor.se.py')
-# tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
-# put_code(genesis, GAS_DEPOSIT, get_code(gc, mk_contract_address(code=code2)))
-# print 'Gas depositor account added'
-    
-
-# Generate the initial set of keys keys
+# Generate the initial set of keys
 keys = [zpad(encode_int(x+1), 32) for x in range(0, MAX_NODES - 2)]
 # Create a second set of 4 keys
 secondkeys = [zpad(encode_int(x+1), 32) for x in range(MAX_NODES - 2, MAX_NODES)]
@@ -140,10 +137,6 @@ for i, k in enumerate(keys):
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
     # Give them 1600 ether
     genesis.set_storage(ETHER, a, 1600 * 10**18)
-    # Make a dummy transaction to initialize the account
-    # tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 0, '', k, create=True)
-    # v = tx_state_transition(genesis, tx)
-    # assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
     print 'Length of validation code:', len(vcode)
@@ -211,12 +204,13 @@ def check_correctness(bets):
     # Withdrawn?
     print 'Withdrawn?: %r' % [(bet.withdrawn, bet.seq) for bet in bets]
     # Probabilities
-    print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
+    # print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
     # Data about bets from each validator according to every other validator
     print 'Now: %.2f' % time.time()
     print 'According to each validator...'
     for bet in bets:
         print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f.' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
+        print 'Probs (in 0-255 repr, from %d):' % (new_min_mfh + 1), map(lambda x: ord(encode_prob(x)), bet.probs[new_min_mfh + 1:])
     # Indices of validators
     print 'Indices: %r' % [bet.index for bet in bets]
     # Number of blocks received by each validator
@@ -238,15 +232,12 @@ def check_correctness(bets):
     for b in bets:
         if not b.byzantine:
             for i in range(new_min_mfh):
-                assert b.stateroots[i] not in ('\x00' * 32, None), (b.stateroots[:max(min_mfh + 1, new_min_mfh + 1)], min_mfh, new_min_mfh, b.my_max_finalized_height, b.calc_state_roots_from)
+                assert b.stateroots[i] not in ('\x00' * 32, None)
     print 'Executing blocks %d to %d' % (min_mfh + 1, max(min_mfh, new_min_mfh) + 1)
-    # if max(min_mfh, new_min_mfh) > 0:
-
     for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
         assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
         block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
         block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
-        # assert block.hash == bets[0].predicted_hashes[i]
         assert block0 == block
         block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i] and i != max(min_mfh, new_min_mfh):
@@ -280,6 +271,7 @@ def check_correctness(bets):
     print 'Validator seqs on speculative chain (%d): %r' % (h-1, [call_method(speculative_state, CASPER, casper_ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     # Validator deposit sizes (over 1500 * 10**18 means profit)
     print 'Validator deposit sizes: %r' % [call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
+    print 'Estimated validator excess gains: %r' % [call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) - 1500 * 10**18 + 47 / 10**9. * 1500 * 10**18 * min_mfh for bet in bets if bet.index >= 0]
     for bet in bets:
         if bet.index >= 0 and big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) >= bet.induction_height:
             assert (call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) >= 1499 * 10**18) or bet.byzantine, (bet.double_bet_suicide, bet.byzantine)
@@ -297,10 +289,6 @@ n.generate_peers(5)
 for bet in bets:
     bet.network = n
 
-# We might want logging
-# from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
-# configure_logging(config_string=config_string)
 # Submitting ring sig contract as a transaction
 print 'Submitting ring sig contract\n\n'
 ringsig_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_code)
@@ -318,7 +306,7 @@ tx4 = ecdsa_accounts.mk_transaction(3, 25 * 10**9, 2000000, CREATOR, 0, ringsig_
 bets[0].add_transaction(tx4)
 check_txs.extend([tx4])
 print 'Ringsig account address', ringsig_account_addr.encode('hex')
-# Keep running until the min finalized height reaches 5
+# Keep running until the min finalized height reaches 20
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)

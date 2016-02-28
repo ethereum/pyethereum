@@ -15,23 +15,23 @@ ECADD = 5
 ECMUL = 6
 MODEXP = 7
 
+# Macro to do elliptic curve multiplication; ecmul([x, y], n) -> [x', y']
 macro ecmul($p, $n):
     with $x = array(2):
         ~call(msg.gas - 20000, ECMUL, 0, [$p[0], $p[1], $n], 96, $x, 64)
         $x
 
+# Macro to do elliptic curve addition; ecadd([x1, y1], [x2, y2]) -> [x', y']
 macro ecadd($a, $b):
     with $x = array(2):
         ~call(msg.gas - 20000, ECADD, 0, [$a[0], $a[1], $b[0], $b[1]], 128, $x, 64)
         $x
 
+# Macro to do elliptic curve subtraction; ecadd([x1, y1], [x2, y2]) -> [x', y']
 macro ecsubtract($a, $b):
     with $x = array(2):
         ~call(msg.gas - 20000, ECADD, 0, [$a[0], $a[1], $b[0], P - $b[1]], 128, $x, 64)
         $x
-
-macro bit($data, $bit):
-    (mload($data - 31) / 2**($bit % 8)) % 2
 
 event ValueLogEvent(i:uint256)
 
@@ -47,6 +47,7 @@ event Gas(gas:uint256:indexed)
 event BadSignature()
 event HashResult(x:uint256:indexed, y:uint256:indexed)
 
+# Hash a public key to get a public key
 def hash_pubkey_to_pubkey(pub:arr):
     with x = sha3(pub:arr):
         while 1:
@@ -59,25 +60,7 @@ def hash_pubkey_to_pubkey(pub:arr):
                 return([x, y]:arr)
             x = mod(x + 1, P)
 
-macro hash_pubkey_to_pubkey($pub):
-    with x = sha3($pub:arr):
-        with xcubed = mulmod(mulmod(x, x, P), x, P):
-            $beta = 0
-            ~call(msg.gas - 20000, MODEXP, 0, [addmod(xcubed, 7, P), div(P + 1, 4), P], 96, ref($beta), 32)
-            with y = $beta * mod($beta, 2) + (P - $beta) * (1 - mod($beta, 2)):
-                if addmod(xcubed, 7, P) == mulmod(y, y, P):
-                    [x, y]
-                else:
-                    x = P - x
-                    xcubed = mulmod(mulmod(x, x, P), x, P)
-                    ~call(msg.gas - 20000, MODEXP, 0, [addmod(xcubed, 7, P), div(P + 1, 4), P], 96, ref($beta), 32)
-                    y = $beta * mod($beta, 2) + (P - $beta) * (1 - mod($beta, 2))
-                    if addmod(xcubed, 7, P) == mulmod(y, y, P):
-                        [x, y]
-                    else:
-                        ~invalid()
-                        [0]
-
+# Get the list of public keys for a given bucket ID
 def const getPubs(bucketId:uint256):
     pubs = array(2 * PARTICIPANTS_PER_BUCKET)
     i = 0
@@ -93,6 +76,7 @@ def const getNextIndex():
 def const getSpendsCount():
     return(self.spendsCount)
 
+# Submit ETH into the mixer
 def submit(x:uint256, y:uint256):
     if msg.value != DENOMINATION:
         send(msg.sender, msg.value)
@@ -107,9 +91,10 @@ event EValues(left:uint256:indexed, right:uint256:indexed)
 event Pub(x:uint256:indexed, y:uint256:indexed)
 event Sub(x:uint256:indexed, y:uint256:indexed)
 
+# Withdraw ETH from the mixer by submitting a ring signature
 def withdraw(to:address, x0:uint256, s:uint256[], Ix:uint256, Iy:uint256, bucketId:uint256):
     # Ensure that the bucket is full
-    assert self.participantsCount >= (bucketId + 1) * 5
+    assert self.participantsCount >= (bucketId + 1) * PARTICIPANTS_PER_BUCKET
     # Ensure that this user has not yet withdrawn
     assert not self.IValuesConsumed[sha3([Ix, Iy]:arr)]
     # Number of pubkeys
@@ -146,13 +131,6 @@ def withdraw(to:address, x0:uint256, s:uint256[], Ix:uint256, Iy:uint256, bucket
         # log(type=Pub, pub2[0], pub2[1])
         left = sha3([to, pub1[0], pub1[1], pub2[0], pub2[1]]:arr)
         right = sha3(left)
-        # FOR DEBUGGING
-        # if i >= 1:
-        #     log(type=PubkeyLogEvent, pub_xi, pub_yi)
-        #     log(type=PubkeyLogEvent, pub1[0], pub1[1])
-        #     log(type=PubkeyLogEvent, pub2[0], pub2[1])
-        #     log(type=ValueLogEvent, left)
-        #     log(type=ValueLogEvent, right)
         e[i] = [left, right]
         # log(type=EValues, left, right)
         # log(type=Gas, msg.gas)
@@ -160,9 +138,9 @@ def withdraw(to:address, x0:uint256, s:uint256[], Ix:uint256, Iy:uint256, bucket
     log(type=Progress, 6)
     # Check that the ring is consistent
     if e[n][0] == e[0][0] and e[n][1] == e[0][1]:
-            # Check that this I value has not yet been used:
-            # log(type=Progress, 7)
+            # Check that this I value has not yet been used
             self.IValuesConsumed[sha3([Ix, Iy]:arr)] = 1
+            # Send, taking a 1% fee to pay for gas
             send(to, DENOMINATION * 99 / 100)
             log(type=Withdrawal, to, bucketId)
             self.spendsCount += 1

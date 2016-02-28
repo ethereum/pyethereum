@@ -20,7 +20,6 @@ import random
 import math
 import copy
 
-FINALITY_LOW, FINALITY_HIGH = 0.00001, 0.99999
 MAX_RECALC = 9
 MAX_LONG_RECALC = 14
 
@@ -37,6 +36,7 @@ NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
 
+# Cached RLP decoding
 rlp_dict = {}
 
 def rlp_decode(*args):
@@ -45,6 +45,10 @@ def rlp_decode(*args):
         rlp_dict[cache_key] = rlp.decode(*args)
     return copy.deepcopy(rlp_dict[cache_key])
 
+# Takes as an argument a list of values and their associated weights
+# and a fraction returns, returns the value such that the desired
+# fraction of other values in the list, weighted by the given weights,
+# is less than that value
 def weighted_percentile(values, weights, frac):
     zipvals = sorted(zip(values, weights))
     target = sum(weights) * frac
@@ -88,16 +92,18 @@ def encode_prob(p):
         while q >= 2:
             q /= 2.0
             exp += 1
-        mantissa = int(q * 7 - 6.9999)
-        v = chr(max(0, min(255, exp * 7 + 128 + mantissa)))
+        mantissa = int(q * 4 - 3.9999)
+        v = chr(max(0, min(255, exp * 4 + 128 + mantissa)))
         return v
 
 
 # Convert probability from one-byte encoded form to a number
 def decode_prob(c):
     c = ord(c)
-    q = 2.0**((c - 128) // 7) * (1 + 0.142857142 * ((c - 128) % 7))
+    q = 2.0**((c - 128) // 4) * (1 + 0.25 * ((c - 128) % 4))
     return q / (1.0 + q)
+
+FINALITY_LOW, FINALITY_HIGH = decode_prob('\x0c'), decode_prob('\xf4')
 
 # Be VERY careful about updating the above algorithms; if the assert below
 # fails (ie. encode and decode are not inverses) then bet serialization will
@@ -256,8 +262,9 @@ def mkid():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
-    def __init__(self, genesis_state, key, clockwrong=False, bravery=0.84,
-                 crazy_bet=False, double_block_suicide=2**200, double_bet_suicide=2**200, min_gas_price=10**9):
+    def __init__(self, genesis_state, key, clockwrong=False, bravery=0.915,
+                 crazy_bet=False, double_block_suicide=2**200,
+                 double_bet_suicide=2**200, min_gas_price=10**9):
         log("Initializing betting strategy", True)
         # An ID for purposes of the network simulator
         self.id = mkid()
@@ -278,6 +285,8 @@ class defaultBetStrategy():
         self.bets = {}
         # Deposit sizes of all validators
         self.deposit_sizes = {}
+        # Which counters have been processed
+        self.counters = {}
         # A dict containing the highest-sequence-number bet processed for
         # each validator
         self.highest_bet_processed = {}
@@ -350,8 +359,7 @@ class defaultBetStrategy():
         self.min_gas_price = min_gas_price
         log("My address: %s" % self.addr.encode('hex'), True)
         # Iterate over all validators in the genesis block...
-        for j in range(call_casper(genesis_state, 'getNextUserPos', [])):
-            i = call_casper(genesis_state, 'getUserAtPosition', [j])
+        for i in range(call_casper(genesis_state, 'getNextUserIndex', [])):
             # If they are currently active...
             exists = (call_casper(genesis_state, 'getUserStatus', [i]) == 2)
             if exists:
@@ -365,6 +373,7 @@ class defaultBetStrategy():
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, 0)
                 self.bets[i] = {}
                 self.highest_bet_processed[i] = -1
+                self.counters[i] = 1
                 if valaddr == self.addr.encode('hex'):
                     self.index = i
         log('Found %d validators in genesis' % len(self.opinions), True)
@@ -379,8 +388,6 @@ class defaultBetStrategy():
         self.probs = []
         # Your finalized block hashes
         self.finalized_hashes = []
-        # Your predicted block hashes
-        self.predicted_hashes = []
         # Your state roots
         self.stateroots = []
         # Recently discovered blocks
@@ -423,7 +430,6 @@ class defaultBetStrategy():
             self.blocks.append(None)
             self.stateroots.append(None)
             self.finalized_hashes.append(None)
-            self.predicted_hashes.append(None)
             self.probs.append(0.5)
         # If we are not sufficiently synced, try to sync previous blocks first
         notsynced = False
@@ -485,10 +491,11 @@ class defaultBetStrategy():
     # Try to update the set of validators
     def update_validator_set(self, check_state):
         log('Updating the validator set', True)
-        for j in range(call_casper(check_state, 'getNextUserPos', [])):
-            i = call_casper(check_state, 'getUserAtPosition', [j])
+        for i in range(call_casper(check_state, 'getNextUserIndex', [])):
+            ctr = call_casper(check_state, 'getUserCounter', [i])
             # Ooh, we found a new validator
-            if i not in self.opinions:
+            if ctr not in self.counters:
+                self.counters[ctr] = 1
                 ih = call_casper(check_state, 'getUserInductionHeight', [i])
                 valaddr = call_casper(check_state, 'getUserAddress', [i])
                 valcode = call_casper(check_state, 'getUserValidationCode', [i])
@@ -496,8 +503,6 @@ class defaultBetStrategy():
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, ih)
                 log('Validator inducted at index %d with address %s' % (i, valaddr), True)
                 log('Validator address: %s, my address: %s' % (valaddr, self.addr.encode('hex')), True)
-                assert i not in self.bets
-                assert i not in self.highest_bet_processed
                 self.bets[i] = {}
                 self.highest_bet_processed[i] = -1
                 # Is the new validator me?
@@ -623,7 +628,7 @@ class defaultBetStrategy():
                 self.last_asked_for_block[blk_hash] = time.time()
         # Cap votes at 0.7 unless we know for sure that we have a block
         res = min(o, 1 if have_block else 0.7)
-        if self.crazy_bet and FINALITY_LOW < res < FINALITY_HIGH:
+        if self.crazy_bet and FINALITY_LOW <= res <= FINALITY_HIGH:
             res = 1 / (1 + FINALITY_LOW ** (random.random() * 1.8 - 0.9))
         log('result prob: %.5f %s'% (res, ('have block' if blk_hash in self.objects else 'no block')), self.index == 3)
         # Return the resulting vote
@@ -647,22 +652,19 @@ class defaultBetStrategy():
         tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
         v = tx_state_transition(genesis, tx)
 
+    # Compute as many state roots as possible
     def recalc_state_roots(self):
         recalc_limit = MAX_RECALC if self.calc_state_roots_from > len(self.blocks) - 20 else MAX_LONG_RECALC
         frm = self.calc_state_roots_from
         print 'recalc limit: ', recalc_limit, 'want to recalculate: ', len(self.blocks) - frm
         run_state = State(self.stateroots[frm-1] if frm else self.genesis_state_root, self.db)
         for h in range(frm, len(self.blocks))[:recalc_limit]:
-            # from ethereum.slogging import LogRecorder, configure_logging, set_level
-            # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace'
-            # configure_logging(config_string=config_string)
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
             assert prevblknum == h
             if self.probs[h] is None:
                 prob = self.default_vote(h, self.blocks[h])
             else:
                 prob = self.probs[h]
-            self.predicted_hashes[h] = self.blocks[h].hash if prob >= 0.5 and self.blocks[h] else '\x00' * 32
             block_state_transition(run_state, self.blocks[h] if prob >= 0.5 else None)
             self.stateroots[h] = run_state.root
             blknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
@@ -675,8 +677,6 @@ class defaultBetStrategy():
         # Check integrity
         for i in range(self.calc_state_roots_from):
             assert self.stateroots[i] not in ('\x00' * 32, None)
-        for i in range(min(self.calc_state_roots_from, self.my_max_finalized_height)):
-            assert self.finalized_hashes[i] == self.predicted_hashes[i]
         
     # Construct a bet
     def mkbet(self):
