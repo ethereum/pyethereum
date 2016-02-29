@@ -26,7 +26,7 @@ if self.balance < ~mload(0):
 ~call(2000, %d, ~mload(0), 0, 0, 0, 32)
 # Do the main call; self.storage[1] = main running code
 ~breakpoint()
-~delegatecall(msg.gas - 50000, self.storage[1], 64, ~calldatasize(), 64, 10000)
+x = ~delegatecall(msg.gas - 50000, self.storage[1], 64, ~calldatasize(), 64, 10000)
 # Call the deposit contract to refund
 ~mstore(0, ~mload(32) * msg.gas)
 ~call(2000, %d, ~mload(0), 0, 32, 0, 32)

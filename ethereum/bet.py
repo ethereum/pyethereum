@@ -19,6 +19,7 @@ import sys
 import random
 import math
 import copy
+from utils import DEBUG
 
 MAX_RECALC = 9
 MAX_LONG_RECALC = 14
@@ -262,7 +263,7 @@ def mkid():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
-    def __init__(self, genesis_state, key, clockwrong=False, bravery=0.915,
+    def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
                  double_bet_suicide=2**200, min_gas_price=10**9):
         log("Initializing betting strategy", True)
@@ -439,10 +440,10 @@ class defaultBetStrategy():
             notsynced = True
         if notsynced:
             sys.stderr.write('Not sufficiently synced to receive this block (%d)\n' % block.number)
-            if self.last_time_sent_getblocks < time.time() - 5:
+            if self.last_time_sent_getblocks < self.now - 5:
                 log('asking for blocks', True)
                 self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [encode_int(self.my_max_finalized_height+1)])))
-                self.last_time_sent_getblocks = time.time()
+                self.last_time_sent_getblocks = self.now
             return
         # If the block is invalid, return
         check_state = State(self.stateroots[block.number - ENTER_EXIT_DELAY + 1]
@@ -470,9 +471,9 @@ class defaultBetStrategy():
             self.add_transaction(new_tx, track=True)
         # Store the block as having been received
         self.objects[block.hash] = block
-        self.time_received[block.hash] = time.time()
+        self.time_received[block.hash] = self.now
         self.recently_discovered_blocks.append(block.number)
-        time_delay = time.time() - (self.genesis_time + BLKTIME * block.number)
+        time_delay = self.now - (self.genesis_time + BLKTIME * block.number)
         log("Received good block at height %d with delay %.2f: %s" % (block.number, time_delay, block.hash.encode('hex')[:16]), self.index == 3)
         # Add transactions to the unconfirmed transaction index
         for i, g in enumerate(block.transaction_groups):
@@ -520,7 +521,7 @@ class defaultBetStrategy():
             return
         # Record when the bet came and that it came
         self.objects[bet.hash] = bet
-        self.time_received[bet.hash] = time.time()
+        self.time_received[bet.hash] = self.now
         # Re-broadcast it
         self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BET, [bet.serialize()])))
         # Do we have a duplicate? If so, slash it
@@ -550,9 +551,9 @@ class defaultBetStrategy():
         assert self.opinions[bet.index].seq == self.highest_bet_processed[bet.index] + 1
         # If we did not process any bets after receiving a bet, that
         # implies that we are missing some bets. Ask for them.
-        if not proc and self.last_asked_for_bets.get(bet.index, 0) < time.time() + 10:
+        if not proc and self.last_asked_for_bets.get(bet.index, 0) < self.now + 10:
             self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [bet.index, self.highest_bet_processed[bet.index] + 1]))))
-            self.last_asked_for_bets[bet.index] = time.time()
+            self.last_asked_for_bets[bet.index] = self.now
 
     # Make a default vote on a block based on when you received it
     def default_vote(self, blk_number, blk_hash):
@@ -560,13 +561,13 @@ class defaultBetStrategy():
         received_time = self.time_received.get(blk_hash, None)
         # If we already received a block...
         if received_time:
-            time_delta = abs(received_time * 0.96 + time.time() * 0.04 - scheduled_time)
+            time_delta = abs(received_time * 0.96 + self.now * 0.04 - scheduled_time)
             prob = 1 if time_delta < BLKTIME * 2 else 3.0 / (3.0 + time_delta / BLKTIME)
             log('Voting, block received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 3)
             return 0.7 if random.random() < prob else 0.3
         # If we have not yet received a block...
         else:
-            time_delta = time.time() - scheduled_time
+            time_delta = self.now - scheduled_time
             prob = 1 if time_delta < BLKTIME * 2 else 3.0 / (3.0 + time_delta / BLKTIME)
             log('Voting, block not received. Time delta: %.2f, prob: %.2f' % (time_delta, prob), self.index == 3)
             return 0.5 if random.random() < prob else 0.3
@@ -621,11 +622,11 @@ class defaultBetStrategy():
         # If the probability we get is above 0.8 but we do not have the
         # block, then ask for it explicitly
         if o > 0.8 and not have_block and blk_hash not in (None, '\x00' * 32):
-            if blk_hash not in self.last_asked_for_block or self.last_asked_for_block[blk_hash] < time.time() + 12:
+            if blk_hash not in self.last_asked_for_block or self.last_asked_for_block[blk_hash] < self.now + 12:
                 log('Suspiciously missing a block: %d %s. Asking for it explicitly.' %
                     (blk_number, blk_hash[:8].encode('hex')), True)
                 self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCK, [blk_hash])))
-                self.last_asked_for_block[blk_hash] = time.time()
+                self.last_asked_for_block[blk_number] = self.now
         # Cap votes at 0.7 unless we know for sure that we have a block
         res = min(o, 1 if have_block else 0.7)
         if self.crazy_bet and FINALITY_LOW <= res <= FINALITY_HIGH:
@@ -677,13 +678,13 @@ class defaultBetStrategy():
         # Check integrity
         for i in range(self.calc_state_roots_from):
             assert self.stateroots[i] not in ('\x00' * 32, None)
-        
+
     # Construct a bet
     def mkbet(self):
         # Bet at most once every two seconds to save on computational costs
-        if time.time() < self.last_bet_made + 2:
+        if self.now < self.last_bet_made + 2:
             return
-        self.last_bet_made = time.time()
+        self.last_bet_made = self.now
         # Height at which to start signing
         sign_from = max(0, self.my_max_finalized_height)
         # Keep track of the lowest state root that we should change
@@ -785,7 +786,7 @@ class defaultBetStrategy():
             self.receive_block(blk)
         elif obj.typ == NM_BET:
             bet = Bet.deserialize(obj.args[0])
-            self.receive_bet(bet)           
+            self.receive_bet(bet)
         elif obj.typ == NM_BET_REQUEST:
             index = big_endian_to_int(obj.args[0])
             seq = big_endian_to_int(obj.args[1])
@@ -868,10 +869,10 @@ class defaultBetStrategy():
             return True
     
     def add_transaction(self, tx, track=False):
-        if tx.hash not in self.objects or self.time_received.get(tx.hash, 0) < time.time() - 15:
+        if tx.hash not in self.objects or self.time_received.get(tx.hash, 0) < self.now - 15:
             log('Received transaction: %s' % tx.hash.encode('hex'), self.index == 3)
             self.objects[tx.hash] = tx
-            self.time_received[tx.hash] = time.time()
+            self.time_received[tx.hash] = self.now
             self.txpool[tx.hash] = tx
             if track:
                 self.tracked_tx_hashes.append(tx.hash)
@@ -926,7 +927,7 @@ class defaultBetStrategy():
                 bet_height += 1
             if o.seq < latest_bet:
                 self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_BET_REQUEST, map(encode_int, [i, o.seq + 1]))))
-                self.last_asked_for_bets[i] = time.time()
+                self.last_asked_for_bets[i] = self.now
         # Process the unconfirmed index for the transaction. Note that a
         # transaction could theoretically get included in the chain
         # multiple times even within the same block, though if the account
@@ -969,6 +970,11 @@ class defaultBetStrategy():
                         if self.tx_exceptions[h] >= 10:
                             if h in self.txpool:
                                 del self.txpool[h]
+                        # If the transaction is no longer appropriate for inclusion, remove it
+                        # if not self.should_i_include_transaction(tx):
+                            # log('Transaction no longer appropriate for inclusion', True)
+                        #     if h in self.txpool:
+                        #         del self.txpool[h]
                     # If the transaction failed (eg. due to OOG from block gaslimit),
                     # remove it from the unconfirmed index, but not the expool, so
                     # that we can try to add it again
@@ -1004,22 +1010,33 @@ class defaultBetStrategy():
         self.last_block_produced = self.next_block_to_produce
         self.add_proposers()
         # Log it
-        time_delay = time.time() - (self.genesis_time + BLKTIME * b.number)
+        time_delay = self.now - (self.genesis_time + BLKTIME * b.number)
         log('Node %d making block: %d %s with time delay %.2f' % (self.index, b.number, b.hash.encode('hex')[:16], time_delay), True)
         return b
 
     # Run every tick
     def tick(self):
-        mytime = time.time()
+        # DEBUG('bet tick called', at=self.now, id=self.id)
+        mytime = self.now
         # If (i) we should be making blocks, and (ii) the time has come to
         # produce a block, then produce a block
         if self.index >= 0 and self.next_block_to_produce is not None:
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
+            # DEBUG('index>0', at=self.now, target_time=target_time )
             if mytime >= target_time + self.next_submission_delay:
+                # DEBUG('recalc', at=self.now, id=self.id)
                 self.recalc_state_roots()
                 self.make_block()
                 self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         elif self.next_block_to_produce is None:
+            # DEBUG('add_prop', at=self.now, id=self.id)
             self.add_proposers()
-        if self.last_bet_made < time.time() - BLKTIME * VALIDATOR_ROUNDS * 1.5:
+        if self.last_bet_made < self.now - BLKTIME * VALIDATOR_ROUNDS * 1.5:
+            # DEBUG('mk bet', at=self.now, id=self.id)
             self.mkbet()
+
+
+    @property
+    def now(self):
+        return self.network.now
+

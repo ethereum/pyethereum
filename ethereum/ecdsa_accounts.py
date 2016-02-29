@@ -35,18 +35,18 @@ cc = """
 ~call(5000, 1, 0, 0, 128, 0, 32)
 # Check sender correctness; exception if not
 if ~mload(0) != self.storage[2]:
-    ~log1(0, 0, 51)
+    # ~log1(0, 0, 51)
     ~invalid()
 # Check value sufficiency
 if self.balance < ~calldataload(192) + ~calldataload(0) * ~txexecgas():
-    ~log1(0, 0, 52)
+    # ~log1(0, 0, 52)
     ~invalid()
 # Sequence number operations
 with minusone = ~sub(0, 1):
     with curseq = self.storage[minusone]:
         # Check sequence number correctness, exception if not
         if ~calldataload(128) != curseq:
-            ~log1(0, 0, 53)
+            # ~log3(0, 0, 53, ~calldataload(128), curseq)
             ~invalid()
         # Increment sequence number
         self.storage[minusone] = curseq + 1

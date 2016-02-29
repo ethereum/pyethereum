@@ -170,25 +170,10 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     basicinfo = array(10)
     ~sloadbytes(ref(self.users[index].basicinfo), basicinfo, 320)
     # log(type=SubmitBet, basicinfo[SEQ_POS], basicinfo[PREVHASH_POS], index, stateroot_prob_from)
-    # Check validity
-    if seqnum != basicinfo[SEQ_POS]:
-        # If someone submits a higher-seq bet, register that it has been
-        # submitted; we will later force the user to supply all bets up
-        # to and including this seq in order to withdraw
-        self.users[index].max_seq = max(self.users[index].max_seq, seqnum)
-        return(0:bool)
-    assert prevhash == basicinfo[PREVHASH_POS]
-    assert max_height <= block.number
-    assert self.users[index].withdrawal_height > block.number
-    assert len(probs) >= len(blockhashes)
-    assert len(probs) >= len(stateroots)
     # Compute the signature hash
     _calldata = string(~calldatasize())
     ~calldatacopy(_calldata, 0, ~calldatasize())
     signing_hash = ~sha3(_calldata, ~calldatasize() - 32 - ceil32(len(sig)))
-    # Set seq and prevhash
-    basicinfo[PREVHASH_POS] = ~sha3(_calldata, ~calldatasize())
-    basicinfo[SEQ_POS] = seqnum + 1
     # Check the sig against the user validation code
     user_validation_code = string(~ssize(ref(self.users[index].validationCode)))
     ~sloadbytes(ref(self.users[index].validationCode), user_validation_code, len(user_validation_code))
@@ -198,6 +183,21 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
         ~callstatic(msg.gas - 20000, user_validation_code, len(user_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
         sig[-1] = L
     assert sig_verified == 1
+    # Check sequence number
+    if seqnum != basicinfo[SEQ_POS] or prevhash != basicinfo[PREVHASH_POS]:
+        # If someone submits a higher-seq bet, register that it has been
+        # submitted; we will later force the user to supply all bets up
+        # to and including this seq in order to withdraw
+        self.users[index].max_seq = max(self.users[index].max_seq, seqnum)
+        return(0:bool)
+    # Check basic validity
+    assert max_height <= block.number
+    assert self.users[index].withdrawal_height > block.number
+    assert len(probs) >= len(blockhashes)
+    assert len(probs) >= len(stateroots)
+    # Set seq and prevhash
+    basicinfo[PREVHASH_POS] = ~sha3(_calldata, ~calldatasize())
+    basicinfo[SEQ_POS] = seqnum + 1
     # log(type=ProcessingBet, index, seqnum, 1, 2, 3, 4)
     # Process profits from last bet
     userBalance = basicinfo[DEPOSIT_SIZE_POS]
@@ -213,7 +213,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                                 profit = profit * (INCENTIVIZATION_EMA_COEFF - 1) / INCENTIVIZATION_EMA_COEFF
                                 i += 1
                         userBalance = max(0, userBalance + userBalance * totProfit / SCORING_REWARD_DIVISOR - userBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9)
-                        log(type=Reward, i, profit, blockdiff, userBalance * totProfit / SCORING_REWARD_DIVISOR, userBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9, userBalance)
+                        # log(type=Reward, i, profit, blockdiff, userBalance * totProfit / SCORING_REWARD_DIVISOR, userBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9, userBalance)
                         if userBalance > 3000 * 10**18:
                             log(type=ExcessRewardEvent, i, profit, blockdiff, totProfit, userBalance)
         # Update the maximum height of the previous bet, profits and the user deposit size
@@ -262,15 +262,15 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     # Update probabilities; paste the probs into the self.users[index].probs
     # array at the correct positions, assuming the probs array stores probs
     # in groups of 32
-    with h = max_height + 1:
-        with i = 0:
-            while i < len(probs):
-                with top = (h % 32) or 32:
-                    with bottom = max(top - len(probs) + i, 0):
-                        x = (self.users[index].probs[mod((h - 1) / 32, WRAPLENGTH)] & maskexclude(top, bottom)) + (~mload(probs + i - 32 + top) & maskinclude(top, bottom))
-                        self.users[index].probs[mod((h - 1) / 32, WRAPLENGTH)] = x
-                        h -= top
-                        i += top
+    # with h = max_height + 1:
+    #     with i = 0:
+    #         while i < len(probs):
+    #             with top = (h % 32) or 32:
+    #                 with bottom = max(top - len(probs) + i, 0):
+    #                     x = (self.users[index].probs[mod((h - 1) / 32, WRAPLENGTH)] & maskexclude(top, bottom)) + (~mload(probs + i - 32 + top) & maskinclude(top, bottom))
+    #                     self.users[index].probs[mod((h - 1) / 32, WRAPLENGTH)] = x
+    #                     h -= top
+    #                     i += top
 
     minChanged = max_height - max(max(len(blockhashes), len(stateroots)), len(probs)) + 1
     # Incentivization

@@ -359,7 +359,7 @@ def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listener
     state.set_storage(_EXSTATE, GAS_REMAINING, gas_remaining - tx.exec_gas + msg_gas_remained)
     # Places a log in storage
     logs = state.get_storage(_LOG, txindex)
-    state.set_storage(_LOG, txindex, rlp.insert(logs, 0, encode_int(2)))
+    state.set_storage(_LOG, txindex, rlp.insert(logs, 0, encode_int(2 if result else 1)))
     # Increments the txindex
     state.set_storage(_EXSTATE, TXINDEX, txindex + 1)
     return data

@@ -56,7 +56,7 @@ def get_arg(flag, typ, default):
     else:
         return default
 
-MAX_NODES = get_arg('--maxnodes', int, 10)
+MAX_NODES = get_arg('--maxnodes', int, 12)
 assert MAX_NODES >= 5, "Need at least 5 max nodes"
 CLOCKWRONG = get_arg('--clockwrong', int, 0)
 CLOCKWRONG_CUMUL = CLOCKWRONG + 1
@@ -76,7 +76,7 @@ print 'Running with %d maximum nodes: %d with wonky clocks, %d brave, %d crazy-b
 def mk_bet_strategy(state, index, key):
     return defaultBetStrategy(state.clone(), key,
                               clockwrong=(1 <= index < CLOCKWRONG_CUMUL),
-                              bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.915),
+                              bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.92),
                               crazy_bet=(BRAVE_CUMUL <= index < CRAZYBET_CUMUL),
                               double_block_suicide=(5 if CRAZYBET_CUMUL <= index < DBL_BLK_SUICIDE_CUMUL else 2**80),
                               double_bet_suicide=(1 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
@@ -176,7 +176,8 @@ for i, k in enumerate(secondkeys):
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
-genesis.set_storage(GENESIS_TIME, encode_int32(0), int(time.time() + 5))
+genesis.set_storage(GENESIS_TIME, encode_int32(0), int(network.NetworkSimulator.start_time + 5))
+print 'genesis time', int(network.NetworkSimulator.start_time + 5), '\n' * 10
 # Create betting strategy objects for every validator
 bets = [mk_bet_strategy(genesis, i, k) for i, k in enumerate(keys)]
 # Minimum max finalized height
@@ -206,7 +207,7 @@ def check_correctness(bets):
     # Probabilities
     # print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
     # Data about bets from each validator according to every other validator
-    print 'Now: %.2f' % time.time()
+    print 'Now: %.2f' % n.now
     print 'According to each validator...'
     for bet in bets:
         print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f.' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
@@ -286,8 +287,8 @@ def check_correctness(bets):
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n.generate_peers(5)
-for bet in bets:
-    bet.network = n
+for _bet in bets:
+    _bet.network = n
 
 # Submitting ring sig contract as a transaction
 print 'Submitting ring sig contract\n\n'
@@ -310,7 +311,7 @@ print 'Ringsig account address', ringsig_account_addr.encode('hex')
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
-    if min_mfh >= 20:
+    if min_mfh >= 40:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -340,7 +341,7 @@ for i, k in enumerate(secondkeys):
     bets[0].add_transaction(tx2)
     check_txs.extend([tx, tx2])
 
-THRESHOLD1 = 75 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
+THRESHOLD1 = 100 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
 
 orig_ring_pubs = []
@@ -430,7 +431,7 @@ while 1:
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 150 + BLK_DISTANCE + ENTER_EXIT_DELAY:
+    if min_mfh > 180 + BLK_DISTANCE + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
     # Exit early if the withdrawal step already completed
