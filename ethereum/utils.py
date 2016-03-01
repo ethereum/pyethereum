@@ -9,6 +9,7 @@ import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
+import copy
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
@@ -414,6 +415,15 @@ int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
 
+# Cached RLP decoding
+rlp_dict = {}
+
+def rlp_decode(*args):
+    cache_key = str(args)
+    if cache_key not in rlp_dict:
+        rlp_dict[cache_key] = rlp.decode(*args)
+    return copy.deepcopy(rlp_dict[cache_key])
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -427,12 +437,21 @@ class bcolors:
 
 
 def DEBUG(msg, *args, **kwargs):
-    from ethereum import slogging
-
-    slogging.DEBUG(msg, *args, **kwargs)
+    o = msg + '  '
+    for k, v in kwargs.items():
+        o += '%s=%s, ' % (str(k), str(v))
+    print o[:-2]
+    # from ethereum import slogging
+    # slogging.DEBUG(msg, *args, **kwargs)
 
 
 # Determines the contract address for a piece of code and a given creator
 # address (contracts created from outside get creator '\x00' * 20)
 def mk_contract_address(sender='\x00'*ADDR_BASE_BYTES, left_bound=0, code=''):
     return shardify(sha3(sender + code)[32-ADDR_BASE_BYTES:], left_bound)
+
+# Helper for making an ID
+next_id = [4000]
+def mkid():
+    next_id[0] += 1
+    return next_id[0] - 1

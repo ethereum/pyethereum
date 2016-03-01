@@ -10,8 +10,8 @@ from utils import privtoaddr, normalize_address, zpad, encode_int, \
 import ecdsa_accounts
 import abi
 import sys
-import bet
-from bet import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
+import guardian
+from guardian import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
 from bet_incentivizer import bet_incentivizer_code, bet_incentivizer_ct
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
@@ -190,14 +190,12 @@ check_txs = []
 def check_correctness(bets):
     global min_mfh
     print '#'*80
-    # List of peers of each node
-    print 'Peers: %r' % {bet.id: map(lambda x: x.id, n.peers[bet.id]) for bet in bets}
     # Max finalized heights for each bettor strategy
-    mfhs = [bet.my_max_finalized_height for bet in bets if not bet.byzantine]
+    mfhs = [bet.max_finalized_height for bet in bets if not bet.byzantine]
     mchs = [bet.calc_state_roots_from for bet in bets if not bet.byzantine]
-    mfchs = [min(bet.my_max_finalized_height, bet.calc_state_roots_from) for bet in bets if not bet.byzantine]
+    mfchs = [min(bet.max_finalized_height, bet.calc_state_roots_from) for bet in bets if not bet.byzantine]
     new_min_mfh = min(mfchs)
-    print 'Max finalized heights: %r' % [bet.my_max_finalized_height for bet in bets]
+    print 'Max finalized heights: %r' % [bet.max_finalized_height for bet in bets]
     print 'Max calculated stateroots: %r' % [bet.calc_state_roots_from for bet in bets]
     print 'Max height received: %r' % [len(bet.blocks) for bet in bets]
     # Induction heights of each validator
@@ -243,7 +241,7 @@ def check_correctness(bets):
         block_state_transition(state, block, listeners=[my_listen])
         if state.root != bets[0].stateroots[i] and i != max(min_mfh, new_min_mfh):
             print bets[0].calc_state_roots_from, bets[j].calc_state_roots_from
-            print bets[0].my_max_finalized_height, bets[j].my_max_finalized_height
+            print bets[0].max_finalized_height, bets[j].max_finalized_height
             print 'my state', state.to_dict()
             print 'given state', State(bets[0].stateroots[i], bets[0].db).to_dict()
             import rlp
@@ -282,7 +280,6 @@ def check_correctness(bets):
     print 'Transaction status in unconfirmed_txindex: %r' % [bets[0].unconfirmed_txindex.get(tx.hash, None) for tx in check_txs]
     print 'Transaction status in finalized_txindex: %r' % [bets[0].finalized_txindex.get(tx.hash, None) for tx in check_txs]
     print 'Transaction exceptions: %r' % [bets[0].tx_exceptions.get(tx.hash, 0) for tx in check_txs]
-    print 'Tracking transactions: %r' % [(h[:8].encode('hex'), bets[0].get_transaction_status(h)) for h in bets[0].tracked_tx_hashes]
 
 # Simulate a network
 n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
