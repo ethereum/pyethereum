@@ -1,4 +1,4 @@
 [submodule "fixtures"]
 	path = fixtures
-	url = git://github.com/ethereum/tests.git
+	url = https://github.com/RomanZacharia/tests.git 
 	branch = develop
