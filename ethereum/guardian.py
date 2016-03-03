@@ -10,7 +10,7 @@ from serenity_blocks import tx_state_transition, BLKNUMBER, \
     get_code
 from serenity_transactions import Transaction
 from ecdsa_accounts import sign_block, privtoaddr, sign_bet, mk_transaction
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, BET_INCENTIVIZER, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT, CONST_CALL_SENDER
+from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT, CONST_CALL_SENDER
 from mandatory_account_code import mandatory_account_evm
 from default_betting_strategy import bet_at_height
 from db import OverlayDB
@@ -80,7 +80,7 @@ def decode_prob(c):
     q = 2.0**((c - 128) // 4) * (1 + 0.25 * ((c - 128) % 4))
     return q / (1.0 + q)
 
-FINALITY_LOW, FINALITY_HIGH = decode_prob('\x0c'), decode_prob('\xf4')
+FINALITY_LOW, FINALITY_HIGH = decode_prob('\x00'), decode_prob('\xff')
 
 # Be VERY careful about updating the above algorithms; if the assert below
 # fails (ie. encode and decode are not inverses) then bet serialization will
@@ -91,15 +91,15 @@ assert map(encode_prob, map(decode_prob, map(chr, range(256)))) == map(chr, rang
 invhash = {}
 
 
-# An object that stores a bet made by a validator
+# An object that stores a bet made by a guardian
 class Bet():
-    def __init__(self, index, max_height, probs, blockhashes, stateroots, stateroot_prob_from, prevhash, seq, sig):
+    def __init__(self, index, max_height, probs, blockhashes, stateroots, stateroot_probs, prevhash, seq, sig):
         self.index = index
         self.max_height = max_height
         self.probs = probs
         self.blockhashes = blockhashes
         self.stateroots = stateroots
-        self.stateroot_prob_from = stateroot_prob_from
+        self.stateroot_probs = stateroot_probs
         self.prevhash = prevhash
         self.seq = seq
         self.sig = sig
@@ -110,7 +110,7 @@ class Bet():
     def serialize(self):
         o = casper_ct.encode('submitBet',
             [self.index, self.max_height, ''.join(map(encode_prob, self.probs)),
-             self.blockhashes, self.stateroots, encode_prob(self.stateroot_prob_from),
+             self.blockhashes, self.stateroots, ''.join(map(encode_prob, self.stateroot_probs)),
              self.prevhash, self.seq, self.sig]
         )
         self._hash = sha3(o)
@@ -122,7 +122,7 @@ class Bet():
         params = decode_abi(casper_ct.function_data['submitBet']['encode_types'],
                             betdata[4:])
         o = Bet(params[0], params[1], map(decode_prob, params[2]), params[3],
-                params[4], decode_prob(params[5]), params[6], params[7], params[8])
+                params[4], map(decode_prob, params[5]), params[6], params[7], params[8])
         o._hash = sha3(betdata)
         return o
 
@@ -134,7 +134,7 @@ class Bet():
         return self._hash
 
 
-# An object that stores the "current opinion" of a validator, as computed
+# An object that stores the "current opinion" of a guardian, as computed
 # from their chain of bets
 class Opinion():
     def __init__(self, validation_code, index, prevhash, seq, induction_height):
@@ -143,6 +143,7 @@ class Opinion():
         self.blockhashes = []
         self.stateroots = []
         self.probs = []
+        self.stateroot_probs = []
         self.prevhash = prevhash
         self.seq = seq
         self.induction_height = induction_height
@@ -166,20 +167,23 @@ class Opinion():
         if bet.max_height == 2**256 - 1:
             self.withdrawn = True
             self.withdrawal_height = self.max_height
-            DEBUG("Validator leaving!", index=bet.index)
+            DEBUG("Guardian leaving!", index=bet.index)
             return True
         # Extend probs, blockhashes and state roots arrays as needed
         while len(self.probs) <= bet.max_height:
             self.probs.append(None)
             self.blockhashes.append(None)
             self.stateroots.append(None)
+            self.stateroot_probs.append(None)
         # Update probabilities, blockhashes and stateroots
         for i in range(len(bet.probs)):
             self.probs[bet.max_height - i] = bet.probs[i]
         for i in range(len(bet.blockhashes)):
             self.blockhashes[bet.max_height - i] = bet.blockhashes[i]
-        for i in range(len(bet.stateroots))[::-1]:
+        for i in range(len(bet.stateroots)):
             self.stateroots[bet.max_height - i] = bet.stateroots[i]
+        for i in range(len(bet.stateroot_probs)):
+            self.stateroot_probs[bet.max_height - i] = bet.stateroot_probs[i]
         return True
 
     def get_prob(self, h):
@@ -204,31 +208,31 @@ def call_casper(state, fun, args, gas=1000000):
 # Accepts any state less than ENTER_EXIT_DELAY blocks old
 def is_block_valid(state, block):
     # Determine the desired proposer address and the validation code
-    validator_index = get_validator_index(state, block.number)
-    validator_address = call_casper(state, 'getUserAddress', [validator_index])
-    validator_code = call_casper(state, 'getUserValidationCode', [validator_index])
-    assert isinstance(validator_code, (str, bytes))
+    guardian_index = get_guardian_index(state, block.number)
+    guardian_address = call_casper(state, 'getGuardianAddress', [guardian_index])
+    guardian_code = call_casper(state, 'getGuardianValidationCode', [guardian_index])
+    assert isinstance(guardian_code, (str, bytes))
     # Check block proposer correctness
-    if block.proposer != normalize_address(validator_address):
+    if block.proposer != normalize_address(guardian_address):
         sys.stderr.write('Block proposer check for %d failed: actual %s desired %s\n' %
-                         (block.number, block.proposer.encode('hex'), validator_address))
+                         (block.number, block.proposer.encode('hex'), guardian_address))
         return False
     # Check signature correctness
     message_data = vm.CallData([safe_ord(x) for x in (sha3(encode_int32(block.number) + block.txroot) + block.sig)], 0, 32 + len(block.sig))
     message = vm.Message(NULL_SENDER, '\x00' * 20, 0, 1000000, message_data)
-    _, _, signature_check_result = apply_msg(EmptyVMExt, message, validator_code)
+    _, _, signature_check_result = apply_msg(EmptyVMExt, message, guardian_code)
     if signature_check_result != [0] * 31 + [1]:
         sys.stderr.write('Block signature check failed. Actual result: %s\n' % str(signature_check_result))
         return False
     return True
 
-# Helper method for getting the validator index for a particular block number
+# Helper method for getting the guardian index for a particular block number
 gvi_cache = {}
 
-def get_validator_index(state, blknumber):
+def get_guardian_index(state, blknumber):
     if blknumber not in gvi_cache:
         preseed = state.get_storage(RNGSEEDS, blknumber - ENTER_EXIT_DELAY if blknumber >= ENTER_EXIT_DELAY else 2**256 - 1)
-        gvi_cache[blknumber] = call_casper(state, 'sampleValidator', [preseed, blknumber], gas=3000000)
+        gvi_cache[blknumber] = call_casper(state, 'sampleGuardian', [preseed, blknumber], gas=3000000)
     return gvi_cache[blknumber]
 
 # The default betting strategy; initialize with the genesis block and a privkey
@@ -239,20 +243,20 @@ class defaultBetStrategy():
         DEBUG("Initializing betting strategy")
         # An ID for purposes of the network simulator
         self.id = mkid()
-        # Validator's private key
+        # Guardian's private key
         self.key = key
-        # Validator's address on the network
+        # Guardian's address on the network
         self.addr = privtoaddr(key)
         # The bet strategy's database
         self.db = genesis_state.db
-        # This counter is incremented every time a validator joins;
-        # it allows us to re-process the validator set and refresh
-        # the validators that we have
-        self.validator_signups = call_casper(genesis_state, 'getValidatorSignups', [])
+        # This counter is incremented every time a guardian joins;
+        # it allows us to re-process the guardian set and refresh
+        # the guardians that we have
+        self.guardian_signups = call_casper(genesis_state, 'getGuardianSignups', [])
         # A dict of opinion objects containing the current opinions of all
-        # validators
+        # guardians
         self.opinions = {}
-        # A dict of lists of bets received from validators
+        # A dict of lists of bets received from guardians
         self.bets = {}
         # The probabilities that you are betting
         self.probs = []
@@ -263,7 +267,7 @@ class defaultBetStrategy():
         # Which counters have been processed
         self.counters = {}
         # A dict containing the highest-sequence-number bet processed for
-        # each validator
+        # each guardian
         self.highest_bet_processed = {}
         # The time when you received an object
         self.time_received = {}
@@ -276,7 +280,7 @@ class defaultBetStrategy():
         # prevent excessively frequent lookups
         self.last_asked_for_block = {}
         # When you last explicitly requested to ask for bets from a given
-        # validator; stored to prevent excessively frequent lookups
+        # guardian; stored to prevent excessively frequent lookups
         self.last_asked_for_bets = {}
         # Pool of transactions worth including
         self.txpool = {}
@@ -295,7 +299,7 @@ class defaultBetStrategy():
         # Last time sent a getblocks message; stored to prevent excessively
         # frequent getting
         self.last_time_sent_getblocks = 0
-        # Your validator index
+        # Your guardian index
         self.index = -1
         self.former_index = None
         # Store the genesis block state here
@@ -313,7 +317,7 @@ class defaultBetStrategy():
         assert 0 < self.bravery <= 1
         # Am I making crazy bets? (for testing purposes)
         self.crazy_bet = crazy_bet
-        # What block number to create two blocks at, destroying my validator
+        # What block number to create two blocks at, destroying my guardian
         # slot (for testing purposes; for non-byzantine nodes set to some really
         # high number)
         self.double_block_suicide = double_block_suicide
@@ -334,12 +338,12 @@ class defaultBetStrategy():
         self.calc_state_roots_from = 0
         # Minimum gas price that I accept
         self.min_gas_price = min_gas_price
-        # Create my validator set
-        self.update_validator_set(genesis_state)
-        DEBUG('Found %d validators in genesis' % len(self.opinions))
-        # The height at which this user is added
-        self.induction_height = call_casper(genesis_state, 'getUserInductionHeight', [self.index]) if self.index >= 0 else 2**100
-        DEBUG("Initialized validator",
+        # Create my guardian set
+        self.update_guardian_set(genesis_state)
+        DEBUG('Found %d guardians in genesis' % len(self.opinions))
+        # The height at which this guardian is added
+        self.induction_height = call_casper(genesis_state, 'getGuardianInductionHeight', [self.index]) if self.index >= 0 else 2**100
+        DEBUG("Initialized guardian",
               address=self.addr.encode('hex'),
               index=self.index,
               induction_height=self.induction_height)
@@ -366,7 +370,7 @@ class defaultBetStrategy():
         state = State(self.stateroots[h] if h >= 0 else self.genesis_state_root, self.db)
         maxh = h + ENTER_EXIT_DELAY - 1
         for h in range(len(self.proposers), maxh):
-            self.proposers.append(get_validator_index(state, h))
+            self.proposers.append(get_guardian_index(state, h))
             if self.proposers[-1] == self.index:
                 self.next_block_to_produce = h
                 return
@@ -401,12 +405,12 @@ class defaultBetStrategy():
             sys.stderr.write("ERR: Received invalid block: %d %s\n" % (block.number, block.hash.encode('hex')[:16]))
             return
         check_state2 = self.get_state_at_height(min(self.max_finalized_height, self.calc_state_roots_from - 1))
-        # Try to update the set of validators
-        vs = call_casper(check_state2, 'getValidatorSignups', [])
-        if vs > self.validator_signups:
-            DEBUG('updating validator signups', shouldbe=vs, lastcached=self.validator_signups)
-            self.validator_signups = vs
-            self.update_validator_set(check_state2)
+        # Try to update the set of guardians
+        vs = call_casper(check_state2, 'getGuardianSignups', [])
+        if vs > self.guardian_signups:
+            DEBUG('updating guardian signups', shouldbe=vs, lastcached=self.guardian_signups)
+            self.guardian_signups = vs
+            self.update_guardian_set(check_state2)
         # Add the block to our list of blocks
         if not self.blocks[block.number]:
             self.blocks[block.number] = block
@@ -440,22 +444,22 @@ class defaultBetStrategy():
             DEBUG("betting", index=self.index, height=block.number)
             self.mkbet()
 
-    # Try to update the set of validators
-    def update_validator_set(self, check_state):
-        for i in range(call_casper(check_state, 'getNextUserIndex', [])):
-            ctr = call_casper(check_state, 'getUserCounter', [i])
-            # Ooh, we found a new validator
+    # Try to update the set of guardians
+    def update_guardian_set(self, check_state):
+        for i in range(call_casper(check_state, 'getNextGuardianIndex', [])):
+            ctr = call_casper(check_state, 'getGuardianCounter', [i])
+            # Ooh, we found a new guardian
             if ctr not in self.counters:
                 self.counters[ctr] = 1
-                ih = call_casper(check_state, 'getUserInductionHeight', [i])
-                valaddr = call_casper(check_state, 'getUserAddress', [i])
-                valcode = call_casper(check_state, 'getUserValidationCode', [i])
+                ih = call_casper(check_state, 'getGuardianInductionHeight', [i])
+                valaddr = call_casper(check_state, 'getGuardianAddress', [i])
+                valcode = call_casper(check_state, 'getGuardianValidationCode', [i])
                 self.opinions[i] = Opinion(valcode, i, '\x00' * 32, 0, ih)
-                self.opinions[i].deposit_size = call_casper(check_state, 'getUserDeposit', [i])
-                DEBUG('Validator inducted', index=i, address=valaddr, my_index=self.index)
+                self.opinions[i].deposit_size = call_casper(check_state, 'getGuardianDeposit', [i])
+                DEBUG('Guardian inducted', index=i, address=valaddr, my_index=self.index)
                 self.bets[i] = {}
                 self.highest_bet_processed[i] = -1
-                # Is the new validator me?
+                # Is the new guardian me?
                 if valaddr == self.addr.encode('hex'):
                     self.index = i
                     self.add_proposers()
@@ -465,7 +469,9 @@ class defaultBetStrategy():
 
     def receive_bet(self, bet):
         # Do not process the bet if (i) we already processed it, or (ii) it
-        # comes from a validator not in the current validator set
+        # comes from a guardian not in the current guardian set
+        if bet.seq == 0:
+            print 'FOUND BET SEQ 0'
         if bet.hash in self.objects or bet.index not in self.opinions:
             return
         # Record when the bet came and that it came
@@ -506,7 +512,7 @@ class defaultBetStrategy():
 
     # Make a bet that signifies that we do not want to make any more bets
     def withdraw(self):
-        o = sign_bet(Bet(self.index, 2**256 - 1, [], [], [], FINALITY_HIGH, self.prevhash, self.seq, ''), self.key)
+        o = sign_bet(Bet(self.index, 2**256 - 1, [], [], [], [], self.prevhash, self.seq, ''), self.key)
         payload = rlp.encode(NetworkMessage(NM_BET, [o.serialize()]))
         self.prevhash = o.hash
         self.seq += 1
@@ -571,6 +577,9 @@ class defaultBetStrategy():
         sign_from = max(0, self.max_finalized_height)
         # Keep track of the lowest state root that we should change
         DEBUG('Making probs', frm=sign_from, to=len(self.blocks) - 1)
+        # State root probs
+        srp = []
+        srp_accum = FINALITY_HIGH
         # Bet on each height independently using our betting strategy
         for h in range(sign_from, len(self.blocks)):
             # Get the probability that we should bet
@@ -604,6 +613,12 @@ class defaultBetStrategy():
                 DEBUG('Rewinding', num_blocks=self.calc_state_roots_from - h)
                 self.calc_state_roots_from = h
             self.probs[h] = prob
+            # Compute the state root probabilities
+            if srp_accum == FINALITY_HIGH and prob >= FINALITY_HIGH:
+                srp.append(FINALITY_HIGH)
+            else:
+                srp_accum *= prob
+                srp.append(max(srp_accum, FINALITY_LOW))
             # Finalized!
             if prob < FINALITY_LOW or prob > FINALITY_HIGH:
                 DEBUG('Finalizing', height=h, my_index=self.index)
@@ -615,7 +630,7 @@ class defaultBetStrategy():
                     DEBUG('Increasing max finalized height', new_height=h)
                     if not h % 10:
                         for i in self.opinions.keys():
-                            self.opinions[i].deposit_size = call_casper(self.get_optimistic_state(), 'getUserDeposit', [i])
+                            self.opinions[i].deposit_size = call_casper(self.get_optimistic_state(), 'getGuardianDeposit', [i])
         # Recalculate state roots
         rootstart = max(self.calc_state_roots_from, self.induction_height)
         self.recalc_state_roots()
@@ -628,12 +643,15 @@ class defaultBetStrategy():
             # Create and sign the bet
             blockstart = max(min(self.recently_discovered_blocks), self.induction_height)
             probstart = min(max(sign_from, self.induction_height), blockstart, rootstart)
+            srprobstart = max(sign_from, self.induction_height) - sign_from
+            assert len(srp[srprobstart:]) <= len(self.probs[probstart:])
+            assert srprobstart + sign_from >= probstart
             o = sign_bet(Bet(self.index,
                              len(self.blocks) - 1,
                              self.probs[probstart:][::-1],
                              [x.hash if x else '\x00' * 32 for x in self.blocks[blockstart:]][::-1],
                              self.stateroots[rootstart:][::-1],
-                             FINALITY_HIGH,
+                             [x if (self.stateroots[i] != '\x00' * 32) else FINALITY_LOW for i, x in enumerate(srp)][srprobstart:][::-1],
                              self.prevhash,
                              self.seq, ''),
                         self.key)
@@ -774,12 +792,12 @@ class defaultBetStrategy():
               known=len(self.blocks),
               check_root_height=h-1)
         for i, o in ops:
-            latest_bet = call_casper(latest_state, 'getUserSeq', [i])
+            latest_bet = call_casper(latest_state, 'getGuardianSeq', [i])
             bet_height = latest_bet
             while bet_height in self.bets[i]:
                 DEBUG('Inserting bet', seq=latest_bet, index=i)
                 bet = self.bets[i][bet_height]
-                new_tx = Transaction(BET_INCENTIVIZER, 200000 + 6600 * len(bet.probs) + 10000 * len(bet.blockhashes + bet.stateroots),
+                new_tx = Transaction(CASPER, 200000 + 6600 * len(bet.probs) + 10000 * len(bet.blockhashes + bet.stateroots),
                                      data=bet.serialize())
                 if bet.max_height == 2**256 - 1:
                     self.tracked_tx_hashes.append(new_tx.hash)

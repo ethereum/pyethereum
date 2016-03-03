@@ -559,7 +559,7 @@ def vm_execute(ext, msg, code, breaking=False):
                 return vm_exception('OOG EXTENDING MEMORY')
             topics = [stk.pop() if i < depth else 0 for i in range(4)]
             log_data = map(ord, ''.join(map(encode_int32, topics))) + mem[mstart: mstart + msz]
-            print topics, mem[mstart: mstart + msz]
+            # print topics, mem[mstart: mstart + msz]
             # print 'ld', log_data, msz
             log_data = CallData(log_data, 0, len(log_data))
             log_gas = opcodes.GLOGBYTE * msz + opcodes.GLOGBASE + \

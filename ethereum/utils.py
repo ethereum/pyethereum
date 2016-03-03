@@ -435,13 +435,13 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+import slogging
 
 def DEBUG(msg, *args, **kwargs):
     o = msg + '  '
     for k, v in kwargs.items():
         o += '%s=%s, ' % (str(k), str(v))
     print o[:-2]
-    # from ethereum import slogging
     # slogging.DEBUG(msg, *args, **kwargs)
 
 

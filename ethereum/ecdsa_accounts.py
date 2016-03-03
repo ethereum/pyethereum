@@ -129,11 +129,11 @@ def sign_block(block, key):
     return block
 
 # Helper function for signing a bet
-def sign_bet(bet, key, fee=25 * 10**9):
+def sign_bet(bet, key):
     bet.sig = ''
     sigdata = sha3(bet.serialize()[:-32])
     v, r, s = bitcoin.ecdsa_raw_sign(sigdata, key)
-    bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s) + encode_int32(fee)
+    bet.sig = encode_int32(v) + encode_int32(r) + encode_int32(s)
     s = bet.serialize()
     bet._hash = sha3(s)
     return bet

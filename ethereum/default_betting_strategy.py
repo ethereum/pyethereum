@@ -2,7 +2,7 @@ from config import BLKTIME
 from utils import DEBUG
 import random
 
-BRAVERY = 0.92
+BRAVERY = 0.9375
 
 # Takes as an argument a list of values and their associated weights
 # and a fraction returns, returns the value such that the desired

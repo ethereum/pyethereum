@@ -12,7 +12,6 @@ import abi
 import sys
 import guardian
 from guardian import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
-from bet_incentivizer import bet_incentivizer_code, bet_incentivizer_ct
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
 import network
@@ -108,11 +107,6 @@ casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
 ringsig_file = os.path.join(os.path.split(__file__)[0], 'ringsig.se.py')
 ringsig_code = serpent.compile(open(ringsig_file).read())
 ringsig_ct = abi.ContractTranslator(serpent.mk_full_signature(open(ringsig_file).read()))
-# Add the bet incentivizer
-code2 = serpent.compile(bet_incentivizer_code)
-tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
-put_code(genesis, BET_INCENTIVIZER, get_code(gc, mk_contract_address(code=code2)))
-print 'Bet incentivizer added'
 
 # Get the code for the basic ecrecover account
 code2 = ecdsa_accounts.constructor_code
@@ -140,7 +134,7 @@ for i, k in enumerate(keys):
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
     print 'Length of validation code:', len(vcode)
-    # Make the transaction to join as a Casper validator
+    # Make the transaction to join as a Casper guardian
     txdata = casper_ct.encode('join', [vcode])
     tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 1500 * 10**18, txdata, k, True)
     print 'Joining'
@@ -155,14 +149,8 @@ for i, k in enumerate(keys):
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 1
     # Check that we actually joined Casper with the right
     # validation code
-    vcode2 = call_method(genesis, CASPER, casper_ct, 'getUserValidationCode', [index])
+    vcode2 = call_method(genesis, CASPER, casper_ct, 'getGuardianValidationCode', [index])
     assert vcode2 == vcode
-    # Make the transaction to send some ether to the bet inclusion
-    # incentivization contract
-    txdata2 = bet_incentivizer_ct.encode('deposit', [index])
-    tx = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
-    v = bet_incentivizer_ct.decode('deposit', ''.join(map(chr, tx_state_transition(genesis, tx))))[0]
-    assert v is True
 
 # Give the secondary keys some ether as well
 for i, k in enumerate(secondkeys):
@@ -172,13 +160,13 @@ for i, k in enumerate(secondkeys):
     # Give them 1600 ether
     genesis.set_storage(ETHER, a, 1600 * 10**18)
 
-# Set the starting RNG seed to equal to the number of casper validators
+# Set the starting RNG seed to equal to the number of casper guardians
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
 genesis.set_storage(GENESIS_TIME, encode_int32(0), int(network.NetworkSimulator.start_time + 5))
 print 'genesis time', int(network.NetworkSimulator.start_time + 5), '\n' * 10
-# Create betting strategy objects for every validator
+# Create betting strategy objects for every guardian
 bets = [mk_bet_strategy(genesis, i, k) for i, k in enumerate(keys)]
 # Minimum max finalized height
 min_mfh = -1
@@ -198,23 +186,23 @@ def check_correctness(bets):
     print 'Max finalized heights: %r' % [bet.max_finalized_height for bet in bets]
     print 'Max calculated stateroots: %r' % [bet.calc_state_roots_from for bet in bets]
     print 'Max height received: %r' % [len(bet.blocks) for bet in bets]
-    # Induction heights of each validator
+    # Induction heights of each guardian
     print 'Registered induction heights: %r' % [[op.induction_height for op in bet.opinions.values()] for bet in bets]
     # Withdrawn?
     print 'Withdrawn?: %r' % [(bet.withdrawn, bet.seq) for bet in bets]
     # Probabilities
     # print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
-    # Data about bets from each validator according to every other validator
+    # Data about bets from each guardian according to every other guardian
     print 'Now: %.2f' % n.now
-    print 'According to each validator...'
+    print 'According to each guardian...'
     for bet in bets:
         print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f.' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
         print 'Probs (in 0-255 repr, from %d):' % (new_min_mfh + 1), map(lambda x: ord(encode_prob(x)), bet.probs[new_min_mfh + 1:])
-    # Indices of validators
+    # Indices of guardians
     print 'Indices: %r' % [bet.index for bet in bets]
-    # Number of blocks received by each validator
+    # Number of blocks received by each guardian
     print 'Blocks received: %r' % [len(bet.blocks) for bet in bets]
-    # Number of blocks received by each validator
+    # Number of blocks received by each guardian
     print 'Blocks missing: %r' % [[h for h in range(len(bet.blocks)) if not bet.blocks[h]] for bet in bets]
     # Makes sure all block hashes for all heights up to the minimum finalized
     # height are the same
@@ -252,28 +240,28 @@ def check_correctness(bets):
             raise Exception(" ")
     min_mfh = new_min_mfh
     print 'Min common finalized height: %d, integrity checks passed' % new_min_mfh
-    # Last and next blocks to propose by each validator
+    # Last and next blocks to propose by each guardian
     print 'Last block created: %r' % [bet.last_block_produced for bet in bets]
     print 'Next blocks to create: %r' % [bet.next_block_to_produce for bet in bets]
     # Assert equivalence of proposer lists
     min_proposer_length = min([len(bet.proposers) for bet in bets])
     for i in range(1, len(bets)):
         assert bets[i].proposers[:min_proposer_length] == bets[0].proposers[:min_proposer_length]
-    # Validator sequence numbers as seen by themselves
-    print 'Validator seqs online: %r' % [bet.seq for bet in bets]
-    # Validator sequence numbers as recorded in the chain
-    print 'Validator seqs on finalized chain (%d): %r' % (new_min_mfh, [call_method(state, CASPER, casper_ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
+    # Guardian sequence numbers as seen by themselves
+    print 'Guardian seqs online: %r' % [bet.seq for bet in bets]
+    # Guardian sequence numbers as recorded in the chain
+    print 'Guardian seqs on finalized chain (%d): %r' % (new_min_mfh, [call_method(state, CASPER, casper_ct, 'getGuardianSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     h = 0
     while h < len(bets[3].stateroots) and bets[3].stateroots[h] not in (None, '\x00' * 32):
         h += 1
     speculative_state = State(bets[3].stateroots[h-1] if h else genesis.root, OverlayDB(bets[3].db))
-    print 'Validator seqs on speculative chain (%d): %r' % (h-1, [call_method(speculative_state, CASPER, casper_ct, 'getUserSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
-    # Validator deposit sizes (over 1500 * 10**18 means profit)
-    print 'Validator deposit sizes: %r' % [call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) for bet in bets if bet.index >= 0]
-    print 'Estimated validator excess gains: %r' % [call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) - 1500 * 10**18 + 47 / 10**9. * 1500 * 10**18 * min_mfh for bet in bets if bet.index >= 0]
+    print 'Guardian seqs on speculative chain (%d): %r' % (h-1, [call_method(speculative_state, CASPER, casper_ct, 'getGuardianSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
+    # Guardian deposit sizes (over 1500 * 10**18 means profit)
+    print 'Guardian deposit sizes: %r' % [call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) for bet in bets if bet.index >= 0]
+    print 'Estimated guardian excess gains: %r' % [call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) - 1500 * 10**18 + 47 / 10**9. * 1500 * 10**18 * min_mfh for bet in bets if bet.index >= 0]
     for bet in bets:
         if bet.index >= 0 and big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) >= bet.induction_height:
-            assert (call_method(state, CASPER, casper_ct, 'getUserDeposit', [bet.index]) >= 1499 * 10**18) or bet.byzantine, (bet.double_bet_suicide, bet.byzantine)
+            assert (call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) >= 1499 * 10**18) or bet.byzantine, (bet.double_bet_suicide, bet.byzantine)
     # Account signing nonces
     print 'Account signing nonces: %r' % [big_endian_to_int(state.get_storage(bet.addr, encode_int32(2**256 - 1))) for bet in bets]
     # Transaction status
@@ -291,7 +279,7 @@ for _bet in bets:
 print 'Submitting ring sig contract\n\n'
 ringsig_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_code)
 print 'Ringsig address', ringsig_addr.encode('hex')
-tx3 = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 2000000, CREATOR, 0, ringsig_code, bets[0].key)
+tx3 = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 2000000, CREATOR, 0, ringsig_code, bets[0].key)
 bets[0].add_transaction(tx3)
 check_txs.extend([tx3])
 ringsig_account_code = serpent.compile(("""
@@ -300,7 +288,7 @@ def init():
     sstore(1, %d)
 """ % (big_endian_to_int(ringsig_addr), big_endian_to_int(ringsig_addr))) + '\n' + mandatory_account_code)
 ringsig_account_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_account_code)
-tx4 = ecdsa_accounts.mk_transaction(3, 25 * 10**9, 2000000, CREATOR, 0, ringsig_account_code, bets[0].key)
+tx4 = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 2000000, CREATOR, 0, ringsig_account_code, bets[0].key)
 bets[0].add_transaction(tx4)
 check_txs.extend([tx4])
 print 'Ringsig account address', ringsig_account_addr.encode('hex')
@@ -319,24 +307,19 @@ assert get_code(recent_state, ringsig_addr)
 assert get_code(recent_state, ringsig_account_addr)
 print 'Length of ringsig contract: %d' % len(get_code(recent_state, ringsig_addr))
 
-# Create transactions for a few new validators to join
+# Create transactions for a few new guardians to join
 print '#' * 80 + '\n' + '#' * 80
-print 'Generating transactions to include new validators'
+print 'Generating transactions to include new guardians'
 for i, k in enumerate(secondkeys):
     index = len(keys) + i
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
-    # Make the transaction to join as a Casper validator
+    # Make the transaction to join as a Casper guardian
     txdata = casper_ct.encode('join', [vcode])
     tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 1500 * 10**18, txdata, k, create=True)
     print 'Making transaction: ', tx.hash.encode('hex')
-    # Make the transaction to send some ether to the bet inclusion
-    # incentivization contract
-    txdata2 = bet_incentivizer_ct.encode('deposit', [index])
-    tx2 = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 1000000, BET_INCENTIVIZER, 1 * 10**18, txdata2, k, True)
     bets[0].add_transaction(tx)
-    bets[0].add_transaction(tx2)
-    check_txs.extend([tx, tx2])
+    check_txs.extend([tx])
 
 THRESHOLD1 = 100 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
@@ -348,7 +331,7 @@ for bet in bets[1:6]:
     x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
     orig_ring_pubs.append((x, y))
     data = ringsig_ct.encode('submit', [x, y])
-    tx = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 750000, ringsig_account_addr, 10**17, data, bet.key)
+    tx = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 750000, ringsig_account_addr, 10**17, data, bet.key)
     assert bet.should_i_include_transaction(tx)
     bet.add_transaction(tx, True)
     check_txs.extend([tx])
@@ -386,7 +369,7 @@ for i, bet in enumerate(bets[1:6]):
     bet.add_transaction(tx)
     check_txs.extend([tx])
 
-# Create bet objects for the new validators
+# Create bet objects for the new guardians
 state = State(genesis.root, bets[0].db)
 secondbets = [mk_bet_strategy(state, len(bets) + i, k) for i, k in enumerate(secondkeys)]
 for bet in secondbets:
@@ -396,26 +379,26 @@ n.generate_peers(5)
 print 'Increasing number of peers in the network to %d!' % MAX_NODES
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 # Check that all signups are successful
-signups = call_method(recent_state, CASPER, casper_ct, 'getValidatorSignups', [])
-print 'Validators signed up: %d' % signups
+signups = call_method(recent_state, CASPER, casper_ct, 'getGuardianSignups', [])
+print 'Guardians signed up: %d' % signups
 assert signups == MAX_NODES
-print 'All new validators inducted'
-print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
+print 'All new guardians inducted'
+print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianInductionHeight', [i]) for i in range(len(keys + secondkeys))]
 
 # Keep running until the min finalized height reaches ~175. We expect that by
-# this time all validators will be actively betting off of each other's bets
+# this time all guardians will be actively betting off of each other's bets
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
-    print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserInductionHeight', [i]) for i in range(len(keys + secondkeys))]
+    print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianInductionHeight', [i]) for i in range(len(keys + secondkeys))]
     if min_mfh > THRESHOLD2:
         print 'Reached breakpoint'
         break
 
-# Create transactions for old validators to leave
+# Create transactions for old guardians to leave
 print '#' * 80 + '\n' + '#' * 80
-print 'Generating transactions to withdraw some validators'
+print 'Generating transactions to withdraw some guardians'
 for bet in bets[:3]:
     bet.withdraw()
 
@@ -427,17 +410,17 @@ while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
     print 'Min mfh:', min_mfh
-    print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
+    print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
     if min_mfh > 180 + BLK_DISTANCE + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
     # Exit early if the withdrawal step already completed
-    recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-    if len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3:
+    recent_state = bets[0].get_finalized_state()
+    if len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) == 2]) == MAX_NODES - 3:
         break
 
-recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-# Check that the only remaining active validators are the ones that have not
+recent_state = bets[0].get_finalized_state()
+# Check that the only remaining active guardians are the ones that have not
 # yet signed out.
-print 'Validator statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) for i in range(MAX_NODES)]
-assert len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getUserStatus', [i]) == 2]) == MAX_NODES - 3
+print 'Guardian statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) for i in range(MAX_NODES)]
+assert len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) == 2]) == MAX_NODES - 3
