@@ -67,7 +67,7 @@ macro RLPGETBYTES32: 8
 
 macro RLPGETSTRING: 9
 
-macro MAX_VALIDATION_DURATION: 1000000 # number of blocks
+macro MAX_VALIDATION_DURATION: 4000000 # number of blocks
 
 macro EXCESS_VALIDATION_TAX: 100 # parts per billion per block
 
