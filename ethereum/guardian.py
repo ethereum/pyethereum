@@ -470,8 +470,6 @@ class defaultBetStrategy():
     def receive_bet(self, bet):
         # Do not process the bet if (i) we already processed it, or (ii) it
         # comes from a guardian not in the current guardian set
-        if bet.seq == 0:
-            print 'FOUND BET SEQ 0'
         if bet.hash in self.objects or bet.index not in self.opinions:
             return
         # Record when the bet came and that it came
@@ -905,7 +903,7 @@ class defaultBetStrategy():
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
             # DEBUG('maybe I should make a block', at=self.now, target_time=target_time )
             if mytime >= target_time + self.next_submission_delay:
-                DEBUG('making a block\n')
+                DEBUG('making a block')
                 self.recalc_state_roots()
                 self.make_block()
                 self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0

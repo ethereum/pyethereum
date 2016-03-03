@@ -296,7 +296,7 @@ print 'Ringsig account address', ringsig_account_addr.encode('hex')
 while 1:
     n.run(25, sleep=0.25)
     check_correctness(bets)
-    if min_mfh >= 40:
+    if min_mfh >= 36:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
@@ -321,7 +321,7 @@ for i, k in enumerate(secondkeys):
     bets[0].add_transaction(tx)
     check_txs.extend([tx])
 
-THRESHOLD1 = 100 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
+THRESHOLD1 = 115 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
 
 orig_ring_pubs = []
@@ -411,7 +411,7 @@ while 1:
     check_correctness(bets)
     print 'Min mfh:', min_mfh
     print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 180 + BLK_DISTANCE + ENTER_EXIT_DELAY:
+    if min_mfh > 200 + BLK_DISTANCE + ENTER_EXIT_DELAY:
         print 'Reached breakpoint'
         break
     # Exit early if the withdrawal step already completed
@@ -419,7 +419,7 @@ while 1:
     if len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) == 2]) == MAX_NODES - 3:
         break
 
-recent_state = bets[0].get_finalized_state()
+recent_state = bets[0].get_optimistic_state()
 # Check that the only remaining active guardians are the ones that have not
 # yet signed out.
 print 'Guardian statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) for i in range(MAX_NODES)]

@@ -173,8 +173,6 @@ event ZeroSeq(index:uint256,progress:uint256)
 # Submit a bet
 def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes32[], stateroots:bytes32[], stateroot_probs:bytes, prevhash:bytes32, seqnum:uint256, sig:bytes):
     # Load basic guardian information
-    if seqnum == 0:
-        log(type=ZeroSeq, seqnum, 0)
     basicinfo = array(10)
     ~sloadbytes(ref(self.guardians[index].basicinfo), basicinfo, 320)
     # log(type=SubmitBet, basicinfo[SEQ_POS], basicinfo[PREVHASH_POS], index, stateroot_prob_from)
@@ -186,15 +184,11 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     guardian_validation_code = string(~ssize(ref(self.guardians[index].validationCode)))
     ~sloadbytes(ref(self.guardians[index].validationCode), guardian_validation_code, len(guardian_validation_code))
     sig_verified = 0
-    if seqnum == 0:
-        log(type=ZeroSeq, seqnum, 1)
     with L = len(sig):
         sig[-1] = signing_hash
         ~callstatic(msg.gas - 20000, guardian_validation_code, len(guardian_validation_code), sig - 32, L + 32, ref(sig_verified), 32)
         sig[-1] = L
     assert sig_verified == 1
-    if seqnum == 0:
-        log(type=ZeroSeq, seqnum, 2)
     # Check sequence number
     if seqnum != basicinfo[SEQ_POS] or prevhash != basicinfo[PREVHASH_POS]:
         # If someone submits a higher-seq bet, register that it has been
@@ -208,8 +202,6 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
     assert len(probs) >= len(blockhashes)
     assert len(probs) >= len(stateroots)
     assert len(probs) >= len(stateroot_probs)
-    if seqnum == 0:
-        log(type=ZeroSeq, seqnum, 3)
     # Set seq and prevhash
     basicinfo[PREVHASH_POS] = ~sha3(_calldata, ~calldatasize())
     basicinfo[SEQ_POS] = seqnum + 1
@@ -232,7 +224,7 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                                 profit = profit * (INCENTIVIZATION_EMA_COEFF - 1) / INCENTIVIZATION_EMA_COEFF
                                 i += 1
                         guardianBalance = max(0, guardianBalance + guardianBalance * totProfit / SCORING_REWARD_DIVISOR - guardianBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9)
-                        log(type=Reward, block.number, guardianBalance * totProfit / SCORING_REWARD_DIVISOR, guardianBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9, guardianBalance, blockdiff)
+                        # log(type=Reward, block.number, guardianBalance * totProfit / SCORING_REWARD_DIVISOR, guardianBalance * blockdiff * PER_BLOCK_BASE_COST / 10**9, guardianBalance, blockdiff)
                         prevProfit = profit
                         # if guardianBalance > 3000 * 10**18:
                         #     log(type=ExcessRewardEvent, i, profit, blockdiff, totProfit, guardianBalance)
