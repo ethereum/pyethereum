@@ -2,21 +2,15 @@
 import os
 
 import bitcoin
+from secp256k1 import PrivateKey
 import pytest
 import serpent
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
 
 from ethereum import tester, utils, abi
 from ethereum.slogging import set_level
-from ethereum.utils import safe_ord
+from ethereum.utils import safe_ord, big_endian_to_int
 
-try:
-    from c_secp256k1 import ecdsa_sign_raw
-except ImportError:
-    import warnings
-    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
-
-    from bitcoin import ecdsa_raw_sign as ecdsa_sign_raw
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -943,7 +937,6 @@ def kall():
 
 """
 
-import bitcoin
 
 
 def test_saveload():
@@ -1214,17 +1207,26 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
+    priv = utils.sha3('some big long brainwallet password')
     pub = bitcoin.privtopub(priv)
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = ecdsa_sign_raw(msghash, priv)
+    msghash = utils.sha3('the quick brown fox jumps over the lazy dog')
+
+    pk = PrivateKey(priv, raw=True)
+    signature = pk.ecdsa_recoverable_serialize(
+        pk.ecdsa_sign_recoverable(msghash, raw=True)
+    )
+    signature = signature[0] + chr(signature[1])
+    V = ord(signature[64]) + 27
+    R = big_endian_to_int(signature[0:32])
+    S = big_endian_to_int(signature[32:64])
+
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
-    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
+    result = c.test_ecrecover(utils.big_endian_to_int(msghash), V, R, S)
     assert result == addr
 
 

@@ -1,3 +1,5 @@
+import pytest
+
 from ethereum import tester as t
 from ethereum import blocks, utils, transactions, vm, abi, opcodes
 from ethereum.exceptions import InvalidTransaction
@@ -521,7 +523,8 @@ def run_genesis_test(params, mode):
 def get_tests_from_file_or_dir(dname, json_only=False):
     if os.path.isfile(dname):
         if dname[-5:] == '.json' or not json_only:
-            return {dname: json.load(open(dname))}
+            with open(dname) as f:
+                return {dname: json.load(f)}
         else:
             return {}
     else:
@@ -561,3 +564,33 @@ def fixture_to_bytes(value):
         return ret
     else:
         return value
+
+
+def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+    if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
+        return
+
+    fixtures = get_tests_from_file_or_dir(
+        os.path.join(fixture_path, testsource))
+
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    params = []
+    for filename, tests in fixtures.items():
+        filename = os.path.relpath(filename, base_dir)
+        for testname, testdata in tests.items():
+            if exclude_func and exclude_func(filename, testname, testdata):
+                continue
+            if skip_func:
+                skipif = pytest.mark.skipif(
+                    skip_func(filename, testname, testdata),
+                    reason="Excluded"
+                )
+                params.append(skipif((filename, testname, testdata)))
+            else:
+                params.append((filename, testname, testdata))
+
+    metafunc.parametrize(
+        ('filename', 'testname', 'testdata'),
+        params
+    )
+    return params

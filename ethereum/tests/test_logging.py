@@ -62,10 +62,10 @@ def test_tracebacks(caplog):
         except Exception as e:
             log.error('an Exception trace should preceed this msg', exc_info=True)
     div(1, 0)
-    assert 'an Exception trace' in caplog.text()
-    assert 'Traceback' in caplog.text()
+    assert 'an Exception trace' in caplog.text
+    assert 'Traceback' in caplog.text
     div(1, 1)
-    assert 'the stack' in caplog.text()
+    assert 'the stack' in caplog.text
 
 
 def test_listeners(caplog):
@@ -80,17 +80,17 @@ def test_listeners(caplog):
     # activate listener
     slogging.log_listeners.append(log_cb)  # Add handlers
     log.error('test listener', abc='thislistener')
-    assert 'thislistener' in caplog.text()
+    assert 'thislistener' in caplog.text
     r = called.pop()
     assert r == dict(event='test listener', abc='thislistener')
 
     log.trace('trace is usually filtered', abc='thislistener')  # this handler for function log_cb does not work
-    assert "trace is usually filtered" not in caplog.text()
+    assert "trace is usually filtered" not in caplog.text
 
     # deactivate listener
     slogging.log_listeners.remove(log_cb)
     log.error('test listener', abc='nolistener')
-    assert 'nolistener' in caplog.text()
+    assert 'nolistener' in caplog.text
     assert not called
 
 
@@ -161,7 +161,7 @@ def test_recorder(caplog):
     recorder = slogging.LogRecorder()
     assert len(slogging.log_listeners) == 1
     log.info('a', v=1)
-    assert "a" in caplog.text()
+    assert "a" in caplog.text
     r = recorder.pop_records()
     assert r[0] == dict(event='a', v=1)
     assert len(slogging.log_listeners) == 0
@@ -171,7 +171,7 @@ def test_recorder(caplog):
     recorder = slogging.LogRecorder()
     assert len(slogging.log_listeners) == 1
     log.trace('a', v=2)
-    assert '"v": 2' in caplog.text()
+    assert '"v": 2' in caplog.text
     r = recorder.pop_records()
     assert r[0] == dict(event='a', v=2)
     assert len(slogging.log_listeners) == 0
@@ -224,9 +224,9 @@ def test_logger_filter(caplog, logger_name, filter, should_log):
         log.addFilter(logging.Filter(filter))
     log.info("testlogmessage", v=1)
     if should_log:
-        assert "testlogmessage" in caplog.text()
+        assert "testlogmessage" in caplog.text
     else:
-        assert "testlogmessage" not in caplog.text()
+        assert "testlogmessage" not in caplog.text
 
 
 def test_bound_logger(caplog):
@@ -236,15 +236,15 @@ def test_bound_logger(caplog):
     bound_log_1 = real_log.bind(key1="value1")
     with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
-        assert "test1" in caplog.text()
-        assert "key1=value1" in caplog.text()
+        assert "test1" in caplog.text
+        assert "key1=value1" in caplog.text
 
     bound_log_2 = bound_log_1.bind(key2="value2")
     with caplog.at_level(slogging.TRACE):
         bound_log_2.info("test2")
-        assert "test2" in caplog.text()
-        assert "key1=value1" in caplog.text()
-        assert "key2=value2" in caplog.text()
+        assert "test2" in caplog.text
+        assert "key1=value1" in caplog.text
+        assert "key2=value2" in caplog.text
 
 
 def test_bound_logger_isolation(caplog):

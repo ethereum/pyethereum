@@ -18,7 +18,7 @@ logger = get_logger()
 encode_hex('')
 
 
-def run_test(filename, testname, testdata):
+def test_transaction(filename, testname, testdata):
     testdata = fixture_to_bytes(testdata)
 
     try:
@@ -51,7 +51,11 @@ def run_test(filename, testname, testdata):
         assert encode_hex(o.get("sender", '')) == testdata.get("sender", '')
 
 
-if __name__ == '__main__':
+def pytest_generate_tests(metafunc):
+    testutils.generate_test_params('TransactionTests', metafunc)
+
+
+def main():
     if len(sys.argv) == 1:
         # read fixture from stdin
         fixtures = {'stdin': json.load(sys.stdin)}
@@ -63,15 +67,8 @@ if __name__ == '__main__':
             if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print("Testing: %s %s" % (filename, testname))
                 # testutils.check_state_test(testdata)
-                run_test(filename, testname, testdata)
-else:
-    fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join(testutils.fixture_path, 'TransactionTests'))
+                test_transaction(filename, testname, testdata)
 
-    def mk_test_func(filename, testname, testdata):
-        return lambda: run_test(filename, testname, testdata)
 
-    for filename, tests in list(fixtures.items()):
-        for testname, testdata in list(tests.items()):
-            func_name = 'test_%s_%s' % (filename, testname)
-            globals()[func_name] = mk_test_func(filename, testname, testdata)
+if __name__ == '__main__':
+    main()
