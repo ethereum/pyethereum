@@ -10,6 +10,7 @@ from ethereum import vm as vm
 from ethereum.exceptions import *
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address
 from ethereum import transactions
+import ethereum.config as config
 
 sys.setrecursionlimit(100000)
 
@@ -80,6 +81,8 @@ def validate_transaction(block, tx):
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
         raise UnsignedTransaction(tx)
+    if block.number >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
+            tx.check_low_s()
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
