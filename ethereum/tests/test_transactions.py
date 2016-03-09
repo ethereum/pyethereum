@@ -4,6 +4,7 @@ import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 import ethereum.testutils as testutils
 from ethereum.testutils import fixture_to_bytes
+import ethereum.config as config
 import sys
 import json
 import os
@@ -24,6 +25,9 @@ def run_test(filename, testname, testdata):
         rlpdata = decode_hex(testdata["rlp"][2:])
         o = {}
         tx = rlp.decode(rlpdata, transactions.Transaction)
+        blknum = int(testdata["blocknumber"])
+        if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
+            tx.check_low_s()
         o["sender"] = tx.sender
         o["transaction"] = {
             "data": b'0x' * (len(tx.data) > 0) + encode_hex(tx.data),

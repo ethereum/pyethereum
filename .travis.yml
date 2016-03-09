@@ -1,26 +1,26 @@
 language: python
 python: 2.7
-sudo: false  # use new infrastructure
+sudo: false
 env:
-  - TOX_ENV=py27
-
+- TOX_ENV=py27
 install:
-  - pip install -r requirements.txt
-  - pip install -r dev_requirements.txt
-
+- pip install -r requirements.txt
+- pip install -r dev_requirements.txt
 script:
-- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
+- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore
+  ethereum/tests/test_state.py
 - coverage run --append --source ethereum -m py.test ethereum/tests/test_vm.py
 - coverage run --append --source ethereum -m py.test ethereum/tests/test_state.py
-
 after_success:
 - coveralls
-
+notifications:
+  slack:
+    secure: W/UAhQ/GgYwMWrl3aiVAVOWr4WGdWrxUOX/rTB3ZgwDwGqDYLzQO5UqbsQlo1JXPZ6JOWfIPMURhHu7DSfue9dBW6xQ+NL+bFHe9lSXG4nqFK3IjezYyTBzNRJRDbGUvSSqgj6D5cwhJ8BjfUIRPbJz3CxL64KmsNXezEaMY60w=
 deploy:
   provider: pypi
   user: ethereum_pypi_automated
   password:
-    secure: "FvkEn1xULi9mGxAL9sKlTuxJZvk0Uyd2GaDPAHN5ZAfaJUNwzA6+m7PRAMPd44Uy/LOw0+Ah9X1rxAxZc+7yx+FJjwH1Nl8MjtqYTWp+Ue6TFUNdJXNHjekC5ce4rbULudrqlmwmaWzi5iRC7qhpxuTg1y3iBw3Fsd8E82qbDac="
+    secure: FvkEn1xULi9mGxAL9sKlTuxJZvk0Uyd2GaDPAHN5ZAfaJUNwzA6+m7PRAMPd44Uy/LOw0+Ah9X1rxAxZc+7yx+FJjwH1Nl8MjtqYTWp+Ue6TFUNdJXNHjekC5ce4rbULudrqlmwmaWzi5iRC7qhpxuTg1y3iBw3Fsd8E82qbDac=
   on:
     tags: true
     repo: ethereum/pyethereum
