@@ -221,9 +221,9 @@ def encode_single(typ, arg):
             raise EncodingError("too long: %r" % arg)
         if isnumeric(arg):
             return zpad(encode_int(arg), 32)
-        elif len(arg) == len(sub):
+        elif len(arg) == int(sub):
             return zpad(arg, 32)
-        elif len(arg) == len(sub) * 2:
+        elif len(arg) == int(sub) * 2:
             return zpad(decode_hex(arg), 32)
         else:
             raise EncodingError("Could not parse hash: %r" % arg)
@@ -375,8 +375,14 @@ def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
         return encode_hex(data[12:])
-    elif base == 'string' or base == 'bytes' or base == 'hash':
-        return data[:int(sub)] if len(sub) else data
+    elif base == 'hash':
+        return data[32-int(sub):]
+    elif base == 'string' or base == 'bytes':
+        if len(sub):
+            return data[:int(sub)]
+        else:
+            l = big_endian_to_int(data[0:32])
+            return data[32:][:l]
     elif base == 'uint':
         return big_endian_to_int(data)
     elif base == 'int':
