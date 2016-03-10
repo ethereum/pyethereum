@@ -14,6 +14,18 @@ def test_abi_encode_signed_int():
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [1]))[0] == 1
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [-1]))[0] == -1
 
+def test_abi_decode_single_real():
+    real_data = abi.encode_single(['real', '128x128', []], 1)
+    assert abi.decode_single(['real', '128x128', []], real_data) == 1
+
+    real_data = abi.encode_single(['real', '128x128', []], 2**127-1)
+    assert abi.decode_single(['real', '128x128', []], real_data) == (2**127-1)*1.0
+
+    real_data = abi.encode_single(['real', '128x128', []], -1)
+    assert abi.decode_single(['real', '128x128', []], real_data) == -1
+
+    real_data = abi.encode_single(['real', '128x128', []], -2**127)
+    assert abi.decode_single(['real', '128x128', []], real_data) == -2**127
 
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(filename, testname, testdata):
