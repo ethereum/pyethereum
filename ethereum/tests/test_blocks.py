@@ -1,3 +1,5 @@
+import pytest
+
 from ethereum import blocks, utils, db
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
@@ -106,17 +108,26 @@ def run_block_test(params, config_overrides = {}):
     env.config = old_config
 
 
-def do_test_block(filename, testname=None, testdata=None, limit=99999999):
-    print('\nrunning test:%r in %r' % (testname, filename))
+def test_block(filename, testname, testdata):
     run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
 
-excludes = [('bcWalletTest.json', u'walletReorganizeOwners'),
-            ('bl10251623GO.json', u'randomBlockTest'),
-            ('bl201507071825GO.json', u'randomBlockTest')
-            ]
+
+excludes = {
+    ('bcWalletTest.json', u'walletReorganizeOwners'),
+    ('bl10251623GO.json', u'randomBlockTest'),
+    ('bl201507071825GO.json', u'randomBlockTest')
+}
 
 
-if __name__ == '__main__':
+def pytest_generate_tests(metafunc):
+    testutils.generate_test_params(
+        'BlockchainTests',
+        metafunc,
+        lambda filename, testname, _: (filename.split('/')[-1], testname) in excludes
+    )
+
+
+def main():
     assert len(sys.argv) >= 2, "Please specify file or dir name"
     fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
     if len(sys.argv) >= 3:
@@ -124,23 +135,17 @@ if __name__ == '__main__':
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
+                    run_block_test(testdata, {
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
+                        else 1000000})
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
-else:
-    fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join(testutils.fixture_path, 'BlockchainTests'))
+                    run_block_test(testdata, {
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000})
 
-    def mk_test_func(filename, testname, testdata):
-        return lambda: do_test_block(filename, testname, testdata)
 
-    for filename, tests in list(fixtures.items()):
-        for testname, testdata in list(tests.items())[:500]:
-            func_name = 'test_%s_%s' % (filename, testname)
-            if (filename.split('/')[-1], testname) not in excludes:
-                # print 'making function', (filename.split('/')[-1], testname)
-                globals()[func_name] = mk_test_func(filename, testname, testdata)
+if __name__ == '__main__':
+    main()

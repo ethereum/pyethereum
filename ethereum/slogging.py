@@ -35,15 +35,32 @@ class LogRecorder(object):
     """
     max_capacity = 1000 * 1000  # check we are not forgotten or abused
 
-    def __init__(self):
+    def __init__(self, disable_other_handlers=False, log_config=None):
         self._records = []
         log_listeners.append(self._add_log_record)
+        self._saved_config = None
+        if log_config:
+            self._saved_config = get_configuration()
+            configure(log_config)
+        self._saved_handlers = []
+        if disable_other_handlers:
+            self._saved_handlers = rootLogger.handlers[:]
+            rootLogger.handlers = []
 
     def pop_records(self):
-        # can only be called once
+        # only returns records on the first call
         r = self._records[:]
-        self._records = None
-        log_listeners.remove(self._add_log_record)
+        self._records = []
+        try:
+            log_listeners.remove(self._add_log_record)
+        except ValueError:
+            pass
+        if self._saved_config:
+            configure(**self._saved_config)
+            self._saved_config = None
+        if self._saved_handlers:
+            rootLogger.handlers = self._saved_handlers[:]
+            self._saved_handlers = []
         return r
 
     def _add_log_record(self, msg):
@@ -59,9 +76,13 @@ def get_configuration():
     """
     root = getLogger()
     name_levels = [('', logging.getLevelName(root.level))]
+    name_levels.extend(
+        (name, logging.getLevelName(logger.level))
+        for name, logger
+        in root.manager.loggerDict.items()
+        if hasattr(logger, 'level')
+    )
 
-    for name, logger in list(root.manager.loggerDict.items()):
-        name_levels.append((name, logging.getLevelName(logger.level)))
     config_string = ','.join('%s:%s' % x for x in name_levels)
 
     return dict(config_string=config_string, log_json=root.log_json)
@@ -222,6 +243,7 @@ def configure(config_string=None, log_json=False, log_file=None):
         if hasattr(logger, 'setLevel'):
             # Guard against `logging.PlaceHolder` instances
             logger.setLevel(logging.NOTSET)
+            logger.propagate = True
 
     for name_levels in config_string.split(','):
         name, _, level = name_levels.partition(':')
