@@ -381,7 +381,6 @@ class Block(rlp.Serializable):
         self.header = header
         self.uncles = uncles
 
-        self.uncles = uncles
         self.suicides = []
         self.logs = []
         self.log_listeners = []
