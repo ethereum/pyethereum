@@ -1,9 +1,8 @@
 import json
-import os
 import sys
 import ethereum.testutils as testutils
 
-from ethereum.slogging import get_logger, configure_logging, set_level
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -13,7 +12,6 @@ if '--trace' in sys.argv:  # not default
 
 
 def test_state(filename, testname, testdata):
-    set_level(None, 'info')
     logger.debug('running test:%r in %r' % (testname, filename))
     testutils.check_state_test(testutils.fixture_to_bytes(testdata))
 

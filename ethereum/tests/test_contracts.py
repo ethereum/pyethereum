@@ -8,13 +8,7 @@ import serpent
 from rlp.utils import decode_hex
 
 from ethereum import tester, utils, abi
-from ethereum.slogging import set_level
 from ethereum.utils import safe_ord, big_endian_to_int
-
-
-# customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(0)
 
 
 # Test EVM contracts
@@ -1056,7 +1050,6 @@ def sort(args:arr):
 
 @pytest.mark.timeout(100)
 def test_sort():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(sort_code)
     assert c.sort([9]) == [9]
@@ -1081,7 +1074,6 @@ def test(args:arr):
 
 @pytest.mark.timeout(100)
 def test_indirect_sort():
-    set_level(None, 'info')
     s = tester.state()
     open(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
@@ -1326,7 +1318,6 @@ def get_prevhashes(k):
 
 @pytest.mark.timeout(100)
 def test_prevhashes():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(prevhashes_code)
     s.mine(7)

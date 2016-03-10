@@ -12,9 +12,9 @@ def test_basic(caplog, level_name):
     with caplog.at_level('TRACE'):
         getattr(log, level_name)(level_name)
 
-    assert len(caplog.records()) == 1
-    assert caplog.records()[0].levelname == level_name.upper()
-    assert level_name in caplog.records()[0].msg
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == level_name.upper()
+    assert level_name in caplog.records[0].msg
 
 
 def test_initial_config():

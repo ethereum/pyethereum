@@ -7,9 +7,8 @@ from ethereum.testutils import fixture_to_bytes
 import ethereum.config as config
 import sys
 import json
-import os
 
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console

@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger, configure_logging

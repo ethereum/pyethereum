@@ -1,5 +1,5 @@
 from ethereum.db import DB
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 from ethereum import testutils
 import sys
 logger = get_logger()
