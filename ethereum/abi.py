@@ -100,7 +100,7 @@ class ContractTranslator():
     def is_unknown_type(self, name):
         return self.function_data[name]["is_unknown_type"]
 
-    def listen(self, log, noprint=False):
+    def listen(self, log, noprint=True):
         if not len(log.topics) or log.topics[0] not in self.event_data:
             return
         types = self.event_data[log.topics[0]]['types']
