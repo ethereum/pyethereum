@@ -257,12 +257,10 @@ class BlockHeader(rlp.Serializable):
         else:
             self._receipts_root = value
 
-    _fimxe_hash = None
-
     @property
     def hash(self):
         """The binary block hash"""
-        return self._fimxe_hash or utils.sha3(rlp.encode(self))
+        return utils.sha3(rlp.encode(self))
 
     def hex_hash(self):
         """The hex encoded block hash"""
