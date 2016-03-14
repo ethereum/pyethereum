@@ -38,21 +38,17 @@ def test_difficulty(filename, testname, testdata):
     assert calculated_dif == reference_dif
 
 
-#def pytest_generate_tests(metafunc):
-#    testutils.generate_test_params('BasicTests', metafunc)
-
 def not_a_difficulty_test(filename, testname, testdata):
+    if 'difficultyOlimpic.json' in filename:
+        return True
     if 'difficulty' in filename:
         return False
-    if 'difficulty.json' in filename:
-        return False
-    if 'difficultyFrontier' in filename:
-        return False
+
     return True
 
 
 def pytest_generate_tests(metafunc):
-    testutils.generate_test_params('DifficultyTests', metafunc, exclude_func=not_a_difficulty_test)
+    testutils.generate_test_params('BasicTests', metafunc, exclude_func=not_a_difficulty_test)
 
 
 def main():
