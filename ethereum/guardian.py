@@ -126,7 +126,7 @@ class Bet():
         o._hash = sha3(betdata)
         return o
 
-    # Warning: edit bets very carefully! Make sure hash is always correct 
+    # Warning: edit bets very carefully! Make sure hash is always correct
     @property
     def hash(self, recompute=False):
         if not self._hash or recompute:
@@ -200,7 +200,7 @@ class Opinion():
         return len(self.probs) - 1
 
 # Helper method for calling Casper
-casper_ct = ContractTranslator(serpent.mk_full_signature('casper.se.py'))
+casper_ct = ContractTranslator(serpent.mk_full_signature('ethereum/casper.se.py'))
 
 def call_casper(state, fun, args, gas=1000000):
     return call_method(state, CASPER, casper_ct, fun, args, gas)
@@ -749,7 +749,7 @@ class defaultBetStrategy():
         DEBUG('Transaction passes, should be included',
               hash=tx.hash.encode('hex')[:16])
         return True
-    
+
     def add_transaction(self, tx, track=False):
         if tx.hash not in self.objects or self.time_received.get(tx.hash, 0) < self.now - 15:
             DEBUG('Received transaction', hash=tx.hash.encode('hex')[:16])
@@ -783,7 +783,7 @@ class defaultBetStrategy():
         latest_state_root = self.stateroots[h-1] if h else self.genesis_state_root
         assert latest_state_root not in ('\x00' * 32, None)
         latest_state = State(latest_state_root, self.db)
-        ops = self.opinions.items() 
+        ops = self.opinions.items()
         random.shuffle(ops)
         DEBUG('Producing block',
               number=self.next_block_to_produce,
