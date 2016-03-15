@@ -223,5 +223,321 @@ class SimPyNetworkSimulator(NetworkSimulatorBase):
                     self.receive_later(sender.id, p, obj)
 
 
-NetworkSimulator = NetworkSimulatorBase
+#NetworkSimulator = NetworkSimulatorBase
 #NetworkSimulator = SimPyNetworkSimulator
+
+
+import sys
+import random
+import copy
+import six
+import rlp
+import gevent
+
+from devp2p.crypto import (
+    sha3,
+    privtopub as privtopub_raw,
+)
+from devp2p.app import BaseApp
+from devp2p.protocol import BaseProtocol
+from devp2p.service import WiredService
+from devp2p.utils import (
+    colors,
+    COLOR_END,
+    host_port_pubkey_to_uri,
+    update_config_with_defaults,
+)
+from devp2p import app_helper
+
+import ethereum.slogging as slogging
+from ethereum.guardian import NetworkMessage
+
+
+slogging.configure(config_string=':debug,p2p.discovery:info')
+logger = slogging.get_logger('guardian')
+
+_nonce = 0
+
+
+#
+# Protocol
+#
+class GuardianProtocol(BaseProtocol):
+    protocol_id = 1
+    network_id = 0
+    max_cmd_id = 1  # Actually max id is 0, but 0 is the special value.
+    name = 'guardian'
+    version = 1
+
+    def __init__(self, peer, service):
+        # required by P2PProtocol
+        self.config = peer.config
+        BaseProtocol.__init__(self, peer, service)
+
+    class network_message(BaseProtocol.command):
+        """
+        A guardian network message
+        """
+        cmd_id = 0
+
+        structure = [
+            ('network_message', NetworkMessage)
+        ]
+
+#
+#  Service
+#
+class GuardianService(WiredService):
+
+    # required by BaseService
+    name = 'guardianservice'
+    default_config = {
+        'guardian': {
+            'num_participants': 1,
+        }
+    }
+
+    # required by WiredService
+    wire_protocol = GuardianProtocol
+
+    def __init__(self, app):
+        self.config = app.config
+        self.address = privtopub_raw(self.config['node']['privkey_hex'].decode('hex'))
+        super(GuardianService, self).__init__(app)
+
+    def log(self, text, **kargs):
+        node_num = self.config['node_num']
+        msg = ' '.join([
+            colors[node_num % len(colors)],
+            "NODE%d" % node_num,
+            text,
+            (' %r' % kargs if kargs else ''),
+            COLOR_END])
+        logger.debug(msg)
+
+    def broadcast(self, obj, origin=None):
+        fmap = {NetworkMessage: 'network_message'}
+        self.log('broadcasting', obj=obj)
+        bcast = self.app.services.peermanager.broadcast
+        bcast(GuardianProtocol, fmap[type(obj)], args=(obj,),
+              exclude_peers=[origin.peer] if origin else [])
+
+    def on_wire_protocol_stop(self, proto):
+        assert isinstance(proto, self.wire_protocol)
+        self.log('----------------------------------')
+        self.log('on_wire_protocol_stop', proto=proto)
+
+    def on_wire_protocol_start(self, proto):
+        self.log('----------------------------------')
+        self.log('on_wire_protocol_start', proto=proto, peers=self.app.services.peermanager.peers)
+        assert isinstance(proto, self.wire_protocol)
+        # register callbacks
+        proto.receive_network_message_callbacks.append(self.on_receive_network_message)
+        self.send_network_message('initializing')
+
+    def on_receive_network_message(self, proto, network_message):
+        print "====================got it===================="
+        assert isinstance(network_message, NetworkMessage)
+        assert isinstance(proto, self.wire_protocol)
+        self.log('----------------------------------')
+        self.log('on_receive network_message', network_message=network_message, proto=proto)
+        #self.send_network_message('received: {0}'.format(network_message.message))
+
+    def send_network_message(self, typ, args):
+        # without this we hit a race condition between our nodes.
+        gevent.sleep(random.random())
+        network_message = NetworkMessage(typ=typ, args=args)
+        self.log('----------------------------------')
+        self.log('sending network_message', network_message=network_message)
+        self.broadcast(network_message)
+
+
+#
+#  App
+#
+guardian_client_name = "guardianapp"
+guardian_version = '0.1'
+guardian_client_version = ''.join((
+    guardian_version,
+    sys.platform,
+    'py{:d}.{:d}.{:d}'.format(*sys.version_info[:3]),
+))
+guardian_client_version_string = '{:s}/v{:s}'.format(
+    guardian_client_name,
+    guardian_client_version,
+)
+
+guardian_default_config = copy.deepcopy(BaseApp.default_config)
+guardian_default_config.update({
+    'client_version_string': guardian_client_version_string,
+    'post_app_start_callback': None,
+})
+
+
+class GuardianApp(BaseApp):
+    client_name = guardian_client_name
+    version = guardian_version
+    client_version = guardian_client_version
+    client_version_string = guardian_client_version_string
+
+    default_config = guardian_default_config
+
+
+from devp2p import app_helper
+from devp2p import peermanager
+from devp2p.service import BaseService
+from devp2p.discovery import NodeDiscovery
+
+
+class DevP2PNetwork(NetworkSimulatorBase):
+
+    start_time = time.time()
+
+    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False):
+        self.agents = agents or []
+
+        # copy/paste from devp2p.app_helper, not sure if this gevent config is
+        # necessary.
+        gevent.get_hub().SYSTEM_ERROR = BaseException
+        if random_port:
+            self.base_port = random.randint(10000, 60000)
+        else:
+            self.base_port = 29870
+
+        # setup the bootstrap node (node0) enode
+        self.bootstrap_node_privkey = app_helper.mk_privkey('%d:udp:%d' % (seed, 0))
+        self.bootstrap_node_pubkey = privtopub_raw(self.bootstrap_node_privkey)
+        self.enode = host_port_pubkey_to_uri(b'0.0.0.0', self.base_port, self.bootstrap_node_pubkey)
+
+        services = [NodeDiscovery, peermanager.PeerManager, GuardianService]
+
+        # prepare config
+        base_config = dict()
+        for s in services:
+            update_config_with_defaults(base_config, s.default_config)
+
+        base_config['discovery']['bootstrap_nodes'] = [self.enode]
+        base_config['seed'] = seed
+        base_config['base_port'] = self.base_port
+        base_config['num_nodes'] = len(self.agents)
+        base_config['min_peers'] = min_peers
+        base_config['max_peers'] = max_peers
+
+        self.base_config = base_config
+
+        # prepare apps
+        self.apps = {}
+        for idx, agent in enumerate(self.agents):
+            app = app_helper.create_app(idx, self.base_config, services, GuardianApp)
+            self.apps[agent.id] = app
+
+    def start(self):
+        for app in self.apps.values():
+            app.start()
+            time.sleep(0.5)
+            if app.config['post_app_start_callback'] is not None:
+                app.config['post_app_start_callback'](app)
+
+    def join(self):
+        # wait for apps to finish
+        for app in self.apps.values():
+            app.join()
+
+    def stop(self):
+        # finally stop
+        for app in self.apps.values():
+            app.stop()
+
+    def generate_peers(self, *args, **kwargs):
+        raise ValueError("DevP2PNetwork does not generate_peers")
+    #def generate_peers(self, num_peers=5):
+    #    self.peers = {}
+    #    for a in self.agents:
+    #        p = []
+    #        while len(p) <= num_peers // 2:
+    #            p.append(random.choice(self.agents))
+    #            if p[-1] == a:
+    #                p.pop()
+    #        self.peers[a.id] = list(set(self.peers.get(a.id, []) + p))
+    #        for peer in p:
+    #            self.peers[peer.id] = list(set(self.peers.get(peer.id, []) + [a]))
+
+
+    def tick(self, *args, **kwargs):
+        raise ValueError("DevP2PNetwork does not tick")
+    #def tick(self):
+    #    if self.time in self.objqueue:
+    #        for sender_id, recipient, obj in self.objqueue[self.time]:
+    #            if random.random() < self.reliability:
+    #                recipient.on_receive(obj, sender_id)
+    #        del self.objqueue[self.time]
+    #    for a in self.agents:
+    #        a.tick()
+    #    self.time += 1
+
+
+    def run(self, seconds, sleep=0):
+        start_time = time.time()
+        while time.time < start_time + seconds:
+            for agent in self.agents:
+                agent.tick()
+
+    def broadcast(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        gevent.sleep(random.random())
+        app = self.apps[sender.id]
+        bcast = app.services.peermanager.broadcast
+        bcast(GuardianProtocol, 'network_message', args=(obj,), exclude_peers=[])
+        import ipdb; ipdb.set_trace()
+
+        #if random.random() < self.broadcast_success_rate:
+        #    for p in self.peers[sender.id]:
+        #        recv_time = self.time + self.latency_distribution_sample()
+        #        if recv_time not in self.objqueue:
+        #            self.objqueue[recv_time] = []
+        #        self.objqueue[recv_time].append((sender.id, p, obj))
+
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+
+        app = self.apps[sender.id]
+        peer = random.choice(app.services.peermanager.peers)
+
+        import ipdb; ipdb.set_trace()
+        #self.direct_send(sender....
+        raise NotImplementedError("Not Implemented")
+
+
+        #if random.random() < self.broadcast_success_rate:
+        #    p = random.choice(self.peers[sender.id])
+        #    recv_time = self.time + self.latency_distribution_sample()
+        #    if recv_time not in self.objqueue:
+        #        self.objqueue[recv_time] = []
+        #    self.objqueue[recv_time].append((sender.id, p, obj))
+
+    def direct_send(self, sender, to_id, obj):
+        app = self.apps[sender.id]
+        import ipdb; ipdb.set_trace()
+
+        #func = peer.protocols[protocol].send_network_message
+        #func(*args, **kargs)
+
+        raise NotImplementedError("Not Implemented")
+        #if random.random() < self.broadcast_success_rate * self.reliability:
+        #    for a in self.agents:
+        #        if a.id == to_id:
+        #            recv_time = self.time + self.latency_distribution_sample()
+        #            if recv_time not in self.objqueue:
+        #                self.objqueue[recv_time] = []
+        #            self.objqueue[recv_time].append((sender.id, a, obj))
+
+    def knock_offline_random(self, n):
+        # TODO: how to do this with a devp2p network?
+        raise NotImplementedError("Not Implemented")
+
+    def partition(self):
+        # TODO: how to do this with a devp2p network?
+        raise NotImplementedError("Not Implemented")
+
+
+NetworkSimulator = DevP2PNetwork
