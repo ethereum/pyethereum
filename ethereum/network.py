@@ -445,8 +445,7 @@ class DevP2PNetwork(NetworkSimulatorBase):
             )
             public_key_to_agent_id[app.config['node']['id']] = agent.id
             bootstrap_nodes.append(enode)
-            if len(bootstrap_nodes) > 4:
-                bootstrap_nodes = random.sample(bootstrap_nodes, 4)
+            bootstrap_nodes = bootstrap_nodes[-2:]
             self.apps[agent.id] = app
 
     def start(self):
@@ -468,31 +467,9 @@ class DevP2PNetwork(NetworkSimulatorBase):
 
     def generate_peers(self, *args, **kwargs):
         raise ValueError("DevP2PNetwork does not generate_peers")
-    #def generate_peers(self, num_peers=5):
-    #    self.peers = {}
-    #    for a in self.agents:
-    #        p = []
-    #        while len(p) <= num_peers // 2:
-    #            p.append(random.choice(self.agents))
-    #            if p[-1] == a:
-    #                p.pop()
-    #        self.peers[a.id] = list(set(self.peers.get(a.id, []) + p))
-    #        for peer in p:
-    #            self.peers[peer.id] = list(set(self.peers.get(peer.id, []) + [a]))
-
 
     def tick(self, *args, **kwargs):
         raise ValueError("DevP2PNetwork does not tick")
-    #def tick(self):
-    #    if self.time in self.objqueue:
-    #        for sender_id, recipient, obj in self.objqueue[self.time]:
-    #            if random.random() < self.reliability:
-    #                recipient.on_receive(obj, sender_id)
-    #        del self.objqueue[self.time]
-    #    for a in self.agents:
-    #        a.tick()
-    #    self.time += 1
-
 
     def run(self, seconds, sleep=0):
         start_time = time.time()
