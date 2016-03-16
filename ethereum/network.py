@@ -436,9 +436,8 @@ class DevP2PNetwork(NetworkSimulatorBase):
         self.apps = {}
         for idx, agent in enumerate(self.agents):
             base_config['discovery']['bootstrap_nodes'] = bootstrap_nodes
-            base_config['guardianservice']['agent'] = agent
             app = app_helper.create_app(idx, self.base_config, services, GuardianApp)
-            app.config['guardianservice']['agent'].network = self
+            app.config['guardianservice']['agent'] = agent
             enode = host_port_pubkey_to_uri(
                 b'0.0.0.0',
                 app.config['discovery']['listen_port'],
