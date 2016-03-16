@@ -273,7 +273,6 @@ def check_correctness(bets):
 #n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
 n = network.NetworkSimulator(agents=bets)
 n.start()
-time.sleep(5)
 #n.generate_peers(5)
 for _bet in bets:
     _bet.network = n

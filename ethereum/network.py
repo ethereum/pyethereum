@@ -292,7 +292,7 @@ class GuardianService(WiredService):
     # required by BaseService
     name = 'guardianservice'
     default_config = {
-        'guardian': {
+        'guardianservice': {
             'num_participants': 1,
         }
     }
@@ -333,7 +333,6 @@ class GuardianService(WiredService):
         assert isinstance(proto, self.wire_protocol)
         # register callbacks
         proto.receive_network_message_callbacks.append(self.on_receive_network_message)
-        self.send_network_message('initializing')
 
     def on_receive_network_message(self, proto, network_message):
         print "====================got it===================="
@@ -341,7 +340,10 @@ class GuardianService(WiredService):
         assert isinstance(proto, self.wire_protocol)
         self.log('----------------------------------')
         self.log('on_receive network_message', network_message=network_message, proto=proto)
-        #self.send_network_message('received: {0}'.format(network_message.message))
+        agent = self.app.services.guardianservice.config['guardianservice']['agent']
+        lookup_fn = self.app.services.guardianservice.config['guardianservice']['lookup_fn']
+        other_agent_id = lookup_fn(proto.peer.remote_pubkey)
+        agent.on_receive(rlp.encode(network_message), other_agent_id)
 
     def send_network_message(self, typ, args):
         # without this we hit a race condition between our nodes.
@@ -416,25 +418,42 @@ class DevP2PNetwork(NetworkSimulatorBase):
         for s in services:
             update_config_with_defaults(base_config, s.default_config)
 
-        base_config['discovery']['bootstrap_nodes'] = [self.enode]
+        bootstrap_nodes = [self.enode]
+
         base_config['seed'] = seed
         base_config['base_port'] = self.base_port
         base_config['num_nodes'] = len(self.agents)
         base_config['min_peers'] = min_peers
         base_config['max_peers'] = max_peers
 
+        public_key_to_agent_id = {}
+
+        base_config['guardianservice']['lookup_fn'] = public_key_to_agent_id.__getitem__
+
         self.base_config = base_config
 
         # prepare apps
         self.apps = {}
         for idx, agent in enumerate(self.agents):
+            base_config['discovery']['bootstrap_nodes'] = bootstrap_nodes
+            base_config['guardianservice']['agent'] = agent
             app = app_helper.create_app(idx, self.base_config, services, GuardianApp)
+            app.config['guardianservice']['agent'].network = self
+            enode = host_port_pubkey_to_uri(
+                b'0.0.0.0',
+                app.config['discovery']['listen_port'],
+                app.config['node']['id'],
+            )
+            public_key_to_agent_id[app.config['node']['id']] = agent.id
+            bootstrap_nodes.append(enode)
+            if len(bootstrap_nodes) > 4:
+                bootstrap_nodes = random.sample(bootstrap_nodes, 4)
             self.apps[agent.id] = app
 
     def start(self):
         for app in self.apps.values():
             app.start()
-            time.sleep(0.5)
+            gevent.sleep(random.random())
             if app.config['post_app_start_callback'] is not None:
                 app.config['post_app_start_callback'](app)
 
@@ -478,17 +497,23 @@ class DevP2PNetwork(NetworkSimulatorBase):
 
     def run(self, seconds, sleep=0):
         start_time = time.time()
-        while time.time < start_time + seconds:
+        while time.time() < start_time + seconds:
             for agent in self.agents:
+                gevent.sleep(random.random())
                 agent.tick()
 
     def broadcast(self, sender, obj):
         assert isinstance(obj, (str, bytes))
         gevent.sleep(random.random())
         app = self.apps[sender.id]
+        network_message = rlp.decode(obj, NetworkMessage)
         bcast = app.services.peermanager.broadcast
-        bcast(GuardianProtocol, 'network_message', args=(obj,), exclude_peers=[])
-        import ipdb; ipdb.set_trace()
+        bcast(
+            GuardianProtocol,
+            'network_message',
+            args=(network_message,),
+            exclude_peers=[],
+        )
 
         #if random.random() < self.broadcast_success_rate:
         #    for p in self.peers[sender.id]:
@@ -502,34 +527,27 @@ class DevP2PNetwork(NetworkSimulatorBase):
 
         app = self.apps[sender.id]
         peer = random.choice(app.services.peermanager.peers)
+        to_id = app.config['guardianservice']['lookup_fn'](peer.remote_pubkey)
 
-        import ipdb; ipdb.set_trace()
-        #self.direct_send(sender....
-        raise NotImplementedError("Not Implemented")
-
-
-        #if random.random() < self.broadcast_success_rate:
-        #    p = random.choice(self.peers[sender.id])
-        #    recv_time = self.time + self.latency_distribution_sample()
-        #    if recv_time not in self.objqueue:
-        #        self.objqueue[recv_time] = []
-        #    self.objqueue[recv_time].append((sender.id, p, obj))
+        self.direct_send(sender, to_id, obj)
 
     def direct_send(self, sender, to_id, obj):
         app = self.apps[sender.id]
-        import ipdb; ipdb.set_trace()
+        lookup_fn = app.config['guardianservice']['lookup_fn']
 
-        #func = peer.protocols[protocol].send_network_message
-        #func(*args, **kargs)
+        to_peer = None
 
-        raise NotImplementedError("Not Implemented")
-        #if random.random() < self.broadcast_success_rate * self.reliability:
-        #    for a in self.agents:
-        #        if a.id == to_id:
-        #            recv_time = self.time + self.latency_distribution_sample()
-        #            if recv_time not in self.objqueue:
-        #                self.objqueue[recv_time] = []
-        #            self.objqueue[recv_time].append((sender.id, a, obj))
+        for peer in app.services.peermanager.peers:
+            if lookup_fn(peer.remote_pubkey) == to_id:
+                to_peer = peer
+                break
+
+        if to_peer is None:
+            import ipdb; ipdb.set_trace()
+            raise ValueError("Not connected to the provided agent")
+
+        proto = to_peer.protocols[GuardianProtocol]
+        proto.send_network_message(rlp.decode(obj, NetworkMessage))
 
     def knock_offline_random(self, n):
         # TODO: how to do this with a devp2p network?
