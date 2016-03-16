@@ -253,7 +253,8 @@ import ethereum.slogging as slogging
 from ethereum.guardian import NetworkMessage
 
 
-slogging.configure(config_string=':debug,p2p.discovery:info')
+#slogging.configure(config_string=':debug,p2p.discovery:info')
+slogging.configure(config_string=':info,p2p.discovery:info')
 logger = slogging.get_logger('guardian')
 
 _nonce = 0
@@ -335,7 +336,6 @@ class GuardianService(WiredService):
         proto.receive_network_message_callbacks.append(self.on_receive_network_message)
 
     def on_receive_network_message(self, proto, network_message):
-        print "====================got it===================="
         assert isinstance(network_message, NetworkMessage)
         assert isinstance(proto, self.wire_protocol)
         self.log('----------------------------------')
