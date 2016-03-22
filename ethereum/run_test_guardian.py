@@ -1,12 +1,41 @@
+import os
+import serpent
+import gevent
+import random
+import rlp
+import time
+
+from devp2p import peermanager
+from devp2p.service import BaseService
+from devp2p.discovery import NodeDiscovery
+from devp2p.crypto import (
+    privtopub as privtopub_raw,
+)
+from devp2p.utils import (
+    host_port_pubkey_to_uri,
+    update_config_with_defaults,
+)
+
 from serenity_blocks import State, tx_state_transition, mk_contract_address, \
     block_state_transition, initialize_with_gas_limit, get_code, put_code
 from serenity_transactions import Transaction
-from db import LevelDB, OverlayDB
-import serpent
-import ringsig_tester
-from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, BASICSENDER, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING, CREATOR, GAS_DEPOSIT
-from utils import privtoaddr, normalize_address, zpad, encode_int, \
-    big_endian_to_int, encode_int32, shardify, sha3, int_to_addr
+from db import EphemDB, OverlayDB
+from config import (
+    BLKNUMBER,
+    CASPER,
+    ETHER,
+    ECRECOVERACCT,
+    BASICSENDER,
+    RNGSEEDS,
+    GENESIS_TIME,
+)
+from utils import (
+    zpad,
+    encode_int,
+    big_endian_to_int,
+    encode_int32,
+    sha3,
+)
 import ecdsa_accounts
 import abi
 import sys
@@ -15,14 +44,18 @@ from ethereum.guardian.utils import (
     casper_ct,
     encode_prob,
 )
-from ethereum.guardian2.strategy import (
+from ethereum.guardian.strategy import (
     defaultBetStrategy,
 )
-from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
-import time
-import network
-import os
-import bitcoin
+from ethereum.mandatory_account_code import mandatory_account_ct, mandatory_account_evm
+
+from ethereum.guardian.network import (
+    NetworkMessage,
+    GuardianService,
+    GuardianProtocol,
+    GuardianApp,
+)
+
 
 # Maybe add logging
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
@@ -54,6 +87,7 @@ def my_listen(sender, topics, data):
     mandatory_account_ct.listen(sender, topics, data)
     jsondata = ringsig_ct.listen(sender, topics, data)
 
+
 # Get command line parameters
 def get_arg(flag, typ, default):
     if flag in sys.argv:
@@ -61,48 +95,17 @@ def get_arg(flag, typ, default):
     else:
         return default
 
-MAX_NODES = get_arg('--maxnodes', int, 12)
-assert MAX_NODES >= 5, "Need at least 5 max nodes"
-CLOCKWRONG = get_arg('--clockwrong', int, 0)
-CLOCKWRONG_CUMUL = CLOCKWRONG + 1
-BRAVE = get_arg('--brave', int, 0)
-BRAVE_CUMUL = CLOCKWRONG_CUMUL + BRAVE
-CRAZYBET = get_arg('--crazybet', int, 0)
-CRAZYBET_CUMUL = BRAVE_CUMUL + CRAZYBET
-DBL_BLK_SUICIDE = get_arg('--dblblk', int, 0)
-DBL_BLK_SUICIDE_CUMUL = CRAZYBET_CUMUL + DBL_BLK_SUICIDE
-DBL_BET_SUICIDE = get_arg('--dblbet', int, 0)
-DBL_BET_SUICIDE_CUMUL = DBL_BLK_SUICIDE_CUMUL + DBL_BET_SUICIDE
-assert 0 <= CLOCKWRONG_CUMUL <= BRAVE_CUMUL <= CRAZYBET_CUMUL <= DBL_BLK_SUICIDE_CUMUL <= DBL_BET_SUICIDE_CUMUL <= MAX_NODES, \
-    "Negative numbers or too many nodes with special properties"
-
-print 'Running with %d maximum nodes: %d with wonky clocks, %d brave, %d crazy-betting, %d double-block suiciding, %d double-bet suiciding' % (MAX_NODES, CLOCKWRONG, BRAVE, CRAZYBET, DBL_BLK_SUICIDE, DBL_BET_SUICIDE)
-
-serenity_states_path = os.path.join(os.path.dirname(__file__), '..', 'serenity_states')
-genesis_db_path = os.path.join(serenity_states_path, 'genesis')
-bet_db_path = os.path.join(serenity_states_path, 'bet%d')
-try:
-    os.mkdir(serenity_states_path)
-except OSError:
-    pass
-
-def mk_bet_strategy(state, index, key):
-    bet_state = state.clone(bet_db_path % index)
-    return defaultBetStrategy(bet_state, key,
-                              clockwrong=(1 <= index < CLOCKWRONG_CUMUL),
-                              bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.92),
-                              crazy_bet=(BRAVE_CUMUL <= index < CRAZYBET_CUMUL),
-                              double_block_suicide=(5 if CRAZYBET_CUMUL <= index < DBL_BLK_SUICIDE_CUMUL else 2**80),
-                              double_bet_suicide=(1 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
 
 # Create the genesis
-genesis = State('', LevelDB(genesis_db_path))
+genesis = State('', EphemDB())
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
+
 # Unleash the kraken....err, I mean casper
 casper_file = os.path.join(os.path.split(__file__)[0], 'casper.se.py')
 casper_hash_file = os.path.join(os.path.split(__file__)[0], '_casper.hash')
 casper_evm_file = os.path.join(os.path.split(__file__)[0], '_casper.evm')
+
 # Cache compilation of Casper to save time
 try:
     h = sha3(open(casper_file).read()).encode('hex')
@@ -113,11 +116,12 @@ except:
     code = serpent.compile(casper_file)
     open(casper_evm_file, 'w').write(code)
     open(casper_hash_file, 'w').write(h)
+
 # Add Casper contract to blockchain
 tx_state_transition(gc, Transaction(None, 4000000, data='', code=code))
 put_code(genesis, CASPER, get_code(gc, mk_contract_address(code=code)))
 print 'Casper added'
-casper_ct = abi.ContractTranslator(serpent.mk_full_signature(casper_file))
+
 # Ringsig file and ct
 ringsig_file = os.path.join(os.path.split(__file__)[0], 'ringsig.se.py')
 ringsig_code = serpent.compile(open(ringsig_file).read())
@@ -135,10 +139,22 @@ tx_state_transition(gc, Transaction(None, 1000000, data='', code=code2))
 put_code(genesis, BASICSENDER, get_code(gc, mk_contract_address(code=code2)))
 print 'Basic sender account added'
 
+
+# Determine the number of nodes that will be run.
+#
+# TODO: This will need to be reworked so that we can initialize the genesis
+# state without needing to know about which other nodes are participating.
+#
+NUM_NODES = get_arg('--num-nodes', int, 3)
+KEY_IDX = get_arg('--key-idx', int, None)
+if KEY_IDX is None:
+    raise Exception("Must specify which validator")
+
+assert KEY_IDX < NUM_NODES
+
 # Generate the initial set of keys
-keys = [zpad(encode_int(x+1), 32) for x in range(0, MAX_NODES - 2)]
-# Create a second set of 4 keys
-secondkeys = [zpad(encode_int(x+1), 32) for x in range(MAX_NODES - 2, MAX_NODES)]
+keys = [zpad(encode_int(x + 1), 32) for x in range(0, NUM_NODES)]
+
 # Initialize the first keys
 for i, k in enumerate(keys):
     # Generate the address
@@ -167,32 +183,38 @@ for i, k in enumerate(keys):
     vcode2 = call_method(genesis, CASPER, casper_ct, 'getGuardianValidationCode', [index])
     assert vcode2 == vcode
 
-# Give the secondary keys some ether as well
-for i, k in enumerate(secondkeys):
-    # Generate the address
-    a = ecdsa_accounts.privtoaddr(k)
-    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
-    # Give them 1600 ether
-    genesis.set_storage(ETHER, a, 1600 * 10**18)
+KEY = keys[KEY_IDX]
+
+
+def get_genesis_time():
+    t = int(time.time())
+    return t - t % 30
+
+
+GENESIS_TIMESTAMP = get_arg('--genesis-time', int, get_genesis_time())
+
 
 # Set the starting RNG seed to equal to the number of casper guardians
 # in genesis
 genesis.set_storage(RNGSEEDS, encode_int32(2**256 - 1), genesis.get_storage(CASPER, 0))
 # Set the genesis timestamp
-genesis.set_storage(GENESIS_TIME, encode_int32(0), int(network.NetworkSimulator.start_time + 5))
-print 'genesis time', int(network.NetworkSimulator.start_time + 5), '\n' * 10
+genesis.set_storage(GENESIS_TIME, encode_int32(0), GENESIS_TIMESTAMP)
+print 'genesis time', GENESIS_TIMESTAMP, '\n' * 10
 # Create betting strategy objects for every guardian
-bets = [mk_bet_strategy(genesis, i, k) for i, k in enumerate(keys)]
+# TODO: may not need to `clone()` this anymore since it's singular.
+bet = defaultBetStrategy(genesis.clone(), KEY)
+bets = [bet]
 # Minimum max finalized height
 min_mfh = -1
 
 # Transactions to status report on
 check_txs = []
 
+
 # Function to check consistency between everything
 def check_correctness(bets):
     global min_mfh
-    print '#'*80
+    print '#' * 80
     # Max finalized heights for each bettor strategy
     mfhs = [bet.max_finalized_height for bet in bets if not bet.byzantine]
     mchs = [bet.calc_state_roots_from for bet in bets if not bet.byzantine]
@@ -208,7 +230,7 @@ def check_correctness(bets):
     # Probabilities
     # print 'Probs: %r' % {i: [bet.probs[i] if i < len(bet.probs) else None for bet in bets] for i in range(new_min_mfh, max([len(bet.blocks) for bet in bets]))}
     # Data about bets from each guardian according to every other guardian
-    print 'Now: %.2f' % n.now
+    print 'Now: %.2f' % time.time()
     print 'According to each guardian...'
     for bet in bets:
         print ('(%d) Bets received: %r, blocks received: %s. Last bet made: %.2f.' % (bet.index, [((str(op.seq) + ' (withdrawn)') if op.withdrawn else op.seq) for op in bet.opinions.values()], ''.join(['1' if b else '0' for b in bet.blocks]), bet.last_bet_made))
@@ -223,9 +245,9 @@ def check_correctness(bets):
     # height are the same
     print 'Verifying finalized block hash equivalence'
     for j in range(1, len(bets)):
-        if not bets[j].byzantine and not bets[j-1].byzantine:
-            j_hashes = bets[j].finalized_hashes[:(new_min_mfh+1)]
-            jm1_hashes = bets[j-1].finalized_hashes[:(new_min_mfh+1)]
+        if not bets[j].byzantine and not bets[j - 1].byzantine:
+            j_hashes = bets[j].finalized_hashes[:(new_min_mfh + 1)]
+            jm1_hashes = bets[j - 1].finalized_hashes[:(new_min_mfh + 1)]
             assert j_hashes == jm1_hashes, (j_hashes, jm1_hashes)
     # Checks state roots for finalized heights and makes sure that they are
     # consistent
@@ -237,7 +259,7 @@ def check_correctness(bets):
                 assert b.stateroots[i] not in ('\x00' * 32, None)
     print 'Executing blocks %d to %d' % (min_mfh + 1, max(min_mfh, new_min_mfh) + 1)
     for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
-        assert state.root == bets[0].stateroots[i-1] if i > 0 else genesis.root
+        assert state.root == bets[0].stateroots[i - 1] if i > 0 else genesis.root
         block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
         block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
         assert block0 == block
@@ -267,10 +289,10 @@ def check_correctness(bets):
     # Guardian sequence numbers as recorded in the chain
     print 'Guardian seqs on finalized chain (%d): %r' % (new_min_mfh, [call_method(state, CASPER, casper_ct, 'getGuardianSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     h = 0
-    while h < len(bets[3].stateroots) and bets[3].stateroots[h] not in (None, '\x00' * 32):
+    while h < len(bets[0].stateroots) and bets[0].stateroots[h] not in (None, '\x00' * 32):
         h += 1
-    speculative_state = State(bets[3].stateroots[h-1] if h else genesis.root, OverlayDB(bets[3].db))
-    print 'Guardian seqs on speculative chain (%d): %r' % (h-1, [call_method(speculative_state, CASPER, casper_ct, 'getGuardianSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
+    speculative_state = State(bets[0].stateroots[h - 1] if h else genesis.root, OverlayDB(bets[0].db))
+    print 'Guardian seqs on speculative chain (%d): %r' % (h - 1, [call_method(speculative_state, CASPER, casper_ct, 'getGuardianSeq', [bet.index if bet.index >= 0 else bet.former_index]) for bet in bets])
     # Guardian deposit sizes (over 1500 * 10**18 means profit)
     print 'Guardian deposit sizes: %r' % [call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) for bet in bets if bet.index >= 0]
     print 'Estimated guardian excess gains: %r' % [call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) - 1500 * 10**18 + 47 / 10**9. * 1500 * 10**18 * min_mfh for bet in bets if bet.index >= 0]
@@ -284,161 +306,115 @@ def check_correctness(bets):
     print 'Transaction status in finalized_txindex: %r' % [bets[0].finalized_txindex.get(tx.hash, None) for tx in check_txs]
     print 'Transaction exceptions: %r' % [bets[0].tx_exceptions.get(tx.hash, 0) for tx in check_txs]
 
-# Simulate a network
-#n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n = network.NetworkSimulator(agents=bets)
-n.start()
-#n.generate_peers(5)
-for _bet in bets:
-    _bet.network = n
+# Gevent config
+gevent.get_hub().SYSTEM_ERROR = BaseException
 
-# Submitting ring sig contract as a transaction
-print 'Submitting ring sig contract\n\n'
-ringsig_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_code)
-print 'Ringsig address', ringsig_addr.encode('hex')
-tx3 = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 2000000, CREATOR, 0, ringsig_code, bets[0].key)
-bets[0].add_transaction(tx3)
-check_txs.extend([tx3])
-ringsig_account_code = serpent.compile(("""
-def init():
-    sstore(0, %d)
-    sstore(1, %d)
-""" % (big_endian_to_int(ringsig_addr), big_endian_to_int(ringsig_addr))) + '\n' + mandatory_account_code)
-ringsig_account_addr = mk_contract_address(sender=bets[0].addr, code=ringsig_account_code)
-tx4 = ecdsa_accounts.mk_transaction(2, 25 * 10**9, 2000000, CREATOR, 0, ringsig_account_code, bets[0].key)
-bets[0].add_transaction(tx4)
-check_txs.extend([tx4])
-print 'Ringsig account address', ringsig_account_addr.encode('hex')
+
+def mk_privkey(seed):
+    return sha3(seed)
+
+
+# setup the bootstrap node (node0) enode
+DEFAULT_PORT = 29870
+DEFAULT_IP_ADDRESS = b'0.0.0.0'
+
+PORT = get_arg('--port', int, DEFAULT_PORT)
+IP_ADDRESS = get_arg('--ip-address', str, DEFAULT_IP_ADDRESS)
+
+BOOTSTRAP_NODE_IP = get_arg('--bootstrap-ip', str, DEFAULT_IP_ADDRESS)
+BOOTSTRAP_NODE_PORT = get_arg('--bootstrap-port', int, DEFAULT_PORT)
+
+bootstrap_node_privkey = mk_privkey(keys[0])
+bootstrap_node_pubkey = privtopub_raw(bootstrap_node_privkey)
+bootstrap_enode = host_port_pubkey_to_uri(BOOTSTRAP_NODE_IP, BOOTSTRAP_NODE_PORT, bootstrap_node_pubkey)
+
+print "Bootstrap ENODE: {0}".format(bootstrap_enode)
+
+services = [NodeDiscovery, peermanager.PeerManager, GuardianService]
+
+# prepare config
+config = dict()
+for s in services:
+    update_config_with_defaults(config, s.default_config)
+
+MIN_PEERS = get_arg('--min-peers', int, 2)
+MAX_PEERS = get_arg('--max-peers', int, 25)
+
+config['node']['privkey_hex'] = mk_privkey(KEY).encode('hex')
+
+config['p2p']['listen_port'] = PORT
+config['p2p']['min_peers'] = min(10, MIN_PEERS)
+config['p2p']['max_peers'] = MAX_PEERS
+
+config['discovery']['listen_port'] = PORT
+config['discovery']['bootstrap_nodes'] = [bootstrap_enode]
+
+config['guardianservice']['agent'] = bet
+
+
+class StandaloneGuardianApp(GuardianApp):
+    def broadcast(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        gevent.sleep(random.random())
+        network_message = rlp.decode(obj, NetworkMessage)
+        bcast = self.services.peermanager.broadcast
+        bcast(
+            GuardianProtocol,
+            'network_message',
+            args=(network_message,),
+            exclude_peers=[],
+        )
+
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+
+        peer = random.choice(self.services.peermanager.peers)
+
+        self.direct_send(sender, peer.remote_pubkey, obj)
+
+    def direct_send(self, sender, to_id, obj):
+        to_peer = None
+
+        for peer in self.services.peermanager.peers:
+            if peer.remote_pubkey == to_id:
+                to_peer = peer
+                break
+
+        if to_peer is None:
+            raise ValueError("Not connected to the provided agent")
+
+        proto = to_peer.protocols[GuardianProtocol]
+        proto.send_network_message(rlp.decode(obj, NetworkMessage))
+
+    @property
+    def now(self):
+        return time.time()
+
+
+# prepare app
+app = StandaloneGuardianApp(config)
+bet.network = app
+
+
+# register services
+for service in services:
+    assert issubclass(service, BaseService)
+    if service.name not in app.config['deactivated_services']:
+        assert service.name not in app.services
+        service.register_with_app(app)
+        assert hasattr(app.services, service.name)
+
+# start the app
+app.start()
+
 # Keep running until the min finalized height reaches 20
 while 1:
-    n.run(25, sleep=0.25)
+    start = time.time()
+    while start + 25 > time.time():
+        bet.tick()
+        gevent.sleep(random.random())
     check_correctness(bets)
     if min_mfh >= 36:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
-    # DevP2PNetwork does not do peer lists
-    #print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
-
-recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-assert get_code(recent_state, ringsig_addr)
-assert get_code(recent_state, ringsig_account_addr)
-print 'Length of ringsig contract: %d' % len(get_code(recent_state, ringsig_addr))
-
-# Create transactions for a few new guardians to join
-print '#' * 80 + '\n' + '#' * 80
-print 'Generating transactions to include new guardians'
-for i, k in enumerate(secondkeys):
-    index = len(keys) + i
-    # Make their validation code
-    vcode = ecdsa_accounts.mk_validation_code(k)
-    # Make the transaction to join as a Casper guardian
-    txdata = casper_ct.encode('join', [vcode])
-    tx = ecdsa_accounts.mk_transaction(0, 25 * 10**9, 1000000, CASPER, 1500 * 10**18, txdata, k, create=True)
-    print 'Making transaction: ', tx.hash.encode('hex')
-    bets[0].add_transaction(tx)
-    check_txs.extend([tx])
-
-THRESHOLD1 = 315 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
-THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
-
-orig_ring_pubs = []
-# Publish submits to ringsig contract
-print 'Sending to ringsig contract\n\n'
-for bet in bets[1:6]:
-    x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
-    orig_ring_pubs.append((x, y))
-    data = ringsig_ct.encode('submit', [x, y])
-    tx = ecdsa_accounts.mk_transaction(1, 25 * 10**9, 750000, ringsig_account_addr, 10**17, data, bet.key)
-    assert bet.should_i_include_transaction(tx)
-    bet.add_transaction(tx, True)
-    check_txs.extend([tx])
-# Keep running until the min finalized height reaches 75. We expect that by
-# this time all transactions from the previous phase have been included
-while 1:
-    n.run(25, sleep=0.25)
-    check_correctness(bets)
-    if min_mfh > THRESHOLD1:
-        print 'Reached breakpoint'
-        break
-    print 'Min mfh:', min_mfh
-
-
-recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-next_index = call_method(recent_state, ringsig_account_addr, ringsig_ct, 'getNextIndex', [])
-assert next_index == 5, ("Next index: %d, should be 5" % next_index)
-ring_pub_data = call_method(recent_state, ringsig_account_addr, ringsig_ct, 'getPubs', [0])
-ring_pubs = [(ring_pub_data[i] % 2**256, ring_pub_data[i+1] % 2**256) for i in range(0, len(ring_pub_data), 2)]
-print sorted(ring_pubs), sorted(orig_ring_pubs)
-assert sorted(ring_pubs) == sorted(orig_ring_pubs)
-print 'Submitted public keys:', ring_pubs
-
-# Create ringsig withdrawal transactions
-for i, bet in enumerate(bets[1:6]):
-    x, y = bitcoin.privtopub(bitcoin.decode_privkey(bet.key))
-    target_addr = 2000 + i
-    x0, s, Ix, Iy = ringsig_tester.ringsig_sign_substitute(encode_int32(target_addr), bitcoin.decode_privkey(bet.key), ring_pubs)
-    print 'Verifying ring signature using python code'
-    assert ringsig_tester.ringsig_verify_substitute(encode_int32(target_addr), x0, s, Ix, Iy, ring_pubs)
-    data = ringsig_ct.encode('withdraw', [int_to_addr(target_addr), x0, s, Ix, Iy, 0])
-    tx = Transaction(ringsig_account_addr, 1000000, data=data, code=b'')
-    print 'Verifying tx includability'
-    assert bet.should_i_include_transaction(tx)
-    bet.add_transaction(tx)
-    check_txs.extend([tx])
-
-# Create bet objects for the new guardians
-state = State(genesis.root, bets[0].db)
-secondbets = [mk_bet_strategy(state, len(bets) + i, k) for i, k in enumerate(secondkeys)]
-for bet in secondbets:
-    bet.network = n
-n.agents.extend(secondbets)
-n.generate_peers(5)
-print 'Increasing number of peers in the network to %d!' % MAX_NODES
-recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
-# Check that all signups are successful
-signups = call_method(recent_state, CASPER, casper_ct, 'getGuardianSignups', [])
-print 'Guardians signed up: %d' % signups
-assert signups == MAX_NODES
-print 'All new guardians inducted'
-print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianInductionHeight', [i]) for i in range(len(keys + secondkeys))]
-
-# Keep running until the min finalized height reaches ~175. We expect that by
-# this time all guardians will be actively betting off of each other's bets
-while 1:
-    n.run(25, sleep=0.25)
-    check_correctness(bets)
-    print 'Min mfh:', min_mfh
-    print 'Induction heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianInductionHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > THRESHOLD2:
-        print 'Reached breakpoint'
-        break
-
-# Create transactions for old guardians to leave
-print '#' * 80 + '\n' + '#' * 80
-print 'Generating transactions to withdraw some guardians'
-for bet in bets[:3]:
-    bet.withdraw()
-
-BLK_DISTANCE = len(bet.blocks) - min_mfh
-
-
-# Keep running until the min finalized height reaches ~290.
-while 1:
-    n.run(25, sleep=0.25)
-    check_correctness(bets)
-    print 'Min mfh:', min_mfh
-    print 'Withdrawal heights: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianWithdrawalHeight', [i]) for i in range(len(keys + secondkeys))]
-    if min_mfh > 200 + BLK_DISTANCE + ENTER_EXIT_DELAY:
-        print 'Reached breakpoint'
-        break
-    # Exit early if the withdrawal step already completed
-    recent_state = bets[0].get_finalized_state()
-    if len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) == 2]) == MAX_NODES - 3:
-        break
-
-recent_state = bets[0].get_optimistic_state()
-# Check that the only remaining active guardians are the ones that have not
-# yet signed out.
-print 'Guardian statuses: %r' % [call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) for i in range(MAX_NODES)]
-assert len([i for i in range(50) if call_method(recent_state, CASPER, casper_ct, 'getGuardianStatus', [i]) == 2]) == MAX_NODES - 3

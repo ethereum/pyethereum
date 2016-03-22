@@ -178,12 +178,15 @@ class Opinion():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
+    @property
+    def id(self):
+        from ethereum.utils import decode_int
+        return decode_int(self.addr)
+
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
                  double_bet_suicide=2**200, min_gas_price=10**9):
         DEBUG("Initializing betting strategy")
-        # An ID for purposes of the network simulator
-        self.id = mkid()
         # Guardian's private key
         self.key = key
         # Guardian's address on the network
