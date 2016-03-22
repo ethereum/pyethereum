@@ -4,7 +4,7 @@ import time
 import rlp
 import gevent
 
-from ethereum.guardian2.network import (
+from ethereum.guardian.network import (
     NetworkMessage,
     GuardianService,
     GuardianProtocol,

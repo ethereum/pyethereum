@@ -10,12 +10,12 @@ from utils import privtoaddr, normalize_address, zpad, encode_int, \
 import ecdsa_accounts
 import abi
 import sys
-from ethereum.guardian2.utils import (
+from ethereum.guardian.utils import (
     call_method,
     casper_ct,
     encode_prob,
 )
-from ethereum.guardian2.strategy import (
+from ethereum.guardian.strategy import (
     defaultBetStrategy,
 )
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code

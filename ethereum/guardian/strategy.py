@@ -40,7 +40,7 @@ from ethereum.serenity_blocks import (
 from ethereum.default_betting_strategy import bet_at_height
 from ethereum.mandatory_account_code import mandatory_account_evm
 
-from ethereum.guardian2.network import (
+from ethereum.guardian.network import (
     NetworkMessage,
     NM_LIST,
     NM_BLOCK,
@@ -50,7 +50,7 @@ from ethereum.guardian2.network import (
     NM_GETBLOCK,
     NM_GETBLOCKS,
 )
-from ethereum.guardian2.utils import (
+from ethereum.guardian.utils import (
     casper_ct,
     call_casper,
     is_block_valid,
