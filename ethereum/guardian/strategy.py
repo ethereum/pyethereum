@@ -1,94 +1,69 @@
-import time
-from abi import ContractTranslator, decode_abi
-from utils import address, int256, trie_root, hash32, to_string, \
-    sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    encode_int32, safe_ord, encode_int, shardify, DEBUG, rlp_decode, \
-    mkid
-from rlp.sedes import big_endian_int, Binary, binary, CountableList
-from serenity_blocks import tx_state_transition, BLKNUMBER, \
-    block_state_transition, Block, apply_msg, EmptyVMExt, State, VMExt, \
-    get_code
-from serenity_transactions import Transaction
-from ecdsa_accounts import sign_block, privtoaddr, sign_bet, mk_transaction
-from config import CASPER, BLKTIME, RNGSEEDS, NULL_SENDER, GENESIS_TIME, ENTER_EXIT_DELAY, GASLIMIT, LOG, ETHER, VALIDATOR_ROUNDS, EXECUTION_STATE, TXINDEX, BLKNUMBER, ADDR_BYTES, GAS_DEPOSIT, CONST_CALL_SENDER
-from mandatory_account_code import mandatory_account_evm
-from default_betting_strategy import bet_at_height
-from db import OverlayDB
-import fastvm as vm
-import serpent
-import rlp
 import sys
+import rlp
 import random
-import math
-import copy
+
+from ethereum.ecdsa_accounts import (
+    sign_block,
+    privtoaddr,
+    sign_bet,
+    mk_transaction,
+)
+from ethereum.utils import (
+    big_endian_to_int,
+    encode_int,
+    shardify,
+    DEBUG,
+    rlp_decode,
+    mkid,
+    sha3,
+)
+from ethereum.abi import decode_abi
+from ethereum.config import (
+    GENESIS_TIME,
+    BLKTIME,
+    ENTER_EXIT_DELAY,
+    ADDR_BYTES,
+    VALIDATOR_ROUNDS,
+    LOG,
+    CASPER,
+    GASLIMIT,
+)
+from ethereum.serenity_blocks import (
+    BLKNUMBER,
+    State,
+    Block,
+    Transaction,
+    tx_state_transition,
+    block_state_transition,
+    get_code,
+)
+from ethereum.default_betting_strategy import bet_at_height
+from ethereum.mandatory_account_code import mandatory_account_evm
+
+from ethereum.guardian2.network import (
+    NetworkMessage,
+    NM_LIST,
+    NM_BLOCK,
+    NM_BET,
+    NM_BET_REQUEST,
+    NM_TRANSACTION,
+    NM_GETBLOCK,
+    NM_GETBLOCKS,
+)
+from ethereum.guardian2.utils import (
+    casper_ct,
+    call_casper,
+    is_block_valid,
+    encode_prob,
+    decode_prob,
+    FINALITY_HIGH,
+    FINALITY_LOW,
+    get_guardian_index,
+)
+
 
 MAX_RECALC = 9
 MAX_LONG_RECALC = 14
-
-NM_LIST = 0
-NM_BLOCK = 1
-NM_BET = 2
-NM_BET_REQUEST = 3
-NM_TRANSACTION = 4
-NM_GETBLOCK = 5
-NM_GETBLOCKS = 6
-NM_BLOCKS = 7
-
-# Network message object
-class NetworkMessage(rlp.Serializable):
-    fields = [
-        ('typ', big_endian_int),
-        ('args', CountableList(binary))
-    ]
-
-    def __init__(self, typ, args):
-        self.typ = typ
-        self.args = args
-
-# Call a method of a function with no effect
-def call_method(state, addr, ct, fun, args, gas=1000000):
-    data = ct.encode(fun, args)
-    message_data = vm.CallData([safe_ord(x) for x in data], 0, len(data))
-    message = vm.Message(CONST_CALL_SENDER, addr, 0, gas, message_data)
-    result, gas_remained, data = apply_msg(VMExt(state.clone()), message, get_code(state, addr))
-    output = ''.join(map(chr, data))
-    return ct.decode(fun, output)[0]
-
-# Convert probability from a number to one-byte encoded form
-# using scientific notation on odds with a 3-bit mantissa;
-# 0 = 65536:1 odds = 0.0015%, 128 = 1:1 odds = 50%, 255 =
-# 1:61440 = 99.9984%
-def encode_prob(p):
-    lastv = '\x00'
-    while 1:
-        q = p / (1.0 - p)
-        exp = 0
-        while q < 1:
-            q *= 2.0
-            exp -= 1
-        while q >= 2:
-            q /= 2.0
-            exp += 1
-        mantissa = int(q * 4 - 3.9999)
-        v = chr(max(0, min(255, exp * 4 + 128 + mantissa)))
-        return v
-
-
-# Convert probability from one-byte encoded form to a number
-def decode_prob(c):
-    c = ord(c)
-    q = 2.0**((c - 128) // 4) * (1 + 0.25 * ((c - 128) % 4))
-    return q / (1.0 + q)
-
-FINALITY_LOW, FINALITY_HIGH = decode_prob('\x00'), decode_prob('\xff')
-
-# Be VERY careful about updating the above algorithms; if the assert below
-# fails (ie. encode and decode are not inverses) then bet serialization will
-# break and so casper will break
-assert map(encode_prob, map(decode_prob, map(chr, range(256)))) == map(chr, range(256)), map(encode_prob, map(decode_prob, map(chr, range(256))))
-
-
-invhash = {}
 
 
 # An object that stores a bet made by a guardian
@@ -108,7 +83,8 @@ class Bet():
     # Serializes the bet into the function message which can be directly submitted
     # to the casper contract
     def serialize(self):
-        o = casper_ct.encode('submitBet',
+        o = casper_ct.encode(
+            'submitBet',
             [self.index, self.max_height, ''.join(map(encode_prob, self.probs)),
              self.blockhashes, self.stateroots, ''.join(map(encode_prob, self.stateroot_probs)),
              self.prevhash, self.seq, self.sig]
@@ -199,41 +175,6 @@ class Opinion():
     def max_height(self):
         return len(self.probs) - 1
 
-# Helper method for calling Casper
-casper_ct = ContractTranslator(serpent.mk_full_signature('ethereum/casper.se.py'))
-
-def call_casper(state, fun, args, gas=1000000):
-    return call_method(state, CASPER, casper_ct, fun, args, gas)
-
-# Accepts any state less than ENTER_EXIT_DELAY blocks old
-def is_block_valid(state, block):
-    # Determine the desired proposer address and the validation code
-    guardian_index = get_guardian_index(state, block.number)
-    guardian_address = call_casper(state, 'getGuardianAddress', [guardian_index])
-    guardian_code = call_casper(state, 'getGuardianValidationCode', [guardian_index])
-    assert isinstance(guardian_code, (str, bytes))
-    # Check block proposer correctness
-    if block.proposer != normalize_address(guardian_address):
-        sys.stderr.write('Block proposer check for %d failed: actual %s desired %s\n' %
-                         (block.number, block.proposer.encode('hex'), guardian_address))
-        return False
-    # Check signature correctness
-    message_data = vm.CallData([safe_ord(x) for x in (sha3(encode_int32(block.number) + block.txroot) + block.sig)], 0, 32 + len(block.sig))
-    message = vm.Message(NULL_SENDER, '\x00' * 20, 0, 1000000, message_data)
-    _, _, signature_check_result = apply_msg(EmptyVMExt, message, guardian_code)
-    if signature_check_result != [0] * 31 + [1]:
-        sys.stderr.write('Block signature check failed. Actual result: %s\n' % str(signature_check_result))
-        return False
-    return True
-
-# Helper method for getting the guardian index for a particular block number
-gvi_cache = {}
-
-def get_guardian_index(state, blknumber):
-    if blknumber not in gvi_cache:
-        preseed = state.get_storage(RNGSEEDS, blknumber - ENTER_EXIT_DELAY if blknumber >= ENTER_EXIT_DELAY else 2**256 - 1)
-        gvi_cache[blknumber] = call_casper(state, 'sampleGuardian', [preseed, blknumber], gas=3000000)
-    return gvi_cache[blknumber]
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
@@ -324,6 +265,7 @@ class defaultBetStrategy():
         # What seq to create two bets at (also destructively, for testing purposes)
         self.double_bet_suicide = double_bet_suicide
         # Next submission delay (should be 0 on livenet; nonzero for testing purposes)
+        # TODO: remove `next_submission_delay`
         self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         # List of proposers for blocks; calculated into the future just-in-time
         self.proposers = []
@@ -396,7 +338,7 @@ class defaultBetStrategy():
             sys.stderr.write('Not sufficiently synced to receive this block (%d)\n' % block.number)
             if self.last_time_sent_getblocks < self.now - 5:
                 DEBUG('asking for blocks', index=self.index)
-                self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [encode_int(self.max_finalized_height+1)])))
+                self.network.broadcast(self, rlp.encode(NetworkMessage(NM_GETBLOCKS, [encode_int(self.max_finalized_height + 1)])))
                 self.last_time_sent_getblocks = self.now
             return
         # If the block is invalid, return
@@ -523,14 +465,14 @@ class defaultBetStrategy():
     # Take one's ether out
     def finalizeWithdrawal(self):
         txdata = casper_ct.encode('withdraw', [self.former_index])
-        tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, k, True)
-        v = tx_state_transition(genesis, tx)
+        tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, self.key, True)
+        v = tx_state_transition(self.genesis, tx)  # NOQA
 
     # Compute as many state roots as possible
     def recalc_state_roots(self):
         recalc_limit = MAX_RECALC if self.calc_state_roots_from > len(self.blocks) - 20 else MAX_LONG_RECALC
         frm = self.calc_state_roots_from
-        DEBUG('recalculating', limit=recalc_limit, want=len(self.blocks)-frm)
+        DEBUG('recalculating', limit=recalc_limit, want=len(self.blocks) - frm)
         run_state = self.get_state_at_height(frm - 1)
         for h in range(frm, len(self.blocks))[:recalc_limit]:
             prevblknum = big_endian_to_int(run_state.get_storage(BLKNUMBER, '\x00' * 32))
@@ -606,8 +548,12 @@ class defaultBetStrategy():
             # If the probability of a block flips to the other side of 0.5,
             # that means that we should recalculate the state root at least
             # from that point (and possibly earlier)
-            if ((prob - 0.5) * (self.probs[h] - 0.5) <= 0 or (self.probs[h] >= 0.5 and \
-                    h in self.recently_discovered_blocks)) and h < self.calc_state_roots_from:
+            if (
+                    (prob - 0.5) * (self.probs[h] - 0.5) <= 0 or
+                    (
+                        self.probs[h] >= 0.5 and
+                        h in self.recently_discovered_blocks
+                    )) and h < self.calc_state_roots_from:
                 DEBUG('Rewinding', num_blocks=self.calc_state_roots_from - h)
                 self.calc_state_roots_from = h
             self.probs[h] = prob
@@ -644,15 +590,17 @@ class defaultBetStrategy():
             srprobstart = max(sign_from, self.induction_height) - sign_from
             assert len(srp[srprobstart:]) <= len(self.probs[probstart:])
             assert srprobstart + sign_from >= probstart
-            o = sign_bet(Bet(self.index,
-                             len(self.blocks) - 1,
-                             self.probs[probstart:][::-1],
-                             [x.hash if x else '\x00' * 32 for x in self.blocks[blockstart:]][::-1],
-                             self.stateroots[rootstart:][::-1],
-                             [x if (self.stateroots[i] != '\x00' * 32) else FINALITY_LOW for i, x in enumerate(srp)][srprobstart:][::-1],
-                             self.prevhash,
-                             self.seq, ''),
-                        self.key)
+            o = sign_bet(Bet(
+                self.index,
+                len(self.blocks) - 1,
+                self.probs[probstart:][::-1],
+                [x.hash if x else '\x00' * 32 for x in self.blocks[blockstart:]][::-1],
+                self.stateroots[rootstart:][::-1],
+                [x if (self.stateroots[i] != '\x00' * 32) else FINALITY_LOW for i, x in enumerate(srp)][srprobstart:][::-1],
+                self.prevhash,
+                self.seq,
+                '',
+            ), self.key)
             # Reset the recently discovered blocks array, so that we do not needlessly resubmit hashes
             self.recently_discovered_blocks = []
             # Update my prevhash and seq
@@ -721,7 +669,7 @@ class defaultBetStrategy():
 
     def should_i_include_transaction(self, tx):
         check_state = self.get_optimistic_state()
-        o = tx_state_transition(check_state, tx, override_gas=250000+tx.intrinsic_gas, breaking=True)
+        o = tx_state_transition(check_state, tx, override_gas=250000 + tx.intrinsic_gas, breaking=True)
         if not o:
             DEBUG('No output from running transaction',
                   hash=tx.hash.encode('hex')[:16])
@@ -780,7 +728,7 @@ class defaultBetStrategy():
         h = 0
         while h < len(self.stateroots) and self.stateroots[h] not in (None, '\x00' * 32):
             h += 1
-        latest_state_root = self.stateroots[h-1] if h else self.genesis_state_root
+        latest_state_root = self.stateroots[h - 1] if h else self.genesis_state_root
         assert latest_state_root not in ('\x00' * 32, None)
         latest_state = State(latest_state_root, self.db)
         ops = self.opinions.items()
@@ -788,7 +736,7 @@ class defaultBetStrategy():
         DEBUG('Producing block',
               number=self.next_block_to_produce,
               known=len(self.blocks),
-              check_root_height=h-1)
+              check_root_height=h - 1)
         for i, o in ops:
             latest_bet = call_casper(latest_state, 'getGuardianSeq', [i])
             bet_height = latest_bet
@@ -906,14 +854,14 @@ class defaultBetStrategy():
                 DEBUG('making a block')
                 self.recalc_state_roots()
                 self.make_block()
-                self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
+                # TODO: remove `next_submission_delay`
+                # self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         elif self.next_block_to_produce is None:
             # DEBUG('add_prop', at=self.now, id=self.id)
             self.add_proposers()
         if self.last_bet_made < self.now - BLKTIME * VALIDATOR_ROUNDS * 1.5:
             # DEBUG('mk bet', at=self.now, id=self.id)
             self.mkbet()
-
 
     @property
     def now(self):

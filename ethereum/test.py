@@ -10,8 +10,14 @@ from utils import privtoaddr, normalize_address, zpad, encode_int, \
 import ecdsa_accounts
 import abi
 import sys
-import guardian
-from guardian import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
+from ethereum.guardian2.utils import (
+    call_method,
+    casper_ct,
+    encode_prob,
+)
+from ethereum.guardian2.strategy import (
+    defaultBetStrategy,
+)
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
 import network
@@ -324,7 +330,7 @@ for i, k in enumerate(secondkeys):
     bets[0].add_transaction(tx)
     check_txs.extend([tx])
 
-THRESHOLD1 = 115 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
+THRESHOLD1 = 315 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
 
 orig_ring_pubs = []
