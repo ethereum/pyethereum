@@ -1,10 +1,7 @@
 import os
-import pytest
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger
 import ethereum.abi as abi
-from ethereum.utils import zpad
-
 logger = get_logger()
 
 
@@ -19,17 +16,6 @@ def test_abi_encode_fixed_size_array():
 def test_abi_encode_signed_int():
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [1]))[0] == 1
     assert abi.decode_abi(['int8'], abi.encode_abi(['int8'], [-1]))[0] == -1
-
-def test_abi_encode_single_int():
-    assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
-
-    assert abi.encode_single(['int', '8', []], -128) == zpad(b'\x80', 32)
-    with pytest.raises(abi.ValueOutOfBounds):
-        assert abi.encode_single(['int', '8', []], -129)
-
-    assert abi.encode_single(['int', '8', []], 127) == zpad(b'\x7f', 32)
-    with pytest.raises(abi.ValueOutOfBounds):
-        assert abi.encode_single(['int', '8', []], 128)
 
 def test_abi_encode_single_ureal():
     assert abi.encode_single(['ureal', '128x128', []], 0) == (b'\x00'*32)
