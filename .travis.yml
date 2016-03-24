@@ -7,8 +7,7 @@ install:
 - pip install -Ur requirements.txt
 - pip install -Ur dev_requirements.txt
 script:
-- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore
-  ethereum/tests/test_state.py
+- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
 - coverage run --append --source ethereum -m py.test ethereum/tests/test_vm.py
 - coverage run --append --source ethereum -m py.test ethereum/tests/test_state.py
 after_success:
