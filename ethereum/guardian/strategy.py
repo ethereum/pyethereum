@@ -268,9 +268,6 @@ class defaultBetStrategy():
         self.double_block_suicide = double_block_suicide
         # What seq to create two bets at (also destructively, for testing purposes)
         self.double_bet_suicide = double_bet_suicide
-        # Next submission delay (should be 0 on livenet; nonzero for testing purposes)
-        # TODO: remove `next_submission_delay`
-        self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         # List of proposers for blocks; calculated into the future just-in-time
         self.proposers = []
         # Prevhash (for betting)
@@ -879,8 +876,8 @@ class defaultBetStrategy():
 
         # We may not be a validator so potentially exit early
         if self.index < 0:
-            if self.max_finalized_height < 1:
-                DEBUG('delaying joining pool until a block has been finalized')
+            if len(self.blocks) < 10:
+                DEBUG('delaying joining pool until a few blocks have shown up.')
             elif not self._joined:
                 self.join()
             else:
@@ -901,12 +898,10 @@ class defaultBetStrategy():
         if self.index >= 0 and self.next_block_to_produce is not None:
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
             # DEBUG('maybe I should make a block', at=self.now, target_time=target_time )
-            if mytime >= target_time + self.next_submission_delay:
+            if mytime >= target_time:
                 DEBUG('making a block')
                 self.recalc_state_roots()
                 self.make_block()
-                # TODO: remove `next_submission_delay`
-                # self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         elif self.next_block_to_produce is None:
             # DEBUG('add_prop', at=self.now, id=self.id)
             self.add_proposers()

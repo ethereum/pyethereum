@@ -25,3 +25,5 @@ pyethereum/todo.txt
 pyethereum/monkeypatch.py
 .eggs
 .cache
+ethereum/_casper.evm
+ethereum/_casper.hash
