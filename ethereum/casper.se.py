@@ -304,14 +304,14 @@ def submitBet(index:uint256, max_height:uint256, probs:bytes, blockhashes:bytes3
                     with blockOdds = logoddsToOdds(logBlockOdds): # mod((self.guardians[index].probs[H / 32] / 256**(H % 32)), 256) or 128
                         # log(type=Progress, 3)
                         blockHashInfo = mod(div(self.guardians[index].blockhashes[mod(H / 32, WRAPLENGTH)], 256**(H % 32)), 256)
-                        with invBlockOdds = 10**18 / blockOdds: 
+                        with invBlockOdds = 10**18 / blockOdds:
                             if blockHashInfo >= 2 and blockHashInfo % 2: # block hashes match, and there is a block
                                 profitFactor = scoreCorrect(logBlockOdds, blockOdds) + scoreIncorrect(invBlockOdds)
                             elif blockHashInfo < 2: # there is no block
                                 profitFactor = scoreCorrect(256 - logBlockOdds, invBlockOdds) + scoreIncorrect(blockOdds)
                             else: # block hashes do not match, there is a block
                                 profitFactor = scoreIncorrect(blockOdds) + scoreIncorrect(invBlockOdds)
-    
+
                         # if profitFactor < 0 and (blockOdds < 10**8 or blockOdds > 10**10):
                         #     log(type=BlockLoss, blockOdds, profitFactor, H, index, blockHashInfo)
                         # log(type=Progress, 1000000000 + logodds * 100000 + logStaterootOdds)
@@ -361,6 +361,10 @@ event StateLoss(odds, loss, height, index, stateRootInfo)
 def const sampleGuardian(orig_seedhash:bytes32, blknumber:uint256):
     n = self.nextGuardianIndex
     seedhash = sha3([orig_seedhash, blknumber]:arr)
+
+    while n > 1 and self.guardians[n - 1].induction_height > blknumber:
+        n -= 1
+
     while 1:
         with index = mod(seedhash, n):
             if (div(seedhash, 2**128) * MAX_DEPOSIT / 2**128 < self.guardians[index].orig_deposit_size):
@@ -369,7 +373,7 @@ def const sampleGuardian(orig_seedhash:bytes32, blknumber:uint256):
         seedhash = sha3(seedhash)
 
 
-# Getter methods 
+# Getter methods
 def const getNextGuardianIndex():
     return(self.nextGuardianIndex:uint256)
 
