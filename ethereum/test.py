@@ -285,10 +285,14 @@ def check_correctness(bets):
     print 'Transaction exceptions: %r' % [bets[0].tx_exceptions.get(tx.hash, 0) for tx in check_txs]
 
 # Simulate a network
-#n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n = network.NetworkSimulator(agents=bets)
-n.start()
-#n.generate_peers(5)
+n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
+
+try:
+    n.generate_peers(5)
+except NotImplementedError:
+    # DevP2PNetwork doesn't generate peers.
+    pass
+
 for _bet in bets:
     _bet.network = n
 

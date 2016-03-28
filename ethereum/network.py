@@ -254,7 +254,7 @@ class DevP2PNetwork(NetworkSimulatorBase):
     """
     start_time = time.time()
 
-    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False):
+    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False, **kwargs):
         self.agents = agents or []
 
         # copy/paste from devp2p.app_helper, not sure if this gevent config is
@@ -302,6 +302,8 @@ class DevP2PNetwork(NetworkSimulatorBase):
             bootstrap_nodes = bootstrap_nodes[-2:]
             self.apps[agent.id] = app
 
+        self.start()
+
     def start(self):
         for app in self.apps.values():
             app.start()
@@ -320,10 +322,10 @@ class DevP2PNetwork(NetworkSimulatorBase):
             app.stop()
 
     def generate_peers(self, *args, **kwargs):
-        raise ValueError("DevP2PNetwork does not generate_peers")
+        raise NotImplementedError("DevP2PNetwork does not generate_peers")
 
     def tick(self, *args, **kwargs):
-        raise ValueError("DevP2PNetwork does not tick")
+        raise NotImplementedError("DevP2PNetwork does not tick")
 
     def run(self, seconds, sleep=0):
         start_time = time.time()
