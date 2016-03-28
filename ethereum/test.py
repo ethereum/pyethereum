@@ -15,7 +15,7 @@ from ethereum.guardian.utils import (
     casper_ct,
     encode_prob,
 )
-from ethereum.guardian2.strategy import (
+from ethereum.guardian.strategy import (
     defaultBetStrategy,
 )
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code

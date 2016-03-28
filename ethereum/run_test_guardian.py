@@ -140,20 +140,9 @@ put_code(genesis, BASICSENDER, get_code(gc, mk_contract_address(code=code2)))
 print 'Basic sender account added'
 
 
-# Determine the number of nodes that will be run.
-#
-# TODO: This will need to be reworked so that we can initialize the genesis
-# state without needing to know about which other nodes are participating.
-#
-NUM_NODES = get_arg('--num-nodes', int, 3)
-KEY_IDX = get_arg('--key-idx', int, None)
-if KEY_IDX is None:
-    raise Exception("Must specify which validator")
-
-assert KEY_IDX < NUM_NODES
-
 # Generate the initial set of keys
-keys = [zpad(encode_int(x + 1), 32) for x in range(0, NUM_NODES)]
+keys = [zpad(encode_int(x + 1), 32) for x in range(3)]
+extra_keys = [zpad(encode_int(x + 1), 32) for x in range(100, 200)]
 
 # Initialize the first keys
 for i, k in enumerate(keys):
@@ -183,7 +172,29 @@ for i, k in enumerate(keys):
     vcode2 = call_method(genesis, CASPER, casper_ct, 'getGuardianValidationCode', [index])
     assert vcode2 == vcode
 
-KEY = keys[KEY_IDX]
+
+# Initialize the extra accounts for validators that join late.
+for i, k in enumerate(extra_keys):
+    # Generate the address
+    a = ecdsa_accounts.privtoaddr(k)
+    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
+    # Give them 1600 ether
+    genesis.set_storage(ETHER, a, 1600 * 10**18)
+
+
+# Determine the number of nodes that will be run.
+#
+# TODO: This will need to be reworked so that we can initialize the genesis
+# state without needing to know about which other nodes are participating.
+#
+KEY_IDX = get_arg('--key-idx', int, None)
+
+if KEY_IDX is None:
+    KEY = random.choice(extra_keys)
+elif KEY_IDX < 3:
+    KEY = keys[KEY_IDX]
+else:
+    raise Exception("When specifying a key it must be one of 1-3")
 
 
 def get_genesis_time():
@@ -204,6 +215,7 @@ print 'genesis time', GENESIS_TIMESTAMP, '\n' * 10
 # TODO: may not need to `clone()` this anymore since it's singular.
 bet = defaultBetStrategy(genesis.clone(), KEY)
 bets = [bet]
+
 # Minimum max finalized height
 min_mfh = -1
 
@@ -258,23 +270,27 @@ def check_correctness(bets):
             for i in range(new_min_mfh):
                 assert b.stateroots[i] not in ('\x00' * 32, None)
     print 'Executing blocks %d to %d' % (min_mfh + 1, max(min_mfh, new_min_mfh) + 1)
-    for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
-        assert state.root == bets[0].stateroots[i - 1] if i > 0 else genesis.root
-        block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
-        block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
-        assert block0 == block
-        block_state_transition(state, block, listeners=[my_listen])
-        if state.root != bets[0].stateroots[i] and i != max(min_mfh, new_min_mfh):
-            print bets[0].calc_state_roots_from, bets[j].calc_state_roots_from
-            print bets[0].max_finalized_height, bets[j].max_finalized_height
-            print 'my state', state.to_dict()
-            print 'given state', State(bets[0].stateroots[i], bets[0].db).to_dict()
-            import rlp
-            print 'block', repr(rlp.encode(block))
-            sys.stderr.write('State root mismatch at block %d!\n' % i)
-            sys.stderr.write('state.root: %s\n' % state.root.encode('hex'))
-            sys.stderr.write('bet: %s\n' % bets[0].stateroots[i].encode('hex'))
-            raise Exception(" ")
+    # TODO: figure out what to do to fix this.
+    # This part requires looking at more than 1 bet object which can't be done
+    # in this situation.
+    #
+    #for i in range(min_mfh + 1, max(min_mfh, new_min_mfh) + 1):
+    #    assert state.root == bets[0].stateroots[i - 1] if i > 0 else genesis.root
+    #    block = bets[j].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
+    #    block0 = bets[0].objects[bets[0].finalized_hashes[i]] if bets[0].finalized_hashes[i] != '\x00' * 32 else None
+    #    assert block0 == block
+    #    block_state_transition(state, block, listeners=[my_listen])
+    #    if state.root != bets[0].stateroots[i] and i != max(min_mfh, new_min_mfh):
+    #        print bets[0].calc_state_roots_from, bets[j].calc_state_roots_from
+    #        print bets[0].max_finalized_height, bets[j].max_finalized_height
+    #        print 'my state', state.to_dict()
+    #        print 'given state', State(bets[0].stateroots[i], bets[0].db).to_dict()
+    #        import rlp
+    #        print 'block', repr(rlp.encode(block))
+    #        sys.stderr.write('State root mismatch at block %d!\n' % i)
+    #        sys.stderr.write('state.root: %s\n' % state.root.encode('hex'))
+    #        sys.stderr.write('bet: %s\n' % bets[0].stateroots[i].encode('hex'))
+    #        raise Exception(" ")
     min_mfh = new_min_mfh
     print 'Min common finalized height: %d, integrity checks passed' % new_min_mfh
     # Last and next blocks to propose by each guardian
@@ -414,7 +430,7 @@ while 1:
         bet.tick()
         gevent.sleep(random.random())
     check_correctness(bets)
-    if min_mfh >= 36:
+    if min_mfh >= 200:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh

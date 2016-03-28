@@ -285,10 +285,6 @@ class DevP2PNetwork(NetworkSimulatorBase):
         base_config['min_peers'] = min_peers
         base_config['max_peers'] = max_peers
 
-        public_key_to_agent_id = {}
-
-        base_config['guardianservice']['lookup_fn'] = public_key_to_agent_id.__getitem__
-
         self.base_config = base_config
 
         # prepare apps
@@ -302,7 +298,6 @@ class DevP2PNetwork(NetworkSimulatorBase):
                 app.config['discovery']['listen_port'],
                 app.config['node']['id'],
             )
-            public_key_to_agent_id[app.config['node']['id']] = agent.id
             bootstrap_nodes.append(enode)
             bootstrap_nodes = bootstrap_nodes[-2:]
             self.apps[agent.id] = app
@@ -355,18 +350,16 @@ class DevP2PNetwork(NetworkSimulatorBase):
 
         app = self.apps[sender.id]
         peer = random.choice(app.services.peermanager.peers)
-        to_id = app.config['guardianservice']['lookup_fn'](peer.remote_pubkey)
 
-        self.direct_send(sender, to_id, obj)
+        self.direct_send(sender, peer.remote_pubkey, obj)
 
     def direct_send(self, sender, to_id, obj):
         app = self.apps[sender.id]
-        lookup_fn = app.config['guardianservice']['lookup_fn']
 
         to_peer = None
 
         for peer in app.services.peermanager.peers:
-            if lookup_fn(peer.remote_pubkey) == to_id:
+            if peer.remote_pubkey == to_id:
                 to_peer = peer
                 break
 

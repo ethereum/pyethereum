@@ -1,12 +1,14 @@
 import sys
-import rlp
 import random
+
+import rlp
 
 from ethereum.ecdsa_accounts import (
     sign_block,
     privtoaddr,
     sign_bet,
     mk_transaction,
+    mk_validation_code,
 )
 from ethereum.utils import (
     big_endian_to_int,
@@ -14,7 +16,6 @@ from ethereum.utils import (
     shardify,
     DEBUG,
     rlp_decode,
-    mkid,
     sha3,
 )
 from ethereum.abi import decode_abi
@@ -181,7 +182,7 @@ class defaultBetStrategy():
     @property
     def id(self):
         from ethereum.utils import decode_int
-        return decode_int(self.addr)
+        return decode_int(self.addr[2:])
 
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
@@ -306,6 +307,33 @@ class defaultBetStrategy():
         DEBUG('List of', proposers=self.proposers)
         # Am I byzantine?
         self.byzantine = self.crazy_bet or self.double_block_suicide < 2**80 or self.double_bet_suicide < 2**80
+
+    _joined = False
+    _joined_at_block = -1
+
+    def join(self):
+        vcode = mk_validation_code(self.key)
+        # Make the transaction to join as a Casper guardian
+        txdata = casper_ct.encode('join', [vcode])
+        tx = mk_transaction(
+            seq=self.seq,
+            gasprice=25 * 10**9,
+            gas=1000000,
+            to=CASPER,
+            value=1500 * 10**18,
+            data=txdata,
+            key=self.key,
+            create=True,
+        )
+        self.seq += 1
+        DEBUG('Joining Guarding Pool',
+              tx_hash=tx.hash.encode('hex'),
+              address=self.addr.encode('hex'))
+        self.add_transaction(tx)
+
+        # Icky grossness, do this better.
+        self._joined = True
+        self._joined_at_block = len(self.blocks)
 
     # Compute as many future block proposers as possible
     def add_proposers(self):
@@ -541,7 +569,7 @@ class defaultBetStrategy():
                 self.last_asked_for_block[h] = self.now
             # Did our preferred block hash change?
             if self.blocks[h] and new_block_hash != self.blocks[h].hash:
-                if new_block_hash not in (None, '\x00' * 32):
+                if new_block_hash not in (None, '\x00' * 32) and new_block_hash in self.objects:
                     DEBUG('Changing block selection', height=h,
                           pre=self.blocks[h].hash[:8].encode('hex'),
                           post=new_block_hash[:8].encode('hex'))
@@ -848,6 +876,26 @@ class defaultBetStrategy():
     def tick(self):
         # DEBUG('bet tick called', at=self.now, id=self.id, index=self.index)
         mytime = self.now
+
+        # We may not be a validator so potentially exit early
+        if self.index < 0:
+            if self.max_finalized_height < 1:
+                DEBUG('delaying joining pool until a block has been finalized')
+            elif not self._joined:
+                self.join()
+            else:
+                DEBUG('updating guardian set',
+                      joined_at_block=self._joined_at_block,
+                      index=self.index,
+                      induction_height=self.induction_height)
+                self.update_guardian_set(self.get_optimistic_state())
+
+        elif len(self.blocks) + 1 < self.induction_height:
+            DEBUG('In guardian pool but not yet inducted',
+                  joined_at_block=self._joined_at_block,
+                  index=self.index,
+                  induction_height=self.induction_height)
+
         # If (i) we should be making blocks, and (ii) the time has come to
         # produce a block, then produce a block
         if self.index >= 0 and self.next_block_to_produce is not None:
