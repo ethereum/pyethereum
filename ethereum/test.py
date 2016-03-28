@@ -317,8 +317,11 @@ while 1:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
-    # DevP2PNetwork does not do peer lists
-    #print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+    try:
+        print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+    except AttributeError:
+        # DevP2PNetwork does not do peer lists
+        pass
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 assert get_code(recent_state, ringsig_addr)

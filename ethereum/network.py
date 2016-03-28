@@ -244,7 +244,7 @@ class SimPyNetworkSimulator(NetworkSimulatorBase):
                     self.receive_later(sender.id, p, obj)
 
 
-#NetworkSimulator = NetworkSimulatorBase
+NetworkSimulator = NetworkSimulatorBase
 #NetworkSimulator = SimPyNetworkSimulator
 
 
@@ -378,4 +378,4 @@ class DevP2PNetwork(NetworkSimulatorBase):
         raise NotImplementedError("Not Implemented")
 
 
-NetworkSimulator = DevP2PNetwork
+#NetworkSimulator = DevP2PNetwork
