@@ -644,6 +644,10 @@ class Block(rlp.Serializable):
             parent = get_block(self.env, uncle.prevhash)
             if uncle.difficulty != calc_difficulty(parent, uncle.timestamp):
                 return False
+            if uncle.number != parent.number + 1:
+                return False
+            if uncle.timestamp < parent.timestamp:
+                return False
             if not uncle.check_pow():
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:

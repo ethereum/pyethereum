@@ -105,8 +105,10 @@ def int_to_32bytearray(i):
         i >>= 8
     return o
 
+sha3_count = [0]
 
 def sha3(seed):
+    sha3_count[0] += 1
     return sha3_256(to_string(seed))
 assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
