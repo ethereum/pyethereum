@@ -1,9 +1,11 @@
 import os
+import random
+import time
+import json
+
+import rlp
 import serpent
 import gevent
-import random
-import rlp
-import time
 
 from devp2p import peermanager
 from devp2p.service import BaseService
@@ -16,8 +18,14 @@ from devp2p.utils import (
     update_config_with_defaults,
 )
 
-from serenity_blocks import State, tx_state_transition, mk_contract_address, \
-    block_state_transition, initialize_with_gas_limit, get_code, put_code
+from serenity_blocks import (
+    State,
+    tx_state_transition,
+    mk_contract_address,
+    initialize_with_gas_limit,
+    get_code,
+    put_code,
+)
 from serenity_transactions import Transaction
 from db import EphemDB, OverlayDB
 from config import (
@@ -140,12 +148,45 @@ put_code(genesis, BASICSENDER, get_code(gc, mk_contract_address(code=code2)))
 print 'Basic sender account added'
 
 
-# Generate the initial set of keys
-keys = [zpad(encode_int(x + 1), 32) for x in range(3)]
-extra_keys = [zpad(encode_int(x + 1), 32) for x in range(100, 200)]
+def generate_genesis_config_file(path='genesis.json'):
+    config = {
+        'timestamp': int(time.time()),
+        'guardians': [zpad(encode_int(1), 32).encode('hex')],
+        'alloc': [
+            (zpad(encode_int(i), 32).encode('hex'), 2000 * 10**18)
+            for i in range(1, 11)
+        ]
+    }
+    with open(path, 'w') as f:
+        f.write(json.dumps(config))
+    return config
 
-# Initialize the first keys
-for i, k in enumerate(keys):
+
+def get_genesis_config(path='genesis.json'):
+    with open(path) as f:
+        return json.load(f)
+
+
+genesis_config_path = get_arg('--genesis-config', str, 'genesis.json')
+should_generate_genesis_config = get_arg('--generate-genesis', int, 0)
+
+if should_generate_genesis_config:
+    generate_genesis_config_file()
+
+genesis_config = get_genesis_config(genesis_config_path)
+
+
+# Initialize the pre-alloced accounts for validators that join late.
+for key_hex, amount in genesis_config['alloc']:
+    key = key_hex.decode('hex')
+    addr = ecdsa_accounts.privtoaddr(key)
+    # Give them 1600 ether
+    genesis.set_storage(ETHER, addr, amount)
+
+
+# Initialize the first guardians
+for i, key_hex in enumerate(genesis_config['guardians']):
+    k = key_hex.decode('hex')
     # Generate the address
     a = ecdsa_accounts.privtoaddr(k)
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
@@ -173,15 +214,6 @@ for i, k in enumerate(keys):
     assert vcode2 == vcode
 
 
-# Initialize the extra accounts for validators that join late.
-for i, k in enumerate(extra_keys):
-    # Generate the address
-    a = ecdsa_accounts.privtoaddr(k)
-    assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
-    # Give them 1600 ether
-    genesis.set_storage(ETHER, a, 1600 * 10**18)
-
-
 # Determine the number of nodes that will be run.
 #
 # TODO: This will need to be reworked so that we can initialize the genesis
@@ -190,19 +222,14 @@ for i, k in enumerate(extra_keys):
 KEY_IDX = get_arg('--key-idx', int, None)
 
 if KEY_IDX is None:
-    KEY = random.choice(extra_keys)
-elif KEY_IDX < 3:
-    KEY = keys[KEY_IDX]
+    KEY = random.choice(genesis_config['alloc'])[0].decode('hex')
+elif KEY_IDX < len(genesis_config['alloc']):
+    KEY = genesis_config['alloc'][KEY_IDX][0].decode('hex')
 else:
-    raise Exception("When specifying a key it must be one of 1-3")
+    raise Exception("Key index out of range")
 
 
-def get_genesis_time():
-    t = int(time.time())
-    return t - t % 30
-
-
-GENESIS_TIMESTAMP = get_arg('--genesis-time', int, get_genesis_time())
+GENESIS_TIMESTAMP = genesis_config['timestamp']
 
 
 # Set the starting RNG seed to equal to the number of casper guardians
@@ -340,7 +367,7 @@ IP_ADDRESS = get_arg('--ip-address', str, DEFAULT_IP_ADDRESS)
 BOOTSTRAP_NODE_IP = get_arg('--bootstrap-ip', str, DEFAULT_IP_ADDRESS)
 BOOTSTRAP_NODE_PORT = get_arg('--bootstrap-port', int, DEFAULT_PORT)
 
-bootstrap_node_privkey = mk_privkey(keys[0])
+bootstrap_node_privkey = mk_privkey(genesis_config['guardians'][0].decode('hex'))
 bootstrap_node_pubkey = privtopub_raw(bootstrap_node_privkey)
 bootstrap_enode = host_port_pubkey_to_uri(BOOTSTRAP_NODE_IP, BOOTSTRAP_NODE_PORT, bootstrap_node_pubkey)
 
