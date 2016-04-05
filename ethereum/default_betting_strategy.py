@@ -69,9 +69,9 @@ def bet_on_block(opinions, blk_number, blk_hash, tr, genesis_time, now):
             opinion_count += (1 if p is not None else 0)
     # The algorithm for producing your own bet based on others' bets;
     # the intention is to converge toward 0 or 1
-    p33 = weighted_percentile(probs, weights, 1/3.)
-    p50 = weighted_percentile(probs, weights, 1/2.)
-    p67 = weighted_percentile(probs, weights, 2/3.)
+    p33 = weighted_percentile(probs, weights, 1 / 3.0)
+    p50 = weighted_percentile(probs, weights, 1 / 2.0)
+    p67 = weighted_percentile(probs, weights, 2 / 3.0)
     if p33 > 0.8:
         o = BRAVERY + p33 * (1 - BRAVERY)
     elif p67 < 0.2:
@@ -79,6 +79,7 @@ def bet_on_block(opinions, blk_number, blk_hash, tr, genesis_time, now):
     else:
         o = min(0.85, max(0.15, p50 * 3 - (0.8 if have_block else 1.2)))
     return o
+
 
 # Takes as input: (i) a list of other validators' opinions,
 # (ii) a block height, (iii) a list of known blocks at that
@@ -105,7 +106,7 @@ def bet_at_height(opinions, h, known, time_received, genesis_time, now):
               height=h,
               options=[(a, b[:8].encode('hex')) for a, b in probs],
               winner=(prob, new_block_hash[:8].encode('hex')))
-    # If we don't have a block, then confidently ask 
+    # If we don't have a block, then confidently ask
     if prob > 0.7 and new_block_hash not in time_received:
         return 0.7, new_block_hash, True
     else:
