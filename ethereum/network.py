@@ -1,7 +1,28 @@
 import random
-import sys
 import time
-from utils import DEBUG
+
+import rlp
+import gevent
+
+from ethereum.guardian.network import (
+    NetworkMessage,
+    GuardianService,
+    GuardianProtocol,
+    GuardianApp,
+)
+
+
+from devp2p import app_helper
+from devp2p import peermanager
+from devp2p.discovery import NodeDiscovery
+from devp2p.crypto import (
+    privtopub as privtopub_raw,
+)
+from devp2p.utils import (
+    host_port_pubkey_to_uri,
+    update_config_with_defaults,
+)
+
 
 # A network simulator
 
@@ -223,5 +244,145 @@ class SimPyNetworkSimulator(NetworkSimulatorBase):
                     self.receive_later(sender.id, p, obj)
 
 
-NetworkSimulator = NetworkSimulatorBase
+#NetworkSimulator = NetworkSimulatorBase
 #NetworkSimulator = SimPyNetworkSimulator
+
+
+class DevP2PNetwork(NetworkSimulatorBase):
+    """
+    *Mostly* drop in networking object for use with `ethereum/test.py` script.
+    """
+    start_time = time.time()
+
+    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False):
+        self.agents = agents or []
+
+        # copy/paste from devp2p.app_helper, not sure if this gevent config is
+        # necessary.
+        gevent.get_hub().SYSTEM_ERROR = BaseException
+        if random_port:
+            self.base_port = random.randint(10000, 60000)
+        else:
+            self.base_port = 29870
+
+        # setup the bootstrap node (node0) enode
+        self.bootstrap_node_privkey = app_helper.mk_privkey('%d:udp:%d' % (seed, 0))
+        self.bootstrap_node_pubkey = privtopub_raw(self.bootstrap_node_privkey)
+        self.enode = host_port_pubkey_to_uri(b'0.0.0.0', self.base_port, self.bootstrap_node_pubkey)
+
+        services = [NodeDiscovery, peermanager.PeerManager, GuardianService]
+
+        # prepare config
+        base_config = dict()
+        for s in services:
+            update_config_with_defaults(base_config, s.default_config)
+
+        bootstrap_nodes = [self.enode]
+
+        base_config['seed'] = seed
+        base_config['base_port'] = self.base_port
+        base_config['num_nodes'] = len(self.agents)
+        base_config['min_peers'] = min_peers
+        base_config['max_peers'] = max_peers
+
+        public_key_to_agent_id = {}
+
+        base_config['guardianservice']['lookup_fn'] = public_key_to_agent_id.__getitem__
+
+        self.base_config = base_config
+
+        # prepare apps
+        self.apps = {}
+        for idx, agent in enumerate(self.agents):
+            base_config['discovery']['bootstrap_nodes'] = bootstrap_nodes
+            app = app_helper.create_app(idx, self.base_config, services, GuardianApp)
+            app.config['guardianservice']['agent'] = agent
+            enode = host_port_pubkey_to_uri(
+                b'0.0.0.0',
+                app.config['discovery']['listen_port'],
+                app.config['node']['id'],
+            )
+            public_key_to_agent_id[app.config['node']['id']] = agent.id
+            bootstrap_nodes.append(enode)
+            bootstrap_nodes = bootstrap_nodes[-2:]
+            self.apps[agent.id] = app
+
+    def start(self):
+        for app in self.apps.values():
+            app.start()
+            gevent.sleep(random.random())
+            if app.config['post_app_start_callback'] is not None:
+                app.config['post_app_start_callback'](app)
+
+    def join(self):
+        # wait for apps to finish
+        for app in self.apps.values():
+            app.join()
+
+    def stop(self):
+        # finally stop
+        for app in self.apps.values():
+            app.stop()
+
+    def generate_peers(self, *args, **kwargs):
+        raise ValueError("DevP2PNetwork does not generate_peers")
+
+    def tick(self, *args, **kwargs):
+        raise ValueError("DevP2PNetwork does not tick")
+
+    def run(self, seconds, sleep=0):
+        start_time = time.time()
+        while time.time() < start_time + seconds:
+            for agent in self.agents:
+                gevent.sleep(random.random())
+                agent.tick()
+
+    def broadcast(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        gevent.sleep(random.random())
+        app = self.apps[sender.id]
+        network_message = rlp.decode(obj, NetworkMessage)
+        bcast = app.services.peermanager.broadcast
+        bcast(
+            GuardianProtocol,
+            'network_message',
+            args=(network_message,),
+            exclude_peers=[],
+        )
+
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+
+        app = self.apps[sender.id]
+        peer = random.choice(app.services.peermanager.peers)
+        to_id = app.config['guardianservice']['lookup_fn'](peer.remote_pubkey)
+
+        self.direct_send(sender, to_id, obj)
+
+    def direct_send(self, sender, to_id, obj):
+        app = self.apps[sender.id]
+        lookup_fn = app.config['guardianservice']['lookup_fn']
+
+        to_peer = None
+
+        for peer in app.services.peermanager.peers:
+            if lookup_fn(peer.remote_pubkey) == to_id:
+                to_peer = peer
+                break
+
+        if to_peer is None:
+            raise ValueError("Not connected to the provided agent")
+
+        proto = to_peer.protocols[GuardianProtocol]
+        proto.send_network_message(rlp.decode(obj, NetworkMessage))
+
+    def knock_offline_random(self, n):
+        # TODO: how to do this with a devp2p network?
+        raise NotImplementedError("Not Implemented")
+
+    def partition(self):
+        # TODO: how to do this with a devp2p network?
+        raise NotImplementedError("Not Implemented")
+
+
+NetworkSimulator = DevP2PNetwork

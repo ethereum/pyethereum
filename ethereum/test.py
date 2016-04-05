@@ -10,8 +10,14 @@ from utils import privtoaddr, normalize_address, zpad, encode_int, \
 import ecdsa_accounts
 import abi
 import sys
-import guardian
-from guardian import call_method, casper_ct, defaultBetStrategy, Bet, encode_prob
+from ethereum.guardian.utils import (
+    call_method,
+    casper_ct,
+    encode_prob,
+)
+from ethereum.guardian.strategy import (
+    defaultBetStrategy,
+)
 from mandatory_account_code import mandatory_account_ct, mandatory_account_evm, mandatory_account_code
 import time
 import network
@@ -270,8 +276,10 @@ def check_correctness(bets):
     print 'Transaction exceptions: %r' % [bets[0].tx_exceptions.get(tx.hash, 0) for tx in check_txs]
 
 # Simulate a network
-n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n.generate_peers(5)
+#n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
+n = network.NetworkSimulator(agents=bets)
+n.start()
+#n.generate_peers(5)
 for _bet in bets:
     _bet.network = n
 
@@ -300,7 +308,8 @@ while 1:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
-    print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+    # DevP2PNetwork does not do peer lists
+    #print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 assert get_code(recent_state, ringsig_addr)
@@ -321,7 +330,7 @@ for i, k in enumerate(secondkeys):
     bets[0].add_transaction(tx)
     check_txs.extend([tx])
 
-THRESHOLD1 = 115 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
+THRESHOLD1 = 315 + 10 * (CLOCKWRONG + CRAZYBET + BRAVE)
 THRESHOLD2 = THRESHOLD1 + ENTER_EXIT_DELAY
 
 orig_ring_pubs = []
