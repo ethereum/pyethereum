@@ -229,6 +229,9 @@ else:
     raise Exception("Key index out of range")
 
 
+JOIN_AT_BLOCK = get_arg('--join-at-block', int, -1)
+
+
 GENESIS_TIMESTAMP = genesis_config['timestamp']
 
 
@@ -240,7 +243,7 @@ genesis.set_storage(GENESIS_TIME, encode_int32(0), GENESIS_TIMESTAMP)
 print 'genesis time', GENESIS_TIMESTAMP, '\n' * 10
 # Create betting strategy objects for every guardian
 # TODO: may not need to `clone()` this anymore since it's singular.
-bet = defaultBetStrategy(genesis.clone(), KEY)
+bet = defaultBetStrategy(genesis.clone(), KEY, join_at_block=JOIN_AT_BLOCK)
 bets = [bet]
 
 # Minimum max finalized height
@@ -398,7 +401,6 @@ config['guardianservice']['agent'] = bet
 class StandaloneGuardianApp(GuardianApp):
     def broadcast(self, sender, obj):
         assert isinstance(obj, (str, bytes))
-        gevent.sleep(random.random())
         network_message = rlp.decode(obj, NetworkMessage)
         bcast = self.services.peermanager.broadcast
         bcast(
@@ -457,7 +459,7 @@ while 1:
         bet.tick()
         gevent.sleep(random.random())
     check_correctness(bets)
-    if min_mfh >= 200:
+    if min_mfh >= 300:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh

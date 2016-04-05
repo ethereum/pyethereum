@@ -362,7 +362,7 @@ def const sampleGuardian(orig_seedhash:bytes32, blknumber:uint256):
     n = self.nextGuardianIndex
     seedhash = sha3([orig_seedhash, blknumber]:arr)
 
-    while n > 1 and self.guardians[n - 1].induction_height > blknumber:
+    while n > 1 and blknumber < self.guardians[n - 1].induction_height:
         n -= 1
 
     while 1:

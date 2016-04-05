@@ -186,7 +186,7 @@ class defaultBetStrategy():
 
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
-                 double_bet_suicide=2**200, min_gas_price=10**9):
+                 double_bet_suicide=2**200, min_gas_price=10**9, join_at_block=-1):
         DEBUG("Initializing betting strategy")
         # Guardian's private key
         self.key = key
@@ -244,6 +244,8 @@ class defaultBetStrategy():
         # Last time sent a getblocks message; stored to prevent excessively
         # frequent getting
         self.last_time_sent_getblocks = 0
+        # The block that this guardian should try to join the pool
+        self.join_at_block = join_at_block
         # Your guardian index
         self.index = -1
         self.former_index = None
@@ -281,6 +283,8 @@ class defaultBetStrategy():
         self.calc_state_roots_from = 0
         # Minimum gas price that I accept
         self.min_gas_price = min_gas_price
+        # Max height which is finalized from your point of view
+        self.max_finalized_height = -1
         # Create my guardian set
         self.update_guardian_set(genesis_state)
         DEBUG('Found %d guardians in genesis' % len(self.opinions))
@@ -291,8 +295,6 @@ class defaultBetStrategy():
               index=self.index,
               induction_height=self.induction_height)
         self.withdrawn = False
-        # Max height which is finalized from your point of view
-        self.max_finalized_height = -1
         # Recently discovered blocks
         self.recently_discovered_blocks = []
         # When will I suicide?
@@ -322,7 +324,6 @@ class defaultBetStrategy():
             key=self.key,
             create=True,
         )
-        self.seq += 1
         DEBUG('Joining Guarding Pool',
               tx_hash=tx.hash.encode('hex'),
               address=self.addr.encode('hex'))
@@ -338,7 +339,7 @@ class defaultBetStrategy():
         while h >= 0 and self.stateroots[h] in (None, '\x00' * 32):
             h -= 1
         state = State(self.stateroots[h] if h >= 0 else self.genesis_state_root, self.db)
-        maxh = h + ENTER_EXIT_DELAY - 1
+        maxh = self.max_finalized_height + ENTER_EXIT_DELAY - 1
         for h in range(len(self.proposers), maxh):
             self.proposers.append(get_guardian_index(state, h))
             if self.proposers[-1] == self.index:
@@ -876,8 +877,10 @@ class defaultBetStrategy():
 
         # We may not be a validator so potentially exit early
         if self.index < 0:
-            if len(self.blocks) < 10:
+            if not self.blocks:
                 DEBUG('delaying joining pool until a few blocks have shown up.')
+            elif len(self.blocks) < self.join_at_block:
+                DEBUG('Waiting to join pool', join_at_block=self.join_at_block)
             elif not self._joined:
                 self.join()
             else:
@@ -886,12 +889,6 @@ class defaultBetStrategy():
                       index=self.index,
                       induction_height=self.induction_height)
                 self.update_guardian_set(self.get_optimistic_state())
-
-        elif len(self.blocks) + 1 < self.induction_height:
-            DEBUG('In guardian pool but not yet inducted',
-                  joined_at_block=self._joined_at_block,
-                  index=self.index,
-                  induction_height=self.induction_height)
 
         # If (i) we should be making blocks, and (ii) the time has come to
         # produce a block, then produce a block

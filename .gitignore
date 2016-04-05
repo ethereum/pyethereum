@@ -27,3 +27,4 @@ pyethereum/monkeypatch.py
 .cache
 ethereum/_casper.evm
 ethereum/_casper.hash
+genesis.json
