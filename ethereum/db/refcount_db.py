@@ -1,7 +1,9 @@
-import rlp
-import ethereum.utils as utils
 import sys
-from db import BaseDB
+import rlp
+
+import ethereum.utils as utils
+
+from .base_db import BaseDB
 
 DEATH_ROW_OFFSET = 2**62
 ZERO_ENCODED = utils.encode_int(0)

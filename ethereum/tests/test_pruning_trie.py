@@ -1,6 +1,5 @@
 import ethereum.pruning_trie as pruning_trie
-from ethereum.db import EphemDB
-from ethereum.refcount_db import RefcountDB
+from ethereum.db import EphemDB, RefcountDB
 import rlp
 import ethereum.utils as utils
 from ethereum.utils import to_string
