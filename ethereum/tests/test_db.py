@@ -1,7 +1,7 @@
 import itertools
 import random
 import pytest
-from ethereum.db import _EphemDB
+from ethereum.db import EphemDB
 from rlp.utils import ascii_chr
 
 random.seed(0)
@@ -17,7 +17,7 @@ alt_content = {key: random_string(32) for key in content}
 
 
 def test_ephem():
-    db = _EphemDB()
+    db = EphemDB()
     for key in content:
         assert key not in db
         with pytest.raises(KeyError):

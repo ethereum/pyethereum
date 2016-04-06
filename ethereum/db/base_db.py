@@ -1,0 +1,2 @@
+class BaseDB(object):
+    pass
