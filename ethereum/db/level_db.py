@@ -1,3 +1,4 @@
+import shutil
 import leveldb
 
 from ethereum import slogging
@@ -57,7 +58,7 @@ class LevelDB(BaseDB):
         log.trace('putting entry', key=key.encode('hex')[:8], len=len(value))
         self.uncommitted[key] = value
 
-    def commit(self):
+    def commit(self, sync=False):
         log.debug('committing', db=self)
         batch = leveldb.WriteBatch()
         for k, v in self.uncommitted.items():
@@ -65,12 +66,17 @@ class LevelDB(BaseDB):
                 batch.Delete(k)
             else:
                 batch.Put(k, compress(v))
-        self.db.Write(batch, sync=False)
+        self.db.Write(batch, sync=sync)
         self.uncommitted.clear()
         log.debug('committed', db=self, num=len(self.uncommitted))
         # self.commit_counter += 1
         # if self.commit_counter % 100 == 0:
         #     self.reopen()
+
+    def clone(self, new_dbfile):
+        self.commit()
+        shutil.copytree(self.dbfile, new_dbfile)
+        return LevelDB(new_dbfile)
 
     def delete(self, key):
         log.trace('deleting entry', key=key)

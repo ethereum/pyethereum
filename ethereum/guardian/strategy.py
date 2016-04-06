@@ -863,6 +863,8 @@ class defaultBetStrategy():
             # DEBUG('mk bet', at=self.now, id=self.id)
             self.mkbet()
 
+        self.db.commit()
+
     @property
     def now(self):
         return self.network.now
