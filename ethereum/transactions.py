@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import rlp
-from bitcoin import encode_pubkey, N, P, encode_privkey
+from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import encode_hex, str_to_bytes, ascii_chr
 from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
@@ -171,9 +171,8 @@ class Transaction(rlp.Serializable):
     @property
     def creates(self):
         "returns the address of a contract created by this tx"
-        if self.to in (b'', '\0'*20):
+        if self.to in (b'', '\0' * 20):
             return mk_contract_address(self.sender, self.nonce)
-
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
@@ -194,7 +193,7 @@ class Transaction(rlp.Serializable):
     # The >= operator is replaced by > because the integer division N/2 always produces the value
     # which is by 0.5 less than the real N/2
     def check_low_s(self):
-        if self.s > N/2 or self.s == 0:
+        if self.s > N / 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
 
 

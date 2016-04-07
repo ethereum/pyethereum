@@ -12,7 +12,6 @@ from ethereum import processblock
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 from ethereum.slogging import get_logger
 from ethereum.config import Env
-import sys
 log = get_logger('eth.chain')
 
 

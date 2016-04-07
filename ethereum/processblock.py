@@ -1,7 +1,7 @@
 import sys
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import opcodes
 from ethereum import utils
 from ethereum import specials
@@ -9,7 +9,7 @@ from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
         BlockGasLimitReached, InsufficientBalance
-from ethereum.utils import safe_ord, normalize_address, mk_contract_address
+from ethereum.utils import safe_ord, mk_contract_address
 from ethereum import transactions
 import ethereum.config as config
 
@@ -149,7 +149,7 @@ def apply_transaction(block, tx):
     log_tx.debug('TX NEW', tx_dict=tx.log_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
-                
+
     # buy startgas
     assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
