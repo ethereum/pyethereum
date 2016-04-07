@@ -85,7 +85,7 @@ def get_configuration():
 
     config_string = ','.join('%s:%s' % x for x in name_levels)
 
-    return dict(config_string=config_string, log_json=root.log_json)
+    return dict(config_string=config_string, log_json=SLogger.manager.log_json)
 
 
 def get_logger_names():
@@ -121,17 +121,22 @@ class SLogger(logging.Logger):
         self.warn = self.warning
         super(SLogger, self).__init__(name, level=level)
 
+    @property
+    def log_json(self):
+        return SLogger.manager.log_json
+
     def is_active(self, level_name='trace'):
         return self.isEnabledFor(logging._checkLevel(level_name.upper()))
 
-    def format_message(self, msg, kwargs, highlight):
+    def format_message(self, msg, kwargs, highlight, level):
         if getattr(self, 'log_json', False):
             message = {
                 k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
                 for k, v in kwargs.items()
             }
 
-            message['event'] = "{}.{}".format(self.name, msg)
+            message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
+            message['level'] = logging.getLevelName(level)
             msg = json.dumps(message)
         else:
             msg = "{}{} {}{}".format(
@@ -140,7 +145,6 @@ class SLogger(logging.Logger):
                 " ".join("{}={!s}".format(k, v) for k, v in kwargs.items()),
                 bcolors.ENDC if highlight else ""
             )
-
         return msg
 
     def bind(self, **kwargs):
@@ -152,7 +156,7 @@ class SLogger(logging.Logger):
         highlight = kwargs.pop('highlight', False)
         extra['kwargs'] = kwargs
         extra['original_msg'] = msg
-        msg = self.format_message(msg, kwargs, highlight)
+        msg = self.format_message(msg, kwargs, highlight, level)
         super(SLogger, self)._log(level, msg, args, exc_info, extra)
 
     def DEV(self, msg, *args, **kwargs):
@@ -174,7 +178,6 @@ class RootLogger(SLogger):
         Initialize the logger with the name "root".
         """
         super(RootLogger, self).__init__("root", level)
-        self.log_json = False
 
     def handle(self, record):
         if log_listeners:
@@ -189,6 +192,7 @@ class SManager(logging.Manager):
 
     def __init__(self, rootnode):
         self.loggerClass = SLogger
+        self.log_json = False
         super(SManager, self).__init__(rootnode)
 
     def getLogger(self, name):
@@ -209,7 +213,6 @@ def getLogger(name=None):
 
     if name:
         logger = SLogger.manager.getLogger(name)
-        logger.log_json = rootLogger.log_json
         return logger
     else:
         return rootLogger
@@ -220,11 +223,11 @@ def configure(config_string=None, log_json=False, log_file=None):
         config_string = ":{}".format(DEFAULT_LOGLEVEL)
 
     if log_json:
+        SLogger.manager.log_json = True
         log_format = JSON_FORMAT
-        rootLogger.log_json = True
     else:
+        SLogger.manager.log_json = False
         log_format = PRINT_FORMAT
-        rootLogger.log_json = False
 
     if len(rootLogger.handlers) == 0:
         handler = StreamHandler()

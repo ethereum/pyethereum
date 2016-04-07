@@ -108,6 +108,27 @@ def validate_transaction(block, tx):
     return True
 
 
+class lazy_safe_encode(object):
+    """Creates a lazy and logging safe representation of transaction data.
+    Use this in logging of transactions; instead of
+
+        >>> log.debug(data=data)
+
+    do this:
+
+        >>> log.debug(data=lazy_safe_encode(data))
+    """
+
+    def __init__(self, data):
+        self.data = data
+
+    def __str__(self):
+        if not isinstance(self.data, (str, unicode)):
+            return self.data
+        else:
+            return encode_hex(self.data)
+
+
 def apply_transaction(block, tx):
     validate_transaction(block, tx)
 
@@ -139,16 +160,16 @@ def apply_transaction(block, tx):
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         result, gas_remained, data = apply_msg(ext, message)
-        log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
+        log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
         assert utils.is_numeric(gas_remained)
-        log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
+        log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
 
     assert gas_remained >= 0
 
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
-                 data=data)
+                 data=lazy_safe_encode(data))
 
     if not result:  # 0 = OOG failure in both cases
         log_tx.debug('TX FAILED', reason='out of gas',
@@ -158,7 +179,7 @@ def apply_transaction(block, tx):
         output = b''
         success = 0
     else:
-        log_tx.debug('TX SUCCESS', data=data)
+        log_tx.debug('TX SUCCESS', data=lazy_safe_encode(data))
         gas_used = tx.startgas - gas_remained
         block.refunds += len(set(block.suicides)) * opcodes.GSUICIDEREFUND
         if block.refunds > 0:

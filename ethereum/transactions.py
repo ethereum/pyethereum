@@ -157,6 +157,7 @@ class Transaction(rlp.Serializable):
         d = self.to_dict()
         d['sender'] = encode_hex(d['sender'] or '')
         d['to'] = encode_hex(d['to'])
+        d['data'] = encode_hex(d['data'])
         return d
 
     @property
