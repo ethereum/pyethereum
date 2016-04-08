@@ -270,7 +270,8 @@ def get_logger(name=None):
 def DEBUG(msg, *args, **kwargs):
     """temporary logger during development that is always on"""
     logger = getLogger("DEBUG")
-    logger.addHandler(StreamHandler())
+    if len(logger.handlers) == 0:
+        logger.addHandler(StreamHandler())
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     logger.DEV(msg, *args, **kwargs)
