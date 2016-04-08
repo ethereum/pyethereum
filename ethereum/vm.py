@@ -26,6 +26,16 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 
+def memview(mem):
+    """sliced view on memory similar to geth
+    """
+    assert len(mem) % 16 == 0
+    m = []
+    for i in range(len(mem) / 16):
+        m.append("".join([encode_hex(ascii_chr(x)) for x in mem[i * 16:i * 16 + 16]]))
+    return m
+
+
 class CallData(object):
 
     def __init__(self, parent_memory, offset=0, size=None):
@@ -55,7 +65,7 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0, 
+    def __init__(self, sender, to, value, gas, data, depth=0,
             code_address=None, is_create=False, transfers_value=True):
         self.sender = sender
         self.to = to
@@ -210,14 +220,7 @@ def vm_execute(ext, msg, code):
             if _prevop in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
                            'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
                            'EXTCODECOPY'):
-                if len(compustate.memory) < 1024:
-                    trace_data['memory'] = \
-                        b''.join([encode_hex(ascii_chr(x)) for x
-                                  in compustate.memory])
-                else:
-                    trace_data['sha3memory'] = \
-                        encode_hex(utils.sha3(''.join([ascii_chr(x) for
-                                              x in compustate.memory])))
+                trace_data['memory'] = memview(mem)
             if _prevop in ('SSTORE', 'SLOAD') or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = to_string(compustate.gas + fee)
