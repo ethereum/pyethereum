@@ -125,9 +125,12 @@ class lazy_safe_encode(object):
 
     def __str__(self):
         if not isinstance(self.data, (str, unicode)):
-            return self.data
+            return repr(self.data)
         else:
             return encode_hex(self.data)
+
+    def __repr__(self):
+        return str(self)
 
 
 def apply_transaction(block, tx):
@@ -276,7 +279,7 @@ def _apply_msg(ext, msg, code):
     # assert utils.is_numeric(gas)
     if trace_msg:
         log_msg.debug('MSG APPLIED', gas_remained=gas,
-                      sender=msg.sender, to=msg.to, data=dat)
+                      sender=encode_hex(msg.sender), to=encode_hex(msg.to), data=dat)
         if log_state.is_active('trace'):
             log_state.trace('MSG POST STATE SENDER', account=msg.sender.encode('hex'),
                             bal=ext.get_balance(msg.sender),

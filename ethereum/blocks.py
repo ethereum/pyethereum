@@ -34,6 +34,16 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 
+class lazy_encode(object):
+    def __init__(self, data):
+        self.data = data
+
+    def __repr__(self):
+        return repr([[k, encode_hex(a), v if k != 'code' else encode_hex(v)] for k, a, v in self.data])
+
+    def __str__(self):
+        return str(repr(self))
+
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
@@ -1019,7 +1029,7 @@ class Block(rlp.Serializable):
                     t.delete(enckey)
             acct.storage = t.root_hash
             self.state.update(addr, rlp.encode(acct))
-        log_state.trace('delta', changes=changes)
+        log_state.trace('delta', changes=lazy_encode(changes))
         self.reset_cache()
         self.db.put_temporarily(b'validated:' + self.hash, '1')
 

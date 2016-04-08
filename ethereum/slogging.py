@@ -130,14 +130,21 @@ class SLogger(logging.Logger):
 
     def format_message(self, msg, kwargs, highlight, level):
         if getattr(self, 'log_json', False):
-            message = {
-                k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
-                for k, v in kwargs.items()
-            }
-
+            message = dict()
             message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
             message['level'] = logging.getLevelName(level)
-            msg = json.dumps(message)
+            try:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex, list, str, dict)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
+            except UnicodeDecodeError:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
         else:
             msg = "{}{} {}{}".format(
                 bcolors.WARNING if highlight else "",
