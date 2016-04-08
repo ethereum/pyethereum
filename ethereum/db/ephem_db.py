@@ -21,11 +21,8 @@ class EphemDB(BaseDB):
     def commit(self):
         pass
 
-    def _has_key(self, key):
-        return key in self.db
-
     def __contains__(self, key):
-        return self._has_key(key)
+        return key in self.db
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.db == other.db

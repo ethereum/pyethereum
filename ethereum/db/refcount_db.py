@@ -149,11 +149,8 @@ class RefcountDB(BaseDB):
         except:
             pass
 
-    def _has_key(self, key):
-        return b'r:'+key in self.db
-
     def __contains__(self, key):
-        return self._has_key(key)
+        return b'r:'+key in self.db
 
     def put_temporarily(self, key, value):
         self.inc_refcount(key, value)

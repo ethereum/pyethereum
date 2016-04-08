@@ -82,15 +82,12 @@ class LevelDB(BaseDB):
         log.trace('deleting entry', key=key)
         self.uncommitted[key] = None
 
-    def _has_key(self, key):
+    def __contains__(self, key):
         try:
             self.get(key)
             return True
         except KeyError:
             return False
-
-    def __contains__(self, key):
-        return self._has_key(key)
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.db == other.db

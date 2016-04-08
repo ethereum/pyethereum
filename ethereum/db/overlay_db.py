@@ -27,13 +27,10 @@ class OverlayDB(BaseDB):
     def commit(self):
         pass
 
-    def _has_key(self, key):
+    def __contains__(self, key):
         if key in self.overlay:
             return self.overlay[key] is not None
         return key in self.db
-
-    def __contains__(self, key):
-        return self._has_key(key)
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.db == other.db

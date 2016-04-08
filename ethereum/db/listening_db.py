@@ -21,9 +21,6 @@ class ListeningDB(BaseDB):
     def delete(self, key):
         self.parent.delete(key)
 
-    def _has_key(self, key):
-        return self.parent._has_key(key)
-
     def __contains__(self, key):
         return self.parent.__contains__(key)
 
