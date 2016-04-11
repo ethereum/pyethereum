@@ -2,8 +2,7 @@ import os
 import time
 from ethereum import utils
 from ethereum import pruning_trie as trie
-from ethereum.refcount_db import RefcountDB
-from ethereum.db import OverlayDB
+from ethereum.db import OverlayDB, RefcountDB
 from ethereum.utils import to_string, is_string
 import rlp
 from rlp.utils import encode_hex

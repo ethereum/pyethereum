@@ -1,7 +1,7 @@
 from serenity_blocks import State, tx_state_transition, mk_contract_address, \
     block_state_transition, initialize_with_gas_limit, get_code, put_code
 from serenity_transactions import Transaction
-from db import EphemDB, OverlayDB
+from db import LevelDB, OverlayDB
 import serpent
 import ringsig_tester
 from config import BLOCKHASHES, STATEROOTS, BLKNUMBER, CASPER, GASLIMIT, NULL_SENDER, ETHER, ECRECOVERACCT, BASICSENDER, RNGSEEDS, GENESIS_TIME, ENTER_EXIT_DELAY, BET_INCENTIVIZER, GAS_REMAINING, CREATOR, GAS_DEPOSIT
@@ -78,8 +78,17 @@ assert 0 <= CLOCKWRONG_CUMUL <= BRAVE_CUMUL <= CRAZYBET_CUMUL <= DBL_BLK_SUICIDE
 
 print 'Running with %d maximum nodes: %d with wonky clocks, %d brave, %d crazy-betting, %d double-block suiciding, %d double-bet suiciding' % (MAX_NODES, CLOCKWRONG, BRAVE, CRAZYBET, DBL_BLK_SUICIDE, DBL_BET_SUICIDE)
 
+serenity_states_path = os.path.join(os.path.dirname(__file__), '..', 'serenity_states')
+genesis_db_path = os.path.join(serenity_states_path, 'genesis')
+bet_db_path = os.path.join(serenity_states_path, 'bet%d')
+try:
+    os.mkdir(serenity_states_path)
+except OSError:
+    pass
+
 def mk_bet_strategy(state, index, key):
-    return defaultBetStrategy(state.clone(), key,
+    bet_state = state.clone(bet_db_path % index)
+    return defaultBetStrategy(bet_state, key,
                               clockwrong=(1 <= index < CLOCKWRONG_CUMUL),
                               bravery=(0.997 if CLOCKWRONG_CUMUL <= index < BRAVE_CUMUL else 0.92),
                               crazy_bet=(BRAVE_CUMUL <= index < CRAZYBET_CUMUL),
@@ -87,7 +96,7 @@ def mk_bet_strategy(state, index, key):
                               double_bet_suicide=(1 if DBL_BLK_SUICIDE_CUMUL <= index < DBL_BET_SUICIDE_CUMUL else 2**80))
 
 # Create the genesis
-genesis = State('', EphemDB())
+genesis = State('', LevelDB(genesis_db_path))
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
 # Unleash the kraken....err, I mean casper

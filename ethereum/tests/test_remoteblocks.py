@@ -1,5 +1,5 @@
-from ethereum.db import DB
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.db import EphemDB
+from ethereum.slogging import get_logger
 from ethereum import testutils
 import sys
 logger = get_logger()
@@ -8,7 +8,7 @@ logger = get_logger()
 
 
 def import_chain_data(raw_blocks_fn, test_db_path, skip=0):
-    db = DB(test_db_path)
+    db = EphemDB(test_db_path)
     blks = testutils.get_blocks_from_textdump(
         open(raw_blocks_fn).read().strip())
     testutils.test_chain_data(blks, db, skip)

@@ -1,7 +1,9 @@
-import rlp
-import ethereum.utils as utils
 import sys
-from db import BaseDB
+import rlp
+
+import ethereum.utils as utils
+
+from .base_db import BaseDB
 
 DEATH_ROW_OFFSET = 2**62
 ZERO_ENCODED = utils.encode_int(0)
@@ -147,11 +149,8 @@ class RefcountDB(BaseDB):
         except:
             pass
 
-    def _has_key(self, key):
-        return b'r:'+key in self.db
-
     def __contains__(self, key):
-        return self._has_key(key)
+        return b'r:'+key in self.db
 
     def put_temporarily(self, key, value):
         self.inc_refcount(key, value)

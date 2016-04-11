@@ -11,7 +11,7 @@
 import json
 import os
 import tempfile
-from ethereum.db import DB as DB
+from ethereum.db import EphemDB as DB
 from ethereum.config import Env
 __TESTDATADIR = "../tests"
 

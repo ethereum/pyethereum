@@ -18,7 +18,7 @@ def translate_keys(olddict, keymap, valueconv, deletes):
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
 
-env = blocks.Env(db._EphemDB())
+env = blocks.Env(db.EphemDB())
 
 translator_list = {
     "extra_data": "extraData",

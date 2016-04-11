@@ -176,6 +176,8 @@ class State():
         self.cache = {}
         self.modified = {}
 
+        self.db.commit()
+
     def get_storage(self, addr, k):
         if isinstance(k, (int, long)):
             k = encode_int32(k)
@@ -197,9 +199,11 @@ class State():
 
     # Creates a new state using an overlay of the existing state. Updates to
     # the cloned state will NOT affect the parent state.
-    def clone(self):
+    def clone(self, new_dbfile=None):
         self.commit()
-        return State(self.root, OverlayDB(self.state.db))
+
+        db = self.db.clone(new_dbfile) if new_dbfile else OverlayDB(self.db)
+        return State(self.root, db)
 
     # Converts the state to a dictionary
     def to_dict(self):
