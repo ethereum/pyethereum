@@ -17,6 +17,7 @@ from ethereum.utils import (
     DEBUG,
     rlp_decode,
     sha3,
+    address,
 )
 from ethereum.abi import decode_abi
 from ethereum.config import (
@@ -28,6 +29,7 @@ from ethereum.config import (
     LOG,
     CASPER,
     GASLIMIT,
+    ETHER,
 )
 from ethereum.serenity_blocks import (
     BLKNUMBER,
@@ -50,6 +52,7 @@ from ethereum.guardian.network import (
     NM_TRANSACTION,
     NM_GETBLOCK,
     NM_GETBLOCKS,
+    NM_FAUCET,
 )
 from ethereum.guardian.utils import (
     casper_ct,
@@ -246,6 +249,8 @@ class defaultBetStrategy():
         self.last_time_sent_getblocks = 0
         # The block that this guardian should try to join the pool
         self.join_at_block = join_at_block
+        # Last time we requested ether
+        self.last_faucet_request = -1
         # Your guardian index
         self.index = -1
         self.former_index = None
@@ -695,6 +700,35 @@ class defaultBetStrategy():
         elif obj.typ == NM_LIST:
             for x in obj.args:
                 self.on_receive(x, sender_id)
+        elif obj.typ == NM_FAUCET:
+            to_addr = rlp_decode(obj.args[0], address)
+            amount = big_endian_to_int(obj.args[1])
+            state = self.get_optimistic_state()
+            balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
+            if balance >= amount:
+                DEBUG("Fauceting ether", to_addr=to_addr, amount=amount)
+                self.send_ether(to_addr, amount)
+            else:
+                DEBUG("Relaying Faucet request", to_addr=to_addr, amount=amount)
+                self.send_to_one(self, rlp.encode(NetworkMessage(NM_FAUCET, [rlp.encode(to_addr, address), encode_int(amount)])))
+
+    def send_ether(self, to_addr, amount):
+        tx = mk_transaction(
+            seq=self.seq,
+            gasprice=25 * 10**9,
+            gas=1000000,
+            to=to_addr,
+            value=amount,
+            data='',
+            key=self.key,
+            create=False,
+        )
+        self.add_transaction(tx)
+
+    def request_ether(self, amount):
+        nm = NetworkMessage(NM_FAUCET, [rlp.encode(self.addr, address), encode_int(amount)])
+        self.network.send_to_one(self, rlp.encode(nm))
+        self.last_faucet_request = len(self.blocks)
 
     def should_i_include_transaction(self, tx):
         check_state = self.get_optimistic_state()
@@ -877,7 +911,18 @@ class defaultBetStrategy():
 
         # We may not be a validator so potentially exit early
         if self.index < 0:
-            if not self.blocks:
+            state = self.get_optimistic_state()
+            balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
+
+            if balance < 1500 * 10**18:
+                if not self.network.peers:
+                    DEBUG("No peers yet.  Delaying Faucet Request")
+                elif self.last_faucet_request < 0 or self.max_finalized_height > self.last_faucet_request + 5:
+                    DEBUG('Requesting Ether')
+                    self.request_ether(1500 * 10**18)
+                else:
+                    DEBUG('Waiting on faucet ether request')
+            elif not self.blocks:
                 DEBUG('delaying joining pool until a few blocks have shown up.')
             elif len(self.blocks) < self.join_at_block:
                 DEBUG('Waiting to join pool', join_at_block=self.join_at_block)

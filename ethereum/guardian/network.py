@@ -34,6 +34,7 @@ NM_TRANSACTION = 4
 NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
+NM_FAUCET = 8
 
 
 class NetworkMessage(rlp.Serializable):

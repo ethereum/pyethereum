@@ -191,7 +191,9 @@ for i, key_hex in enumerate(genesis_config['guardians']):
     a = ecdsa_accounts.privtoaddr(k)
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
     # Give them 1600 ether
-    genesis.set_storage(ETHER, a, 1600 * 10**18)
+    #genesis.set_storage(ETHER, a, 1600 * 10**18)
+    # Give them A LOT more ether
+    genesis.set_storage(ETHER, a, 1600 * 10**18 * 1000)
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
     print 'Length of validation code:', len(vcode)
@@ -220,13 +222,20 @@ for i, key_hex in enumerate(genesis_config['guardians']):
 # state without needing to know about which other nodes are participating.
 #
 KEY_IDX = get_arg('--key-idx', int, None)
+KEY = get_arg('--key', str, None)
 
-if KEY_IDX is None:
-    KEY = random.choice(genesis_config['alloc'])[0].decode('hex')
-elif KEY_IDX < len(genesis_config['alloc']):
-    KEY = genesis_config['alloc'][KEY_IDX][0].decode('hex')
+if KEY is None:
+    if KEY_IDX is None:
+        KEY = zpad(encode_int(random.randint(1e16, 1e32)), 32)
+        print "Using KEY=", KEY
+    elif KEY_IDX < len(genesis_config['alloc']):
+        KEY = genesis_config['alloc'][KEY_IDX][0].decode('hex')
+    else:
+        raise Exception("Key index out of range")
+elif KEY_IDX is not None:
+    raise Exception("Cannot specify both --key and --key-idx")
 else:
-    raise Exception("Key index out of range")
+    KEY = zpad(KEY, 32)
 
 
 JOIN_AT_BLOCK = get_arg('--join-at-block', int, -1)
@@ -416,6 +425,10 @@ class StandaloneGuardianApp(GuardianApp):
         peer = random.choice(self.services.peermanager.peers)
 
         self.direct_send(sender, peer.remote_pubkey, obj)
+
+    @property
+    def peers(self):
+        return self.services.peermanager.peers
 
     def direct_send(self, sender, to_id, obj):
         to_peer = None
