@@ -3,7 +3,7 @@ Create traces from tester file:
 - with geth:
   1. start `gethrpctest`
 
-    gethrpctest --json /home/konrad/Projects/rpc-tests/lib/tests/BlockchainTests/bcRPC_API_Test.json --test RPC_API_Test
+    gethrpctest --json tests/BlockchainTests/bcRPC_API_Test.json --test RPC_API_Test
 
   2. dump traces
 
@@ -13,3 +13,8 @@ Create traces from tester file:
             \"params\": [$i, {}], \"id\": 110}" | python -mjson.tool > debugging/trace-$i.json;
     done
     
+- with pyethapp
+
+    pyethapp --log-json -d /tmp/bt -l:trace blocktest \
+    tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test 2>&1 | grep "eth.vm.op"|while IFS=$'\n' read -r line; \
+    do python -mjson.tool <<<"$line"; done
