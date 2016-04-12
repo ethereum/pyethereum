@@ -4,7 +4,7 @@ import json
 import ethereum.trie as trie
 import ethereum.db as db
 import itertools
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 from rlp.utils import decode_hex, encode_hex
 from ethereum.abi import is_string
 from ethereum.testutils import fixture_to_bytes
@@ -25,7 +25,6 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures')
 def load_tests():
     fixture = {}
     testdir = os.path.join(fixture_path, 'TrieTests')
-    print testdir
     for f in os.listdir(testdir):
         if f != 'trietest.json':
             continue
@@ -38,7 +37,6 @@ def load_tests():
 def run_test(name, pairs):
 
     logger.debug('testing %s' % name)
-    print name
 
     def _dec(x):
         if is_string(x) and x.startswith(b'0x'):

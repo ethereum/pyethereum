@@ -13,6 +13,17 @@ from ethereum._solidity import get_solidity
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 
+
+TRACE_LVL_MAP = [
+    ':info',
+    'eth.vm.log:trace',
+    ':info,eth.vm.log:trace,eth.vm.exit:trace',
+    ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace',
+    ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,' +
+    'eth.vm.storage:trace,eth.vm.memory:trace'
+]
+
+
 serpent = None
 
 u = ethereum.utils
@@ -194,31 +205,35 @@ class state():
         tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = tx
         tx.sign(sender)
+        recorder = None
         if profiling > 1:
-            set_logging_level(3)
-            recorder = LogRecorder()
-        (s, o) = pb.apply_transaction(self.block, tx)
-        if not s:
-            raise TransactionFailed()
-        out = {"output": o}
-        if profiling > 0:
-            zero_bytes = tx.data.count(ascii_chr(0))
-            non_zero_bytes = len(tx.data) - zero_bytes
-            intrinsic_gas_used = opcodes.GTXCOST + \
-                opcodes.GTXDATAZERO * zero_bytes + \
-                opcodes.GTXDATANONZERO * non_zero_bytes
-            ntm, ng = time.time(), self.block.gas_used
-            out["time"] = ntm - tm
-            out["gas"] = ng - g - intrinsic_gas_used
-        if profiling > 1:
-            trace = recorder.pop_records()
-            set_logging_level(0)
-            ops = [x['op'] for x in trace if x['event'] == 'vm']
-            opdict = {}
-            for op in ops:
-                opdict[op] = opdict.get(op, 0) + 1
-            out["ops"] = opdict
-        return out
+            recorder = LogRecorder(disable_other_handlers=True, log_config=TRACE_LVL_MAP[3])
+        try:
+            (s, o) = pb.apply_transaction(self.block, tx)
+            if not s:
+                raise TransactionFailed()
+            out = {"output": o}
+            if profiling > 0:
+                zero_bytes = tx.data.count(ascii_chr(0))
+                non_zero_bytes = len(tx.data) - zero_bytes
+                intrinsic_gas_used = opcodes.GTXCOST + \
+                    opcodes.GTXDATAZERO * zero_bytes + \
+                    opcodes.GTXDATANONZERO * non_zero_bytes
+                ntm, ng = time.time(), self.block.gas_used
+                out["time"] = ntm - tm
+                out["gas"] = ng - g - intrinsic_gas_used
+            if profiling > 1:
+                trace = recorder.pop_records()
+                ops = [x['op'] for x in trace if x['event'] == 'vm']
+                opdict = {}
+                for op in ops:
+                    opdict[op] = opdict.get(op, 0) + 1
+                out["ops"] = opdict
+            return out
+        finally:
+            # ensure LogRecorder has been disabled
+            if recorder:
+                recorder.pop_records()
 
     def profile(self, *args, **kwargs):
         kwargs['profiling'] = True
@@ -275,41 +290,6 @@ class state():
         self.block.header._mutable = True
         self.block._cached_rlp = None
         self.block.header._cached_rlp = None
-
-# logging
-
-
-def set_logging_level(lvl=0):
-    trace_lvl_map = [
-        ':info',
-        'eth.vm.log:trace',
-        ':info,eth.vm.log:trace,eth.vm.exit:trace',
-        ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace',
-        ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,' +
-        'eth.vm.storage:trace,eth.vm.memory:trace'
-    ]
-    configure_logging(config_string=trace_lvl_map[lvl])
-    if lvl == 0:
-        set_level(None, 'info')
-    print('Set logging level: %d' % lvl)
-
-
-def set_log_trace(logger_names=[]):
-    """
-    sets all named loggers to level 'trace'
-    attention: vm.op.* are only active if vm.op is active
-    """
-    for name in logger_names:
-        assert name in slogging.get_logger_names()
-        slogging.set_level(name, 'trace')
-
-
-def enable_logging():
-    set_logging_level(1)
-
-
-def disable_logging():
-    set_logging_level(0)
 
 
 gas_limit = 3141592

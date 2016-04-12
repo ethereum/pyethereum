@@ -34,6 +34,16 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 
+class lazy_encode(object):
+    def __init__(self, data):
+        self.data = data
+
+    def __repr__(self):
+        return repr([[k, encode_hex(a), v if k != 'code' else encode_hex(v)] for k, a, v in self.data])
+
+    def __str__(self):
+        return str(repr(self))
+
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
@@ -257,12 +267,10 @@ class BlockHeader(rlp.Serializable):
         else:
             self._receipts_root = value
 
-    _fimxe_hash = None
-
     @property
     def hash(self):
         """The binary block hash"""
-        return self._fimxe_hash or utils.sha3(rlp.encode(self))
+        return utils.sha3(rlp.encode(self))
 
     def hex_hash(self):
         """The hex encoded block hash"""
@@ -381,7 +389,6 @@ class Block(rlp.Serializable):
         self.header = header
         self.uncles = uncles
 
-        self.uncles = uncles
         self.suicides = []
         self.logs = []
         self.log_listeners = []
@@ -646,6 +653,10 @@ class Block(rlp.Serializable):
         for uncle in self.uncles:
             parent = get_block(self.env, uncle.prevhash)
             if uncle.difficulty != calc_difficulty(parent, uncle.timestamp):
+                return False
+            if uncle.number != parent.number + 1:
+                return False
+            if uncle.timestamp < parent.timestamp:
                 return False
             if not uncle.check_pow():
                 return False
@@ -1018,7 +1029,7 @@ class Block(rlp.Serializable):
                     t.delete(enckey)
             acct.storage = t.root_hash
             self.state.update(addr, rlp.encode(acct))
-        log_state.trace('delta', changes=changes)
+        log_state.trace('delta', changes=lazy_encode(changes))
         self.reset_cache()
         self.db.put_temporarily(b'validated:' + self.hash, '1')
 

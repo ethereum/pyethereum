@@ -10,9 +10,8 @@ from ethereum.chain import Chain
 from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
 
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 logger = get_logger()
-# configure_logging('eth.vm:trace,eth.vm.memory:info')
 
 _db = new_db()
 

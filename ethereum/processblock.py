@@ -1,15 +1,17 @@
 import sys
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import opcodes
 from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
-from ethereum.exceptions import *
-from ethereum.utils import safe_ord, normalize_address, mk_contract_address
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+        BlockGasLimitReached, InsufficientBalance
+from ethereum.utils import safe_ord, mk_contract_address
 from ethereum import transactions
+import ethereum.config as config
 
 sys.setrecursionlimit(100000)
 
@@ -80,6 +82,8 @@ def validate_transaction(block, tx):
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
         raise UnsignedTransaction(tx)
+    if block.number >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
+            tx.check_low_s()
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
@@ -105,6 +109,30 @@ def validate_transaction(block, tx):
     return True
 
 
+class lazy_safe_encode(object):
+    """Creates a lazy and logging safe representation of transaction data.
+    Use this in logging of transactions; instead of
+
+        >>> log.debug(data=data)
+
+    do this:
+
+        >>> log.debug(data=lazy_safe_encode(data))
+    """
+
+    def __init__(self, data):
+        self.data = data
+
+    def __str__(self):
+        if not isinstance(self.data, (str, unicode)):
+            return repr(self.data)
+        else:
+            return encode_hex(self.data)
+
+    def __repr__(self):
+        return str(self)
+
+
 def apply_transaction(block, tx):
     validate_transaction(block, tx)
 
@@ -124,7 +152,7 @@ def apply_transaction(block, tx):
     log_tx.debug('TX NEW', tx_dict=tx.log_dict())
     # start transacting #################
     block.increment_nonce(tx.sender)
-                
+
     # buy startgas
     assert block.get_balance(tx.sender) >= tx.startgas * tx.gasprice
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
@@ -136,16 +164,16 @@ def apply_transaction(block, tx):
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         result, gas_remained, data = apply_msg(ext, message)
-        log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=data)
+        log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
     else:  # CREATE
         result, gas_remained, data = create_contract(ext, message)
         assert utils.is_numeric(gas_remained)
-        log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
+        log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
 
     assert gas_remained >= 0
 
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
-                 data=data)
+                 data=lazy_safe_encode(data))
 
     if not result:  # 0 = OOG failure in both cases
         log_tx.debug('TX FAILED', reason='out of gas',
@@ -155,7 +183,7 @@ def apply_transaction(block, tx):
         output = b''
         success = 0
     else:
-        log_tx.debug('TX SUCCESS', data=data)
+        log_tx.debug('TX SUCCESS', data=lazy_safe_encode(data))
         gas_used = tx.startgas - gas_remained
         block.refunds += len(set(block.suicides)) * opcodes.GSUICIDEREFUND
         if block.refunds > 0:
@@ -251,7 +279,7 @@ def _apply_msg(ext, msg, code):
     # assert utils.is_numeric(gas)
     if trace_msg:
         log_msg.debug('MSG APPLIED', gas_remained=gas,
-                      sender=msg.sender, to=msg.to, data=dat)
+                      sender=encode_hex(msg.sender), to=encode_hex(msg.to), data=dat)
         if log_state.is_active('trace'):
             log_state.trace('MSG POST STATE SENDER', account=msg.sender.encode('hex'),
                             bal=ext.get_balance(msg.sender),

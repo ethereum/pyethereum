@@ -35,15 +35,32 @@ class LogRecorder(object):
     """
     max_capacity = 1000 * 1000  # check we are not forgotten or abused
 
-    def __init__(self):
+    def __init__(self, disable_other_handlers=False, log_config=None):
         self._records = []
         log_listeners.append(self._add_log_record)
+        self._saved_config = None
+        if log_config:
+            self._saved_config = get_configuration()
+            configure(log_config)
+        self._saved_handlers = []
+        if disable_other_handlers:
+            self._saved_handlers = rootLogger.handlers[:]
+            rootLogger.handlers = []
 
     def pop_records(self):
-        # can only be called once
+        # only returns records on the first call
         r = self._records[:]
-        self._records = None
-        log_listeners.remove(self._add_log_record)
+        self._records = []
+        try:
+            log_listeners.remove(self._add_log_record)
+        except ValueError:
+            pass
+        if self._saved_config:
+            configure(**self._saved_config)
+            self._saved_config = None
+        if self._saved_handlers:
+            rootLogger.handlers = self._saved_handlers[:]
+            self._saved_handlers = []
         return r
 
     def _add_log_record(self, msg):
@@ -59,12 +76,16 @@ def get_configuration():
     """
     root = getLogger()
     name_levels = [('', logging.getLevelName(root.level))]
+    name_levels.extend(
+        (name, logging.getLevelName(logger.level))
+        for name, logger
+        in root.manager.loggerDict.items()
+        if hasattr(logger, 'level')
+    )
 
-    for name, logger in list(root.manager.loggerDict.items()):
-        name_levels.append((name, logging.getLevelName(logger.level)))
     config_string = ','.join('%s:%s' % x for x in name_levels)
 
-    return dict(config_string=config_string, log_json=root.log_json)
+    return dict(config_string=config_string, log_json=SLogger.manager.log_json)
 
 
 def get_logger_names():
@@ -100,18 +121,30 @@ class SLogger(logging.Logger):
         self.warn = self.warning
         super(SLogger, self).__init__(name, level=level)
 
+    @property
+    def log_json(self):
+        return SLogger.manager.log_json
+
     def is_active(self, level_name='trace'):
         return self.isEnabledFor(logging._checkLevel(level_name.upper()))
 
-    def format_message(self, msg, kwargs, highlight):
+    def format_message(self, msg, kwargs, highlight, level):
         if getattr(self, 'log_json', False):
-            message = {
-                k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
-                for k, v in kwargs.items()
-            }
-
-            message['event'] = "{}.{}".format(self.name, msg)
-            msg = json.dumps(message)
+            message = dict()
+            message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
+            message['level'] = logging.getLevelName(level)
+            try:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex, list, str, dict)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
+            except UnicodeDecodeError:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
         else:
             msg = "{}{} {}{}".format(
                 bcolors.WARNING if highlight else "",
@@ -119,7 +152,6 @@ class SLogger(logging.Logger):
                 " ".join("{}={!s}".format(k, v) for k, v in kwargs.items()),
                 bcolors.ENDC if highlight else ""
             )
-
         return msg
 
     def bind(self, **kwargs):
@@ -131,7 +163,7 @@ class SLogger(logging.Logger):
         highlight = kwargs.pop('highlight', False)
         extra['kwargs'] = kwargs
         extra['original_msg'] = msg
-        msg = self.format_message(msg, kwargs, highlight)
+        msg = self.format_message(msg, kwargs, highlight, level)
         super(SLogger, self)._log(level, msg, args, exc_info, extra)
 
     def DEV(self, msg, *args, **kwargs):
@@ -153,7 +185,6 @@ class RootLogger(SLogger):
         Initialize the logger with the name "root".
         """
         super(RootLogger, self).__init__("root", level)
-        self.log_json = False
 
     def handle(self, record):
         if log_listeners:
@@ -168,6 +199,7 @@ class SManager(logging.Manager):
 
     def __init__(self, rootnode):
         self.loggerClass = SLogger
+        self.log_json = False
         super(SManager, self).__init__(rootnode)
 
     def getLogger(self, name):
@@ -188,7 +220,6 @@ def getLogger(name=None):
 
     if name:
         logger = SLogger.manager.getLogger(name)
-        logger.log_json = rootLogger.log_json
         return logger
     else:
         return rootLogger
@@ -199,11 +230,11 @@ def configure(config_string=None, log_json=False, log_file=None):
         config_string = ":{}".format(DEFAULT_LOGLEVEL)
 
     if log_json:
+        SLogger.manager.log_json = True
         log_format = JSON_FORMAT
-        rootLogger.log_json = True
     else:
+        SLogger.manager.log_json = False
         log_format = PRINT_FORMAT
-        rootLogger.log_json = False
 
     if len(rootLogger.handlers) == 0:
         handler = StreamHandler()
@@ -222,6 +253,7 @@ def configure(config_string=None, log_json=False, log_file=None):
         if hasattr(logger, 'setLevel'):
             # Guard against `logging.PlaceHolder` instances
             logger.setLevel(logging.NOTSET)
+            logger.propagate = True
 
     for name_levels in config_string.split(','):
         name, _, level = name_levels.partition(':')
@@ -245,7 +277,8 @@ def get_logger(name=None):
 def DEBUG(msg, *args, **kwargs):
     """temporary logger during development that is always on"""
     logger = getLogger("DEBUG")
-    logger.addHandler(StreamHandler())
+    if len(logger.handlers) == 0:
+        logger.addHandler(StreamHandler())
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     logger.DEV(msg, *args, **kwargs)

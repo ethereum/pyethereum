@@ -100,7 +100,7 @@ class ContractTranslator():
     def is_unknown_type(self, name):
         return self.function_data[name]["is_unknown_type"]
 
-    def listen(self, log, noprint=False):
+    def listen(self, log, noprint=True):
         if not len(log.topics) or log.topics[0] not in self.event_data:
             return
         types = self.event_data[log.topics[0]]['types']
@@ -149,7 +149,7 @@ class ValueOutOfBounds(EncodingError):
 def decint(n):
     if isinstance(n, str):
         n = utils.to_string(n)
-    if is_numeric(n) and n < 2**256 and n > -2**255:
+    if is_numeric(n) and n < 2**256 and n >= -2**255:
         return n
     elif is_numeric(n):
         raise EncodingError("Number out of range: %r" % n)
@@ -194,13 +194,14 @@ def encode_single(typ, arg):
         high, low = [int(x) for x in sub.split('x')]
         if not 0 <= arg < 2**high:
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int(arg * 2**low), 32)
+        return zpad(encode_int(int(arg * 2**low)), 32)
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         if not -2**(high - 1) <= arg < 2**(high - 1):
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int((arg % 2**high) * 2**low), 32)
+        i = int(arg * 2**low)
+        return zpad(encode_int(i % 2**(high+low)), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
         if not is_string(arg):
@@ -221,9 +222,9 @@ def encode_single(typ, arg):
             raise EncodingError("too long: %r" % arg)
         if isnumeric(arg):
             return zpad(encode_int(arg), 32)
-        elif len(arg) == len(sub):
+        elif len(arg) == int(sub):
             return zpad(arg, 32)
-        elif len(arg) == len(sub) * 2:
+        elif len(arg) == int(sub) * 2:
             return zpad(decode_hex(arg), 32)
         else:
             raise EncodingError("Could not parse hash: %r" % arg)
@@ -236,7 +237,7 @@ def encode_single(typ, arg):
             return zpad(arg, 32)
         elif len(arg) == 40:
             return zpad(decode_hex(arg), 32)
-        elif len(arg) == 42 and arg[2:] == '0x':
+        elif len(arg) == 42 and arg[:2] == '0x':
             return zpad(decode_hex(arg[2:]), 32)
         else:
             raise EncodingError("Could not parse address: %r" % arg)
@@ -255,6 +256,8 @@ def process_type(typ):
     if base == 'string' or base == 'bytes':
         assert re.match('^[0-9]*$', sub), \
             "String type must have no suffix or numerical suffix"
+        assert not sub or int(sub) <= 32, \
+            "Maximum 32 bytes for fixed-length str or bytes"
     # Check validity of integer type
     elif base == 'uint' or base == 'int':
         assert re.match('^[0-9]+$', sub), \
@@ -263,12 +266,6 @@ def process_type(typ):
             "Integer size out of bounds"
         assert int(sub) % 8 == 0, \
             "Integer size must be multiple of 8"
-    # Check validity of string type
-    if base == 'string' or base == 'bytes':
-        assert re.match('^[0-9]*$', sub), \
-            "String type must have no suffix or numerical suffix"
-        assert not sub or int(sub) <= 32, \
-            "Maximum 32 bytes for fixed-length str or bytes"
     # Check validity of real type
     elif base == 'ureal' or base == 'real':
         assert re.match('^[0-9]+x[0-9]+$', sub), \
@@ -375,8 +372,14 @@ def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
         return encode_hex(data[12:])
-    elif base == 'string' or base == 'bytes' or base == 'hash':
-        return data[:int(sub)] if len(sub) else data
+    elif base == 'hash':
+        return data[32-int(sub):]
+    elif base == 'string' or base == 'bytes':
+        if len(sub):
+            return data[:int(sub)]
+        else:
+            l = big_endian_to_int(data[0:32])
+            return data[32:][:l]
     elif base == 'uint':
         return big_endian_to_int(data)
     elif base == 'int':
@@ -387,7 +390,9 @@ def decode_single(typ, data):
         return big_endian_to_int(data) * 1.0 / 2**low
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
-        return (big_endian_to_int(data) * 1.0 / 2**low) % 2**high
+        o = big_endian_to_int(data)
+        i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
+        return (i * 1.0 / 2**low)
     elif base == 'bool':
         return bool(int(data.encode('hex'), 16))
 

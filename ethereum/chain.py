@@ -9,9 +9,9 @@ import rlp
 from rlp.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
+from ethereum.exceptions import VerificationFailed, InvalidTransaction
 from ethereum.slogging import get_logger
 from ethereum.config import Env
-import sys
 log = get_logger('eth.chain')
 
 
@@ -301,7 +301,7 @@ class Chain(object):
         if block.has_parent():
             try:
                 processblock.verify(block, block.get_parent())
-            except processblock.VerificationFailed as e:
+            except VerificationFailed as e:
                 _log.critical('VERIFICATION FAILED', error=e)
                 f = os.path.join(utils.data_dir, 'badblock.log')
                 open(f, 'w').write(to_string(block.hex_serialize()))
@@ -351,7 +351,7 @@ class Chain(object):
         head_candidate.state_root = self.pre_finalize_state_root
         try:
             success, output = processblock.apply_transaction(head_candidate, transaction)
-        except processblock.InvalidTransaction as e:
+        except InvalidTransaction as e:
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)

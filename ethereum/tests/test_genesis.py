@@ -6,9 +6,8 @@ import ethereum.testutils as testutils
 import ethereum.utils as utils
 from rlp.utils import encode_hex
 from ethereum.tests.utils import new_env
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 logger = get_logger()
-# configure_logging(':trace')
 
 
 @pytest.fixture(scope="module")

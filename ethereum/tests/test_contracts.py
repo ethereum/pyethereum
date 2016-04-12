@@ -2,25 +2,13 @@
 import os
 
 import bitcoin
+from secp256k1 import PrivateKey
 import pytest
 import serpent
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
 
 from ethereum import tester, utils, abi
-from ethereum.slogging import set_level
-from ethereum.utils import safe_ord
-
-try:
-    from c_secp256k1 import ecdsa_sign_raw
-except ImportError:
-    import warnings
-    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
-
-    from bitcoin import ecdsa_raw_sign as ecdsa_sign_raw
-
-# customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(0)
+from ethereum.utils import safe_ord, big_endian_to_int
 
 
 # Test EVM contracts
@@ -353,13 +341,13 @@ def test_hedge():
     c2 = s.abi_contract(hedge_code, sender=tester.k0)
     # Have the first party register, sending 10^16 wei and
     # asking for a hedge using currency code 500
-    o1 = c2.main(c.address, 500, value=10**16)
+    o1 = c2.main(c.address, 500, value=10 ** 16)
     assert o1 == 1
     # Have the second party register. It should receive the
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
-    o2 = c2.main(0, 0, value=10**16, sender=tester.k2)
+    o2 = c2.main(0, 0, value=10 ** 16, sender=tester.k2)
     assert o2 == 7260000000000000000
     snapshot = s.snapshot()
     # Set the price of the asset down to 300 wei
@@ -478,12 +466,12 @@ def recurse():
 
 def test_reverter():
     s = tester.state()
-    c = s.abi_contract(reverter_code, endowment=10**15)
+    c = s.abi_contract(reverter_code, endowment=10 ** 15)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(decode_hex('0'*39+'7')) == 9
+    assert s.block.get_balance(decode_hex('0' * 39 + '7')) == 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(decode_hex('0'*39+'8')) == 0
+    assert s.block.get_balance(decode_hex('0' * 39 + '8')) == 0
 
 # Test stateless contracts
 
@@ -943,8 +931,6 @@ def kall():
 
 """
 
-import bitcoin
-
 
 def test_saveload():
     s = tester.state()
@@ -1063,7 +1049,6 @@ def sort(args:arr):
 
 @pytest.mark.timeout(100)
 def test_sort():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(sort_code)
     assert c.sort([9]) == [9]
@@ -1088,12 +1073,11 @@ def test(args:arr):
 
 @pytest.mark.timeout(100)
 def test_indirect_sort():
-    set_level(None, 'info')
     s = tester.state()
     open(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
-    assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
     os.remove(filename9)
+    assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
 multiarg_code = """
 def kall(a:arr, b, c:arr, d:str, e):
@@ -1214,17 +1198,26 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
+    priv = utils.sha3('some big long brainwallet password')
     pub = bitcoin.privtopub(priv)
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = ecdsa_sign_raw(msghash, priv)
+    msghash = utils.sha3('the quick brown fox jumps over the lazy dog')
+
+    pk = PrivateKey(priv, raw=True)
+    signature = pk.ecdsa_recoverable_serialize(
+        pk.ecdsa_sign_recoverable(msghash, raw=True)
+    )
+    signature = signature[0] + chr(signature[1])
+    V = ord(signature[64]) + 27
+    R = big_endian_to_int(signature[0:32])
+    S = big_endian_to_int(signature[32:64])
+
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
-    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
+    result = c.test_ecrecover(utils.big_endian_to_int(msghash), V, R, S)
     assert result == addr
 
 
@@ -1238,12 +1231,12 @@ def test_sha256():
     s = tester.state()
     c = s.abi_contract(sha256_code)
     assert c.main() == [
-        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
-        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256
+        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2 ** 256,
+        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256
     ]
 
 sha3_code = """
@@ -1256,12 +1249,12 @@ def test_sha3():
     s = tester.state()
     c = s.abi_contract(sha3_code)
     assert c.main() == [
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
-        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2 ** 256,
+        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2 ** 256,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256
     ]
 
 types_in_functions_code = """
@@ -1322,14 +1315,14 @@ def get_prevhashes(k):
     return(o:arr)
 """
 
+
 @pytest.mark.timeout(100)
 def test_prevhashes():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(prevhashes_code)
     s.mine(7)
     # Hashes of last 14 blocks including existing one
-    o1 = [x % 2**256 for x in c.get_prevhashes(14)]
+    o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
     # hash of self = 0, hash of blocks back to genesis block as is, hash of
     # blocks before genesis block = 0
     t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
@@ -1337,7 +1330,7 @@ def test_prevhashes():
     assert o1 == t1
     s.mine(256)
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2**256 for x in c.get_prevhashes(270)]
+    o2 = [x % 2 ** 256 for x in c.get_prevhashes(270)]
     t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
         + [0] * 13
     assert o2 == t2
