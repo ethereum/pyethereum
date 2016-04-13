@@ -362,7 +362,7 @@ def run_state_test(params, mode):
             success, output = pb.apply_transaction(blk, tx)
             blk.commit_state()
             print 'success', blk.get_receipts()[-1].gas_used
-        except pb.InvalidTransaction:
+        except InvalidTransaction:
             success, output = False, b''
             blk.commit_state()
             pass
@@ -476,7 +476,7 @@ def run_abi_test(params, mode):
 def run_genesis_test(params, mode):
     params = copy.deepcopy(params)
     if 'difficulty' not in params:
-        params['difficulty'] = int_to_hex(2**34)
+        params['difficulty'] = int_to_hex(2 ** 34)
     if 'mixhash' not in params:
         params['mixhash'] = '0x' + '0' * 64
     if 'nonce' not in params:
