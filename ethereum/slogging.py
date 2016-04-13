@@ -135,7 +135,9 @@ class SLogger(logging.Logger):
             message['level'] = logging.getLevelName(level)
             try:
                 message.update({
-                    k: v if isnumeric(v) or isinstance(v, (float, complex, list, str, dict)) else repr(v)
+                    k: v if (isnumeric(v) or
+                             isinstance(v, (float, complex, list, str, dict)) or
+                             v is None) else repr(v)
                     for k, v in kwargs.items()
                 })
                 msg = json.dumps(message)
