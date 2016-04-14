@@ -122,47 +122,6 @@ def preprocess_code(code):
     return ops
 
 
-def mem_extend(mem, compustate, op, start, sz, trace=None):
-    if sz:
-        oldsize = len(mem) // 32
-        old_totalfee = oldsize * opcodes.GMEMORY + \
-            oldsize ** 2 // opcodes.GQUADRATICMEMDENOM
-        newsize = utils.ceil32(start + sz) // 32
-        # if newsize > 524288:
-        #     raise Exception("Memory above 16 MB per call not supported by this VM")
-        new_totalfee = newsize * opcodes.GMEMORY + \
-            newsize ** 2 // opcodes.GQUADRATICMEMDENOM
-        if old_totalfee < new_totalfee:
-            memfee = new_totalfee - old_totalfee
-            if compustate.gas < memfee:
-                compustate.gas = 0
-                return False
-            compustate.gas -= memfee
-            m_extend = (newsize - oldsize) * 32
-            mem.extend([0] * m_extend)
-
-        if trace is not None:
-            stackencode = lambda v: utils.encode_hex(zpad(utils.encode_int(v), 32))
-            trace = trace.bind(stack=list(map(stackencode, list(compustate.stack))))
-            trace = trace.bind(memory=memview(mem))
-            trace = trace.bind(gas=compustate.gas)
-            trace = trace.bind(gasCost=compustate.gas)
-            trace = trace.bind(pc=to_string(compustate.pc - 1))
-            trace = trace.bind(op=op)
-
-    return True
-
-
-def data_copy(compustate, size):
-    if size:
-        copyfee = opcodes.GCOPY * utils.ceil32(size) // 32
-        if compustate.gas < copyfee:
-            compustate.gas = 0
-            return False
-        compustate.gas -= copyfee
-    return True
-
-
 def vm_exception(error, **kargs):
     log_vm_exit.trace('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
@@ -179,6 +138,58 @@ def vm_execute(ext, msg, code):
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
     trace_vm = log_vm_op.is_active('trace')
+
+    # Using a mutable object for the bound logger in order to share it 'nonlocal'
+    # this is necessary, because in the trace scenario we need to
+    # accumulate gasCost
+    trace = []
+
+    # we have this function nested in order to share the `trace` instance
+    def mem_extend(mem, compustate, op, start, sz):
+        memfee = None
+        if sz:
+            oldsize = len(mem) // 32
+            old_totalfee = oldsize * opcodes.GMEMORY + \
+                oldsize ** 2 // opcodes.GQUADRATICMEMDENOM
+            newsize = utils.ceil32(start + sz) // 32
+            # if newsize > 524288:
+            #     raise Exception("Memory above 16 MB per call not supported by this VM")
+            new_totalfee = newsize * opcodes.GMEMORY + \
+                newsize ** 2 // opcodes.GQUADRATICMEMDENOM
+            if old_totalfee < new_totalfee:
+                memfee = new_totalfee - old_totalfee
+                if compustate.gas < memfee:
+                    compustate.gas = 0
+                    return False
+                compustate.gas -= memfee
+                m_extend = (newsize - oldsize) * 32
+                mem.extend([0] * m_extend)
+            else:
+                memfee = 0
+
+            if trace:
+                assert 'gasCost' in trace[0].context, trace[0].context
+                trace[0] = trace[0].bind(
+                    gasCost=memfee + trace[0].context['gasCost'],
+                    gas=compustate.gas,
+                    memory=memview(mem))
+
+        return True
+
+    # we have this function nested in order to share the `trace` instance
+    def data_copy(compustate, size):
+        if size:
+            copyfee = opcodes.GCOPY * utils.ceil32(size) // 32
+            if compustate.gas < copyfee:
+                compustate.gas = 0
+                return False
+            compustate.gas -= copyfee
+            if trace:
+                assert 'gasCost' in trace[0].context, trace[0].context
+                trace[0] = trace[0].bind(
+                    gasCost=copyfee + trace[0].context['gasCost'],
+                    gas=compustate.gas)
+        return True
 
     compustate = Compustate(gas=msg.gas)
     stk = compustate.stack
