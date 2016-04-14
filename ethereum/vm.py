@@ -8,8 +8,7 @@ import copy
 from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
-from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string, zpad
+from ethereum.utils import to_string, zpad, encode_int, encode_hex, ascii_chr
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -23,6 +22,9 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 
+stackencode = lambda v: encode_hex(zpad(encode_int(v), 32))
+
+
 def memview(mem):
     """sliced view on memory similar to geth
     """
@@ -31,6 +33,15 @@ def memview(mem):
     for i in range(len(mem) / 32):
         m.append("".join([encode_hex(ascii_chr(x)) for x in mem[i * 32:i * 32 + 32]]))
     return m
+
+
+def storage_view(storage_dict):
+    d = storage_dict.copy()
+    # FIXME: why is there `"0x": "0x08fa01"` in initialized storage?
+    if "0x" in d:
+        # popping in order to align with geth traces
+        d.pop("0x")
+    return {stackencode(int(k, 16)): stackencode(int(v, 16)) for k, v in d.items()}
 
 
 class CallData(object):
