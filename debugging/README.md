@@ -15,6 +15,12 @@ Create traces from tester file:
     
 - with pyethapp
 
-    pyethapp --log-json -d /tmp/bt -l:trace blocktest \
-    tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test 2>&1 | grep "eth.vm.op"|while IFS=$'\n' read -r line; \
-    do python -mjson.tool <<<"$line"; done
+    pyethapp --log-json -d /tmp/bt -l:trace blocktest tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test 2>&1 | grep "eth.vm.op" > pylog.jsons
+
+Now we can diff traces between geth and pyethapp. In the `debugging` folder run:
+
+    ./compare_logs.py <block_number>
+
+    # e.g.
+
+    ./compare_logs.py 3  # to compare the traces of block 3
