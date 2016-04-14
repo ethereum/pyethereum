@@ -143,6 +143,9 @@ def vm_execute(ext, msg, code):
     # this is necessary, because in the trace scenario we need to
     # accumulate gasCost
     trace = []
+    if trace_vm:
+        # init
+        trace = [log_vm_op.bind()]
 
     # we have this function nested in order to share the `trace` instance
     def mem_extend(mem, compustate, op, start, sz):
@@ -167,10 +170,10 @@ def vm_execute(ext, msg, code):
             else:
                 memfee = 0
 
+            # we need to update the memory if we're tracing
             if trace:
                 trace[0] = trace[0].bind(memory=memview(mem),
-                                         # preserve gasCost in context when
-                                         # binding memory
+                                         # preserve gasCost in context
                                          gasCost=trace[0].context.get('gasCost', 0),
                                          gas=compustate.gas)
 
@@ -214,13 +217,9 @@ def vm_execute(ext, msg, code):
     op = None
     steps = 0
 
-    # `try`'ing here in order to `finally` being able to trace RETURN
-    try:
-        while 1:
-            if trace_vm:
-                if trace:
-                    trace[0].trace('vm')
-                trace = [log_vm_op.bind()]
+    while 1:
+        # `try`'ing here in order to `finally` being able to trace
+        try:
             # print 'op: ', op, time.time() - s
             # s = time.time()
             # stack size limit error
@@ -250,10 +249,6 @@ def vm_execute(ext, msg, code):
             compustate.pc += 1
 
             if trace_vm:
-                # if trace:
-                #     trace[0].trace('vm')
-                # trace = [log_vm_op.bind()]
-                # trace.context = dict()
                 """
                 This diverges from normal logging, as we use the logging namespace
                 only to decide which features get logged in 'eth.vm.op'
@@ -262,19 +257,14 @@ def vm_execute(ext, msg, code):
                 """
                 trace_data = {}
                 trace_data['stack'] = list(map(stackencode, list(compustate.stack)))
-                # if len(mem):
                 trace_data['memory'] = memview(mem) if len(mem) else None
                 trace_data['storage'] = storage_view(ext.log_storage(msg.to))
                 trace_data['gas'] = compustate.gas
                 trace_data['gasCost'] = trace[0].context['gasCost']  # keep gasCost in context
                 trace_data['pc'] = compustate.pc - 1
-                # if steps == 0:
-                #     trace_data['address'] = encode_hex(msg.to)
                 trace_data['depth'] = msg.depth
                 trace_data['op'] = op
                 trace_data['error'] = ""
-                # trace_data['steps'] = steps
-                # trace_data['processed_code'] = processed_code[compustate.pc - 1]
 
                 trace[0] = trace[0].bind(**trace_data)
                 steps += 1
@@ -639,9 +629,11 @@ def vm_execute(ext, msg, code):
             # for a in stk:
             #     assert is_numeric(a), (op, stk)
             #     assert a >= 0 and a < 2 ** 256, (a, op, stk)
-    finally:
-        if trace_vm:
-            trace[0].trace('return')
+        finally:
+            if trace_vm:
+                # trace and reset:
+                trace[0].trace('vm')
+                trace = [log_vm_op.bind()]
 
 
 class VmExtBase():
