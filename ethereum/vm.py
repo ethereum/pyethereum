@@ -131,10 +131,10 @@ def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
-code_cache = {}
-
 
 def vm_execute(ext, msg, code):
+    code_cache = {}
+
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
     trace_vm = log_vm_op.is_active('trace')
