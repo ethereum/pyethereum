@@ -1014,7 +1014,7 @@ class Block(rlp.Serializable):
             for k, v in self.caches.get(b'storage:' + addr, {}).items():
                 enckey = utils.zpad(utils.coerce_to_bytes(k), 32)
                 val = rlp.encode(v)
-                changes.append(['storage', addr, k, v])
+                changes.append(['storage', addr, (k, v)])
                 # if self.number > 18280 and False:
                 #     try:
                 #         self.db.logging = True
