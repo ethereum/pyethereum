@@ -73,7 +73,7 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0,
+    def __init__(self, sender, to, value, gas, data, depth=1,
             code_address=None, is_create=False, transfers_value=True):
         self.sender = sender
         self.to = to
