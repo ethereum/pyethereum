@@ -315,12 +315,20 @@ class defaultBetStrategy():
     _joined = False
     _joined_at_block = -1
 
+    def get_nonce(self, optimistic=True):
+        if optimistic:
+            state = self.get_optimistic_state()
+        else:
+            state = self.get_finalized_state()
+        nonce = big_endian_to_int(state.get_storage(self.addr, 2**256 - 1))
+        return nonce
+
     def join(self):
         vcode = mk_validation_code(self.key)
         # Make the transaction to join as a Casper guardian
         txdata = casper_ct.encode('join', [vcode])
         tx = mk_transaction(
-            seq=self.seq,
+            self.get_nonce(),
             gasprice=25 * 10**9,
             gas=1000000,
             to=CASPER,
@@ -705,16 +713,16 @@ class defaultBetStrategy():
             amount = big_endian_to_int(obj.args[1])
             state = self.get_optimistic_state()
             balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
-            if balance >= amount:
-                DEBUG("Fauceting ether", to_addr=to_addr, amount=amount)
+            if balance >= amount * 2:
+                DEBUG("Fauceting ether", to_addr=to_addr.encode('hex'), amount=amount)
                 self.send_ether(to_addr, amount)
             else:
-                DEBUG("Relaying Faucet request", to_addr=to_addr, amount=amount)
-                self.send_to_one(self, rlp.encode(NetworkMessage(NM_FAUCET, [rlp.encode(to_addr, address), encode_int(amount)])))
+                DEBUG("Relaying Faucet request", to_addr=to_addr.encode('hex'), amount=amount)
+                self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_FAUCET, [rlp.encode(to_addr, address), encode_int(amount)])))
 
     def send_ether(self, to_addr, amount):
         tx = mk_transaction(
-            seq=self.seq,
+            self.get_nonce(),
             gasprice=25 * 10**9,
             gas=1000000,
             to=to_addr,
@@ -911,15 +919,19 @@ class defaultBetStrategy():
 
         # We may not be a validator so potentially exit early
         if self.index < 0:
-            state = self.get_optimistic_state()
+            state = self.get_finalized_state()
             balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
 
             if balance < 1500 * 10**18:
+                DEBUG("Account Balance:", addr=self.addr.encode('hex'), balance=balance)
                 if not self.network.peers:
                     DEBUG("No peers yet.  Delaying Faucet Request")
                 elif self.last_faucet_request < 0 or self.max_finalized_height > self.last_faucet_request + 5:
-                    DEBUG('Requesting Ether')
-                    self.request_ether(1500 * 10**18)
+                    if not self.blocks:
+                        DEBUG('Waiting for some blocks before requesting Ether')
+                    else:
+                        DEBUG('Requesting Ether')
+                        self.request_ether(1600 * 10**18)
                 else:
                     DEBUG('Waiting on faucet ether request')
             elif not self.blocks:

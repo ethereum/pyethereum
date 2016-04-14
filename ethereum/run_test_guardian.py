@@ -193,7 +193,7 @@ for i, key_hex in enumerate(genesis_config['guardians']):
     # Give them 1600 ether
     #genesis.set_storage(ETHER, a, 1600 * 10**18)
     # Give them A LOT more ether
-    genesis.set_storage(ETHER, a, 1600 * 10**18 * 1000)
+    genesis.set_storage(ETHER, a, 1000 * 1600 * 10**18)
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
     print 'Length of validation code:', len(vcode)
@@ -227,7 +227,7 @@ KEY = get_arg('--key', str, None)
 if KEY is None:
     if KEY_IDX is None:
         KEY = zpad(encode_int(random.randint(1e16, 1e32)), 32)
-        print "Using KEY=", KEY
+        print "Using KEY=", KEY.encode('hex')
     elif KEY_IDX < len(genesis_config['alloc']):
         KEY = genesis_config['alloc'][KEY_IDX][0].decode('hex')
     else:
