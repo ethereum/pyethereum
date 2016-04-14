@@ -161,18 +161,18 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < memfee:
                     compustate.gas = 0
                     return False
-                compustate.gas -= memfee
+                use_gas(memfee)
                 m_extend = (newsize - oldsize) * 32
                 mem.extend([0] * m_extend)
             else:
                 memfee = 0
 
             if trace:
-                assert 'gasCost' in trace[0].context, trace[0].context
-                trace[0] = trace[0].bind(
-                    gasCost=memfee + trace[0].context['gasCost'],
-                    gas=compustate.gas,
-                    memory=memview(mem))
+                trace[0] = trace[0].bind(memory=memview(mem),
+                                         # preserve gasCost in context when
+                                         # binding memory
+                                         gasCost=trace[0].context.get('gasCost', 0),
+                                         gas=compustate.gas)
 
         return True
 
@@ -183,13 +183,19 @@ def vm_execute(ext, msg, code):
             if compustate.gas < copyfee:
                 compustate.gas = 0
                 return False
-            compustate.gas -= copyfee
-            if trace:
-                assert 'gasCost' in trace[0].context, trace[0].context
-                trace[0] = trace[0].bind(
-                    gasCost=copyfee + trace[0].context['gasCost'],
-                    gas=compustate.gas)
+            use_gas(copyfee)
         return True
+
+    # we have this function nested in order to share the `trace` instance
+    def use_gas(amount):
+        """manipulating compustate.gas should be done through this method!
+        (since this allows us to update the actual used gas per step
+        """
+        compustate.gas -= amount
+        if trace:
+            trace[0] = trace[0].bind(
+                gasCost=trace[0].context.get('gasCost', 0) + amount,
+                gas=compustate.gas)
 
     compustate = Compustate(gas=msg.gas)
     stk = compustate.stack
@@ -240,7 +246,7 @@ def vm_execute(ext, msg, code):
                                     pre_height=to_string(len(compustate.stack)))
 
             # Apply operation
-            compustate.gas -= fee
+            use_gas(fee)
             compustate.pc += 1
 
             if trace_vm:
@@ -260,7 +266,7 @@ def vm_execute(ext, msg, code):
                 trace_data['memory'] = memview(mem) if len(mem) else None
                 trace_data['storage'] = storage_view(ext.log_storage(msg.to))
                 trace_data['gas'] = compustate.gas
-                trace_data['gasCost'] = fee
+                trace_data['gasCost'] = trace[0].context['gasCost']  # keep gasCost in context
                 trace_data['pc'] = compustate.pc - 1
                 # if steps == 0:
                 #     trace_data['address'] = encode_hex(msg.to)
@@ -316,10 +322,7 @@ def vm_execute(ext, msg, code):
                     if compustate.gas < expfee:
                         compustate.gas = 0
                         return vm_exception('OOG EXPONENT')
-                    compustate.gas -= expfee
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gasCost=trace[0].context['gasCost'] + expfee,
-                                                 gas=compustate.gas)
+                    use_gas(expfee)
                     stk.append(pow(base, exponent, TT256))
                 elif op == 'SIGNEXTEND':
                     s0, s1 = stk.pop(), stk.pop()
@@ -363,11 +366,7 @@ def vm_execute(ext, msg, code):
             elif opcode < 0x40:
                 if op == 'SHA3':
                     s0, s1 = stk.pop(), stk.pop()
-                    compustate.gas -= opcodes.GSHA3WORD * (utils.ceil32(s1) // 32)
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gas=compustate.gas,
-                                                 gasCost=trace[0].context['gasCost'] +
-                                                 opcodes.GSHA3WORD * (utils.ceil32(s1) // 32))
+                    use_gas(opcodes.GSHA3WORD * (utils.ceil32(s1) // 32))
                     if compustate.gas < 0:
                         return vm_exception('OOG PAYING FOR SHA3')
                     if not mem_extend(mem, compustate, op, s0, s1):
@@ -475,10 +474,7 @@ def vm_execute(ext, msg, code):
                         refund = 0
                     if compustate.gas < gascost:
                         return vm_exception('OUT OF GAS')
-                    compustate.gas -= gascost
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gasCost=trace[0].context['gasCost'] + gascost,
-                                                 gas=compustate.gas)
+                    use_gas(gascost)
                     ext.add_refund(refund)  # adds neg gascost as a refund if below zero
                     ext.set_storage_data(msg.to, s0, s1)
                 elif op == 'JUMP':
@@ -530,10 +526,7 @@ def vm_execute(ext, msg, code):
                 depth = int(op[3:])
                 mstart, msz = stk.pop(), stk.pop()
                 topics = [stk.pop() for x in range(depth)]
-                compustate.gas -= msz * opcodes.GLOGBYTE
-                if trace_vm:
-                    trace[0] = trace[0].bind(gasCost=trace[0].context['gasCost'] + msz * opcodes.GLOGBYTE,
-                                                gas=compustate.gas)
+                use_gas(msz * opcodes.GLOGBYTE)
                 if not mem_extend(mem, compustate, op, mstart, msz):
                     return vm_exception('OOG EXTENDING MEMORY')
                 data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
@@ -571,13 +564,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas + extra_gas)
                 if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                    compustate.gas -= (gas + extra_gas)
-
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gas=compustate.gas,
-                                                 gasCost=trace[0].context['gasCost'] +
-                                                 gas + extra_gas)
-
+                    use_gas(gas + extra_gas)
                     cd = CallData(mem, meminstart, meminsz)
                     call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                     msg.depth + 1, code_address=to)
@@ -586,22 +573,12 @@ def vm_execute(ext, msg, code):
                         stk.append(0)
                     else:
                         stk.append(1)
-                        compustate.gas += gas
-
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gas=compustate.gas,
-                                                 gasCost=trace[0].context['gasCost'] - gas)
+                        use_gas(-gas)  # refund
 
                         for i in range(min(len(data), memoutsz)):
                             mem[memoutstart + i] = data[i]
                 else:
-                    compustate.gas -= (gas + extra_gas - submsg_gas)
-
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gas=compustate.gas,
-                                                 gasCost=trace[0].context['gasCost'] +
-                                                 gas + extra_gas - submsg_gas)
-
+                    use_gas(gas + extra_gas - submsg_gas)
                     stk.append(0)
             elif op == 'CALLCODE' or op == 'DELEGATECALL':
                 if op == 'CALLCODE':
@@ -619,7 +596,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas + extra_gas)
                 if ext.get_balance(msg.to) >= value and msg.depth < 1024:
-                    compustate.gas -= (gas + extra_gas)
+                    use_gas(gas + extra_gas)
                     to = encode_int(to)
                     to = ((b'\x00' * (32 - len(to))) + to)[12:]
                     cd = CallData(mem, meminstart, meminsz)
@@ -636,16 +613,11 @@ def vm_execute(ext, msg, code):
                         stk.append(0)
                     else:
                         stk.append(1)
-                        compustate.gas += gas
+                        use_gas(-gas)  # refund
                         for i in range(min(len(data), memoutsz)):
                             mem[memoutstart + i] = data[i]
                 else:
-                    compustate.gas -= (gas + extra_gas - submsg_gas)
-
-                    if trace_vm:
-                        trace[0] = trace[0].bind(gas=compustate.gas,
-                                                 gasCost=trace[0].context['gasCost'] +
-                                                 (gas + extra_gas - submsg_gas))
+                    use_gas(gas + extra_gas - submsg_gas)
                     stk.append(0)
 
             elif op == 'RETURN':
