@@ -473,7 +473,7 @@ while 1:
         bet.tick()
         gevent.sleep(random.random())
     check_correctness(bets)
-    if min_mfh >= 300:
+    if min_mfh >= 500:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh

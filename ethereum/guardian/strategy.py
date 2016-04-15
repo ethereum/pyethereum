@@ -316,12 +316,19 @@ class defaultBetStrategy():
     _joined = False
     _joined_at_block = -1
 
+    _last_nonce = -1
+
     def get_nonce(self, optimistic=True):
         if optimistic:
             state = self.get_optimistic_state()
         else:
             state = self.get_finalized_state()
         nonce = big_endian_to_int(state.get_storage(self.addr, NONCE))
+        if nonce <= self._last_nonce:
+            # potentially sending back-to-back transactions so increment the
+            # nonce.
+            nonce = self._last_nonce + 1
+        self._last_nonce = nonce
         return nonce
 
     def join(self):
