@@ -27,7 +27,7 @@ from serenity_blocks import (
     put_code,
 )
 from serenity_transactions import Transaction
-from db import EphemDB, OverlayDB
+from db import LevelDB, EphemDB, OverlayDB
 from config import (
     BLKNUMBER,
     CASPER,
@@ -106,7 +106,7 @@ def get_arg(flag, typ, default):
 
 
 # Create the genesis
-genesis = State('', EphemDB())
+genesis = State('', LevelDB())
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
 
