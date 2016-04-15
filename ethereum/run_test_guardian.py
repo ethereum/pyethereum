@@ -105,8 +105,15 @@ def get_arg(flag, typ, default):
         return default
 
 
+DATA_DIR = get_arg('--data-dir', str, None)
+
+if DATA_DIR is None:
+    DATA_DIR = os.path.join('.', 'tmp', 'db-{0}'.format(os.getpid()))
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+
 # Create the genesis
-genesis = State('', LevelDB())
+genesis = State('', LevelDB(DATA_DIR))
 initialize_with_gas_limit(genesis, 10**9)
 gc = genesis.clone()
 
