@@ -32,6 +32,7 @@ from config import (
     BLKNUMBER,
     CASPER,
     ETHER,
+    NONCE,
     ECRECOVERACCT,
     BASICSENDER,
     RNGSEEDS,
@@ -355,7 +356,7 @@ def check_correctness(bets):
         if bet.index >= 0 and big_endian_to_int(state.get_storage(BLKNUMBER, '\x00' * 32)) >= bet.induction_height:
             assert (call_method(state, CASPER, casper_ct, 'getGuardianDeposit', [bet.index]) >= 1499 * 10**18) or bet.byzantine, (bet.double_bet_suicide, bet.byzantine)
     # Account signing nonces
-    print 'Account signing nonces: %r' % [big_endian_to_int(state.get_storage(bet.addr, encode_int32(2**256 - 1))) for bet in bets]
+    print 'Account signing nonces: %r' % [big_endian_to_int(state.get_storage(bet.addr, NONCE)) for bet in bets]
     # Transaction status
     print 'Transaction status in unconfirmed_txindex: %r' % [bets[0].unconfirmed_txindex.get(tx.hash, None) for tx in check_txs]
     print 'Transaction status in finalized_txindex: %r' % [bets[0].finalized_txindex.get(tx.hash, None) for tx in check_txs]

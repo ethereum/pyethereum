@@ -30,6 +30,7 @@ from ethereum.config import (
     CASPER,
     GASLIMIT,
     ETHER,
+    NONCE,
 )
 from ethereum.serenity_blocks import (
     BLKNUMBER,
@@ -320,7 +321,7 @@ class defaultBetStrategy():
             state = self.get_optimistic_state()
         else:
             state = self.get_finalized_state()
-        nonce = big_endian_to_int(state.get_storage(self.addr, 2**256 - 1))
+        nonce = big_endian_to_int(state.get_storage(self.addr, NONCE))
         return nonce
 
     def join(self):
@@ -507,7 +508,7 @@ class defaultBetStrategy():
     # Take one's ether out
     def finalizeWithdrawal(self):
         txdata = casper_ct.encode('withdraw', [self.former_index])
-        tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, self.key, True)
+        tx = mk_transaction(self.get_nonce(), 1, 1000000, CASPER, 0, txdata, self.key, True)
         v = tx_state_transition(self.genesis, tx)  # NOQA
 
     # Compute as many state roots as possible
@@ -899,7 +900,7 @@ class defaultBetStrategy():
         # If byzantine, produce two blocks
         if b.number >= self.double_block_suicide:
             DEBUG('## Being evil and making two blocks!!\n\n')
-            new_tx = mk_transaction(1, 1, 1000000, '\x33' * ADDR_BYTES, 1, '', self.key, True)
+            new_tx = mk_transaction(self.get_nonce(), 1, 1000000, '\x33' * ADDR_BYTES, 1, '', self.key, True)
             txs2 = [tx for tx in txs] + [new_tx]
             b2 = sign_block(Block(transactions=txs2, number=self.next_block_to_produce, proposer=self.addr), self.key)
             self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(b2)])))

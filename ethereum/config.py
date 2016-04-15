@@ -9,6 +9,7 @@ from utils import address, int256, trie_root, hash32, to_string, \
 STATEROOTS = int_to_addr(20)
 BLKNUMBER = int_to_addr(30)
 ETHER = int_to_addr(50)
+NONCE = int_to_addr(2**256 - 1)
 CASPER = int_to_addr(60)
 ECRECOVERACCT = int_to_addr(70)
 PROPOSER = int_to_addr(80)
