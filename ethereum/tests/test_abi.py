@@ -22,6 +22,7 @@ def test_abi_encode_signed_int():
 
 def test_abi_encode_single_int():
     assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
+    assert abi.encode_single(['int', '256', []], (b'\x80'+b'\x00'*31)) == (b'\x80'+b'\x00'*31)
 
     assert abi.encode_single(['int', '8', []], -128) == zpad(b'\x80', 32)
     with pytest.raises(abi.ValueOutOfBounds):
