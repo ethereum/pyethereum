@@ -25,11 +25,18 @@ def test_difficulty(filename, testname, testdata):
     reference_dif = int(testdata["currentDifficulty"], 10 if testdata["currentDifficulty"].isdigit() else 16)
 
 
+    env = tester.state().env
+    if 'Homestead' in filename:
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 0
+    if 'difficultyMorden' in filename:
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 494000
+
     parent_bh = blocks.BlockHeader(timestamp=parent_timestamp,
                              difficulty=parent_difficulty,
                              number=parent_blk_number)
-    block = blocks.Block(parent_bh, [], env=tester.state().env,
+    block = blocks.Block(parent_bh, [], env=env,
                       making=True)
+
 
     calculated_dif = blocks.calc_difficulty(block, cur_blk_timestamp)
 
