@@ -27,7 +27,7 @@ from serenity_blocks import (
     put_code,
 )
 from serenity_transactions import Transaction
-from db import LevelDB, EphemDB, OverlayDB
+from db import LevelDB, OverlayDB
 from config import (
     BLKNUMBER,
     CASPER,
@@ -111,6 +111,7 @@ if DATA_DIR is None:
     DATA_DIR = os.path.join('.', 'tmp', 'db-{0}'.format(os.getpid()))
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
+    print "Using `{0}` for database".format(DATA_DIR)
 
 # Create the genesis
 genesis = State('', LevelDB(DATA_DIR))
@@ -198,9 +199,7 @@ for i, key_hex in enumerate(genesis_config['guardians']):
     # Generate the address
     a = ecdsa_accounts.privtoaddr(k)
     assert big_endian_to_int(genesis.get_storage(a, 2**256 - 1)) == 0
-    # Give them 1600 ether
-    #genesis.set_storage(ETHER, a, 1600 * 10**18)
-    # Give them A LOT more ether
+    # Give them A bunch of ether
     genesis.set_storage(ETHER, a, 1000 * 1600 * 10**18)
     # Make their validation code
     vcode = ecdsa_accounts.mk_validation_code(k)
@@ -480,7 +479,7 @@ while 1:
         bet.tick()
         gevent.sleep(random.random())
     check_correctness(bets)
-    if min_mfh >= 500:
+    if min_mfh >= 2000:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
