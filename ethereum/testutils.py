@@ -576,18 +576,19 @@ def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None
     base_dir = os.path.dirname(os.path.dirname(__file__))
     params = []
     for filename, tests in fixtures.items():
-        filename = os.path.relpath(filename, base_dir)
-        for testname, testdata in tests.items():
-            if exclude_func and exclude_func(filename, testname, testdata):
-                continue
-            if skip_func:
-                skipif = pytest.mark.skipif(
-                    skip_func(filename, testname, testdata),
-                    reason="Excluded"
-                )
-                params.append(skipif((filename, testname, testdata)))
-            else:
-                params.append((filename, testname, testdata))
+        if isinstance(tests, dict):
+            filename = os.path.relpath(filename, base_dir)
+            for testname, testdata in tests.items():
+                if exclude_func and exclude_func(filename, testname, testdata):
+                    continue
+                if skip_func:
+                    skipif = pytest.mark.skipif(
+                        skip_func(filename, testname, testdata),
+                        reason="Excluded"
+                    )
+                    params.append(skipif((filename, testname, testdata)))
+                else:
+                    params.append((filename, testname, testdata))
 
     metafunc.parametrize(
         ('filename', 'testname', 'testdata'),
