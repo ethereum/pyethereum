@@ -75,10 +75,6 @@ def get_chaindata_dir(data_dir):
     return os.path.join(data_dir, 'chaindata')
 
 
-def get_stateroot_file_path(data_dir):
-    return os.path.join(data_dir, 'stateroot')
-
-
 def get_private_key_path(data_dir):
     return os.path.join(data_dir, 'private_key')
 
@@ -226,17 +222,15 @@ def init(ctx, seed, gen_genesis, write_genesis_state, prompt):
     db = LevelDB(chaindata_dir)
     genesis_state = initialize_genesis_state(genesis_config, db)
 
-    stateroot = genesis_state.root
-    stateroot_file_path = get_stateroot_file_path(data_dir)
-    with open(stateroot_file_path, 'w') as stateroot_file:
-        stateroot_file.write(stateroot)
+    genesis_root = genesis_state.root
+    db.db.Put("stateroot:genesis", genesis_root)
 
     # need to release the lock on the leveldb
     del genesis_state
     del db.db
     del db
 
-    click.echo("Blockchain database initialized with genesis stateroot: `{0}`".format(stateroot.encode('hex')))
+    click.echo("Blockchain database initialized with genesis stateroot: `{0}`".format(genesis_root.encode('hex')))
 
 
 @cli.command()
@@ -251,7 +245,6 @@ def reset(ctx, prompt):
 
     data_dir = configuration['data_dir']
     chaindata_dir = get_chaindata_dir(data_dir)
-    stateroot_file_path = get_stateroot_file_path(data_dir)
 
     if prompt:
         click.confirm("Are you sure you want to wipe the chain data from: `{0}`".format(chaindata_dir), abort=True)
@@ -259,11 +252,6 @@ def reset(ctx, prompt):
     try:
         shutil.rmtree(chaindata_dir)
         click.echo("Erased chaindata dir at: `{0}`".format(chaindata_dir))
-    except OSError:
-        pass
-
-    try:
-        os.remove(stateroot_file_path)
     except OSError:
         pass
 
@@ -501,7 +489,6 @@ def run(ctx, do_reset, auto_init, gen_genesis, prompt):
 
     private_key = configuration['private_key']
     genesis_path = configuration['genesis']
-    stateroot_file_path = get_stateroot_file_path(data_dir)
 
     if gen_genesis or not os.path.exists(genesis_path):
         if gen_genesis or not prompt or click.confirm("No genesis file found.  Would you like to generate one?"):
@@ -509,13 +496,24 @@ def run(ctx, do_reset, auto_init, gen_genesis, prompt):
         else:
             raise click.ClickException("No genesis file found.  Cannot write initial chain data")
 
-    with open(stateroot_file_path) as stateroot_file:
-        stateroot = stateroot_file.read()
-
     db = LevelDB(chaindata_dir)
-    genesis_state = State(stateroot, db)
+    genesis_stateroot = db.Get("stateroot:genesis")
+    stateroots = []
+    idx = 0
+    last_real_stateroot = genesis_stateroot
+    while True:
+        try:
+            stateroot = db.Get("stateroot:{0}".format(idx))
+        except KeyError:
+            break
+        if stateroot == '':
+            stateroot = None
+        if stateroot not in (None, '\00' * 32):
+            last_real_stateroot = stateroot
+        stateroots.append(stateroot)
+    db_state = State(last_real_stateroot, db)
 
-    bet = defaultBetStrategy(genesis_state, private_key)
+    bet = defaultBetStrategy(db_state, private_key, stateroots=stateroots)
     network = get_network(bet)
     bet.network = network
 
@@ -536,8 +534,14 @@ def run(ctx, do_reset, auto_init, gen_genesis, prompt):
                     network.stop()
                     network.join()
                     bet.db.commit()
+                    if bet.max_finalized_height > 0:
+                        stateroot = bet.stateroots[bet.max_finalized_height]
+                    else:
+                        stateroot = bet.genesis_state_root
+
                     with open(stateroot_file_path, 'w') as stateroot_file:
-                        stateroot_file.write(bet.db.root)
+                        stateroot_file.write(stateroot)
+
                     break
                 except KeyboardInterrupt:
                     logger.warning("Shutting Down.  Press ctrl-c {0} more times to force stop".format(5 - interrupt_count))

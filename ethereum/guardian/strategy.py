@@ -255,6 +255,7 @@ class defaultBetStrategy():
         # Your guardian index
         self.index = -1
         self.former_index = None
+        import ipdb; ipdb.set_trace()
         # Store the genesis block state here
         self.genesis_state_root = genesis_state.root
         # Store the timestamp of the genesis block
