@@ -260,7 +260,7 @@ genesis.set_storage(GENESIS_TIME, encode_int32(0), GENESIS_TIMESTAMP)
 print 'genesis time', GENESIS_TIMESTAMP, '\n' * 10
 # Create betting strategy objects for every guardian
 # TODO: may not need to `clone()` this anymore since it's singular.
-bet = defaultBetStrategy(genesis.clone(), KEY, join_at_block=JOIN_AT_BLOCK)
+bet = defaultBetStrategy(genesis, KEY, join_at_block=JOIN_AT_BLOCK)
 bets = [bet]
 
 # Minimum max finalized height
