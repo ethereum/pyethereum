@@ -222,9 +222,7 @@ class VMExt():
         self.get_code = block.get_code
         self.get_balance = block.get_balance
         self.set_balance = block.set_balance
-        self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
-        self.log_storage = lambda x: block.account_to_dict(x)['storage']
         self.add_suicide = lambda x: block.suicides.append(x)
         self.add_refund = lambda x: \
             setattr(block, 'refunds', block.refunds + x)
@@ -243,6 +241,31 @@ class VMExt():
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = block.account_exists
         self.post_homestead_hardfork = lambda: block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
+        # journal for all manipulated storage entries
+        self.storage_journal = dict()
+
+    def log_storage(self, address):
+        """Return a loggable structure of all storage addresses (index: value) for
+        the account `address` that were manipulated in this block.
+        """
+        storage = {}
+        CACHE_KEY = b'storage:' + address
+        if CACHE_KEY in self._block.caches:
+            for index in self.storage_journal[address]:
+                # since `index` was recently manipulated, it must be in blocks cache
+                assert index in self._block.caches[CACHE_KEY]
+                storage[index] = self._block.caches[CACHE_KEY][index]
+        return {utils.hexpad(utils.int_to_big_endian(k)): utils.hexpad(utils.int_to_big_endian(v))
+                for k, v in storage.items()}
+
+    def set_storage_data(self, address, index, value):
+        """Proxies self._block.set_storage and keeps a journal of manipulated
+        addresses (for self.log_storage).
+        """
+        if address not in self.storage_journal:
+            self.storage_journal[address] = []
+        self.storage_journal[address].append(index)
+        self._block.set_storage_data(address, index, value)
 
 
 def apply_msg(ext, msg):

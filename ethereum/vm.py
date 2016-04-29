@@ -8,7 +8,7 @@ import copy
 from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
-from ethereum.utils import to_string, zpad, encode_int, encode_hex, ascii_chr
+from ethereum.utils import to_string, encode_int, encode_hex, ascii_chr, hexpad
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -22,7 +22,7 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 
-stackencode = lambda v: encode_hex(zpad(encode_int(v), 32))
+stackencode = lambda v: hexpad(encode_int(v))
 
 
 def memview(mem):
@@ -33,15 +33,6 @@ def memview(mem):
     for i in range(len(mem) / 32):
         m.append("".join([encode_hex(ascii_chr(x)) for x in mem[i * 32:i * 32 + 32]]))
     return m
-
-
-def storage_view(storage_dict):
-    d = storage_dict.copy()
-    # FIXME: why is there `"0x": "0x08fa01"` in initialized storage?
-    if "0x" in d:
-        # popping in order to align with geth traces
-        d.pop("0x")
-    return {stackencode(int(k, 16)): stackencode(int(v, 16)) for k, v in d.items()}
 
 
 class CallData(object):
@@ -192,7 +183,7 @@ def vm_execute(ext, msg, code):
     # we have this function nested in order to share the `trace` instance
     def use_gas(amount):
         """manipulating compustate.gas should be done through this method!
-        (since this allows us to update the actual used gas per step
+        (since this allows us to update the actual used gas per step)
         """
         compustate.gas -= amount
         if trace:
@@ -258,7 +249,7 @@ def vm_execute(ext, msg, code):
                 trace_data = {}
                 trace_data['stack'] = list(map(stackencode, list(compustate.stack)))
                 trace_data['memory'] = memview(mem) if len(mem) else None
-                trace_data['storage'] = storage_view(ext.log_storage(msg.to))
+                trace_data['storage'] = ext.log_storage(msg.to)
                 trace_data['gas'] = compustate.gas
                 trace_data['gasCost'] = trace[0].context['gasCost']  # keep gasCost in context
                 trace_data['pc'] = compustate.pc - 1
@@ -467,6 +458,9 @@ def vm_execute(ext, msg, code):
                     use_gas(gascost)
                     ext.add_refund(refund)  # adds neg gascost as a refund if below zero
                     ext.set_storage_data(msg.to, s0, s1)
+                    if trace:
+                        trace[0] = trace[0].bind(storage=ext.log_storage(msg.to))
+
                 elif op == 'JUMP':
                     compustate.pc = stk.pop()
                     opnew = processed_code[compustate.pc][0] if \
@@ -632,6 +626,7 @@ def vm_execute(ext, msg, code):
         finally:
             if trace_vm:
                 # trace and reset:
+
                 trace[0].trace('vm')
                 trace = [log_vm_op.bind()]
 

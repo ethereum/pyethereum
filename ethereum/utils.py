@@ -14,6 +14,8 @@ import random
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
+hexpad = lambda v: encode_hex(zpad(v, 32))
+
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
