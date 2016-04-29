@@ -109,6 +109,7 @@ def int_to_32bytearray(i):
 
 sha3_count = [0]
 
+
 def sha3(seed):
     sha3_count[0] += 1
     return sha3_256(to_string(seed))

@@ -246,7 +246,10 @@ def configure(config_string=None, log_json=False, log_file=None):
     if log_file:
         if not any(isinstance(hndlr, FileHandler) for hndlr in rootLogger.handlers):
             handler = FileHandler(log_file)
-            formatter = Formatter("{} {}".format(FILE_PREFIX, log_format))
+            if not log_json:
+                formatter = Formatter("{} {}".format(FILE_PREFIX, log_format))
+            else:
+                formatter = Formatter(log_format)
             handler.setFormatter(formatter)
             rootLogger.addHandler(handler)
 
