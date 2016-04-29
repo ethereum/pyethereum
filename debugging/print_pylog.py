@@ -10,6 +10,8 @@ def read_pythons(fn='pylog.jsons'):
     blocks = defaultdict(list)
     bnum = 0
     for l in lines:
+        if l['event'] != "eth.vm.op.vm":
+            continue
         if l['pc'] == 0:
             bnum += 1
         # remove py slogging specifics:
