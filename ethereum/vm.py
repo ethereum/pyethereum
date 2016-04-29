@@ -64,7 +64,7 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=1,
+    def __init__(self, sender, to, value, gas, data, depth=0,
             code_address=None, is_create=False, transfers_value=True):
         self.sender = sender
         self.to = to
@@ -253,7 +253,7 @@ def vm_execute(ext, msg, code):
                 trace_data['gas'] = compustate.gas
                 trace_data['gasCost'] = trace[0].context['gasCost']  # keep gasCost in context
                 trace_data['pc'] = compustate.pc - 1
-                trace_data['depth'] = msg.depth
+                trace_data['depth'] = msg.depth + 1  # we add 1, because geth logs the depth 1-based
                 trace_data['op'] = op
                 trace_data['error'] = ""
 
