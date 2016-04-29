@@ -4,7 +4,7 @@ import yaml  # use yaml instead of json to get non unicode (works with ascii onl
 from ethereum import utils
 from rlp.utils import decode_hex, encode_hex
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
-from ethereum.utils import isnumeric
+from ethereum.utils import isnumeric, TT256, TT255
 import ast
 
 
@@ -145,20 +145,24 @@ class ValueOutOfBounds(EncodingError):
     pass
 
 
-# Decode an integer
-def decint(n):
+# Decode an unsigned/signed integer
+def decint(n, signed=False):
     if isinstance(n, str):
         n = utils.to_string(n)
-    if is_numeric(n) and n < 2**256 and n >= -2**255:
+
+    if is_numeric(n):
+        min, max = (-TT255,TT255-1) if signed else (0,TT256-1)
+        if n > max or n < min:
+            raise EncodingError("Number out of range: %r" % n)
         return n
-    elif is_numeric(n):
-        raise EncodingError("Number out of range: %r" % n)
-    elif is_string(n) and len(n) == 40:
-        return big_endian_to_int(decode_hex(n))
-    elif is_string(n) and len(n) <= 32:
-        return big_endian_to_int(n)
-    elif is_string(n) and len(n) > 32:
-        raise EncodingError("String too long: %r" % n)
+    elif is_string(n):
+        if len(n) == 40:
+            n = decode_hex(n)
+        if len(n) > 32:
+            raise EncodingError("String too long: %r" % n)
+
+        i = big_endian_to_int(n)
+        return (i - TT256) if signed and i >= TT255 else i
     elif n is True:
         return 1
     elif n is False or n is None:
@@ -166,14 +170,13 @@ def decint(n):
     else:
         raise EncodingError("Cannot encode integer: %r" % n)
 
-
 # Encodes a base datum
 def encode_single(typ, arg):
     base, sub, _ = typ
     # Unsigned integers: uint<sz>
     if base == 'uint':
         sub = int(sub)
-        i = decint(arg)
+        i = decint(arg, False)
 
         if not 0 <= i < 2**sub:
             raise ValueOutOfBounds(repr(arg))
@@ -185,8 +188,8 @@ def encode_single(typ, arg):
     # Signed integers: int<sz>
     elif base == 'int':
         sub = int(sub)
-        i = decint(arg)
-        if not -2**(sub - 1) <= i < 2**sub:
+        i = decint(arg, True)
+        if not -2**(sub - 1) <= i < 2**(sub - 1):
             raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(i % 2**sub), 32)
     # Unsigned reals: ureal<high>x<low>
