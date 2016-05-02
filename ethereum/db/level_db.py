@@ -35,12 +35,12 @@ class LevelDB(BaseDB):
                  write_buffer_size=self.write_buffer_size,
                  max_open_files=self.max_open_files)
         self.dbfile = dbfile
-        self.db = leveldb.LevelDB(dbfile)
+        self.db = leveldb.LevelDB(dbfile, max_open_files=50)
         self.commit_counter = 0
 
     def reopen(self):
         del self.db
-        self.db = leveldb.LevelDB(self.dbfile)
+        self.db = leveldb.LevelDB(self.dbfile, max_open_files=50)
 
     def get(self, key):
         log.trace('getting entry', key=key.encode('hex')[:8])

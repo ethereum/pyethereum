@@ -1159,7 +1159,7 @@ class defaultBetStrategy():
                 DEBUG('delaying joining pool until a few blocks have shown up.')
             elif len(self.blocks) < self.join_at_block:
                 DEBUG('Waiting to join pool', join_at_block=self.join_at_block)
-            elif not self._joined_at_block < 0:
+            elif self._joined_at_block < 0:
                 self.join()
             else:
                 DEBUG('updating guardian set',
