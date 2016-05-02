@@ -178,12 +178,14 @@ def cli(ctx, data_dir, genesis, private_key, config, log_level):
 def init(ctx, seed, gen_genesis, write_genesis_state, prompt):
     configuration = ctx.obj
 
+    # Data dir
     data_dir = configuration['data_dir']
 
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
         click.echo("Created data_dir at: `{0}`".format(data_dir))
 
+    # Private Key
     if seed is None:
         seed = encode_int(random.randint(1e32, 1e64))
 
@@ -196,13 +198,15 @@ def init(ctx, seed, gen_genesis, write_genesis_state, prompt):
             private_key_file.write(private_key)
         click.echo("Generated private key at: `{0}`".format(private_key_file_path))
 
+    # Genesis File
     genesis_path = configuration['genesis']
     if gen_genesis or not os.path.exists(genesis_path):
         if gen_genesis or not prompt or click.confirm("No genesis file found.  Would you like to generate one?"):
             ctx.invoke(generate_genesis, prompt=prompt)
         else:
-            click.exit(0)
+            ctx.exit(0)
 
+    # Genesis State
     chaindata_dir = get_chaindata_dir(data_dir)
 
     chaindata_present = os.path.exists(chaindata_dir)
@@ -223,7 +227,7 @@ def init(ctx, seed, gen_genesis, write_genesis_state, prompt):
     genesis_state = initialize_genesis_state(genesis_config, db)
 
     genesis_root = genesis_state.root
-    db.db.Put("stateroot:genesis", genesis_root)
+    db.db.Put("__geneses_state_root__", genesis_root)
 
     # need to release the lock on the leveldb
     del genesis_state
@@ -451,12 +455,12 @@ def get_network(bet, min_peers=1, max_peers=25, bootstrap_nodes=None,
 @click.option(
     '--auto-init/--no-auto-init',
     default=True,
-    help="The seed value that will be used to generate the private key",
+    help="Should the data directory be initialized",
 )
 @click.option(
     '--gen-genesis/--no-gen-genesis',
     default=False,
-    help="The seed value that will be used to generate the private key",
+    help="Should the genesis block be generated.",
 )
 @click.option(
     '--prompt/--no-prompt',
@@ -497,27 +501,26 @@ def run(ctx, do_reset, auto_init, gen_genesis, prompt):
             raise click.ClickException("No genesis file found.  Cannot write initial chain data")
 
     db = LevelDB(chaindata_dir)
-    genesis_stateroot = db.Get("stateroot:genesis")
-    stateroots = []
-    idx = 0
-    last_real_stateroot = genesis_stateroot
-    while True:
-        try:
-            stateroot = db.Get("stateroot:{0}".format(idx))
-        except KeyError:
-            break
-        if stateroot == '':
-            stateroot = None
-        if stateroot not in (None, '\00' * 32):
-            last_real_stateroot = stateroot
-        stateroots.append(stateroot)
-    db_state = State(last_real_stateroot, db)
+    genesis_state_root = db.db.Get('__geneses_state_root__')
+    db_state = State(genesis_state_root, db)
 
-    bet = defaultBetStrategy(db_state, private_key, stateroots=stateroots)
-    network = get_network(bet)
+    bet = defaultBetStrategy(db_state, private_key)
+    network = get_network(
+        bet,
+        ip_address=configuration.get('ip_address'),
+        port=configuration.get('port'),
+        bootstrap_nodes=configuration.get('bootstrap_nodes')
+    )
     bet.network = network
 
     network.start()
+
+    # Give the peer discovery a chance to find some peers.
+    gevent.sleep(random.random())
+    gevent.sleep(random.random())
+    gevent.sleep(random.random())
+    gevent.sleep(random.random())
+    gevent.sleep(random.random())
 
     logger.info("Entering Event Loop")
     while True:
@@ -533,22 +536,20 @@ def run(ctx, do_reset, auto_init, gen_genesis, prompt):
                 try:
                     network.stop()
                     network.join()
-                    bet.db.commit()
-                    if bet.max_finalized_height > 0:
-                        stateroot = bet.stateroots[bet.max_finalized_height]
-                    else:
-                        stateroot = bet.genesis_state_root
 
-                    with open(stateroot_file_path, 'w') as stateroot_file:
-                        stateroot_file.write(stateroot)
+                    # commit the db
+                    bet.db.commit()
+                    del bet.db.db
+                    del bet.db
+                    del bet
 
                     break
                 except KeyboardInterrupt:
                     logger.warning("Shutting Down.  Press ctrl-c {0} more times to force stop".format(5 - interrupt_count))
             else:
-                logger.error("Hard shutdown. stateroot=`{0}`".format(bet.db.root.encode('hex')))
+                logger.error("Hard shutdown")
                 ctx.exit(1)
-            logger.info("Shutdown complete: stateroot=`{0}`".format(bet.db.root.encode('hex')))
+            logger.info("Shutdown complete")
             ctx.exit(0)
 
 
