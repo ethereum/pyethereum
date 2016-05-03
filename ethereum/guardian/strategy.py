@@ -1,12 +1,14 @@
 import sys
-import rlp
 import random
+
+import rlp
 
 from ethereum.ecdsa_accounts import (
     sign_block,
     privtoaddr,
     sign_bet,
     mk_transaction,
+    mk_validation_code,
 )
 from ethereum.utils import (
     big_endian_to_int,
@@ -14,8 +16,8 @@ from ethereum.utils import (
     shardify,
     DEBUG,
     rlp_decode,
-    mkid,
     sha3,
+    address,
 )
 from ethereum.abi import decode_abi
 from ethereum.config import (
@@ -27,6 +29,8 @@ from ethereum.config import (
     LOG,
     CASPER,
     GASLIMIT,
+    ETHER,
+    NONCE,
 )
 from ethereum.serenity_blocks import (
     BLKNUMBER,
@@ -49,6 +53,7 @@ from ethereum.guardian.network import (
     NM_TRANSACTION,
     NM_GETBLOCK,
     NM_GETBLOCKS,
+    NM_FAUCET,
 )
 from ethereum.guardian.utils import (
     casper_ct,
@@ -178,12 +183,15 @@ class Opinion():
 
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
+    @property
+    def id(self):
+        from ethereum.utils import decode_int
+        return decode_int(self.addr[2:])
+
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
-                 double_bet_suicide=2**200, min_gas_price=10**9):
+                 double_bet_suicide=2**200, min_gas_price=10**9, join_at_block=-1):
         DEBUG("Initializing betting strategy")
-        # An ID for purposes of the network simulator
-        self.id = mkid()
         # Guardian's private key
         self.key = key
         # Guardian's address on the network
@@ -240,6 +248,10 @@ class defaultBetStrategy():
         # Last time sent a getblocks message; stored to prevent excessively
         # frequent getting
         self.last_time_sent_getblocks = 0
+        # The block that this guardian should try to join the pool
+        self.join_at_block = join_at_block
+        # Last time we requested ether
+        self.last_faucet_request = -1
         # Your guardian index
         self.index = -1
         self.former_index = None
@@ -264,9 +276,6 @@ class defaultBetStrategy():
         self.double_block_suicide = double_block_suicide
         # What seq to create two bets at (also destructively, for testing purposes)
         self.double_bet_suicide = double_bet_suicide
-        # Next submission delay (should be 0 on livenet; nonzero for testing purposes)
-        # TODO: remove `next_submission_delay`
-        self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         # List of proposers for blocks; calculated into the future just-in-time
         self.proposers = []
         # Prevhash (for betting)
@@ -280,6 +289,8 @@ class defaultBetStrategy():
         self.calc_state_roots_from = 0
         # Minimum gas price that I accept
         self.min_gas_price = min_gas_price
+        # Max height which is finalized from your point of view
+        self.max_finalized_height = -1
         # Create my guardian set
         self.update_guardian_set(genesis_state)
         DEBUG('Found %d guardians in genesis' % len(self.opinions))
@@ -290,8 +301,6 @@ class defaultBetStrategy():
               index=self.index,
               induction_height=self.induction_height)
         self.withdrawn = False
-        # Max height which is finalized from your point of view
-        self.max_finalized_height = -1
         # Recently discovered blocks
         self.recently_discovered_blocks = []
         # When will I suicide?
@@ -304,13 +313,54 @@ class defaultBetStrategy():
         # Am I byzantine?
         self.byzantine = self.crazy_bet or self.double_block_suicide < 2**80 or self.double_bet_suicide < 2**80
 
+    _joined = False
+    _joined_at_block = -1
+
+    _last_nonce = -1
+
+    def get_nonce(self, optimistic=True):
+        if optimistic:
+            state = self.get_optimistic_state()
+        else:
+            state = self.get_finalized_state()
+        nonce = big_endian_to_int(state.get_storage(self.addr, NONCE))
+        if nonce <= self._last_nonce:
+            # potentially sending back-to-back transactions so increment the
+            # nonce.
+            nonce = self._last_nonce + 1
+        self._last_nonce = nonce
+        return nonce
+
+    def join(self):
+        vcode = mk_validation_code(self.key)
+        # Make the transaction to join as a Casper guardian
+        txdata = casper_ct.encode('join', [vcode])
+        tx = mk_transaction(
+            self.get_nonce(),
+            gasprice=25 * 10**9,
+            gas=1000000,
+            to=CASPER,
+            value=1500 * 10**18,
+            data=txdata,
+            key=self.key,
+            create=True,
+        )
+        DEBUG('Joining Guarding Pool',
+              tx_hash=tx.hash.encode('hex'),
+              address=self.addr.encode('hex'))
+        self.add_transaction(tx)
+
+        # Icky grossness, do this better.
+        self._joined = True
+        self._joined_at_block = len(self.blocks)
+
     # Compute as many future block proposers as possible
     def add_proposers(self):
         h = len(self.finalized_hashes) - 1
         while h >= 0 and self.stateroots[h] in (None, '\x00' * 32):
             h -= 1
         state = State(self.stateroots[h] if h >= 0 else self.genesis_state_root, self.db)
-        maxh = h + ENTER_EXIT_DELAY - 1
+        maxh = self.max_finalized_height + ENTER_EXIT_DELAY - 1
         for h in range(len(self.proposers), maxh):
             self.proposers.append(get_guardian_index(state, h))
             if self.proposers[-1] == self.index:
@@ -465,7 +515,7 @@ class defaultBetStrategy():
     # Take one's ether out
     def finalizeWithdrawal(self):
         txdata = casper_ct.encode('withdraw', [self.former_index])
-        tx = mk_transaction(0, 1, 1000000, CASPER, 0, txdata, self.key, True)
+        tx = mk_transaction(self.get_nonce(), 1, 1000000, CASPER, 0, txdata, self.key, True)
         v = tx_state_transition(self.genesis, tx)  # NOQA
 
     # Compute as many state roots as possible
@@ -538,7 +588,7 @@ class defaultBetStrategy():
                 self.last_asked_for_block[h] = self.now
             # Did our preferred block hash change?
             if self.blocks[h] and new_block_hash != self.blocks[h].hash:
-                if new_block_hash not in (None, '\x00' * 32):
+                if new_block_hash not in (None, '\x00' * 32) and new_block_hash in self.objects:
                     DEBUG('Changing block selection', height=h,
                           pre=self.blocks[h].hash[:8].encode('hex'),
                           post=new_block_hash[:8].encode('hex'))
@@ -666,6 +716,35 @@ class defaultBetStrategy():
         elif obj.typ == NM_LIST:
             for x in obj.args:
                 self.on_receive(x, sender_id)
+        elif obj.typ == NM_FAUCET:
+            to_addr = rlp_decode(obj.args[0], address)
+            amount = big_endian_to_int(obj.args[1])
+            state = self.get_optimistic_state()
+            balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
+            if balance >= amount * 2:
+                DEBUG("Fauceting ether", to_addr=to_addr.encode('hex'), amount=amount)
+                self.send_ether(to_addr, amount)
+            else:
+                DEBUG("Relaying Faucet request", to_addr=to_addr.encode('hex'), amount=amount)
+                self.network.send_to_one(self, rlp.encode(NetworkMessage(NM_FAUCET, [rlp.encode(to_addr, address), encode_int(amount)])))
+
+    def send_ether(self, to_addr, amount):
+        tx = mk_transaction(
+            self.get_nonce(),
+            gasprice=25 * 10**9,
+            gas=1000000,
+            to=to_addr,
+            value=amount,
+            data='',
+            key=self.key,
+            create=False,
+        )
+        self.add_transaction(tx)
+
+    def request_ether(self, amount):
+        nm = NetworkMessage(NM_FAUCET, [rlp.encode(self.addr, address), encode_int(amount)])
+        self.network.send_to_one(self, rlp.encode(nm))
+        self.last_faucet_request = len(self.blocks)
 
     def should_i_include_transaction(self, tx):
         check_state = self.get_optimistic_state()
@@ -828,7 +907,7 @@ class defaultBetStrategy():
         # If byzantine, produce two blocks
         if b.number >= self.double_block_suicide:
             DEBUG('## Being evil and making two blocks!!\n\n')
-            new_tx = mk_transaction(1, 1, 1000000, '\x33' * ADDR_BYTES, 1, '', self.key, True)
+            new_tx = mk_transaction(self.get_nonce(), 1, 1000000, '\x33' * ADDR_BYTES, 1, '', self.key, True)
             txs2 = [tx for tx in txs] + [new_tx]
             b2 = sign_block(Block(transactions=txs2, number=self.next_block_to_produce, proposer=self.addr), self.key)
             self.network.broadcast(self, rlp.encode(NetworkMessage(NM_BLOCK, [rlp.encode(b2)])))
@@ -845,17 +924,46 @@ class defaultBetStrategy():
     def tick(self):
         # DEBUG('bet tick called', at=self.now, id=self.id, index=self.index)
         mytime = self.now
+
+        # We may not be a validator so potentially exit early
+        if self.index < 0:
+            state = self.get_finalized_state()
+            balance = big_endian_to_int(state.get_storage(ETHER, self.addr))
+
+            if balance < 1500 * 10**18:
+                DEBUG("Account Balance:", addr=self.addr.encode('hex'), balance=balance)
+                if not self.network.peers:
+                    DEBUG("No peers yet.  Delaying Faucet Request")
+                elif self.last_faucet_request < 0 or self.max_finalized_height > self.last_faucet_request + 5:
+                    if not self.blocks:
+                        DEBUG('Waiting for some blocks before requesting Ether')
+                    else:
+                        DEBUG('Requesting Ether')
+                        self.request_ether(1600 * 10**18)
+                else:
+                    DEBUG('Waiting on faucet ether request')
+            elif not self.blocks:
+                DEBUG('delaying joining pool until a few blocks have shown up.')
+            elif len(self.blocks) < self.join_at_block:
+                DEBUG('Waiting to join pool', join_at_block=self.join_at_block)
+            elif not self._joined:
+                self.join()
+            else:
+                DEBUG('updating guardian set',
+                      joined_at_block=self._joined_at_block,
+                      index=self.index,
+                      induction_height=self.induction_height)
+                self.update_guardian_set(self.get_optimistic_state())
+
         # If (i) we should be making blocks, and (ii) the time has come to
         # produce a block, then produce a block
         if self.index >= 0 and self.next_block_to_produce is not None:
             target_time = self.genesis_time + BLKTIME * self.next_block_to_produce
             # DEBUG('maybe I should make a block', at=self.now, target_time=target_time )
-            if mytime >= target_time + self.next_submission_delay:
+            if mytime >= target_time:
                 DEBUG('making a block')
                 self.recalc_state_roots()
                 self.make_block()
-                # TODO: remove `next_submission_delay`
-                # self.next_submission_delay = random.randrange(-BLKTIME * 2, BLKTIME * 6) if self.clockwrong else 0
         elif self.next_block_to_produce is None:
             # DEBUG('add_prop', at=self.now, id=self.id)
             self.add_proposers()

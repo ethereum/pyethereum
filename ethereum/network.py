@@ -244,7 +244,7 @@ class SimPyNetworkSimulator(NetworkSimulatorBase):
                     self.receive_later(sender.id, p, obj)
 
 
-#NetworkSimulator = NetworkSimulatorBase
+NetworkSimulator = NetworkSimulatorBase
 #NetworkSimulator = SimPyNetworkSimulator
 
 
@@ -254,7 +254,7 @@ class DevP2PNetwork(NetworkSimulatorBase):
     """
     start_time = time.time()
 
-    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False):
+    def __init__(self, agents=None, seed=0, min_peers=2, max_peers=5, random_port=False, **kwargs):
         self.agents = agents or []
 
         # copy/paste from devp2p.app_helper, not sure if this gevent config is
@@ -285,10 +285,6 @@ class DevP2PNetwork(NetworkSimulatorBase):
         base_config['min_peers'] = min_peers
         base_config['max_peers'] = max_peers
 
-        public_key_to_agent_id = {}
-
-        base_config['guardianservice']['lookup_fn'] = public_key_to_agent_id.__getitem__
-
         self.base_config = base_config
 
         # prepare apps
@@ -302,10 +298,11 @@ class DevP2PNetwork(NetworkSimulatorBase):
                 app.config['discovery']['listen_port'],
                 app.config['node']['id'],
             )
-            public_key_to_agent_id[app.config['node']['id']] = agent.id
             bootstrap_nodes.append(enode)
             bootstrap_nodes = bootstrap_nodes[-2:]
             self.apps[agent.id] = app
+
+        self.start()
 
     def start(self):
         for app in self.apps.values():
@@ -325,10 +322,10 @@ class DevP2PNetwork(NetworkSimulatorBase):
             app.stop()
 
     def generate_peers(self, *args, **kwargs):
-        raise ValueError("DevP2PNetwork does not generate_peers")
+        raise NotImplementedError("DevP2PNetwork does not generate_peers")
 
     def tick(self, *args, **kwargs):
-        raise ValueError("DevP2PNetwork does not tick")
+        raise NotImplementedError("DevP2PNetwork does not tick")
 
     def run(self, seconds, sleep=0):
         start_time = time.time()
@@ -355,18 +352,16 @@ class DevP2PNetwork(NetworkSimulatorBase):
 
         app = self.apps[sender.id]
         peer = random.choice(app.services.peermanager.peers)
-        to_id = app.config['guardianservice']['lookup_fn'](peer.remote_pubkey)
 
-        self.direct_send(sender, to_id, obj)
+        self.direct_send(sender, peer.remote_pubkey, obj)
 
     def direct_send(self, sender, to_id, obj):
         app = self.apps[sender.id]
-        lookup_fn = app.config['guardianservice']['lookup_fn']
 
         to_peer = None
 
         for peer in app.services.peermanager.peers:
-            if lookup_fn(peer.remote_pubkey) == to_id:
+            if peer.remote_pubkey == to_id:
                 to_peer = peer
                 break
 
@@ -385,4 +380,4 @@ class DevP2PNetwork(NetworkSimulatorBase):
         raise NotImplementedError("Not Implemented")
 
 
-NetworkSimulator = DevP2PNetwork
+#NetworkSimulator = DevP2PNetwork

@@ -3,12 +3,13 @@ from ethereum.db import BaseDB
 import time
 from utils import address, int256, trie_root, hash32, to_string, \
     sha3, zpad, normalize_address, int_to_addr, big_endian_to_int, \
-    int_to_big_endian
+    int_to_big_endian, encode_int32
 
 # List of system addresses and global parameters
 STATEROOTS = int_to_addr(20)
 BLKNUMBER = int_to_addr(30)
 ETHER = int_to_addr(50)
+NONCE = encode_int32(2**256 - 1)
 CASPER = int_to_addr(60)
 ECRECOVERACCT = int_to_addr(70)
 PROPOSER = int_to_addr(80)

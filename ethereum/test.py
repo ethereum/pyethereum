@@ -285,10 +285,14 @@ def check_correctness(bets):
     print 'Transaction exceptions: %r' % [bets[0].tx_exceptions.get(tx.hash, 0) for tx in check_txs]
 
 # Simulate a network
-#n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
-n = network.NetworkSimulator(agents=bets)
-n.start()
-#n.generate_peers(5)
+n = network.NetworkSimulator(latency=4, agents=bets, broadcast_success_rate=0.9)
+
+try:
+    n.generate_peers(5)
+except NotImplementedError:
+    # DevP2PNetwork doesn't generate peers.
+    pass
+
 for _bet in bets:
     _bet.network = n
 
@@ -317,8 +321,11 @@ while 1:
         print 'Reached breakpoint'
         break
     print 'Min mfh:', min_mfh
-    # DevP2PNetwork does not do peer lists
-    #print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+    try:
+        print 'Peer lists:', [[p.id for p in n.peers[bet.id]] for bet in bets]
+    except AttributeError:
+        # DevP2PNetwork does not do peer lists
+        pass
 
 recent_state = State(bets[0].stateroots[min_mfh], bets[0].db)
 assert get_code(recent_state, ringsig_addr)

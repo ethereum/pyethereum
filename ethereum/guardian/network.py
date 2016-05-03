@@ -34,6 +34,7 @@ NM_TRANSACTION = 4
 NM_GETBLOCK = 5
 NM_GETBLOCKS = 6
 NM_BLOCKS = 7
+NM_FAUCET = 8
 
 
 class NetworkMessage(rlp.Serializable):
@@ -97,10 +98,10 @@ class GuardianService(WiredService):
         super(GuardianService, self).__init__(app)
 
     def log(self, text, **kargs):
-        node_num = self.config['node_num']
+        node_num = self.config['node']['id'].encode('hex')
         msg = ' '.join([
-            colors[node_num % len(colors)],
-            "NODE%d" % node_num,
+            colors[hash(node_num) % len(colors)],
+            "NODE%s" % node_num,
             text,
             (' %r' % kargs if kargs else ''),
             COLOR_END])
@@ -135,9 +136,7 @@ class GuardianService(WiredService):
         self.log('----------------------------------')
         self.log('on_receive network_message', network_message=network_message, proto=proto)
         agent = self.app.services.guardianservice.config['guardianservice']['agent']
-        lookup_fn = self.app.services.guardianservice.config['guardianservice']['lookup_fn']
-        other_agent_id = lookup_fn(proto.peer.remote_pubkey)
-        agent.on_receive(rlp.encode(network_message), other_agent_id)
+        agent.on_receive(rlp.encode(network_message), proto.peer.remote_pubkey)
 
 
 #
