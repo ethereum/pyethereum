@@ -70,7 +70,7 @@ class Block(rlp.Serializable):
                 assert tx.left_bound % (tx.right_bound - tx.left_bound) == 0
                 assert 0 <= tx.left_bound < tx.right_bound <= MAXSHARDS
             self.summaries = [TransactionGroupSummary(GASLIMIT, 0, MAXSHARDS, transactions)]
-            self.summaries[0].intrinsic_gas = sum([tx.intrinsic_gas for tx in transactions]) 
+            self.summaries[0].intrinsic_gas = sum([tx.intrinsic_gas for tx in transactions])
             assert self.summaries[0].intrinsic_gas < GASLIMIT
             self.header = BlockHeader(number, sha3(rlp.encode(self.summaries)), proposer, sig)
         else:
@@ -257,7 +257,7 @@ class State():
 
 def initialize_with_gas_limit(state, gas_limit, left_bound=0):
     state.set_storage(shardify(EXECUTION_STATE, left_bound), GAS_REMAINING, gas_limit)
-    
+
 
 transition_cache_map = {}
 
@@ -299,7 +299,7 @@ def block_state_transition(state, block, listeners=[]):
     state.set_storage(BLKNUMBER, 0, encode_int32(blknumber + 1))
     # Update the RNG seed (the lower 64 bits contains the number of validators,
     # the upper 192 bits are pseudorandom)
-    prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) if blknumber else '\x00' * 32 
+    prevseed = state.get_storage(RNGSEEDS, encode_int32(blknumber - 1)) if blknumber else '\x00' * 32
     newseed = big_endian_to_int(sha3(prevseed + blkproposer))
     newseed = newseed - (newseed % 2**64) + big_endian_to_int(state.get_storage(CASPER, 0))
     state.set_storage(RNGSEEDS, encode_int32(blknumber), newseed)
@@ -314,7 +314,9 @@ def block_state_transition(state, block, listeners=[]):
 
 RLPEMPTYLIST = rlp.encode([])
 
-def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=[], breaking=False, override_gas=2**255):
+def tx_state_transition(state, tx, left_bound=0, right_bound=MAXSHARDS, listeners=None, breaking=False, override_gas=2**255):
+    if listeners is None:
+        listeners = []
     _EXSTATE = shardify(EXECUTION_STATE, left_bound)
     _LOG = shardify(LOG, left_bound)
     # Get index

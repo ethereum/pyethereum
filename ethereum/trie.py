@@ -265,7 +265,7 @@ class Trie(object):
 
     def set_root_hash(self, root_hash):
         assert is_string(root_hash)
-        assert len(root_hash) in [0, 32]
+        assert len(root_hash) in [0, 32], "Invalid length: {0}".format(repr(root_hash))
         if self.transient:
             self.transient_root_hash = root_hash
             return

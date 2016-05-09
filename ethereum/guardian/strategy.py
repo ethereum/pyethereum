@@ -181,6 +181,207 @@ class Opinion():
         return len(self.probs) - 1
 
 
+class RLPNone(object):
+    def serialize(self, obj):
+        if obj is not None:
+            raise rlp.SerializationError("Cannot serialize non-None types", obj)
+        return b'\00'
+
+    def deserialize(self, serial):
+        if serial != b'\00':
+            raise rlp.DeserializationError("Can only deserialize null byte", serial)
+        return None
+
+
+rlp_none = RLPNone()
+
+
+class RLPFloat(object):
+    def serialize(self, obj):
+        if not isinstance(obj, float):
+            raise rlp.SerializationError("Cannot serialize float types", obj)
+        return rlp.encode(obj.hex())
+
+    def deserialize(self, serial):
+        return float.fromhex(rlp.decode(serial))
+
+
+rlp_float = RLPFloat()
+
+
+class Empty(object):
+    pass
+
+
+empty = Empty()
+
+
+class LDBValue(object):
+    key = None
+    db = None
+
+    def __init__(self, key, default=empty, sedes=None):
+        self.default = default
+        self.key = rlp.encode(key)
+        self.sedes = sedes
+
+    def __get__(self, instance, cls=None):
+        try:
+            db_value = instance.db.db.Get(self.key)
+        except KeyError:
+            if self.default is not empty:
+                return self.default
+            raise
+
+        return rlp.decode(db_value, self.sedes)
+
+    def __set__(self, instance, value):
+        if value is None:
+            db_value = rlp.encode(value, rlp_none)
+        else:
+            db_value = rlp.encode(value, self.sedes)
+        instance.db.db.Put(self.key, db_value)
+
+    def __delete__(self, instance):
+        instance.db.db.Delete(self.key)
+
+
+class LDBBase(object):
+    db = None
+    sedes = None
+
+    def __init__(self, db, ns, sedes=None):
+        self.db = db
+        self.ns = ns
+        self.sedes = sedes
+
+    def _to_db_key(self, key):
+        return "{0}:{1}".format(self.ns, rlp.encode(key))
+
+    def _set_length(self, length):
+        db_key = self._to_db_key("__len__")
+        db_value = rlp.encode(length, rlp.sedes.big_endian_int)
+        self.db.Put(db_key, db_value)
+
+    def __len__(self):
+        db_key = self._to_db_key("__len__")
+        try:
+            db_value = self.db.Get(db_key)
+        except KeyError:
+            return 0
+        return rlp.decode(db_value, rlp.sedes.big_endian_int)
+
+
+class LDBList(LDBBase):
+    def __iter__(self):
+        for idx in range(len(self)):
+            yield self[idx]
+        raise StopIteration
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start = key.start or 0
+            step = key.step or 1
+            stop = min(key.stop or len(self), len(self))
+            return [self[k] for k in range(start, stop, step)]
+        elif key < -1 * len(self) or key >= len(self):
+            raise IndexError("list index out of range")
+        elif key < 0:
+            key = key % len(self)
+        db_key = self._to_db_key(key)
+        db_value = self.db.Get(db_key)
+        try:
+            return rlp.decode(db_value, rlp_none)
+        except rlp.DeserializationError:
+            return rlp.decode(db_value, self.sedes)
+
+    def __setitem__(self, key, value):
+        if key < -1 * len(self) or key >= len(self):
+            raise IndexError("list index out of range")
+        elif key < 0:
+            key = key % len(self)
+        db_key = self._to_db_key(key)
+        if value is None:
+            db_value = rlp.encode(value, rlp_none)
+        else:
+            db_value = rlp.encode(value, self.sedes)
+        return self.db.Put(db_key, db_value)
+
+    def append(self, value):
+        idx = len(self)
+        self._set_length(len(self) + 1)
+        self[idx] = value
+
+    def __contains__(self, value):
+        for v in self:
+            if v == value:
+                return True
+        return False
+
+
+class LDBDict(LDBBase):
+    def __init__(self, *args, **kwargs):
+        super(LDBDict, self).__init__(*args, **kwargs)
+        key_ns = self._to_db_key('__keys__')
+        self._keys = LDBList(self.db, key_ns)
+
+    def __contains__(self, key):
+        db_key = self._to_db_key(key)
+        try:
+            self.db.Get(db_key)
+            return True
+        except KeyError:
+            return False
+
+    def __getitem__(self, key):
+        db_key = self._to_db_key(key)
+        db_value = self.db.Get(db_key)
+        return rlp.decode(db_value, self.sedes)
+
+    def __setitem__(self, key, value):
+        db_key = self._to_db_key(key)
+
+        if value is None:
+            db_value = rlp.encode(value, rlp_none)
+        else:
+            db_value = rlp.encode(value, self.sedes)
+
+        is_new_key = key not in self
+
+        self.db.Put(db_key, db_value)
+
+        if is_new_key:
+            self._set_length(len(self) + 1)
+            self._keys.append(key)
+
+    def __delitem__(self, key):
+        db_key = self._to_db_key(key)
+        self.db.Delete(db_key)
+        self._set_length(len(self) - 1)
+
+        keys = [k for k in self.keys() if k != key]
+        assert len(keys) == len(self)
+        for idx, k in enumerate(keys):
+            self._keys[idx] = k
+
+        self._keys._set_length(len(keys))
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self):
+        return list(self._keys)
+
+    def values(self):
+        return [self[key] for key in self.keys()]
+
+    def items(self):
+        return [(key, self[key]) for key in self.keys()]
+
+
 # The default betting strategy; initialize with the genesis block and a privkey
 class defaultBetStrategy():
     @property
@@ -188,9 +389,22 @@ class defaultBetStrategy():
         from ethereum.utils import decode_int
         return decode_int(self.addr[2:])
 
+    last_bet_made = LDBValue('last_bet_made', 0, rlp.sedes.big_endian_int)
+    last_time_sent_getblocks = LDBValue('last_time_sent_getblocks', 0, rlp.sedes.big_endian_int)
+    join_at_block = LDBValue('join_at_block', -1, rlp.sedes.big_endian_int)
+    last_faucet_request = LDBValue('last_faucet_request', -1, rlp.sedes.big_endian_int)
+    index = LDBValue('index', -1, rlp.sedes.big_endian_int)
+    former_index = LDBValue('former_index', None, rlp.sedes.big_endian_int)
+    last_block_produced = LDBValue('last_block_produced', -1, rlp.sedes.big_endian_int)
+    next_block_to_produce = LDBValue('next_block_to_produce', -1, rlp.sedes.big_endian_int)
+    prevhash = LDBValue('prevhash', '\x00' * 32)
+    seq = LDBValue('seq', 0, rlp.sedes.big_endian_int)
+    calc_state_roots_from = LDBValue('calc_state_roots_from', 0, rlp.sedes.big_endian_int)
+    max_finalized_height = LDBValue('max_finalized_height', -1, rlp.sedes.big_endian_int)
+
     def __init__(self, genesis_state, key, clockwrong=False, bravery=0.92,
                  crazy_bet=False, double_block_suicide=2**200,
-                 double_bet_suicide=2**200, min_gas_price=10**9, join_at_block=-1):
+                 double_bet_suicide=2**200, min_gas_price=10**9, join_at_block=None):
         DEBUG("Initializing betting strategy")
         # Guardian's private key
         self.key = key
@@ -208,11 +422,11 @@ class defaultBetStrategy():
         # A dict of lists of bets received from guardians
         self.bets = {}
         # The probabilities that you are betting
-        self.probs = []
+        self.probs = LDBList(self.db.db, 'probs', rlp_float)
         # Your finalized block hashes
-        self.finalized_hashes = []
+        self.finalized_hashes = LDBList(self.db.db, 'finalized_hashes')
         # Your state roots
-        self.stateroots = []
+        self.stateroots = LDBList(self.db.db, 'stateroots')
         # Which counters have been processed
         self.counters = {}
         # A dict containing the highest-sequence-number bet processed for
@@ -224,15 +438,15 @@ class defaultBetStrategy():
         # already been received and processed
         self.objects = {}
         # Blocks selected for each height
-        self.blocks = []
+        self.blocks = LDBList(self.db.db, 'blocks', Block)
         # When you last explicitly requested to ask for a block; stored to
         # prevent excessively frequent lookups
-        self.last_asked_for_block = {}
+        self.last_asked_for_block = LDBDict(self.db.db, 'last_asked_for_block', rlp_float)
         # When you last explicitly requested to ask for bets from a given
         # guardian; stored to prevent excessively frequent lookups
-        self.last_asked_for_bets = {}
+        self.last_asked_for_bets = LDBDict(self.db.db, 'last_asked_for_bets', rlp_float)
         # Pool of transactions worth including
-        self.txpool = {}
+        self.txpool = LDBDict(self.db.db, 'txpool', Transaction)
         # Map of hash -> (tx, [(blknum, index), ...]) for transactions that
         # are in blocks that are not fully confirmed
         self.unconfirmed_txindex = {}
@@ -241,28 +455,29 @@ class defaultBetStrategy():
         self.finalized_txindex = {}
         # Counter for number of times a transaction entered an exceptional
         # condition
-        self.tx_exceptions = {}
+        self.tx_exceptions = LDBDict(self.db.db, 'tx_exceptions', rlp.sedes.big_endian_int)
         # Last time you made a bet; stored to prevent excessively
         # frequent betting
-        self.last_bet_made = 0
+        #self.last_bet_made = 0
         # Last time sent a getblocks message; stored to prevent excessively
         # frequent getting
-        self.last_time_sent_getblocks = 0
+        #self.last_time_sent_getblocks = 0
         # The block that this guardian should try to join the pool
-        self.join_at_block = join_at_block
+        if join_at_block is not None:
+            self.join_at_block = join_at_block
         # Last time we requested ether
-        self.last_faucet_request = -1
+        #self.last_faucet_request = -1
         # Your guardian index
-        self.index = -1
-        self.former_index = None
+        #self.index = -1
+        #self.former_index = None
         # Store the genesis block state here
         self.genesis_state_root = genesis_state.root
         # Store the timestamp of the genesis block
         self.genesis_time = big_endian_to_int(genesis_state.get_storage(GENESIS_TIME, '\x00' * 32))
         # Last block that you produced
-        self.last_block_produced = -1
+        #self.last_block_produced = -1
         # Next height at which you are eligible to produce (could be None)
-        self.next_block_to_produce = -1
+        #self.next_block_to_produce = -1
         # Deliberately sabotage my clock? (for testing purposes)
         self.clockwrong = clockwrong
         # How quickly to converge toward finalization?
@@ -277,22 +492,22 @@ class defaultBetStrategy():
         # What seq to create two bets at (also destructively, for testing purposes)
         self.double_bet_suicide = double_bet_suicide
         # List of proposers for blocks; calculated into the future just-in-time
-        self.proposers = []
+        self.proposers = LDBList(self.db.db, 'proposers', rlp.sedes.big_endian_int)
         # Prevhash (for betting)
-        self.prevhash = '\x00' * 32
+        #self.prevhash = '\x00' * 32
         # Sequence number (for betting)
-        self.seq = 0
+        #self.seq = 0
         # Transactions I want to track
-        self.tracked_tx_hashes = []
+        self.tracked_tx_hashes = LDBList(self.db.db, 'tracked_tx_hashes')
         # If we only partially calculate state roots, store the index at which
         # to start calculating next time you make a bet
-        self.calc_state_roots_from = 0
+        #self.calc_state_roots_from = 0
         # Minimum gas price that I accept
         self.min_gas_price = min_gas_price
         # Max height which is finalized from your point of view
-        self.max_finalized_height = -1
+        #self.max_finalized_height = -1
         # Create my guardian set
-        self.update_guardian_set(genesis_state)
+        self.update_guardian_set(self.get_finalized_state())
         DEBUG('Found %d guardians in genesis' % len(self.opinions))
         # The height at which this guardian is added
         self.induction_height = call_casper(genesis_state, 'getGuardianInductionHeight', [self.index]) if self.index >= 0 else 2**100
@@ -302,7 +517,7 @@ class defaultBetStrategy():
               induction_height=self.induction_height)
         self.withdrawn = False
         # Recently discovered blocks
-        self.recently_discovered_blocks = []
+        self.recently_discovered_blocks = LDBList(self.db.db, 'recently_discovered_blocks', rlp.sedes.big_endian_int)
         # When will I suicide?
         if self.double_block_suicide < 2**40:
             if self.double_block_suicide < self.next_block_to_produce:
@@ -313,10 +528,9 @@ class defaultBetStrategy():
         # Am I byzantine?
         self.byzantine = self.crazy_bet or self.double_block_suicide < 2**80 or self.double_bet_suicide < 2**80
 
-    _joined = False
-    _joined_at_block = -1
+    _joined_at_block = LDBValue('_joined_at_block', -1, rlp.sedes.big_endian_int)
 
-    _last_nonce = -1
+    _last_nonce = LDBValue('_last_nonce', -1, rlp.sedes.big_endian_int)
 
     def get_nonce(self, optimistic=True):
         if optimistic:
@@ -351,7 +565,6 @@ class defaultBetStrategy():
         self.add_transaction(tx)
 
         # Icky grossness, do this better.
-        self._joined = True
         self._joined_at_block = len(self.blocks)
 
     # Compute as many future block proposers as possible
@@ -946,7 +1159,7 @@ class defaultBetStrategy():
                 DEBUG('delaying joining pool until a few blocks have shown up.')
             elif len(self.blocks) < self.join_at_block:
                 DEBUG('Waiting to join pool', join_at_block=self.join_at_block)
-            elif not self._joined:
+            elif self._joined_at_block < 0:
                 self.join()
             else:
                 DEBUG('updating guardian set',

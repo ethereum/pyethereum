@@ -1,6 +1,8 @@
 import sys
 import copy
 import rlp
+import random
+import time
 from rlp.sedes import (
     big_endian_int,
     binary,
@@ -168,3 +170,45 @@ class GuardianApp(BaseApp):
     client_version_string = guardian_client_version_string
 
     default_config = guardian_default_config
+
+
+class StandaloneGuardianApp(GuardianApp):
+    def broadcast(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+        network_message = rlp.decode(obj, NetworkMessage)
+        bcast = self.services.peermanager.broadcast
+        bcast(
+            GuardianProtocol,
+            'network_message',
+            args=(network_message,),
+            exclude_peers=[],
+        )
+
+    def send_to_one(self, sender, obj):
+        assert isinstance(obj, (str, bytes))
+
+        peer = random.choice(self.services.peermanager.peers)
+
+        self.direct_send(sender, peer.remote_pubkey, obj)
+
+    @property
+    def peers(self):
+        return self.services.peermanager.peers
+
+    def direct_send(self, sender, to_id, obj):
+        to_peer = None
+
+        for peer in self.services.peermanager.peers:
+            if peer.remote_pubkey == to_id:
+                to_peer = peer
+                break
+
+        if to_peer is None:
+            raise ValueError("Not connected to the provided agent")
+
+        proto = to_peer.protocols[GuardianProtocol]
+        proto.send_network_message(rlp.decode(obj, NetworkMessage))
+
+    @property
+    def now(self):
+        return time.time()
