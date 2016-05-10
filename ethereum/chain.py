@@ -363,8 +363,7 @@ class Chain(object):
         # we might have a new head_candidate (due to ctx switches in pyethapp)
         if self.head_candidate != head_candidate:
             log.debug('head_candidate changed during validation, trying again')
-            self.add_transaction(transaction)
-            return
+            return self.add_transaction(transaction)
 
         self.pre_finalize_state_root = head_candidate.state_root
         head_candidate.finalize()
