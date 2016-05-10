@@ -345,7 +345,7 @@ class Chain(object):
         log.debug('add tx', num_txs=self.num_transactions(), tx=transaction, on=head_candidate)
         if self.head_candidate.includes_transaction(transaction.hash):
             log.debug('known tx')
-            return False
+            return
         old_state_root = head_candidate.state_root
         # revert finalization
         head_candidate.state_root = self.pre_finalize_state_root
