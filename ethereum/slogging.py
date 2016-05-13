@@ -1,5 +1,6 @@
 import logging
 import json
+import textwrap
 from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, isnumeric
 
@@ -18,13 +19,52 @@ known_loggers = set()
 log_listeners = []
 
 
-# add level trace into logging
-def _trace(self, msg, *args, **kwargs):
-    if self.isEnabledFor(TRACE):
-        self._log(TRACE, msg, args, **kwargs)
-logging.Logger.trace = _trace
+def _inject_into_logger(name, code, namespace=None):
+    # This is a hack to fool the logging module into reporting correct source files.
+    # It determines the actual source of a logging call by inspecting the stack frame's
+    # source file. So we use this `eval(compile())` construct to "inject" our additional
+    # methods into the logging module.
+    if namespace is None:
+        namespace = {}
+    eval(
+        compile(
+            code,
+            logging._srcfile,
+            'exec'
+        ),
+        namespace
+    )
+    setattr(logging.Logger, name, namespace[name])
+
+
+# Add `trace()` level to Logger
+_inject_into_logger(
+    'trace',
+    textwrap.dedent(
+        """\
+        def trace(self, msg, *args, **kwargs):
+            if self.isEnabledFor(TRACE):
+                self._log(TRACE, msg, args, **kwargs)
+        """
+    ),
+    {'TRACE': TRACE}
+)
 logging.TRACE = TRACE
 logging.addLevelName(TRACE, "TRACE")
+
+
+# Add `DEV()` shortcut to loggers
+_inject_into_logger(
+    'DEV',
+    textwrap.dedent(
+        """\
+        def DEV(self, msg, *args, **kwargs):
+            '''Shortcut to output highlighted log text'''
+            kwargs['highlight'] = True
+            self.critical(msg, *args, **kwargs)
+        """
+    )
+)
 
 
 class LogRecorder(object):
@@ -165,11 +205,6 @@ class SLogger(logging.Logger):
         extra['original_msg'] = msg
         msg = self.format_message(msg, kwargs, highlight, level)
         super(SLogger, self)._log(level, msg, args, exc_info, extra)
-
-    def DEV(self, msg, *args, **kwargs):
-        """Shortcut to output highlighted log text"""
-        kwargs['highlight'] = True
-        self.critical(msg, *args, **kwargs)
 
 
 class RootLogger(SLogger):
