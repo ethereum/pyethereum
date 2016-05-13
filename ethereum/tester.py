@@ -13,6 +13,12 @@ from ethereum._solidity import get_solidity
 import rlp
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 
+try:
+    import serpent
+    HAS_SERPENT = True
+except ImportError:
+    HAS_SERPENT = False
+
 
 TRACE_LVL_MAP = [
     ':info',
@@ -23,8 +29,6 @@ TRACE_LVL_MAP = [
     'eth.vm.storage:trace,eth.vm.memory:trace'
 ]
 
-
-serpent = None
 
 u = ethereum.utils
 t = ethereum.transactions
@@ -131,10 +135,6 @@ class ABIContract():
 class state():
 
     def __init__(self, num_accounts=len(keys)):
-        global serpent
-        if not serpent:
-            serpent = __import__('serpent')
-
         self.temp_data_dir = tempfile.mkdtemp()
         self.db = db.EphemDB()
         self.env = Env(self.db)
@@ -243,6 +243,8 @@ class state():
         return self._send(*args, **kwargs)["output"]
 
     def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
+        if not HAS_SERPENT:
+            raise RuntimeError("ethereum-serpent package not installed")
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
             evmdata = serpent.encode_abi(funid, *abi)
@@ -253,8 +255,9 @@ class state():
         tx.sign(sender)
         return spv.mk_transaction_spv_proof(self.block, tx)
 
-    def verifyspv(self, sender, to, value, data=[],
-                  funid=None, abi=None, proof=[]):
+    def verifyspv(self, sender, to, value, data=[], funid=None, abi=None, proof=[]):
+        if not HAS_SERPENT:
+            raise RuntimeError("ethereum-serpent package not installed")
         sendnonce = self.block.get_nonce(u.privtoaddr(sender))
         if funid is not None:
             evmdata = serpent.encode_abi(funid, *abi)
