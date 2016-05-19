@@ -31,6 +31,34 @@ contract zoo {
 }
 """
 
+@pytest.mark.xfail(reason="compilation from file seems to work with library, but the ABI-calling tx fails")
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
+def test_compile_from_file(tmpdir):
+    contractsdir = tmpdir.mkdir("contracts")
+    otherpath = contractsdir.join("Other.sol")
+    otherpath.write("""library Other {
+    function seven() returns (int256 y) {
+        y = 7;
+    }
+}
+""")
+    userpath = contractsdir.join("user.sol")
+    userpath.write("""import "Other.sol";
+contract user {
+    function test() returns (int256 seven) {
+        seven = Other.seven();
+    }
+}
+""")
+    s = tester.state()
+    othercontract = s.abi_contract(None, path=str(otherpath), language='solidity')
+    # assert othercontract.seven() == 7
+    libraryuser = s.abi_contract('', path=str(userpath),
+            # libraries still need to be supplied with their address:
+            libraries={'Other': othercontract.address.encode('hex')},
+            language='solidity')
+    assert libraryuser.test() == 7
+
 
 @pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
 def test_interop():
