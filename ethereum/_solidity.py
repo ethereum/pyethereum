@@ -37,9 +37,9 @@ class solc_wrapper(object):
         return re.findall(r'^\s*(contract|library) (\S*) ', code, re.MULTILINE)
 
     @classmethod
-    def compile(cls, code, libraries=None, contract_name=''):
+    def compile(cls, code, path=None, libraries=None, contract_name=''):
         "returns binary of last contract in code"
-        sorted_contracts = cls.combined(code)
+        sorted_contracts = cls.combined(code, path=path)
         if contract_name:
             idx = [x[0] for x in sorted_contracts].index(contract_name)
         else:
@@ -48,13 +48,14 @@ class solc_wrapper(object):
             if cls.compiler_version() < "0.1.2":
                 raise CompileError('Compiler does not support libraries. Please update compiler.')
             for lib_name, lib_address in libraries.iteritems():
-                sorted_contracts[idx][1]['bin'] = sorted_contracts[idx][1]['bin'].replace("__{}{}".format(lib_name, "_" * (38-len(lib_name))), lib_address)
+                sorted_contracts[idx][1]['bin'] = sorted_contracts[idx][1]['bin'].replace(
+                    "__{}{}".format(lib_name, "_" * (38 - len(lib_name))), lib_address)
         return sorted_contracts[idx][1]['bin'].decode('hex')
 
     @classmethod
-    def mk_full_signature(cls, code, libraries=None, contract_name=''):
+    def mk_full_signature(cls, code, path=None, libraries=None, contract_name=''):
         "returns signature of last contract in code"
-        sorted_contracts = cls.combined(code)
+        sorted_contracts = cls.combined(code, path=path)
         if contract_name:
             idx = [x[0] for x in sorted_contracts].index(contract_name)
         else:
@@ -62,10 +63,23 @@ class solc_wrapper(object):
         return sorted_contracts[idx][1]['abi']
 
     @classmethod
-    def combined(cls, code):
-        p = subprocess.Popen(['solc', '--add-std', '--optimize', '--combined-json', 'abi,bin,devdoc,userdoc'],
-                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdoutdata, stderrdata = p.communicate(input=code)
+    def combined(cls, code, path=None):
+        """compile combined-json with abi,bin,devdoc,userdoc
+        @param code: literal solidity code as a string.
+        @param path: absolute path to solidity-file. Note: code & path are exclusive!
+        """
+        p = None
+        if path is None:
+            p = subprocess.Popen(['solc', '--add-std', '--optimize', '--combined-json', 'abi,bin,devdoc,userdoc'],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            stdoutdata, stderrdata = p.communicate(input=code)
+        else:
+            assert code is None or len(code) == 0, "`code` and `path` are exclusive!"
+            workdir, fn = os.path.split(path)
+            p = subprocess.Popen(['solc', '--add-std', '--optimize', '--combined-json', 'abi,bin,devdoc,userdoc', fn],
+                                stdout=subprocess.PIPE, cwd=workdir)
+            stdoutdata = p.stdout.read().strip()
+            p.terminate()
         if p.returncode:
             raise CompileError('compilation failed')
         # contracts = json.loads(stdoutdata)['contracts']
@@ -75,7 +89,7 @@ class solc_wrapper(object):
             data['devdoc'] = yaml.safe_load(data['devdoc'])
             data['userdoc'] = yaml.safe_load(data['userdoc'])
 
-        names = cls.contract_names(code)
+        names = cls.contract_names(code or open(path).read())
         assert len(names) <= len(contracts)  # imported contracts are not returned
         sorted_contracts = []
         for name in names:
@@ -90,7 +104,7 @@ class solc_wrapper(object):
             return match.group(1)
 
     @classmethod
-    def compile_rich(cls, code):
+    def compile_rich(cls, code, path=None):
         """full format as returned by jsonrpc"""
 
         return {
@@ -107,7 +121,7 @@ class solc_wrapper(object):
                 },
             }
             for contract_name, contract
-            in cls.combined(code)
+            in cls.combined(code, path=path)
         }
 
 
