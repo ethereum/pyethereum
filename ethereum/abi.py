@@ -1,104 +1,210 @@
-import sys
+# -*- coding: utf8 -*-
+import ast
 import re
+
 import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
-from ethereum import utils
 from rlp.utils import decode_hex, encode_hex
+
+from ethereum import utils
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
 from ethereum.utils import isnumeric, TT256, TT255
-import ast
 
 
-def json_decode(x):
-    return yaml.safe_load(x)
+def json_decode(data):
+    return yaml.safe_load(data)
 
 
-def _canonical_name(x):
-    if x.startswith('int['):
-        return 'uint256' + x[3:]
-    elif x == 'int':
+def split32(data):
+    """ Split data into pieces of 32 bytes. """
+    all_pieces = []
+
+    for position in range(0, len(data), 32):
+        piece = data[position:position + 32]
+        all_pieces.append(piece)
+
+    return all_pieces
+
+
+def _canonical_name(name):
+    """ Replace aliases to the corresponding type. """
+
+    if name.startswith('int['):
+        return 'uint256' + name[3:]
+
+    if name == 'int':
         return 'uint256'
-    elif x.startswith('real['):
-        return 'real128x128' + x[4:]
-    elif x == 'real':
+
+    if name.startswith('real['):
+        return 'real128x128' + name[4:]
+
+    if name == 'real':
         return 'real128x128'
-    return x
+
+    return name
 
 
 def method_id(name, encode_types):
-    sig = name + '(' + ','.join(_canonical_name(x) for x in encode_types) + ')'
-    return big_endian_to_int(utils.sha3(sig)[:4])
+    """ Return the unique method id.
+
+    The signature is defined as the canonical expression of the basic
+    prototype, i.e. the function name with the parenthesised list of parameter
+    types. Parameter types are split by a single comma - no spaces are used.
+
+    The method id is defined as the first four bytes (left, high-order in
+    big-endian) of the Keccak (SHA-3) hash of the signature of the function.
+    """
+    function_types = [
+        _canonical_name(type_)
+        for type_ in encode_types
+    ]
+
+    function_signature = '{function_name}({canonical_types})'.format(
+        function_name=name,
+        canonical_types=','.join(function_types),
+    )
+
+    function_keccak = utils.sha3(function_signature)
+    first_bytes = function_keccak[:4]
+
+    return big_endian_to_int(first_bytes)
 
 
 def event_id(name, encode_types):
-    sig = name + '(' + ','.join(_canonical_name(x) for x in encode_types) + ')'
-    return big_endian_to_int(utils.sha3(sig))
+    """ Return the event id.
+
+    Defined as:
+
+        `keccak(EVENT_NAME+"("+EVENT_ARGS.map(canonical_type_of).join(",")+")")`
+
+    Where `canonical_type_of` is a function that simply returns the canonical
+    type of a given argument, e.g. for uint indexed foo, it would return
+    uint256). Note the lack of spaces.
+    """
+
+    event_types = [
+        _canonical_name(type_)
+        for type_ in encode_types
+    ]
+
+    event_signature = '{event_name}({canonical_types})'.format(
+        event_name=name,
+        canonical_types=','.join(event_types),
+    )
+
+    return big_endian_to_int(utils.sha3(event_signature))
 
 
-class ContractTranslator():
+def _normalize_name(name):
+    """ Return normalized event/function name. """
+    if '(' in name:
+        return name[:name.find('(')]
 
-    def __init__(self, full_signature):
+    return name
+
+
+class ContractTranslator(object):
+
+    def __init__(self, contract_interface):
+        if is_string(contract_interface):
+            contract_interface = json_decode(contract_interface)
+
+        self.constructor_data = None
         self.function_data = {}
         self.event_data = {}
-        v = vars(self)
-        if is_string(full_signature):
-            full_signature = json_decode(full_signature)
-        for sig_item in full_signature:
-            if sig_item['type'] == 'constructor':
-                continue
-            encode_types = [f['type'] for f in sig_item['inputs']]
-            signature = [(f['type'], f['name']) for f in sig_item['inputs']]
-            name = sig_item['name']
-            if '(' in name:
-                name = name[:name.find('(')]
-            if name in v:
-                i = 2
-                while name + utils.to_string(i) in v:
-                    i += 1
-                name += utils.to_string(i)
-                sys.stderr.write("Warning: multiple methods with the same "
-                                 " name. Use %s to call %s with types %r"
-                                 % (name, sig_item['name'], encode_types))
-            if sig_item['type'] == 'function':
-                decode_types = [f['type'] for f in sig_item['outputs']]
-                is_unknown_type = len(sig_item['outputs']) and \
-                    sig_item['outputs'][0]['name'] == 'unknown_out'
-                self.function_data[name] = {
-                    "prefix": method_id(name, encode_types),
-                    "encode_types": encode_types,
-                    "decode_types": decode_types,
-                    "is_unknown_type": is_unknown_type,
-                    "is_constant": sig_item.get('constant', False),
-                    "signature": signature
-                }
-            elif sig_item['type'] == 'event':
-                indexed = [f['indexed'] for f in sig_item['inputs']]
-                names = [f['name'] for f in sig_item['inputs']]
-                self.event_data[event_id(name, encode_types)] = {
-                    "types": encode_types,
-                    "name": name,
-                    "names": names,
-                    "indexed": indexed,
-                    "anonymous": sig_item.get('anonymous', False)
+
+        for description in contract_interface:
+            encode_types = [
+                element['type']
+                for element in description['inputs']
+            ]
+
+            signature = [
+                (element['type'], element['name'])
+                for element in description['inputs']
+            ]
+
+            # type can be omitted, defaulting to function
+            if description.get('type', 'function') == 'function':
+                normalized_name = _normalize_name(description['name'])
+
+                decode_types = [
+                    element['type']
+                    for element in description['outputs']
+                ]
+
+                self.function_data[normalized_name] = {
+                    'prefix': method_id(normalized_name, encode_types),
+                    'encode_types': encode_types,
+                    'decode_types': decode_types,
+                    'is_constant': description.get('constant', False),
+                    'signature': signature,
                 }
 
-    def encode(self, name, args):
-        fdata = self.function_data[name]
-        o = zpad(encode_int(fdata['prefix']), 4) + \
-            encode_abi(fdata['encode_types'], args)
-        return o
+            elif description['type'] == 'event':
+                normalized_name = _normalize_name(description['name'])
 
-    def decode(self, name, data):
-        # print 'out', utils.encode_hex(data)
-        fdata = self.function_data[name]
-        if fdata['is_unknown_type']:
-            o = [utils.to_signed(utils.big_endian_to_int(data[i:i + 32]))
-                 for i in range(0, len(data), 32)]
-            return [0 if not o else o[0] if len(o) == 1 else o]
-        o = decode_abi(fdata['decode_types'], data)
-        return o
+                indexed = [
+                    element['indexed']
+                    for element in description['inputs']
+                ]
+                names = [
+                    element['name']
+                    for element in description['inputs']
+                ]
+                self.event_data[event_id(normalized_name, encode_types)] = {
+                    'types': encode_types,
+                    'name': normalized_name,
+                    'names': names,
+                    'indexed': indexed,
+                    'anonymous': description.get('anonymous', False),
+                }
 
-    def is_unknown_type(self, name):
-        return self.function_data[name]["is_unknown_type"]
+            elif description['type'] == 'constructor':
+                if self.constructor_data is not None:
+                    raise ValueError('Only one constructor is supported.')
+
+                self.constructor_data = {
+                    'encode_types': encode_types,
+                    'signature': signature,
+                }
+
+            else:
+                raise ValueError('Unknown type {}'.format(description['type']))
+
+    def encode(self, function_name, args):
+        """ Return the encoded function call.
+
+        Args:
+            function_name (str): One of the existing functions described in the
+                contract interface.
+            args (List[object]): The function arguments that wll be encoded and
+                used in the contract execution in the vm.
+
+        Return:
+            bin: The encoded function name and arguments so that it can be used
+                 with the evm to execute a funcion call, the binary string follows
+                 the Ethereum Contract ABI.
+        """
+        if function_name not in self.function_data:
+            raise ValueError('Unkown function {}'.format(function_name))
+
+        description = self.function_data[function_name]
+
+        function_selector = zpad(encode_int(description['prefix']), 4)
+        arguments = encode_abi(description['encode_types'], args)
+
+        return function_selector + arguments
+
+    def encode_constructor_arguments(self, args):
+        """ Return the encoded constructor call. """
+        if self.constructor_data is None:
+            raise ValueError("The contract interface didn't have a constructor")
+
+        return encode_abi(self.constructor_data['encode_types'], args)
+
+    def decode(self, function_name, data):
+        description = self.function_data[function_name]
+        return decode_abi(description['decode_types'], data)
 
     def listen(self, log, noprint=True):
         if not len(log.topics) or log.topics[0] not in self.event_data:
@@ -128,13 +234,6 @@ class ContractTranslator():
         if not noprint:
             print(o)
         return o
-
-
-def split32(s):
-    o = []
-    for i in range(0, len(s), 32):
-        o.append(s[i:i + 32])
-    return o
 
 
 class EncodingError(Exception):

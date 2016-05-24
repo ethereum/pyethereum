@@ -1,24 +1,18 @@
+# -*- coding: utf8 -*-
 import shutil
 import tempfile
 import time
-from ethereum import spv
-import ethereum
-import ethereum.db as db
-import ethereum.opcodes as opcodes
-import ethereum.abi as abi
-from ethereum.slogging import LogRecorder, configure_logging, set_level
-from ethereum.utils import to_string
-from ethereum.config import Env
-from ethereum._solidity import get_solidity
+import types
+
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import ascii_chr
 
-try:
-    import serpent
-    HAS_SERPENT = True
-except ImportError:
-    HAS_SERPENT = False
-
+from ethereum import blocks, db, opcodes, processblock, transactions
+from ethereum.abi import ContractTranslator
+from ethereum.config import Env
+from ethereum.slogging import LogRecorder
+from ethereum._solidity import get_solidity
+from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
 
 TRACE_LVL_MAP = [
     ':info',
@@ -29,55 +23,68 @@ TRACE_LVL_MAP = [
     'eth.vm.storage:trace,eth.vm.memory:trace'
 ]
 
+GAS_LIMIT = 3141592
+GAS_PRICE = 1
 
-u = ethereum.utils
-t = ethereum.transactions
-b = ethereum.blocks
-pb = ethereum.processblock
-vm = ethereum.vm
+# pylint: disable=invalid-name
+
+gas_limit = GAS_LIMIT
+gas_price = GAS_PRICE
 
 accounts = []
 keys = []
+languages = {}
 
-for i in range(10):
-    keys.append(u.sha3(to_string(i)))
-    accounts.append(u.privtoaddr(keys[-1]))
+for account_number in range(10):
+    keys.append(sha3(to_string(account_number)))
+    accounts.append(privtoaddr(keys[-1]))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
-languages = {}
+try:
+    import serpent
+    languages['serpent'] = serpent
+except ImportError:
+    pass
 
 _solidity = get_solidity()
 if _solidity:
     languages['solidity'] = _solidity
 
-
-seed = 3 ** 160
-
-
-def dict_without(d, *args):
-    o = {}
-    for k, v in list(d.items()):
-        if k not in args:
-            o[k] = v
-    return o
+DEFAULT_KEY = k0
+DEFAULT_ACCOUNT = a0
 
 
-def dict_with(d, **kwargs):
-    o = {}
-    for k, v in list(d.items()):
-        o[k] = v
-    for k, v in list(kwargs.items()):
-        o[k] = v
-    return o
+def dict_without(base_dict, *args):
+    """ Return a copy of the dictionary without the `keys`. """
+    without_keys = dict(base_dict)
+
+    for key in args:
+        without_keys.pop(key, None)
+
+    return without_keys
 
 
-# Pseudo-RNG (deterministic for now for testing purposes)
+def dict_with(base_dict, **kwargs):
+    """ Return a copy of the dictionary with the added elements. """
+    full_dict = dict(base_dict)
+    full_dict.update(**kwargs)
+
+    return full_dict
+
+
 def rand():
-    global seed
-    seed = pow(seed, 2, 2 ** 512)
-    return seed % 2 ** 256
+    """ Return a pseudo random number.
+
+    Pseudo-RNG (deterministic for now for testing purposes).
+    """
+    rand.seed = pow(rand.seed, 2, 2 ** 512)
+    return rand.seed % 2 ** 256
+
+
+# initialize the rand function
+rand.seed = 3 ** 160
 
 
 class TransactionFailed(Exception):
@@ -88,147 +95,226 @@ class ContractCreationFailed(Exception):
     pass
 
 
-class ABIContract():
+class ABIContract(object):  # pylint: disable=too-few-public-methods
 
-    def __init__(self, _state, _abi, address, listen=True, log_listener=None):
+    def __init__(self, test_state, abi_translator, address, listen=True, log_listener=None, default_key=None):  # pylint: disable=too-many-arguments
         self.address = address
-        self._translator = abi.ContractTranslator(_abi)
-        self.abi = _abi
+        self.default_key = default_key or DEFAULT_KEY
+        self.translator = abi_translator
+
+        def listener(log):
+            result = self.translator.listen(log, noprint=False)
+
+            if result and log_listener:
+                log_listener(result)
 
         if listen:
-            if not log_listener:
-                listener = lambda log: self._translator.listen(log, noprint=False)
+            test_state.block.log_listeners.append(listener)
+
+        for function_name in self.translator.function_data:
+            function = self.method_factory(test_state, function_name)
+            method = types.MethodType(function, self)
+            setattr(self, function_name, method)
+
+    @staticmethod
+    def method_factory(test_state, function_name):
+        """ Return a proxy for calling a contract method with automatic encoding of
+        argument and decoding of results.
+        """
+
+        def kall(self, *args, **kwargs):
+            key = kwargs.get('sender', self.default_key)
+
+            result = test_state._send(  # pylint: disable=protected-access
+                key,
+                self.address,
+                kwargs.get('value', 0),
+                self.translator.encode(function_name, args),
+                **dict_without(kwargs, 'sender', 'value', 'output')
+            )
+
+            if kwargs.get('output', '') == 'raw':
+                outdata = result['output']
+            elif not result['output']:
+                outdata = None
             else:
-                def listener(log):
-                    r = self._translator.listen(log, noprint=True)
-                    if r:
-                        log_listener(r)
-            _state.block.log_listeners.append(listener)
+                outdata = self.translator.decode(function_name, result['output'])
+                outdata = outdata[0] if len(outdata) == 1 else outdata
 
-        def kall_factory(f):
+            if kwargs.get('profiling', ''):
+                return dict_with(result, output=outdata)
 
-            def kall(*args, **kwargs):
-                o = _state._send(kwargs.get('sender', k0),
-                                 self.address,
-                                 kwargs.get('value', 0),
-                                 self._translator.encode(f, args),
-                                 **dict_without(kwargs, 'sender', 'value', 'output'))
-                # Compute output data
-                if kwargs.get('output', '') == 'raw':
-                    outdata = o['output']
-                elif not o['output']:
-                    outdata = None
-                else:
-                    outdata = self._translator.decode(f, o['output'])
-                    outdata = outdata[0] if len(outdata) == 1 else outdata
-                # Format output
-                if kwargs.get('profiling', ''):
-                    return dict_with(o, output=outdata)
-                else:
-                    return outdata
-            return kall
-
-        for f in self._translator.function_data:
-            vars(self)[f] = kall_factory(f)
+            return outdata
+        return kall
 
 
-class state():
+class state(object):
 
     def __init__(self, num_accounts=len(keys)):
         self.temp_data_dir = tempfile.mkdtemp()
         self.db = db.EphemDB()
         self.env = Env(self.db)
+        self.last_tx = None
 
-        o = {}
+        initial_balances = {}
+
         for i in range(num_accounts):
-            o[accounts[i]] = {"wei": 10 ** 24}
+            account = accounts[i]
+            initial_balances[account] = {'wei': 10 ** 24}
+
         for i in range(1, 5):
-            o[u.int_to_addr(i)] = {"wei": 1}
-        self.block = b.genesis(self.env, start_alloc=o)
+            address = int_to_addr(i)
+            initial_balances[address] = {'wei': 1}
+
+        self.block = blocks.genesis(
+            self.env,
+            start_alloc=initial_balances,
+        )
         self.blocks = [self.block]
         self.block.timestamp = 1410973349
-        self.block.coinbase = a0
+        self.block.coinbase = DEFAULT_ACCOUNT
         self.block.gas_limit = 10 ** 9
 
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
 
-    def contract(self, code, sender=k0, endowment=0, language='serpent', gas=None):
+    def contract(self, sourcecode, sender=DEFAULT_KEY, endowment=0,  # pylint: disable=too-many-arguments
+                 language='serpent', libraries=None, path=None,
+                 constructor_call=None, **kwargs):
         if language not in languages:
             languages[language] = __import__(language)
-        language = languages[language]
-        evm = language.compile(code)
-        o = self.evm(evm, sender, endowment)
-        assert len(self.block.get_code(o)), "Contract code empty"
-        return o
 
-    def abi_contract(self, code, sender=k0, endowment=0, language='serpent',
-                     gas=None, log_listener=None, listen=True, **kwargs):
-        if language not in languages:
-            languages[language] = __import__(language)
-        language = languages[language]
-        evm = language.compile(code, **kwargs)
-        address = self.evm(evm, sender, endowment, gas)
-        assert len(self.block.get_code(address)), "Contract code empty"
-        _abi = language.mk_full_signature(code, **kwargs)
-        return ABIContract(self, _abi, address, listen=listen, log_listener=log_listener)
+        compiler = languages[language]
+        bytecode = compiler.compile(sourcecode, path=path, libraries=libraries, **kwargs)
+
+        if constructor_call is not None:
+            bytecode += constructor_call
+
+        address = self.evm(bytecode, sender, endowment)
+
+        if len(self.block.get_code(address)) == 0:
+            raise Exception('Contract code empty')
+
+        return address
+
+    def abi_contract(self, sourcecode, sender=DEFAULT_KEY, endowment=0,  # pylint: disable=too-many-arguments
+                     language='serpent', log_listener=None, listen=True,
+                     libraries=None, path=None, constructor_parameters=None,
+                     **kwargs):
+
+        compiler = languages[language]
+        contract_interface = compiler.mk_full_signature(sourcecode, path=path, **kwargs)
+        translator = ContractTranslator(contract_interface)
+
+        encoded_parameters = None
+        if constructor_parameters is not None:
+            encoded_parameters = translator.encode_constructor_arguments(constructor_parameters)
+
+        address = self.contract(
+            sourcecode,
+            sender,
+            endowment,
+            language,
+            libraries,
+            path,
+            constructor_call=encoded_parameters,
+            **kwargs
+        )
+
+        return ABIContract(
+            self,
+            translator,
+            address,
+            listen=listen,
+            log_listener=log_listener,
+        )
 
     def clear_listeners(self):
         while len(self.block.log_listeners):
             self.block.log_listeners.pop()
 
-    def evm(self, evm, sender=k0, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        tx = t.contract(sendnonce, gas_price, gas_limit, endowment, evm)
-        tx.sign(sender)
+    def evm(self, code, sender=DEFAULT_KEY, endowment=0, gas=None):
+        sendnonce = self.block.get_nonce(privtoaddr(sender))
+
+        transaction = transactions.contract(sendnonce, gas_price, gas_limit, endowment, code)
+        transaction.sign(sender)
+
         if gas is not None:
-            tx.startgas = gas
-        # print('starting', tx.startgas, gas_limit)
-        (s, a) = pb.apply_transaction(self.block, tx)
-        if not s:
+            transaction.startgas = gas
+
+        (success, output) = processblock.apply_transaction(self.block, transaction)
+
+        if not success:
             raise ContractCreationFailed()
-        return a
 
-    def call(*args, **kwargs):
-        raise Exception("Call deprecated. Please use the abi_contract "
-                        "mechanism or send(sender, to, value, "
-                        "data) directly, using the abi module to generate "
-                        "data if needed")
+        return output
 
-    def _send(self, sender, to, value, evmdata='', output=None,
-              funid=None, abi=None, profiling=0):
+    def call(*args, **kwargs):  # pylint: disable=unused-argument,no-method-argument
+        raise Exception(
+            'Call deprecated. Please use the abi_contract mechanism or '
+            'send(sender, to, value, data) directly, using the abi module to '
+            'generate data if needed.'
+        )
+
+    def _send(self, sender, to, value, evmdata='', funid=None, abi=None,  # pylint: disable=too-many-arguments
+              profiling=0):
+        # pylint: disable=too-many-locals
+
         if funid is not None or abi is not None:
-            raise Exception("Send with funid+abi is deprecated. Please use"
-                            " the abi_contract mechanism")
-        tm, g = time.time(), self.block.gas_used
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
-        self.last_tx = tx
-        tx.sign(sender)
+            raise Exception(
+                'Send with funid+abi is deprecated. Please use the abi_contract mechanism'
+            )
+
+        start_time = time.time()
+        gas_used = self.block.gas_used
+
+        sendnonce = self.block.get_nonce(privtoaddr(sender))
+        transaction = transactions.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
+        self.last_tx = transaction
+        transaction.sign(sender)
         recorder = None
+
         if profiling > 1:
-            recorder = LogRecorder(disable_other_handlers=True, log_config=TRACE_LVL_MAP[3])
+            recorder = LogRecorder(
+                disable_other_handlers=True,
+                log_config=TRACE_LVL_MAP[3],
+            )
+
         try:
-            (s, o) = pb.apply_transaction(self.block, tx)
-            if not s:
+            (success, output) = processblock.apply_transaction(self.block, transaction)
+
+            if not success:
                 raise TransactionFailed()
-            out = {"output": o}
+
+            out = {
+                'output': output,
+            }
+
             if profiling > 0:
-                zero_bytes = tx.data.count(ascii_chr(0))
-                non_zero_bytes = len(tx.data) - zero_bytes
-                intrinsic_gas_used = opcodes.GTXCOST + \
-                    opcodes.GTXDATAZERO * zero_bytes + \
-                    opcodes.GTXDATANONZERO * non_zero_bytes
-                ntm, ng = time.time(), self.block.gas_used
-                out["time"] = ntm - tm
-                out["gas"] = ng - g - intrinsic_gas_used
+                zero_bytes_count = transaction.data.count(ascii_chr(0))
+                non_zero_bytes_count = len(transaction.data) - zero_bytes_count
+
+                zero_bytes_cost = opcodes.GTXDATAZERO * zero_bytes_count
+                nonzero_bytes_cost = opcodes.GTXDATANONZERO * non_zero_bytes_count
+
+                base_gas_cost = opcodes.GTXCOST
+                intrinsic_gas_used = base_gas_cost + zero_bytes_cost + nonzero_bytes_cost
+
+                out['time'] = time.time() - start_time
+                out['gas'] = self.block.gas_used - gas_used - intrinsic_gas_used
+
             if profiling > 1:
                 trace = recorder.pop_records()
-                ops = [x['op'] for x in trace if x['event'] == 'vm']
+                vm_operations = [
+                    event['op']
+                    for event in trace
+                    if event['event'] == 'vm'
+                ]
                 opdict = {}
-                for op in ops:
-                    opdict[op] = opdict.get(op, 0) + 1
-                out["ops"] = opdict
+                for operation in vm_operations:
+                    opdict[operation] = opdict.get(operation, 0) + 1
+                out['ops'] = opdict
+
             return out
         finally:
             # ensure LogRecorder has been disabled
@@ -242,58 +328,75 @@ class state():
     def send(self, *args, **kwargs):
         return self._send(*args, **kwargs)["output"]
 
-    def mkspv(self, sender, to, value, data=[], funid=None, abi=None):
-        if not HAS_SERPENT:
-            raise RuntimeError("ethereum-serpent package not installed")
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        if funid is not None:
-            evmdata = serpent.encode_abi(funid, *abi)
-        else:
-            evmdata = serpent.encode_datalist(*data)
-        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
-        self.last_tx = tx
-        tx.sign(sender)
-        return spv.mk_transaction_spv_proof(self.block, tx)
+    def mkspv(self, sender, to, value, data=None, funid=None, abi=None):  # pylint: disable=too-many-arguments
+        # TODO: rewrite the method without using encode_abi/encode_datalist
+        # since both function were removed.
+        raise NotImplementedError()
 
-    def verifyspv(self, sender, to, value, data=[], funid=None, abi=None, proof=[]):
-        if not HAS_SERPENT:
-            raise RuntimeError("ethereum-serpent package not installed")
-        sendnonce = self.block.get_nonce(u.privtoaddr(sender))
-        if funid is not None:
-            evmdata = serpent.encode_abi(funid, *abi)
-        else:
-            evmdata = serpent.encode_datalist(*data)
-        tx = t.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
-        self.last_tx = tx
-        tx.sign(sender)
-        return spv.verify_transaction_spv_proof(self.block, tx, proof)
+        # if not HAS_SERPENT:
+        #     raise RuntimeError('ethereum-serpent package not installed')
+        # data = data or list()
+        # sendnonce = self.block.get_nonce(privtoaddr(sender))
+        # if funid is not None:
+        #     evmdata = serpent.encode_abi(funid, *abi)
+        # else:
+        #     evmdata = serpent.encode_datalist(*data)
+        # transaction = transactions.Transaction(sendnonce, gas_price, gas_limit,
+        #                                        to, value, evmdata)
+        # self.last_tx = transaction
+        # transaction.sign(sender)
+        # return spv.mk_transaction_spv_proof(self.block, transaction)
 
-    def trace(self, sender, to, value, data=[]):
+    def verifyspv(self, sender, to, value, data=None, funid=None, abi=None, proof=None):  # pylint: disable=too-many-arguments
+        # TODO: rewrite the method without using encode_abi/encode_datalist
+        # since both function were removed.
+        raise NotImplementedError()
+
+        # if not HAS_SERPENT:
+        #     raise RuntimeError('ethereum-serpent package not installed')
+        # data = data or list()
+        # proof = proof or list()
+        # sendnonce = self.block.get_nonce(privtoaddr(sender))
+        # if funid is not None:
+        #     evmdata = serpent.encode_abi(funid, *abi)
+        # else:
+        #     evmdata = serpent.encode_datalist(*data)
+        # transaction = transactions.Transaction(sendnonce, gas_price,
+        #                                        gas_limit, to, value, evmdata)
+        # self.last_tx = transaction
+        # transaction.sign(sender)
+        # return spv.verify_transaction_spv_proof(self.block, transaction, proof)
+
+    def trace(self, sender, to, value, data=None):
         # collect log events (independent of loglevel filters)
+        data = data or list()
         recorder = LogRecorder()
         self.send(sender, to, value, data)
         return recorder.pop_records()
 
-    def mine(self, n=1, coinbase=a0):
-        for i in range(n):
+    def mine(self, number_of_blocks=1, coinbase=DEFAULT_ACCOUNT):
+        for _ in range(number_of_blocks):
             self.block.finalize()
             self.block.commit_state()
             self.db.put(self.block.hash, rlp.encode(self.block))
-            t = self.block.timestamp + 6 + rand() % 12
-            x = b.Block.init_from_parent(self.block, coinbase, timestamp=t)
-            self.block = x
+            timestamp = self.block.timestamp + 6 + rand() % 12
+
+            block = blocks.Block.init_from_parent(
+                self.block,
+                coinbase,
+                timestamp=timestamp,
+            )
+
+            self.block = block
             self.blocks.append(self.block)
 
     def snapshot(self):
         return rlp.encode(self.block)
 
     def revert(self, data):
-        self.block = rlp.decode(data, b.Block, env=self.env)
+        self.block = rlp.decode(data, blocks.Block, env=self.env)
+        # pylint: disable=protected-access
         self.block._mutable = True
         self.block.header._mutable = True
         self.block._cached_rlp = None
         self.block.header._cached_rlp = None
-
-
-gas_limit = 3141592
-gas_price = 1

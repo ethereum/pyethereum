@@ -49,7 +49,7 @@ sixten_code =\
 def test_sixten():
     s = tester.state()
     c = decode_hex('1231231231231234564564564564561231231231')
-    s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
+    s.block.set_code(c, serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
 
@@ -1526,7 +1526,7 @@ def test_abi_logging():
     s = tester.state()
     c = s.abi_contract(abi_logging_code)
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    s.block.log_listeners.append(lambda x: o.append(c.translator.listen(x)))
     c.test_rabbit(3)
     assert o == [{"_event_type": b"rabbit", "x": 3}]
     o.pop()
@@ -1627,7 +1627,7 @@ def test_string_logging():
     s = tester.state()
     c = s.abi_contract(string_logging_code)
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    s.block.log_listeners.append(lambda x: o.append(c.translator.listen(x)))
     c.moo()
     assert o == [{"_event_type": "foo", "x": "bob", "__hash_x": utils.sha3("bob"),
                   "y": "cow", "__hash_y": utils.sha3("cow"), "z": "dog",
