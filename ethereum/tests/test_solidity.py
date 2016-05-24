@@ -76,6 +76,31 @@ def test_interop():
     assert c2.main(c1.address) == 10
 
 
+CONSTRUCTOR_CONTRACT = '''
+contract testme {
+    uint value;
+    function testme(uint a) {
+        value = a;
+    }
+    function getValue() returns (uint) {
+        return value;
+    }
+}
+'''
+
+
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
+def test_constructor():
+    state = tester.state()
+
+    contract = state.abi_contract(
+        CONSTRUCTOR_CONTRACT,
+        language='solidity',
+        constructor_parameters=(2, ),
+    )
+    assert contract.getValue() == 2  # pylint: disable=no-member
+
+
 compile_rich_contract = """
 contract contract_add {
     function add7(uint a) returns(uint d) { return a + 7; }

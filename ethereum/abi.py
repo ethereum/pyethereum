@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 import ast
 import re
+import warnings
 
 import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
 from rlp.utils import decode_hex, encode_hex
@@ -171,7 +172,7 @@ class ContractTranslator(object):
             else:
                 raise ValueError('Unknown type {}'.format(description['type']))
 
-    def encode(self, function_name, args):
+    def encode_function_call(self, function_name, args):
         """ Return the encoded function call.
 
         Args:
@@ -194,6 +195,10 @@ class ContractTranslator(object):
         arguments = encode_abi(description['encode_types'], args)
 
         return function_selector + arguments
+
+    def encode(self, function_name, args):
+        warnings.warn('encode is deprecated, please use encode_function_call', DeprecationWarning)
+        return self.encode_function_call(function_name, args)
 
     def encode_constructor_arguments(self, args):
         """ Return the encoded constructor call. """

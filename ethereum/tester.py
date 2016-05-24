@@ -201,6 +201,7 @@ class state(object):
                      language='serpent', log_listener=None, listen=True,
                      libraries=None, path=None, constructor_parameters=None,
                      **kwargs):
+        # pylint: disable=too-many-locals
 
         compiler = languages[language]
         contract_interface = compiler.mk_full_signature(sourcecode, path=path, **kwargs)
