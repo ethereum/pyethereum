@@ -149,3 +149,36 @@ def test_solidity_compile_rich():
         for defn
         in contract_info['contract_sub']['info']['abiDefinition']
     } == {'subtract7', 'subtract42'}
+
+
+@pytest.mark.skipif(get_solidity() is None, reason="'solc' compiler not available")
+def test_abi_contract(tmpdir):
+    one_contract = """
+    contract foo {
+        function seven() returns (int256 y) {
+            y = 7;
+        }
+        function mul2(int256 x) returns (int256 y) {
+            y = x * 2;
+        }
+    }
+    """
+
+    two_contracts = one_contract + """
+    contract baz {
+        function echo(address a) returns (address b) {
+            b = a;
+            return b;
+        }
+        function eight() returns (int256 y) {
+            y = 8;
+        }
+    }
+    """
+
+    state = tester.state()
+
+    contract = state.abi_contract(one_contract, language='solidity')
+    assert contract.seven() == 7
+    assert contract.mul2(2) == 4
+    assert contract.mul2(-2) == -4
