@@ -1353,15 +1353,22 @@ def get_block(env, blockhash):
     return CachedBlock.create_cached(blk)
 
 
-# def has_block(blockhash):
-#    return blockhash in db.DB(utils.get_db_path())
-
-
 def genesis(env, **kwargs):
+    """ Build the genesis block. """
     assert isinstance(env, Env)
-    """Build the genesis block."""
-    allowed_args = set(['start_alloc', 'prevhash', 'coinbase', 'difficulty', 'gas_limit',
-                        'timestamp', 'extra_data', 'mixhash', 'nonce'])
+
+    allowed_args = set([
+        'start_alloc',
+        'prevhash',
+        'coinbase',
+        'difficulty',
+        'gas_limit',
+        'timestamp',
+        'extra_data',
+        'mixhash',
+        'nonce',
+    ])
+
     assert set(kwargs.keys()).issubset(allowed_args)
 
     # https://ethereum.etherpad.mozilla.org/11
