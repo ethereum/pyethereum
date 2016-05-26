@@ -66,7 +66,12 @@ def solc_parse_output(compiler_output):
     if 'bin' in result.values()[0]:
         for value in result.values():
             value['bin_hex'] = value['bin']
-            value['bin'] = value['bin_hex'].decode('hex')
+
+            # decoding can fail if the compiled contract has unresolved symbols
+            try:
+                value['bin'] = value['bin_hex'].decode('hex')
+            except TypeError:
+                pass
 
     for json_data in ('abi', 'devdoc', 'userdoc'):
         # the values in the output can be configured through the
@@ -90,10 +95,104 @@ def compiler_version():
         return match.group(1)
 
 
-def solidity_names(code):
+def solidity_names(code):  # pylint: disable=too-many-branches
     """ Return the library and contract names in order of appearence. """
-    # the special sequence \s is equivalent to the set [ \t\n\r\f\v]
-    return re.findall(r'(contract|library)\s+([a-zA-Z][a-zA-Z0-9]*)', code, re.MULTILINE)
+    names = []
+    in_string = None
+    backslash = False
+    comment = None
+
+    # "parse" the code by hand to handle the corner cases:
+    #  - the contract or library can be inside a comment or string
+    #  - multiline comments
+    #  - the contract and library keywords could not be at the start of the line
+    for pos, char in enumerate(code):
+        if in_string:
+            if not backslash and in_string == char:
+                in_string = None
+                backslash = False
+
+            if char == '\\':  # pylint: disable=simplifiable-if-statement
+                backslash = True
+            else:
+                backslash = False
+
+        elif comment == '//':
+            if char in ('\n', '\r'):
+                comment = None
+
+        elif comment == '/*':
+            if char == '*' and code[pos + 1] == '/':
+                comment = None
+
+        else:
+            if char == '"' or char == "'":
+                in_string = char
+
+            if char == '/':
+                if code[pos + 1] == '/':
+                    comment = '//'
+                if code[pos + 1] == '*':
+                    comment = '/*'
+
+            if char == 'c' and code[pos: pos + 8] == 'contract':
+                result = re.match('^contract[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+
+                if result:
+                    names.append(('contract', result.groups()[0]))
+
+            if char == 'l' and code[pos: pos + 7] == 'library':
+                result = re.match('^library[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+
+                if result:
+                    names.append(('library', result.groups()[0]))
+
+    return names
+
+
+def solidity_library_symbol(library_name):
+    """ Return the symbol used in the bytecode to represent the `library_name`. """
+    # the symbol is always 40 characters in length with the minimum of two
+    # leading and trailing underscores
+    length = min(len(library_name), 36)
+    symbol = bytearray('_' * 40)
+    symbol[2:length] = library_name[:length]
+    return str(symbol)
+
+
+def solidity_resolve_address(hex_code, library_name, library_address):
+    """ Change the bytecode to use the given library address.
+
+    Args:
+        hex_code (bin): The bytecode encoded in hexadecimal.
+        library_name (str): The library that will be resolved.
+        library_address (str): The address of the library.
+
+    Returns:
+        bin: The bytecode encoded in hexadecimal with the library references
+            resolved.
+    """
+    symbol = solidity_library_symbol(library_name)
+    return hex_code.replace(symbol, library_address)
+
+
+def solidity_unresolved_symbols(hex_code):
+    """ Return the unresolved symbols contained in the `hex_code`. """
+    iterator = iter(hex_code)
+    symbol_names = []
+
+    for char in iterator:
+        if char == '_':
+            symbol = char
+            count = 1
+
+            while count < 40:
+                symbol += next(iterator)
+                count += 1
+
+            symbol_names.append(symbol)
+
+    return set(symbol_names)
 
 
 def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
@@ -138,8 +237,7 @@ def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize
 
     all_contract_names = [
         name
-        for kind, name in all_names
-        # if kind == 'contract'
+        for _, name in all_names
     ]
 
     last_contract = all_contract_names[-1]
