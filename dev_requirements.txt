@@ -3,4 +3,5 @@ coveralls
 pytest>=2.9.0
 pytest-catchlog==1.2.2
 pytest-timeout==1.0.0
+hypothesis>=3.4.0
 https://github.com/ethereum/serpent/tarball/develop
