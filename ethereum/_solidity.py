@@ -46,7 +46,7 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
     if optimize:
         args.append('--optmize')
 
-    if libraries is not None:
+    if libraries is not None and len(libraries):
         addresses = [
             '{name}:{address}'.format(name=name, address=address)
             for name, address in libraries.items()
@@ -155,12 +155,17 @@ def solidity_library_symbol(library_name):
     # the symbol is always 40 characters in length with the minimum of two
     # leading and trailing underscores
     length = min(len(library_name), 36)
-    symbol = bytearray('_' * 40)
-    symbol[2:length] = library_name[:length]
-    return str(symbol)
+
+    library_piece = library_name[:length]
+    hold_piece = '_' * (36 - length)
+
+    return '__{library}{hold}__'.format(
+        library=library_piece,
+        hold=hold_piece,
+    )
 
 
-def solidity_resolve_address(hex_code, library_name, library_address):
+def solidity_resolve_address(hex_code, library_symbol, library_address):
     """ Change the bytecode to use the given library address.
 
     Args:
@@ -172,12 +177,32 @@ def solidity_resolve_address(hex_code, library_name, library_address):
         bin: The bytecode encoded in hexadecimal with the library references
             resolved.
     """
-    symbol = solidity_library_symbol(library_name)
-    return hex_code.replace(symbol, library_address)
+    return hex_code.replace(library_symbol, library_address)
+
+
+def solidity_resolve_symbols(hex_code, libraries):
+    symbol_address = {
+        solidity_library_symbol(library_name): address
+        for library_name, address in libraries.items()
+    }
+
+    for unresolved in solidity_unresolved_symbols(hex_code):
+        address = symbol_address[unresolved]
+        hex_code = solidity_resolve_address(hex_code, unresolved, address)
+
+    return hex_code
 
 
 def solidity_unresolved_symbols(hex_code):
-    """ Return the unresolved symbols contained in the `hex_code`. """
+    """ Return the unresolved symbols contained in the `hex_code`.
+
+    Note:
+        The binary representation should not be provided since this function
+        relies on the fact that the '_' is invalid in hex encoding.
+
+    Args:
+        hex_code (str): The bytecode encoded as hexadecimal.
+    """
     iterator = iter(hex_code)
     symbol_names = []
 
