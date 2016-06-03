@@ -5,6 +5,6 @@ repoze.lru
 pbkdf2
 pycryptodome>=3.3.1
 scrypt
-rlp==0.4.4
+rlp>=0.4.4
 https://github.com/ethereum/ethash/tarball/master
 git+https://github.com/ulope/secp256k1-py#egg=secp256k1
