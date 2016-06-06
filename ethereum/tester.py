@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import time
 import types
+import warnings
 
 import rlp
 from rlp.utils import ascii_chr
@@ -375,7 +376,11 @@ class state(object):
         self.send(sender, to, value, data)
         return recorder.pop_records()
 
-    def mine(self, number_of_blocks=1, coinbase=DEFAULT_ACCOUNT):
+    def mine(self, number_of_blocks=1, coinbase=DEFAULT_ACCOUNT, **kwargs):
+        if 'n' in kwargs: # compatibility 
+            number_of_blocks = kwargs['n']
+            warnings.warn('The argument \'n\' is deprecated and its support will be removed '\
+                'in the future versions. Please use the name \'number_of_blocks\'.')
         for _ in range(number_of_blocks):
             self.block.finalize()
             self.block.commit_state()
