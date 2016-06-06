@@ -177,6 +177,17 @@ def solidity_resolve_address(hex_code, library_symbol, library_address):
         bin: The bytecode encoded in hexadecimal with the library references
             resolved.
     """
+    if library_address.startswith('0x'):
+        raise ValueError('Address should not contain the 0x prefix')
+
+    try:
+        _ = library_address.decode('hex')
+    except TypeError:
+        raise ValueError('library_address contains invalid characters, it must be hex encoded.')
+
+    if len(library_symbol) != 40 or len(library_address) != 40:
+        raise ValueError('Address with wrong length')
+
     return hex_code.replace(library_symbol, library_address)
 
 
@@ -307,8 +318,7 @@ class Solc(object):
         all_names = solidity_names(sourcecode)
         all_contract_names = [
             name
-            for kind, name in all_names
-            if kind == 'contract'
+            for _, name in all_names
         ]
         last_contract = all_contract_names[-1]
 
