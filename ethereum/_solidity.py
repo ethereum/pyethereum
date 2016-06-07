@@ -1,7 +1,8 @@
 # -*- coding: utf8 -*-
+import os
 import re
 import subprocess
-import os
+import warnings
 
 import yaml
 
@@ -236,10 +237,9 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
 
     Args:
         filepath (str): The path to the contract source code.
-        libraries (dict): A dictionary mapping library name to address.
-        combined (str: The flags passed to the solidity compiler to defined
-            what output should be used.
-        optimize (bool): Flag to set up compiler optimization.
+        libraries (dict): A dictionary mapping library name to it's address.
+        combined (str): The argument for solc's --combined-json.
+        optimize (bool): Enable/disables compiler optimization.
 
     Returns:
         dict: A mapping from the contract name to it's binary.
@@ -306,6 +306,8 @@ class Solc(object):
 
     @staticmethod
     def _code_or_path(sourcecode, path, contract_name, libraries, combined):
+        warnings.warn('solc_wrapper is deprecated, please use the functions compile_file or compile_code')
+
         if sourcecode and path:
             raise ValueError('sourcecode and path are mutually exclusive.')
 
@@ -346,17 +348,20 @@ class Solc(object):
         @param path: absolute path to solidity-file. Note: code & path are exclusive!
         """
 
-        contracts = cls._code_or_path(
-            sourcecode=code,
-            path=path,
-            contract_name=None,
-            libraries=None,
-            combined='abi,bin,devdoc,userdoc',
-        )
+        if code and path:
+            raise ValueError('sourcecode and path are mutually exclusive.')
 
         if path:
+            contracts = compile_file(path)
+
             with open(path) as handler:
                 code = handler.read()
+
+        elif code:
+            contracts = compile_code(code)
+
+        else:
+            raise ValueError('either code or path needs to be supplied.')
 
         sorted_contracts = []
         for name in solidity_names(code):
@@ -369,7 +374,7 @@ class Solc(object):
 
         return {
             contract_name: {
-                'code': '0x' + contract.get('bin'),
+                'code': '0x' + contract.get('bin_hex'),
                 'info': {
                     'abiDefinition': contract.get('abi'),
                     'compilerVersion': cls.compiler_version(),
