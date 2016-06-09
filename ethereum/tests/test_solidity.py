@@ -1,4 +1,5 @@
 # -*- coding: utf8 -*-
+import os
 from os import path
 
 import pytest
@@ -9,7 +10,12 @@ from ethereum import _solidity
 from ethereum._solidity import get_solidity
 
 SOLIDITY_AVAILABLE = get_solidity() is not None
+TRAVIS = os.environ['TRAVIS'] == 'true'
+VERSION = None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
+
+if SOLIDITY_AVAILABLE:
+    VERSION = _solidity.compiler_version().split('-')[0]
 
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
@@ -68,6 +74,26 @@ def test_library_from_code():
     # pylint: disable=no-member
     assert library.seven() == 7
     assert contract.test() == 7
+
+
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.xfail(TRAVIS, reason='solc compiler not available')
+def test_optimize():
+    compiler_output = _solidity.compile_file(path.join(CONTRACTS_DIR, 'seven_library.sol'), optimize=False)
+    unoptimized = (
+        '6060604052606e8060106000396000f36503047dab89025060606040526000357c0100000000000000'
+        '0000000000000000000000000000000000000000009004806378710d3714604157603d565b6007565b'
+        '604c60048050506062565b6040518082815260200191505060405180910390f35b6000600790508050'
+        '5b9056'
+    )
+    assert compiler_output['SevenLibrary']['bin_hex'] == unoptimized
+
+    compiler_output = _solidity.compile_file(path.join(CONTRACTS_DIR, 'seven_library.sol'), optimize=True)
+    optimized = (
+        '606060405260308060106000396000f36503047dab890250606060405260e060020a60003504637871'
+        '0d3781146024575b6007565b60076060908152602090f3'
+    )
+    assert compiler_output['SevenLibrary']['bin_hex'] == optimized
 
 
 def test_names():

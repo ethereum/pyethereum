@@ -38,14 +38,14 @@ def get_solidity():
 
 
 def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
-    """ Build the arguments to call the solc binary. """
+    """ Return the arguments to call the solc binary. """
     args = [
         '--combined-json', combined,
         '--add-std',
     ]
 
     if optimize:
-        args.append('--optmize')
+        args.append('--optimize')
 
     if libraries is not None and len(libraries):
         addresses = [
@@ -61,7 +61,17 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
 
 
 def solc_parse_output(compiler_output):
-    """ Parses the compiler output. """
+    """ Return the compiler output parsed.
+
+    Note:
+        This function will try to decode the field `bin`, this might fail if
+        not all libraries addresses are supplied, in the failure case the value
+        will be a string, not binary.
+
+    Return:
+        dict: The keys are the contract/library names and the value is the
+        parsed output from the compiler.
+    """
     result = yaml.safe_load(compiler_output)['contracts']
 
     if 'bin' in result.values()[0]:
@@ -97,7 +107,9 @@ def compiler_version():
 
 
 def solidity_names(code):  # pylint: disable=too-many-branches
-    """ Return the library and contract names in order of appearence. """
+    """ Return the library and contract names in order of appearence in the
+    `code`.
+    """
     names = []
     in_string = None
     backslash = False
@@ -167,7 +179,7 @@ def solidity_library_symbol(library_name):
 
 
 def solidity_resolve_address(hex_code, library_symbol, library_address):
-    """ Change the bytecode to use the given library address.
+    """ Change the `hex_code` to use the given library address.
 
     Args:
         hex_code (bin): The bytecode encoded in hexadecimal.
@@ -193,6 +205,12 @@ def solidity_resolve_address(hex_code, library_symbol, library_address):
 
 
 def solidity_resolve_symbols(hex_code, libraries):
+    """ Resolve all the symbols in the `hex_code`
+
+    Args:
+        hex_code (bin): The EVM bytecode in the hexadecimal format.
+        libraries (dict): A dictionary mapping library name -> library address.
+    """
     symbol_address = {
         solidity_library_symbol(library_name): address
         for library_name, address in libraries.items()
@@ -206,7 +224,7 @@ def solidity_resolve_symbols(hex_code, libraries):
 
 
 def solidity_unresolved_symbols(hex_code):
-    """ Return the unresolved symbols contained in the `hex_code`.
+    """ Return all the unresolved symbols contained in the `hex_code`.
 
     Note:
         The binary representation should not be provided since this function
@@ -233,7 +251,7 @@ def solidity_unresolved_symbols(hex_code):
 
 
 def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
-    """ Return the compile contract code.
+    """ Compile the `filepath` and return the compiler output parsed.
 
     Args:
         filepath (str): The path to the contract source code.
@@ -242,7 +260,8 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
         optimize (bool): Enable/disables compiler optimization.
 
     Returns:
-        dict: A mapping from the contract name to it's binary.
+        dict: A mapping from the contract name to a dictionary containing it's
+            data. (the values depend on the `combined` flag).
     """
 
     workdir, filename = os.path.split(filepath)
@@ -257,6 +276,11 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
 
 
 def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True):
+    """ Compile `filepath` and return the `contract_name` data.
+
+    Return:
+        dict: The data in the resulting dictionary depends on the `combined` argument.
+    """
     all_contracts = compile_file(
         filepath,
         libraries=libraries,
@@ -268,6 +292,13 @@ def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi'
 
 
 def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True):
+    """ Compile `filepath` and return the data from the latest contract in the
+    file (in order of appearence).
+
+    Return:
+        dict: The data in the resulting dictionary depends on the `combined` argument.
+    """
+
     with open(filepath) as handler:
         all_names = solidity_names(handler.read())
 
@@ -329,13 +360,13 @@ class Solc(object):
 
     @classmethod
     def compile(cls, code, path=None, libraries=None, contract_name=''):
-        """ Return the binary of last contract in code. """
+        """ Return the EVM bytecode of lastest contract in `code`. """
         result = cls._code_or_path(code, path, contract_name, libraries, 'bin')
         return result['bin']
 
     @classmethod
     def mk_full_signature(cls, code, path=None, libraries=None, contract_name=''):
-        "returns signature of last contract in code"
+        """ Return the signature of lastest contract in `code`. """
 
         result = cls._code_or_path(code, path, contract_name, libraries, 'abi')
         return result['abi']
@@ -370,7 +401,7 @@ class Solc(object):
 
     @classmethod
     def compile_rich(cls, code, path=None):
-        """full format as returned by jsonrpc"""
+        """ Full format as returned by JSON RPC API. """
 
         return {
             contract_name: {
