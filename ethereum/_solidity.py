@@ -45,7 +45,7 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
     ]
 
     if optimize:
-        args.append('--optmize')
+        args.append('--optimize')
 
     if libraries is not None and len(libraries):
         addresses = [
