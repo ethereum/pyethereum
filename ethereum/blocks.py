@@ -6,6 +6,7 @@ dump_block_on_failed_verification = False
 import time
 from itertools import count
 import sys
+from collections import Iterable
 import rlp
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex
@@ -38,8 +39,21 @@ class lazy_encode(object):
     def __init__(self, data):
         self.data = data
 
+    def encode_entry(self, entry):
+        assert isinstance(entry, Iterable)
+        if len(entry) == 3:
+            name, addr, v = entry
+            if name == 'code':
+                return [name, encode_hex(addr), encode_hex(v)]
+            else:
+                return [name, encode_hex(addr), v]
+        elif len(entry) == 4:
+            name, addr, k, v = entry
+            return [name, encode_hex(addr), encode_hex(k), encode_hex(v)]
+        assert False, ("unexpected entry format", entry)
+
     def __repr__(self):
-        return repr([[k, encode_hex(a), v if k != 'code' else encode_hex(v)] for k, a, v in self.data])
+        return repr([self.encode_entry(entry) for entry in self.data])
 
     def __str__(self):
         return str(repr(self))
