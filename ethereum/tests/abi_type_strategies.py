@@ -10,10 +10,6 @@ MAX_LIST_SIZE = 8
 MIN_LIST_SIZE = 0
 
 
-def listify(value):
-    return [value]
-
-
 uint_raw_strats = [
     ('uint' + str(sub), st.integers(min_value=0, max_value=2**sub - 1))
     for sub in range(8, 257, 8)
