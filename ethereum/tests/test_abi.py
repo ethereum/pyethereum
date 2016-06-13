@@ -1,7 +1,5 @@
-import itertools
 import pytest
 from hypothesis import given
-import hypothesis.strategies as st
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger
 import ethereum.abi as abi
@@ -13,13 +11,6 @@ from .abi_type_strategies import all_abi_strats
 logger = get_logger()
 
 
-#@given(st.one_of(address_strat, *itertools.chain(
-#    uint_strats,
-#    int_strats,
-#    bytes_strats,
-#    unsized_list_strats,
-#    sized_list_strats,
-#)))
 @given(all_abi_strats)
 def test_reversability(types_and_values):
     """
