@@ -10,7 +10,7 @@ from ethereum import bloom
 from ethereum import opcodes
 from ethereum import utils
 from ethereum.slogging import get_logger
-from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int
+from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int, safe_ord
 
 
 log = get_logger('eth.chain.tx')
@@ -126,8 +126,8 @@ class Transaction(rlp.Serializable):
         signature = pk.ecdsa_recoverable_serialize(
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
         )
-        signature = signature[0] + chr(signature[1])
-        self.v = ord(signature[64]) + 27
+        signature = signature[0] + ascii_chr(signature[1])
+        self.v = safe_ord(signature[64]) + 27
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])
 
