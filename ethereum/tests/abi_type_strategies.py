@@ -6,7 +6,7 @@ import hypothesis.strategies as st
 strat_int256 = st.integers(min_value=-1 * 2**255, max_value=2**255 - 1)
 strat_uint256 = st.integers(min_value=0, max_value=2**256 - 1)
 
-MAX_LIST_SIZE = 3
+MAX_LIST_SIZE = 8
 MIN_LIST_SIZE = 0
 
 
