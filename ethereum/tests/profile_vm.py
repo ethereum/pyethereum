@@ -3,12 +3,17 @@ import sys
 import ethereum.testutils as testutils
 import cProfile
 import pstats
-import StringIO
 import time
 from rlp.utils import encode_hex
-from ethereum.utils import sha3
+from ethereum.utils import sha3, to_string
 from ethereum.slogging import get_logger
 logger = get_logger()
+
+
+if sys.version_info.major == 2:
+    from io import BytesIO as StringIO
+else:
+    from io import StringIO
 
 
 def do_test_vm(filename, testname=None, testdata=None, limit=99999999, profiler=None):
@@ -31,7 +36,7 @@ if __name__ == '__main__':
                 if i == num:
                     break
                 do_test_vm(filename, testname, testdata, profiler=profiler)
-                seen += str(testname)
+                seen += to_string(testname)
                 i += 1
         print('ran %d tests' % i)
         print('test key', encode_hex(sha3(seen)))
@@ -39,7 +44,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         pr = cProfile.Profile()
         run(pr)
-        s = StringIO.StringIO()
+        s = StringIO()
         sortby = 'tottime'
         ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
         ps.print_stats(50)
