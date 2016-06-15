@@ -1,7 +1,7 @@
 import sys
 import rlp
-from utils import int_to_big_endian, big_endian_to_int, safe_ord
-import db
+from .utils import int_to_big_endian, big_endian_to_int, safe_ord
+from . import db
 
 
 def _encode_optimized(item):
