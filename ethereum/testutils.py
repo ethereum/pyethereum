@@ -358,10 +358,10 @@ def run_state_test(params, mode):
 
         time_pre = time.time()
         try:
-            print 'trying'
+            print('trying')
             success, output = pb.apply_transaction(blk, tx)
             blk.commit_state()
-            print 'success', blk.get_receipts()[-1].gas_used
+            print('success', blk.get_receipts()[-1].gas_used)
         except InvalidTransaction:
             success, output = False, b''
             blk.commit_state()
@@ -508,7 +508,7 @@ def run_genesis_test(params, mode):
     assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
     assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
     assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
-    print 9
+    print(9)
     if mode == FILL:
         params['result'] = encode_hex(rlp.encode(b))
         return params

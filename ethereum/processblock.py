@@ -136,7 +136,7 @@ class lazy_safe_encode(object):
 def apply_transaction(block, tx):
     validate_transaction(block, tx)
 
-    # print block.get_nonce(tx.sender), '@@@'
+    # print(block.get_nonce(tx.sender), '@@@')
 
     def rp(what, actual, target):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)

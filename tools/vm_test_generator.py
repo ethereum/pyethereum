@@ -67,4 +67,4 @@ def gen_test(code, val, data):
 
 if __name__ == "__main__":
     o = gen_test(sys.argv[2], int(sys.argv[3]), sys.argv[4:])
-    print json.dumps({sys.argv[1]: o}, indent=4)
+    print(json.dumps({sys.argv[1]: o}, indent=4))

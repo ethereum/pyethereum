@@ -25,7 +25,7 @@ elif sys.argv[1] == 'create':
     assert pw == pw2, "Password mismatch"
     print("Applying hard key derivation function. Wait a little")
     j = keys.make_keystore_json(key, pw)
-    print j
+    print(j)
     open(j["id"]+'.json', 'w').write(json.dumps(j, indent=4))
     print("Wallet creation successful, file saved at: " + j["id"] + ".json")
 # Decode a json

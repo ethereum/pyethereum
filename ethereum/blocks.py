@@ -74,7 +74,7 @@ def calc_difficulty(parent, timestamp):
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
         o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
-    # print 'Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o)
+    # print('Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o))
     return o
 
 

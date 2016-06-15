@@ -85,20 +85,20 @@ def main():
         x = trie.Trie(db.EphemDB())
         for i in range(10000):
             x.update(str(i), str(i**3))
-        print 'elapsed', time.time() - st
+        print('elapsed', time.time() - st)
         return x.root_hash
 
     trie.rlp_encode = _encode_optimized
-    print 'trie.rlp_encode = encode_optimized'
+    print('trie.rlp_encode = encode_optimized')
     r3 = run()
 
     trie.rlp_encode = rlp.codec.encode_raw
-    print 'trie.rlp_encode = rlp.codec.encode_raw'
+    print('trie.rlp_encode = rlp.codec.encode_raw')
     r2 = run()
     assert r2 == r3
 
     trie.rlp_encode = rlp.encode
-    print 'trie.rlp_encode = rlp.encode'
+    print('trie.rlp_encode = rlp.encode')
     r = run()
     assert r == r2
 

@@ -285,7 +285,7 @@ class Trie(object):
         if root_hash == BLANK_ROOT:
             self.root_node = BLANK_NODE
             return
-        # print repr(root_hash)
+        # print(repr(root_hash))
         self.root_node = self._decode_to_node(root_hash)
         # dummy to increase reference count
         # self._encode_node(self.root_node)

@@ -255,8 +255,8 @@ def test(n, m=100):
         k = hashfunc(str(i))
         v = hashfunc('v'+str(i))
         x = update(x, db, [int(a) for a in encode_bin(rlp.encode(k))], v)
-    print x
-    print sum([len(val) for key, val in db.db.items()])
+    print(x)
+    print(sum([len(val) for key, val in db.db.items()]))
     l1 = ListeningDB(db)
     o = 0
     p = 0

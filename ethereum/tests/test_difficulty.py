@@ -40,8 +40,8 @@ def test_difficulty(filename, testname, testdata):
 
     calculated_dif = blocks.calc_difficulty(block, cur_blk_timestamp)
 
-    print calculated_dif
-    print reference_dif
+    print(calculated_dif)
+    print(reference_dif)
     assert calculated_dif == reference_dif
 
 
