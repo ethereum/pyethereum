@@ -3,6 +3,8 @@ from os import path
 
 import pytest
 
+from rlp.utils import encode_hex
+
 from ethereum import tester
 from ethereum import utils
 from ethereum import _solidity
@@ -24,7 +26,7 @@ def test_library_from_file():
     )
 
     libraries = {
-        'SevenLibrary': library.address.encode('hex'),
+        'SevenLibrary': encode_hex(library.address),
     }
     contract = state.abi_contract(
         None,
@@ -56,7 +58,7 @@ def test_library_from_code():
     )
 
     libraries = {
-        'SevenLibrary': library.address.encode('hex'),
+        'SevenLibrary': encode_hex(library.address),
     }
     contract = state.abi_contract(
         contract_code,

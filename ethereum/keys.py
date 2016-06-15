@@ -2,6 +2,8 @@ import os
 import pbkdf2
 import sys
 
+from rlp.utils import encode_hex, decode_hex
+
 try:
     scrypt = __import__('scrypt')
 except ImportError:
@@ -225,16 +227,6 @@ def zpad(x, l):
 
 if sys.version_info.major == 2:
 
-    def decode_hex(s):
-        if not isinstance(s, (str, unicode)):
-            raise TypeError('Value must be an instance of str or unicode')
-        return s.decode('hex')
-
-    def encode_hex(s):
-        if not isinstance(s, (str, unicode)):
-            raise TypeError('Value must be an instance of str or unicode')
-        return s.encode('hex')
-
     def int_to_big_endian(value):
         cs = []
         while value > 0:
@@ -253,20 +245,6 @@ if sys.version_info.major == 2:
 
 
 if sys.version_info.major == 3:
-
-    def decode_hex(s):
-        if isinstance(s, str):
-            return bytes.fromhex(s)
-        if isinstance(s, bytes):
-            return binascii.unhexlify(s)
-        raise TypeError('Value must be an instance of str or bytes')
-
-    def encode_hex(b):
-        if isinstance(b, str):
-            b = bytes(b, 'utf-8')
-        if isinstance(b, bytes):
-            return binascii.hexlify(b)
-        raise TypeError('Value must be an instance of str or bytes')
 
     def int_to_big_endian(value):
         byte_length = ceil(value.bit_length() / 8)

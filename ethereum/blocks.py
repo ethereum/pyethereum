@@ -676,8 +676,8 @@ class Block(rlp.Serializable):
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
                 log.error("Uncle does not have a valid ancestor", block=self,
-                          eligible=[x.encode('hex') for x in eligible_ancestor_hashes],
-                          uncle_prevhash=uncle.prevhash.encode('hex'))
+                          eligible=[encode_hex(x) for x in eligible_ancestor_hashes],
+                          uncle_prevhash=encode_hex(uncle.prevhash))
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
@@ -1035,7 +1035,7 @@ class Block(rlp.Serializable):
                 #     except:
                 #         pass
                 #     sys.stderr.write("pre: %r\n" % self.account_to_dict(addr)['storage'])
-                #     sys.stderr.write("pre: %r\n" % self.get_storage(addr).root_hash.encode('hex'))
+                #     sys.stderr.write("pre: %r\n" % encode_hex(self.get_storage(addr).root_hash))
                 #     sys.stderr.write("changed: %s %s %s\n" % (encode_hex(addr), encode_hex(enckey), encode_hex(val)))
                 if v:
                     t.update(enckey, val)

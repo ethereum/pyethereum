@@ -95,7 +95,7 @@ def run_block_test(params, config_overrides = {}):
             blockmap[b2.hash] = b2
             env.db.put(b2.hash, rlp.encode(b2))
         if b2:
-            print('Block %d with state root %s' % (b2.number, b2.state.root_hash.encode('hex')))
+            print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])

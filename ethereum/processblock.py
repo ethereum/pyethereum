@@ -256,10 +256,10 @@ def _apply_msg(ext, msg, code):
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()))
         if log_state.is_active('trace'):
-            log_state.trace('MSG PRE STATE SENDER', account=msg.sender.encode('hex'),
+            log_state.trace('MSG PRE STATE SENDER', account=encode_hex(msg.sender),
                             bal=ext.get_balance(msg.sender),
                             state=ext.log_storage(msg.sender))
-            log_state.trace('MSG PRE STATE RECIPIENT', account=msg.to.encode('hex'),
+            log_state.trace('MSG PRE STATE RECIPIENT', account=encode_hex(msg.to),
                             bal=ext.get_balance(msg.to),
                             state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
@@ -281,10 +281,10 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('MSG APPLIED', gas_remained=gas,
                       sender=encode_hex(msg.sender), to=encode_hex(msg.to), data=dat)
         if log_state.is_active('trace'):
-            log_state.trace('MSG POST STATE SENDER', account=msg.sender.encode('hex'),
+            log_state.trace('MSG POST STATE SENDER', account=encode_hex(msg.sender),
                             bal=ext.get_balance(msg.sender),
                             state=ext.log_storage(msg.sender))
-            log_state.trace('MSG POST STATE RECIPIENT', account=msg.to.encode('hex'),
+            log_state.trace('MSG POST STATE RECIPIENT', account=encode_hex(msg.to),
                             bal=ext.get_balance(msg.to),
                             state=ext.log_storage(msg.to))
 

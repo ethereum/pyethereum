@@ -6,6 +6,7 @@ import cProfile
 import pstats
 import StringIO
 import time
+from rlp.utils import encode_hex
 from ethereum.utils import sha3
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -34,7 +35,7 @@ if __name__ == '__main__':
                 seen += str(testname)
                 i += 1
         print('ran %d tests' % i)
-        print('test key', sha3(seen).encode('hex'))
+        print('test key', encode_hex(sha3(seen)))
 
     if len(sys.argv) == 1:
         pr = cProfile.Profile()

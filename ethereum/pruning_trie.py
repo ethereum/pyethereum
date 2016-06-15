@@ -270,7 +270,7 @@ class Trie(object):
         self._delete_node_storage(old_node, is_root=True)
         self._encode_node(new_node, is_root=True)
         self.root_node = new_node
-        # sys.stderr.write('nrh: %s\n' % self.root_hash.encode('hex'))
+        # sys.stderr.write('nrh: %s\n' % encode_hex(self.root_hash))
 
     @root_hash.setter
     def root_hash(self, value):
