@@ -51,7 +51,7 @@ def test_testutils_check_vm_test():
     func_name, filename, testname, testdata = collected[1]
     testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
     # manipulate post data
-    storage = testdata['post'].values()[0]['storage']
+    storage = tuple(testdata['post'].values())[0]['storage']
     assert storage['0x23'] == '0x01'
     storage['0x23'] = '0x02'
     failed_as_expected = False
