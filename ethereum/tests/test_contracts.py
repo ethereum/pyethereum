@@ -1207,8 +1207,8 @@ def test_ecrecover():
     signature = pk.ecdsa_recoverable_serialize(
         pk.ecdsa_sign_recoverable(msghash, raw=True)
     )
-    signature = signature[0] + chr(signature[1])
-    V = ord(signature[64]) + 27
+    signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+    V = utils.safe_ord(signature[64]) + 27
     R = big_endian_to_int(signature[0:32])
     S = big_endian_to_int(signature[32:64])
 
@@ -1629,9 +1629,15 @@ def test_string_logging():
     o = []
     s.block.log_listeners.append(lambda x: o.append(c.translator.listen(x)))
     c.moo()
-    assert o == [{"_event_type": "foo", "x": "bob", "__hash_x": utils.sha3("bob"),
-                  "y": "cow", "__hash_y": utils.sha3("cow"), "z": "dog",
-                  "__hash_z": utils.sha3("dog")}]
+    assert o == [{
+        "_event_type": b"foo",
+        "x": b"bob",
+        "__hash_x": utils.sha3(b"bob"),
+        "y": b"cow",
+        "__hash_y": utils.sha3(b"cow"),
+        "z": b"dog",
+        "__hash_z": utils.sha3(b"dog"),
+    }]
 
 
 params_code = """
@@ -1654,7 +1660,7 @@ def test_params_contract():
     s = tester.state()
     c = s.abi_contract(params_code, FOO=4, BAR='horse')
     assert c.garble() == 4
-    assert c.marble() == 'horse'
+    assert c.marble() == b'horse'
 
 prefix_types_in_functions_code = """
 type fixedp: fp_

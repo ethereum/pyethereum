@@ -87,7 +87,7 @@ class Transaction(rlp.Serializable):
                     pk.public_key = pk.ecdsa_recover(
                         rawhash,
                         pk.ecdsa_recoverable_deserialize(
-                            zpad("".join(chr(c) for c in int_to_32bytearray(self.r)), 32) + zpad("".join(chr(c) for c in int_to_32bytearray(self.s)), 32),
+                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
                             self.v - 27
                         ),
                         raw=True
@@ -96,7 +96,7 @@ class Transaction(rlp.Serializable):
                 except Exception:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
 
-                if pub[1:] == "\x00" * 32:
+                if pub[1:] == b"\x00" * 32:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 pub = encode_pubkey(pub, 'bin')
                 self._sender = utils.sha3(pub[1:])[-20:]
@@ -114,7 +114,7 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
-        if key in (0, '', '\x00' * 32, '0' * 64):
+        if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
 
@@ -126,8 +126,8 @@ class Transaction(rlp.Serializable):
         signature = pk.ecdsa_recoverable_serialize(
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
         )
-        signature = signature[0] + chr(signature[1])
-        self.v = ord(signature[64]) + 27
+        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        self.v = utils.safe_ord(signature[64]) + 27
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])
 

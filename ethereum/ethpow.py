@@ -69,9 +69,9 @@ def check_pow(block_number, header_hash, mixhash, nonce, difficulty):
     # Grab current cache
     cache = get_cache(block_number)
     mining_output = hashimoto_light(block_number, cache, header_hash, nonce)
-    if mining_output['mix digest'] != mixhash:
+    if mining_output[b'mix digest'] != mixhash:
         return False
-    return utils.big_endian_to_int(mining_output['result']) <= 2**256 / (difficulty or 1)
+    return utils.big_endian_to_int(mining_output[b'result']) <= 2**256 / (difficulty or 1)
 
 
 class Miner():
@@ -114,9 +114,9 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
     for i in range(1, rounds + 1):
         bin_nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
         o = hashimoto_light(block_number, cache, mining_hash, bin_nonce)
-        if o["result"] <= target:
+        if o[b"result"] <= target:
             log.debug("nonce found")
             assert len(bin_nonce) == 8
-            assert len(o["mix digest"]) == 32
-            return bin_nonce, o["mix digest"]
+            assert len(o[b"mix digest"]) == 32
+            return bin_nonce, o[b"mix digest"]
     return None, None

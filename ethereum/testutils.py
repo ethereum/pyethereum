@@ -67,7 +67,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip(b'0') != b'0x'}
     }
 
 

@@ -110,7 +110,7 @@ class Chain(object):
     """
     head_candidate = None
 
-    def __init__(self, env, genesis=None, new_head_cb=None, coinbase='\x00' * 20):
+    def __init__(self, env, genesis=None, new_head_cb=None, coinbase=b'\x00' * 20):
         assert isinstance(env, Env)
         self.env = env
         self.db = self.blockchain = env.db

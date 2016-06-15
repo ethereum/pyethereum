@@ -6,6 +6,9 @@ import warnings
 
 import yaml
 
+from rlp.utils import decode_hex
+from . import utils
+
 BINARY = 'solc'
 
 
@@ -49,7 +52,7 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
 
     if libraries is not None and len(libraries):
         addresses = [
-            '{name}:{address}'.format(name=name, address=address)
+            '{name}:{address}'.format(name=name, address=address.decode('utf8'))
             for name, address in libraries.items()
         ]
         args.extend([
