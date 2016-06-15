@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 import ethereum.testutils as testutils
