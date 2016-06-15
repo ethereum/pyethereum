@@ -67,13 +67,13 @@ def solc_parse_output(compiler_output):
     """ Parses the compiler output. """
     result = yaml.safe_load(compiler_output)['contracts']
 
-    if 'bin' in result.values()[0]:
+    if 'bin' in tuple(result.values())[0]:
         for value in result.values():
             value['bin_hex'] = value['bin']
 
             # decoding can fail if the compiled contract has unresolved symbols
             try:
-                value['bin'] = value['bin_hex'].decode('hex')
+                value['bin'] = decode_hex(value['bin_hex'])
             except TypeError:
                 pass
 
@@ -81,7 +81,7 @@ def solc_parse_output(compiler_output):
         # the values in the output can be configured through the
         # --combined-json flag, check that it's present in the first value and
         # assume all values are consistent
-        if json_data not in result.values()[0]:
+        if json_data not in tuple(result.values())[0]:
             continue
 
         for value in result.values():
@@ -185,7 +185,7 @@ def solidity_resolve_address(hex_code, library_symbol, library_address):
         raise ValueError('Address should not contain the 0x prefix')
 
     try:
-        _ = library_address.decode('hex')
+        _ = decode_hex(library_address)
     except TypeError:
         raise ValueError('library_address contains invalid characters, it must be hex encoded.')
 
@@ -294,8 +294,11 @@ def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True):
     args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize)
     args.insert(0, get_compiler_path())
 
-    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdoutdata, _ = process.communicate(input=sourcecode)
+    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = process.communicate(input=utils.to_string(sourcecode))
+
+    if process.returncode != 0:
+        raise CompileError(stderrdata)
 
     return solc_parse_output(stdoutdata)
 
