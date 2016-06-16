@@ -195,7 +195,7 @@ class Transaction(rlp.Serializable):
     # The >= operator is replaced by > because the integer division N/2 always produces the value
     # which is by 0.5 less than the real N/2
     def check_low_s(self):
-        if self.s > N / 2 or self.s == 0:
+        if self.s > N // 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
 
 

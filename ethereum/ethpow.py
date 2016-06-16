@@ -71,7 +71,7 @@ def check_pow(block_number, header_hash, mixhash, nonce, difficulty):
     mining_output = hashimoto_light(block_number, cache, header_hash, nonce)
     if mining_output[b'mix digest'] != mixhash:
         return False
-    return utils.big_endian_to_int(mining_output[b'result']) <= 2**256 / (difficulty or 1)
+    return utils.big_endian_to_int(mining_output[b'result']) <= 2**256 // (difficulty or 1)
 
 
 class Miner():

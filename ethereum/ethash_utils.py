@@ -94,7 +94,7 @@ deserialize_dataset = deserialize_cache
 class ListWrapper(list):
     def __init__(self, data):
         self.data = data
-        self.len = len(data) / HASH_BYTES
+        self.len = len(data) // HASH_BYTES
 
     def __len__(self):
         return self.len
@@ -122,7 +122,7 @@ def isprime(x):
 def get_cache_size(block_number):
     sz = CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
     sz -= HASH_BYTES
-    while not isprime(sz / HASH_BYTES):
+    while not isprime(sz // HASH_BYTES):
         sz -= 2 * HASH_BYTES
     return sz
 
@@ -130,6 +130,6 @@ def get_cache_size(block_number):
 def get_full_size(block_number):
     sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
     sz -= MIX_BYTES
-    while not isprime(sz / MIX_BYTES):
+    while not isprime(sz // MIX_BYTES):
         sz -= 2 * MIX_BYTES
     return sz

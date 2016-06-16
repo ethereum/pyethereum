@@ -494,12 +494,12 @@ def decode_single(typ, data):
         return (o - 2**int(sub)) if o >= 2**(int(sub) - 1) else o
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
-        return big_endian_to_int(data) * 1.0 / 2**low
+        return big_endian_to_int(data) * 1.0 // 2**low
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         o = big_endian_to_int(data)
         i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
-        return (i * 1.0 / 2**low)
+        return (i * 1.0 // 2**low)
     elif base == 'bool':
         return bool(int(encode_hex(data), 16))
 

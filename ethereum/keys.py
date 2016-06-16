@@ -247,7 +247,7 @@ if sys.version_info.major == 2:
 if sys.version_info.major == 3:
 
     def int_to_big_endian(value):
-        byte_length = ceil(value.bit_length() / 8)
+        byte_length = ceil(value.bit_length() // 8)
         return (value).to_bytes(byte_length, byteorder='big')
 
     def big_endian_to_int(value):

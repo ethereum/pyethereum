@@ -525,7 +525,7 @@ def test_reward_uncles(db):
     assert blk2 == chain.head
     assert chain.head.get_balance(local_coinbase) == \
         2 * chain.env.config['BLOCK_REWARD'] + chain.env.config['NEPHEW_REWARD']
-    assert chain.head.get_balance(uncle_coinbase) == chain.env.config['BLOCK_REWARD'] * 7 / 8
+    assert chain.head.get_balance(uncle_coinbase) == chain.env.config['BLOCK_REWARD'] * 7 // 8
 
 
 # TODO ##########################################

@@ -282,8 +282,8 @@ def test(n, m=100):
     o = {
         'total_db_size': sum([len(val) for key, val in l1.kv.items()]),
         'avg_proof_size': sum([len(val) for key, val in l1.kv.items()]),
-        'avg_compressed_proof_size': (p / min(n, m)),
-        'avg_branch_size': (q / min(n, m)),
+        'avg_compressed_proof_size': (p // min(n, m)),
+        'avg_branch_size': (q // min(n, m)),
         'compressed_db_size': len(compress_db(l1))
     }
     return o

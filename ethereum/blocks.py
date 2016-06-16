@@ -1169,10 +1169,13 @@ class Block(rlp.Serializable):
         self.ether_delta += delta
 
         for uncle in self.uncles:
-            r = self.config['BLOCK_REWARD'] * \
-                (self.config['UNCLE_DEPTH_PENALTY_FACTOR'] + uncle.number - self.number) \
-                / self.config['UNCLE_DEPTH_PENALTY_FACTOR']
-            r = int(r)
+            br = self.config['BLOCK_REWARD']
+            udpf = self.config['UNCLE_DEPTH_PENALTY_FACTOR']
+            un = uncle.number
+            bn = self.number
+
+            r = int(br * (udpf + un - bn) // udpf)
+
             self.delta_balance(uncle.coinbase, r)
             self.ether_delta += r
         self.commit_state()
@@ -1307,7 +1310,7 @@ def calc_gaslimit(parent):
 
 def check_gaslimit(parent, gas_limit):
     config = parent.config
-    #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
+    #  block.gasLimit - parent.gasLimit <= parent.gasLimit // GasLimitBoundDivisor
     gl = parent.gas_limit // config['GASLIMIT_ADJMAX_FACTOR']
     a = bool(abs(gas_limit - parent.gas_limit) <= gl)
     b = bool(gas_limit >= config['MIN_GAS_LIMIT'])
