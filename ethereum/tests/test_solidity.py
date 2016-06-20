@@ -269,3 +269,55 @@ def test_abi_contract():
     assert contract.seven() == 7
     assert contract.mul2(2) == 4
     assert contract.mul2(-2) == -4
+
+
+def test_origin():
+    code = """
+contract testme {
+    function sender() returns (address) {
+        return msg.sender;
+    }
+
+    function origin() returns (address) {
+        return tx.origin;
+    }
+
+    function senderisorigin() returns (bool) {
+        return msg.sender == tx.origin;
+    }
+}
+
+contract testmechild is testme {
+}
+
+contract testmeparent is testme {
+    testmechild child;
+
+    function testmeparent() {
+        child = new testmechild();
+    }
+
+    function childsender() returns(address) {
+        return child.sender();
+    }
+
+    function childorigin() returns(address) {
+        return child.origin();
+    }
+
+    function childsenderisorigin() returns(bool) {
+        return child.senderisorigin();
+    }
+}
+    """
+
+    state = tester.state()
+    c = state.abi_contract(code, language='solidity')
+
+    assert c.sender() == utils.encode_hex(tester.a0)
+    assert c.origin() == utils.encode_hex(tester.a0)
+    assert c.senderisorigin() == True
+
+    assert c.childsender() == utils.encode_hex(c.address)
+    assert c.childorigin() == utils.encode_hex(tester.a0)
+    assert c.childsenderisorigin() == False
