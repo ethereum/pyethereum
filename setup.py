@@ -15,7 +15,9 @@ install_requires = [install_requires_replacements.get(r, r) for r in install_req
 # dev requirements
 tests_require = set(x.strip() for x in open('dev_requirements.txt'))
 tests_require_replacements = {
-    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
+    # 'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
+    # THIS SHOULD NOT BE MERGED
+    'https://github.com/pipermerriam/serpent/tarball/piper/python3-support-with-pyethereum3': 'ethereum-serpent>=1.8.1',
 }
 tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
