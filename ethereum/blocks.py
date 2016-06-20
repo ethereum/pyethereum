@@ -1168,13 +1168,11 @@ class Block(rlp.Serializable):
         self.delta_balance(self.coinbase, delta)
         self.ether_delta += delta
 
-        for uncle in self.uncles:
-            br = self.config['BLOCK_REWARD']
-            udpf = self.config['UNCLE_DEPTH_PENALTY_FACTOR']
-            un = uncle.number
-            bn = self.number
+        br = self.config['BLOCK_REWARD']
+        udpf = self.config['UNCLE_DEPTH_PENALTY_FACTOR']
 
-            r = int(br * (udpf + un - bn) // udpf)
+        for uncle in self.uncles:
+            r = int(br * (udpf + uncle.number - self.number) // udpf)
 
             self.delta_balance(uncle.coinbase, r)
             self.ether_delta += r
