@@ -13,6 +13,19 @@ CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+def test_compile_error():
+    code = '''
+notacontract test {
+
+}
+'''
+
+    s = tester.state()
+    with pytest.raises(_solidity.CompileError):
+        s.abi_contract(code, language='solidity')
+
+
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_library_from_file():
     state = tester.state()
     state.env.config['HOMESTEAD_FORK_BLKNUM'] = 0  # enable CALLCODE opcode

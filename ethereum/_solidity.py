@@ -60,9 +60,12 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True):
     return args
 
 
-def solc_parse_output(compiler_output):
+def solc_parse_output(returncode, stdout, stderr):
     """ Parses the compiler output. """
-    result = yaml.safe_load(compiler_output)['contracts']
+    if returncode:
+        raise CompileError('compilation failed: %s' % str(stderr).replace('\\n', '\n'))
+
+    result = yaml.safe_load(stdout)['contracts']
 
     if 'bin' in result.values()[0]:
         for value in result.values():
@@ -251,9 +254,12 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
     args.insert(0, get_compiler_path())
     args.append(filename)
 
-    output = subprocess.check_output(args, cwd=workdir)
 
-    return solc_parse_output(output)
+    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=workdir)
+    stdoutdata = process.stdout.read().strip()
+    stderrdata = process.stderr.read().strip()
+
+    return solc_parse_output(process.returncode, stdoutdata, stderrdata)
 
 
 def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True):
@@ -291,10 +297,10 @@ def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True):
     args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize)
     args.insert(0, get_compiler_path())
 
-    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdoutdata, _ = process.communicate(input=sourcecode)
+    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = process.communicate(input=sourcecode)
 
-    return solc_parse_output(stdoutdata)
+    return solc_parse_output(process.returncode, stdoutdata, stderrdata)
 
 
 class Solc(object):
