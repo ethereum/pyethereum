@@ -71,7 +71,7 @@ def test_tracebacks(caplog):
 
     def div(a, b):
         try:
-            _ = a / b
+            _ = a // b
             log.error('heres the stack', stack_info=True)
         except Exception as e:
             log.error('an Exception trace should preceed this msg', exc_info=True)

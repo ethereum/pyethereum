@@ -110,7 +110,7 @@ class Chain(object):
     """
     head_candidate = None
 
-    def __init__(self, env, genesis=None, new_head_cb=None, coinbase='\x00' * 20):
+    def __init__(self, env, genesis=None, new_head_cb=None, coinbase=b'\x00' * 20):
         assert isinstance(env, Env)
         self.env = env
         self.db = self.blockchain = env.db
@@ -121,7 +121,7 @@ class Chain(object):
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
         self.genesis = self.get(self.index.get_block_by_number(0))
-        log.debug('got genesis', nonce=self.genesis.nonce.encode('hex'),
+        log.debug('got genesis', nonce=encode_hex(self.genesis.nonce),
                   difficulty=self.genesis.difficulty)
         self._update_head_candidate()
 

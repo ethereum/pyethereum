@@ -15,7 +15,8 @@ install_requires = [install_requires_replacements.get(r, r) for r in install_req
 # dev requirements
 tests_require = set(x.strip() for x in open('dev_requirements.txt'))
 tests_require_replacements = {
-    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1'}
+    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
+}
 tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
@@ -37,4 +38,13 @@ setup(
         "https://github.com/ulope/secp256k1-py/archive/master.zip#egg=secp256k1-0.11.1"
     ],
     version=version,
+    classifiers=[
+        'Intended Audience :: Developers',
+        'Natural Language :: English',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+    ],
 )

@@ -222,7 +222,7 @@ class ContractTranslator(object):
                          if indexed[i]]
         unindexed_types = [types[i] for i in range(len(types))
                            if not indexed[i]]
-        # print('listen', log.data.encode('hex'), log.topics)
+        # print('listen', encode_hex(log.data), log.topics)
         deserialized_args = decode_abi(unindexed_types, log.data)
         o = {}
         c1, c2 = 0, 0
@@ -494,14 +494,14 @@ def decode_single(typ, data):
         return (o - 2**int(sub)) if o >= 2**(int(sub) - 1) else o
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
-        return big_endian_to_int(data) * 1.0 / 2**low
+        return big_endian_to_int(data) * 1.0 // 2**low
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         o = big_endian_to_int(data)
         i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
-        return (i * 1.0 / 2**low)
+        return (i * 1.0 // 2**low)
     elif base == 'bool':
-        return bool(int(data.encode('hex'), 16))
+        return bool(int(encode_hex(data), 16))
 
 
 # Decodes multiple arguments using the head/tail mechanism

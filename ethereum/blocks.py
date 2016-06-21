@@ -74,7 +74,7 @@ def calc_difficulty(parent, timestamp):
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
         o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
-    # print 'Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o)
+    # print('Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o))
     return o
 
 
@@ -676,8 +676,8 @@ class Block(rlp.Serializable):
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
                 log.error("Uncle does not have a valid ancestor", block=self,
-                          eligible=[x.encode('hex') for x in eligible_ancestor_hashes],
-                          uncle_prevhash=uncle.prevhash.encode('hex'))
+                          eligible=[encode_hex(x) for x in eligible_ancestor_hashes],
+                          uncle_prevhash=encode_hex(uncle.prevhash))
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
@@ -1035,7 +1035,7 @@ class Block(rlp.Serializable):
                 #     except:
                 #         pass
                 #     sys.stderr.write("pre: %r\n" % self.account_to_dict(addr)['storage'])
-                #     sys.stderr.write("pre: %r\n" % self.get_storage(addr).root_hash.encode('hex'))
+                #     sys.stderr.write("pre: %r\n" % encode_hex(self.get_storage(addr).root_hash))
                 #     sys.stderr.write("changed: %s %s %s\n" % (encode_hex(addr), encode_hex(enckey), encode_hex(val)))
                 if v:
                     t.update(enckey, val)
@@ -1168,11 +1168,12 @@ class Block(rlp.Serializable):
         self.delta_balance(self.coinbase, delta)
         self.ether_delta += delta
 
+        br = self.config['BLOCK_REWARD']
+        udpf = self.config['UNCLE_DEPTH_PENALTY_FACTOR']
+
         for uncle in self.uncles:
-            r = self.config['BLOCK_REWARD'] * \
-                (self.config['UNCLE_DEPTH_PENALTY_FACTOR'] + uncle.number - self.number) \
-                / self.config['UNCLE_DEPTH_PENALTY_FACTOR']
-            r = int(r)
+            r = int(br * (udpf + uncle.number - self.number) // udpf)
+
             self.delta_balance(uncle.coinbase, r)
             self.ether_delta += r
         self.commit_state()
@@ -1307,7 +1308,7 @@ def calc_gaslimit(parent):
 
 def check_gaslimit(parent, gas_limit):
     config = parent.config
-    #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
+    #  block.gasLimit - parent.gasLimit <= parent.gasLimit // GasLimitBoundDivisor
     gl = parent.gas_limit // config['GASLIMIT_ADJMAX_FACTOR']
     a = bool(abs(gas_limit - parent.gas_limit) <= gl)
     b = bool(gas_limit >= config['MIN_GAS_LIMIT'])

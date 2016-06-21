@@ -209,7 +209,7 @@ def vm_execute(ext, msg, code):
     _prevop = None  # for trace only
 
     while 1:
-      # print 'op: ', op, time.time() - s
+      # print('op: ', op, time.time() - s)
       # s = time.time()
       # stack size limit error
       if compustate.pc not in processed_code:
