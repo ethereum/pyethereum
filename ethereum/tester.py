@@ -377,7 +377,7 @@ class state(object):
         return recorder.pop_records()
 
     def mine(self, number_of_blocks=1, coinbase=DEFAULT_ACCOUNT, **kwargs):
-        if 'n' in kwargs: # compatibility 
+        if 'n' in kwargs: # compatibility
             number_of_blocks = kwargs['n']
             warnings.warn('The argument \'n\' is deprecated and its support will be removed '\
                 'in the future versions. Please use the name \'number_of_blocks\'.')
