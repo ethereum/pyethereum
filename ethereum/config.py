@@ -46,6 +46,9 @@ default_config = dict(
     # Homestead fork
     HOMESTEAD_FORK_BLKNUM=1150000,
     HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
+    # Metropolis fork
+    METROPOLIS_FORK_BLKNUM=9999999,
+    METROPOLIS_ENTRY_POINT=2**160 - 1,
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
