@@ -13,7 +13,7 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum.utils import address, int256, trie_root, hash32, to_string,
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -453,6 +453,7 @@ class Block(rlp.Serializable):
             self.transaction_count = 0
             self.gas_used = 0
             # replay
+            self.initialize(parent)
             for tx in transaction_list:
                 success, output = processblock.apply_transaction(self, tx)
             self.finalize()
@@ -1140,6 +1141,18 @@ class Block(rlp.Serializable):
         self.transaction_count = mysnapshot['txcount']
         self._get_transactions_cache = []
         self.ether_delta = mysnapshot['ether_delta']
+
+    def initialize(self, parent):
+        if self.number == self.config["METROPOLIS_FORK_BLKNUM"]:
+            self.set_code(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
+            self.set_code(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
+        if self.number >= self.config["METROPOLIS_FORK_BLKNUM"]:
+            self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]),
+                                  self.number % self.config["METROPOLIS_WRAPAROUND"],
+                                  parent.state_root)
+            self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
+                                  self.number % self.config["METROPOLIS_WRAPAROUND"],
+                                  self.prevhash)
 
     def finalize(self):
         """Apply rewards and commit."""
