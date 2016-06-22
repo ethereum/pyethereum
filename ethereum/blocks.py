@@ -789,7 +789,10 @@ class Block(rlp.Serializable):
 
     def mk_transaction_receipt(self, tx):
         """Create a receipt for a transaction."""
-        return Receipt(self.state_root, self.gas_used, self.logs)
+        if self.number >= self.config["METROPOLIS_FORK_BLKNUM"]:
+            return Receipt('\x00' * 32, self.gas_used, self.logs)
+        else:
+            return Receipt(self.state_root, self.gas_used, self.logs)
 
     def add_transaction_to_list(self, tx):
         """Add a transaction to the transaction trie.
