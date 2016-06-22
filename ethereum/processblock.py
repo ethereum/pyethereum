@@ -224,6 +224,7 @@ class VMExt():
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = block.account_exists
         self.post_homestead_hardfork = lambda: block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
+        self.post_metropolis_hardfork = lambda: block.number >= block.config['METROPOLIS_FORK_BLKNUM']
 
 
 def apply_msg(ext, msg):
