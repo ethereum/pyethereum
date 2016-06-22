@@ -7,9 +7,9 @@ from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-        BlockGasLimitReached, InsufficientBalance
-from ethereum.utils import safe_ord, mk_contract_address
+from ethereum.exceptions import *
+from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
+    mk_metropolis_contract_address, int_to_addr, big_endian_to_int
 from ethereum import transactions
 import ethereum.config as config
 
@@ -81,7 +81,10 @@ def validate_transaction(block, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
-        raise UnsignedTransaction(tx)
+        if block.number >= config.default_config["METROPOLIS_FORK_BLKNUM"]:
+            tx._sender = normalize_address(config.default_config["METROPOLIS_ENTRY_POINT"])
+        else:
+            raise UnsignedTransaction(tx)
     if block.number >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
             tx.check_low_s()
 
@@ -222,6 +225,8 @@ class VMExt():
         self.get_code = block.get_code
         self.get_balance = block.get_balance
         self.set_balance = block.set_balance
+        self.get_nonce = block.get_nonce
+        self.set_nonce = block.set_nonce
         self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
         self.log_storage = lambda x: block.account_to_dict(x)['storage']
@@ -299,10 +304,21 @@ def create_contract(ext, msg):
     log_msg.debug('CONTRACT CREATION')
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
-    if ext.tx_origin != msg.sender:
-        ext._block.increment_nonce(msg.sender)
-    nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
-    msg.to = mk_contract_address(sender, nonce)
+    code = msg.data.extract_all()
+    if ext._block.number >= ext._block.METROPOLIS_FORK_BLKNUM:
+        msg.to = mk_metropolis_contract_address(msg.sender, code)
+        if ext.get_code(msg.to):
+            if ext.get_nonce(msg.to) >= 2**40:
+                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2**160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+            else:
+                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2**160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+    else:
+        if ext.tx_origin != msg.sender:
+            ext._block.increment_nonce(msg.sender)
+        nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
+        msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
@@ -311,7 +327,6 @@ def create_contract(ext, msg):
         ext._block.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
-    code = msg.data.extract_all()
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext._block.snapshot()
     res, gas, dat = _apply_msg(ext, msg, code)
