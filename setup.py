@@ -34,9 +34,6 @@ setup(
     setup_requires=[
         'pytest-runner==2.7'
     ],
-    dependency_links=[
-        "https://github.com/ulope/secp256k1-py/archive/master.zip#egg=secp256k1-0.11.1"
-    ],
     version=version,
     classifiers=[
         'Intended Audience :: Developers',
