@@ -8,14 +8,14 @@ with open('README.rst') as readme_file:
 install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master': 'pyethash',
-    'git+https://github.com/ulope/secp256k1-py#egg=secp256k1': 'secp256k1'
 }
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 
 # dev requirements
 tests_require = set(x.strip() for x in open('dev_requirements.txt'))
+tests_require_replacements = dict()
 tests_require_replacements = {
-    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=1.8.1',
+    'https://github.com/pipermerriam/serpent/tarball/piper/add-travis-ci-testing': 'ethereum-serpent>=1.8.1'
 }
 tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
