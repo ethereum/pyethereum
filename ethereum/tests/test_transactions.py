@@ -39,7 +39,7 @@ def test_transaction(filename, testname, testdata):
             "value": str_to_bytes(str(tx.value)),
             "to": encode_hex(tx.to),
         }
-    except Exception, e:
+    except Exception as e:
         tx = None
         sys.stderr.write(str(e))
     if 'transaction' not in testdata:  # expected to fail

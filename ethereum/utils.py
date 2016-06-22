@@ -35,6 +35,9 @@ if sys.version_info.major == 2:
         return str(value)
     unicode = unicode
 
+    def bytearray_to_bytestr(value):
+        return bytes(''.join(chr(c) for c in value))
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -55,6 +58,9 @@ else:
     def to_string_for_regexp(value):
         return str(to_string(value), 'utf-8')
     unicode = str
+
+    def bytearray_to_bytestr(value):
+        return bytes(value)
 
 isnumeric = is_numeric
 
@@ -112,7 +118,8 @@ sha3_count = [0]
 def sha3(seed):
     sha3_count[0] += 1
     return sha3_256(to_string(seed))
-assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+
+assert encode_hex(sha3('')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -140,8 +147,8 @@ def check_and_strip_checksum(x):
 def normalize_address(x, allow_blank=False):
     if isinstance(x, (int, long)):
         return int_to_addr(x)
-    if allow_blank and x == '':
-        return ''
+    if allow_blank and (x == '' or x == b''):
+        return b''
     if len(x) in (42, 50) and x[:2] == '0x':
         x = x[2:]
     if len(x) in (40, 48):
@@ -160,7 +167,7 @@ def zpad(x, l):
 
 def zunpad(x):
     i = 0
-    while i < len(x) and (x[i] == 0 or x[i] == '\x00'):
+    while i < len(x) and (x[i] == 0 or x[i] == b'\x00'):
         i += 1
     return x[i:]
 
@@ -251,7 +258,7 @@ def decode_addr(v):
 
 def decode_int(v):
     '''decodes and integer from serialization'''
-    if len(v) > 0 and (v[0] == '\x00' or v[0] == 0):
+    if len(v) > 0 and (v[0] == b'\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
@@ -332,7 +339,7 @@ scanners = {
 
 def int_to_hex(x):
     o = encode_hex(encode_int(x))
-    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
+    return b'0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
 
 
 def remove_0x_head(s):

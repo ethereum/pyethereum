@@ -4,6 +4,8 @@ from pkg_resources import get_distribution, DistributionNotFound
 import os.path
 import subprocess
 import re
+# Import slogging to patch logging as soon as possible
+from . import slogging  # noqa
 
 
 GIT_DESCRIBE_RE = re.compile('^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')

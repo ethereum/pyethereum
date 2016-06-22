@@ -1,5 +1,6 @@
 import logging
 import json
+import textwrap
 from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, isnumeric
 
@@ -18,13 +19,52 @@ known_loggers = set()
 log_listeners = []
 
 
-# add level trace into logging
-def _trace(self, msg, *args, **kwargs):
-    if self.isEnabledFor(TRACE):
-        self._log(TRACE, msg, args, **kwargs)
-logging.Logger.trace = _trace
+def _inject_into_logger(name, code, namespace=None):
+    # This is a hack to fool the logging module into reporting correct source files.
+    # It determines the actual source of a logging call by inspecting the stack frame's
+    # source file. So we use this `eval(compile())` construct to "inject" our additional
+    # methods into the logging module.
+    if namespace is None:
+        namespace = {}
+    eval(
+        compile(
+            code,
+            logging._srcfile,
+            'exec'
+        ),
+        namespace
+    )
+    setattr(logging.Logger, name, namespace[name])
+
+
+# Add `trace()` level to Logger
+_inject_into_logger(
+    'trace',
+    textwrap.dedent(
+        """\
+        def trace(self, msg, *args, **kwargs):
+            if self.isEnabledFor(TRACE):
+                self._log(TRACE, msg, args, **kwargs)
+        """
+    ),
+    {'TRACE': TRACE}
+)
 logging.TRACE = TRACE
 logging.addLevelName(TRACE, "TRACE")
+
+
+# Add `DEV()` shortcut to loggers
+_inject_into_logger(
+    'DEV',
+    textwrap.dedent(
+        """\
+        def DEV(self, msg, *args, **kwargs):
+            '''Shortcut to output highlighted log text'''
+            kwargs['highlight'] = True
+            self.critical(msg, *args, **kwargs)
+        """
+    )
+)
 
 
 class LogRecorder(object):
@@ -85,7 +125,7 @@ def get_configuration():
 
     config_string = ','.join('%s:%s' % x for x in name_levels)
 
-    return dict(config_string=config_string, log_json=root.log_json)
+    return dict(config_string=config_string, log_json=SLogger.manager.log_json)
 
 
 def get_logger_names():
@@ -121,18 +161,30 @@ class SLogger(logging.Logger):
         self.warn = self.warning
         super(SLogger, self).__init__(name, level=level)
 
+    @property
+    def log_json(self):
+        return SLogger.manager.log_json
+
     def is_active(self, level_name='trace'):
         return self.isEnabledFor(logging._checkLevel(level_name.upper()))
 
-    def format_message(self, msg, kwargs, highlight):
+    def format_message(self, msg, kwargs, highlight, level):
         if getattr(self, 'log_json', False):
-            message = {
-                k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
-                for k, v in kwargs.items()
-            }
-
-            message['event'] = "{}.{}".format(self.name, msg)
-            msg = json.dumps(message)
+            message = dict()
+            message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
+            message['level'] = logging.getLevelName(level)
+            try:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex, list, str, dict)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
+            except UnicodeDecodeError:
+                message.update({
+                    k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
+                    for k, v in kwargs.items()
+                })
+                msg = json.dumps(message)
         else:
             msg = "{}{} {}{}".format(
                 bcolors.WARNING if highlight else "",
@@ -140,7 +192,6 @@ class SLogger(logging.Logger):
                 " ".join("{}={!s}".format(k, v) for k, v in kwargs.items()),
                 bcolors.ENDC if highlight else ""
             )
-
         return msg
 
     def bind(self, **kwargs):
@@ -152,13 +203,8 @@ class SLogger(logging.Logger):
         highlight = kwargs.pop('highlight', False)
         extra['kwargs'] = kwargs
         extra['original_msg'] = msg
-        msg = self.format_message(msg, kwargs, highlight)
+        msg = self.format_message(msg, kwargs, highlight, level)
         super(SLogger, self)._log(level, msg, args, exc_info, extra)
-
-    def DEV(self, msg, *args, **kwargs):
-        """Shortcut to output highlighted log text"""
-        kwargs['highlight'] = True
-        self.critical(msg, *args, **kwargs)
 
 
 class RootLogger(SLogger):
@@ -174,7 +220,6 @@ class RootLogger(SLogger):
         Initialize the logger with the name "root".
         """
         super(RootLogger, self).__init__("root", level)
-        self.log_json = False
 
     def handle(self, record):
         if log_listeners:
@@ -189,6 +234,7 @@ class SManager(logging.Manager):
 
     def __init__(self, rootnode):
         self.loggerClass = SLogger
+        self.log_json = False
         super(SManager, self).__init__(rootnode)
 
     def getLogger(self, name):
@@ -209,7 +255,6 @@ def getLogger(name=None):
 
     if name:
         logger = SLogger.manager.getLogger(name)
-        logger.log_json = rootLogger.log_json
         return logger
     else:
         return rootLogger
@@ -220,11 +265,11 @@ def configure(config_string=None, log_json=False, log_file=None):
         config_string = ":{}".format(DEFAULT_LOGLEVEL)
 
     if log_json:
+        SLogger.manager.log_json = True
         log_format = JSON_FORMAT
-        rootLogger.log_json = True
     else:
+        SLogger.manager.log_json = False
         log_format = PRINT_FORMAT
-        rootLogger.log_json = False
 
     if len(rootLogger.handlers) == 0:
         handler = StreamHandler()
@@ -267,7 +312,8 @@ def get_logger(name=None):
 def DEBUG(msg, *args, **kwargs):
     """temporary logger during development that is always on"""
     logger = getLogger("DEBUG")
-    logger.addHandler(StreamHandler())
+    if len(logger.handlers) == 0:
+        logger.addHandler(StreamHandler())
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     logger.DEV(msg, *args, **kwargs)

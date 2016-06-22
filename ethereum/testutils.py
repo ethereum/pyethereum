@@ -67,7 +67,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip(b'0') != b'0x'}
     }
 
 
@@ -358,11 +358,11 @@ def run_state_test(params, mode):
 
         time_pre = time.time()
         try:
-            print 'trying'
+            print('trying')
             success, output = pb.apply_transaction(blk, tx)
             blk.commit_state()
-            print 'success', blk.get_receipts()[-1].gas_used
-        except pb.InvalidTransaction:
+            print('success', blk.get_receipts()[-1].gas_used)
+        except InvalidTransaction:
             success, output = False, b''
             blk.commit_state()
             pass
@@ -476,7 +476,7 @@ def run_abi_test(params, mode):
 def run_genesis_test(params, mode):
     params = copy.deepcopy(params)
     if 'difficulty' not in params:
-        params['difficulty'] = int_to_hex(2**34)
+        params['difficulty'] = int_to_hex(2 ** 34)
     if 'mixhash' not in params:
         params['mixhash'] = '0x' + '0' * 64
     if 'nonce' not in params:
@@ -508,7 +508,7 @@ def run_genesis_test(params, mode):
     assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
     assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
     assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
-    print 9
+    print(9)
     if mode == FILL:
         params['result'] = encode_hex(rlp.encode(b))
         return params
@@ -576,18 +576,19 @@ def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None
     base_dir = os.path.dirname(os.path.dirname(__file__))
     params = []
     for filename, tests in fixtures.items():
-        filename = os.path.relpath(filename, base_dir)
-        for testname, testdata in tests.items():
-            if exclude_func and exclude_func(filename, testname, testdata):
-                continue
-            if skip_func:
-                skipif = pytest.mark.skipif(
-                    skip_func(filename, testname, testdata),
-                    reason="Excluded"
-                )
-                params.append(skipif((filename, testname, testdata)))
-            else:
-                params.append((filename, testname, testdata))
+        if isinstance(tests, dict):
+            filename = os.path.relpath(filename, base_dir)
+            for testname, testdata in tests.items():
+                if exclude_func and exclude_func(filename, testname, testdata):
+                    continue
+                if skip_func:
+                    skipif = pytest.mark.skipif(
+                        skip_func(filename, testname, testdata),
+                        reason="Excluded"
+                    )
+                    params.append(skipif((filename, testname, testdata)))
+                else:
+                    params.append((filename, testname, testdata))
 
     metafunc.parametrize(
         ('filename', 'testname', 'testdata'),

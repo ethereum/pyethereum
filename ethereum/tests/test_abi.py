@@ -22,6 +22,7 @@ def test_abi_encode_signed_int():
 
 def test_abi_encode_single_int():
     assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
+    assert abi.encode_single(['int', '256', []], (b'\x80'+b'\x00'*31)) == (b'\x80'+b'\x00'*31)
 
     assert abi.encode_single(['int', '8', []], -128) == zpad(b'\x80', 32)
     with pytest.raises(abi.ValueOutOfBounds):
@@ -33,7 +34,7 @@ def test_abi_encode_single_int():
 
 def test_abi_encode_single_ureal():
     assert abi.encode_single(['ureal', '128x128', []], 0) == (b'\x00'*32)
-    assert abi.encode_single(['ureal', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + '\x00'*15)
+    assert abi.encode_single(['ureal', '128x128', []], 1.125) == (b'\x00'*15 + b'\x01\x20' + b'\x00'*15)
     assert abi.encode_single(['ureal', '128x128', []], 2**127-1) == (b'\x7f' + b'\xff'*15 + b'\x00'*16)
 
 def test_abi_encode_single_real():
@@ -50,10 +51,10 @@ def test_abi_decode_single_hash():
 
 def test_abi_decode_single_bytes():
     typ = ['bytes', '8', []]
-    assert (b'\x01\x02' + b'\x00'*6) == abi.decode_single(typ, abi.encode_single(typ, '\x01\x02'))
+    assert (b'\x01\x02' + b'\x00'*6) == abi.decode_single(typ, abi.encode_single(typ, b'\x01\x02'))
 
     typ = ['bytes', '', []]
-    assert b'\x01\x02' == abi.decode_single(typ, abi.encode_single(typ, '\x01\x02'))
+    assert b'\x01\x02' == abi.decode_single(typ, abi.encode_single(typ, b'\x01\x02'))
 
 def test_abi_encode_single_prefixed_address():
     prefixed_address = '0x' + '0'*40

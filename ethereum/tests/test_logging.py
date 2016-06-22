@@ -5,6 +5,20 @@ import pytest
 from ethereum import slogging
 
 
+def setup_function(function):
+    """ setup any state tied to the execution of the given function.
+    Invoked for every test function in the module.
+    """
+    function.snapshot = slogging.get_configuration()
+
+
+def teardown_function(function):
+    """ teardown any state that was previously setup with a setup_function
+    call.
+    """
+    slogging.configure(**function.snapshot)
+
+
 @pytest.mark.parametrize('level_name', ['critical', 'error', 'warning', 'info', 'debug', 'trace'])
 def test_basic(caplog, level_name):
     slogging.configure(":trace")
@@ -35,7 +49,7 @@ def test_jsonconfig(caplog):
     slogging.configure(log_json=True)
     log = slogging.get_logger('prefix')
     log.warn('abc', a=1)
-    assert json.loads(caplog.records()[0].msg) == dict(event='prefix.abc', a=1)
+    assert json.loads(caplog.records[0].msg) == dict(event='prefix.abc', a=1, level='WARNING')
 
 
 def test_configuration():
@@ -57,7 +71,7 @@ def test_tracebacks(caplog):
 
     def div(a, b):
         try:
-            _ = a / b
+            _ = a // b
             log.error('heres the stack', stack_info=True)
         except Exception as e:
             log.error('an Exception trace should preceed this msg', exc_info=True)
@@ -237,14 +251,14 @@ def test_bound_logger(caplog):
     with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
         assert "test1" in caplog.text
-        assert "key1=value1" in caplog.text
+        assert 'key1=value1' in caplog.text
 
     bound_log_2 = bound_log_1.bind(key2="value2")
     with caplog.at_level(slogging.TRACE):
         bound_log_2.info("test2")
         assert "test2" in caplog.text
-        assert "key1=value1" in caplog.text
-        assert "key2=value2" in caplog.text
+        assert 'key1=value1' in caplog.text
+        assert 'key2=value2' in caplog.text
 
 
 def test_bound_logger_isolation(caplog):
@@ -257,25 +271,25 @@ def test_bound_logger_isolation(caplog):
     bound_log_1 = real_log.bind(key1="value1")
     with caplog.at_level(slogging.TRACE):
         bound_log_1.info("test1")
-        records = caplog.records()
+        records = caplog.records
         assert len(records) == 1
         assert "test1" in records[0].msg
-        assert "key1=value1" in records[0].msg
+        assert 'key1=value1' in records[0].msg
 
     with caplog.at_level(slogging.TRACE):
         real_log.info("test2")
-        records = caplog.records()
+        records = caplog.records
         assert len(records) == 2
         assert "test2" in records[1].msg
-        assert "key1=value1" not in records[1].msg
+        assert 'key1=value1' not in records[1].msg
 
 
 def test_highlight(caplog):
-    slogging.configure()
+    slogging.configure(log_json=False)
     log = slogging.getLogger()
 
     log.DEV('testmessage')
-    assert "\033[91mtestmessage \033[0m" in caplog.records()[0].msg
+    assert "\033[91mtestmessage \033[0m" in caplog.records[0].msg
 
 
 def test_shortcut_dev_logger(capsys):
@@ -322,3 +336,19 @@ def test_logging_reconfigure_levels(config, logger, level):
 def test_set_level():
     slogging.set_level('test', 'CRITICAL')
     assert slogging.getLogger('test').level == logging.CRITICAL
+
+
+@pytest.mark.parametrize(
+    ('log_method', ), (
+        ('DEV', ),
+        ('trace', ),
+        ('info', ),
+    ))
+def test_logging_source_file(caplog, log_method):
+    slogging.configure(":trace")
+    logger = slogging.getLogger("test")
+    getattr(logger, log_method)("testmessage")
+
+    v = caplog.records[0]
+    print(v.pathname, v.module, v.name)
+    assert caplog.records[0].module == "test_logging"

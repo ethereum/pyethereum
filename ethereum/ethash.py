@@ -9,7 +9,7 @@ else:
     from functools import lru_cache
 
 
-cache_seeds = ['\x00' * 32]
+cache_seeds = [b'\x00' * 32]
 
 
 def mkcache(block_number):

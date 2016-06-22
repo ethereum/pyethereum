@@ -1,7 +1,7 @@
 import sys
 import rlp
-from utils import int_to_big_endian, big_endian_to_int, safe_ord
-import db
+from .utils import int_to_big_endian, big_endian_to_int, safe_ord
+from . import db
 
 
 def _encode_optimized(item):
@@ -73,7 +73,9 @@ if sys.version_info.major == 2:
     decode_optimized = _decode_optimized
 else:
     encode_optimized = rlp.codec.encode_raw
-    decode_optimized = rlp.codec.decode_raw
+    # rlp does not implement a decode_raw function.
+    # decode_optimized = rlp.codec.decode_raw
+    decode_optimized = _decode_optimized
 
 
 def main():
@@ -85,20 +87,20 @@ def main():
         x = trie.Trie(db.EphemDB())
         for i in range(10000):
             x.update(str(i), str(i**3))
-        print 'elapsed', time.time() - st
+        print('elapsed', time.time() - st)
         return x.root_hash
 
     trie.rlp_encode = _encode_optimized
-    print 'trie.rlp_encode = encode_optimized'
+    print('trie.rlp_encode = encode_optimized')
     r3 = run()
 
     trie.rlp_encode = rlp.codec.encode_raw
-    print 'trie.rlp_encode = rlp.codec.encode_raw'
+    print('trie.rlp_encode = rlp.codec.encode_raw')
     r2 = run()
     assert r2 == r3
 
     trie.rlp_encode = rlp.encode
-    print 'trie.rlp_encode = rlp.encode'
+    print('trie.rlp_encode = rlp.encode')
     r = run()
     assert r == r2
 

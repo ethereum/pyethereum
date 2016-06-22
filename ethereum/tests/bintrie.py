@@ -255,8 +255,8 @@ def test(n, m=100):
         k = hashfunc(str(i))
         v = hashfunc('v'+str(i))
         x = update(x, db, [int(a) for a in encode_bin(rlp.encode(k))], v)
-    print x
-    print sum([len(val) for key, val in db.db.items()])
+    print(x)
+    print(sum([len(val) for key, val in db.db.items()]))
     l1 = ListeningDB(db)
     o = 0
     p = 0
@@ -282,8 +282,8 @@ def test(n, m=100):
     o = {
         'total_db_size': sum([len(val) for key, val in l1.kv.items()]),
         'avg_proof_size': sum([len(val) for key, val in l1.kv.items()]),
-        'avg_compressed_proof_size': (p / min(n, m)),
-        'avg_branch_size': (q / min(n, m)),
+        'avg_compressed_proof_size': (p // min(n, m)),
+        'avg_branch_size': (q // min(n, m)),
         'compressed_db_size': len(compress_db(l1))
     }
     return o

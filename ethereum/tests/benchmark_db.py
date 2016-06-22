@@ -17,6 +17,6 @@ def benchmark(size):
         nsz.append(sum([len(v) for k, v in ldb2.kv.items()]))
         t.db = odb
     ldbsz = sum([len(v) for k, v in ldb.kv.items()])
-    print sz, sum(nsz) // len(nsz), ldbsz
+    print(sz, sum(nsz) // len(nsz), ldbsz)
 
 benchmark(int(sys.argv[1]) if len(sys.argv) > 1 else 1000)

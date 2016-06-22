@@ -3,6 +3,7 @@ import json
 import ethereum.trie as trie
 from ethereum.utils import to_string
 from ethereum.tests.utils import new_db
+from ethereum.testutils import fixture_to_bytes
 import ethereum.testutils as testutils
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -30,7 +31,7 @@ def run_test(name):
 
     logger.debug('testing %s' % name)
     t = trie.Trie(new_db())
-    data = load_tests()[name]
+    data = fixture_to_bytes(load_tests()[name])
 
     for k in data['in']:
         logger.debug('updating with (%s, %s)' % (k, k))

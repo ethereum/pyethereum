@@ -1,18 +1,34 @@
 language: python
-python: 2.7
-sudo: false
+python: 3.5
+sudo: required
+dist: trusty
+before_install:
+- sudo add-apt-repository -y ppa:ethereum/ethereum
+- sudo apt-get update
+- sudo apt-get install -y solc
 env:
-- TOX_ENV=py27
+  matrix:
+  - TOX_ENV=py27
+  - TOX_ENV=py34
+  - TOX_ENV=py35
+  global:
+    - COVERAGE_APPEND="--append"
+    - secure: cKbIgpTJ1yjKLBxpCEiT6IH7NShDWZUE+BvnrAfc+ujCsR6LyLJcKxFQmKnWryJCqg7fp82Ep2bF2oDKzanAROar2xDY1SFGbai42seYMaFCw53YPGJ6u3VNCcfT0rN9BWgE7el/m4fjcD6CRsZYKArNNJbMX8csRt3uXXCFLso=
 install:
-- pip install -Ur requirements.txt
-- pip install -Ur dev_requirements.txt
+  - travis_retry pip install setuptools --upgrade
+  - travis_retry pip install tox
+  - travis_retry pip install coverage
 script:
-- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore
-  ethereum/tests/test_state.py
-- coverage run --append --source ethereum -m py.test ethereum/tests/test_vm.py
-- coverage run --append --source ethereum -m py.test ethereum/tests/test_state.py
+  - if [ -d .tox/$TOX_ENV/ ]; then cd .tox/$TOX_ENV && coverage erase; fi;
+  - tox -e $TOX_ENV -- --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
+  - tox -e $TOX_ENV -- ethereum/tests/test_vm.py
+  - tox -e $TOX_ENV -- ethereum/tests/test_state.py
+  - cd .tox/$TOX_ENV && coverage report --show-missing
 after_success:
-- coveralls
+  - travis_retry pip install coveralls
+  - cd .tox/$TOX_ENV && coveralls
+after_script:
+  - cat .tox/$TOX_ENV/log/*.log
 notifications:
   slack:
     secure: W/UAhQ/GgYwMWrl3aiVAVOWr4WGdWrxUOX/rTB3ZgwDwGqDYLzQO5UqbsQlo1JXPZ6JOWfIPMURhHu7DSfue9dBW6xQ+NL+bFHe9lSXG4nqFK3IjezYyTBzNRJRDbGUvSSqgj6D5cwhJ8BjfUIRPbJz3CxL64KmsNXezEaMY60w=
@@ -25,3 +41,5 @@ deploy:
     tags: true
     repo: ethereum/pyethereum
     branch: develop
+after_deploy:
+- ./.release_notify.sh

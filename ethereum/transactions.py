@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import rlp
-from bitcoin import encode_pubkey, N, P, encode_privkey
+from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import encode_hex, str_to_bytes, ascii_chr
 from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
@@ -54,6 +54,8 @@ class Transaction(rlp.Serializable):
     _sender = None
 
     def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
+        self.data = None
+
         to = utils.normalize_address(to, allow_blank=True)
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
@@ -85,7 +87,7 @@ class Transaction(rlp.Serializable):
                     pk.public_key = pk.ecdsa_recover(
                         rawhash,
                         pk.ecdsa_recoverable_deserialize(
-                            zpad("".join(chr(c) for c in int_to_32bytearray(self.r)), 32) + zpad("".join(chr(c) for c in int_to_32bytearray(self.s)), 32),
+                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
                             self.v - 27
                         ),
                         raw=True
@@ -94,7 +96,7 @@ class Transaction(rlp.Serializable):
                 except Exception:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
 
-                if pub[1:] == "\x00" * 32:
+                if pub[1:] == b"\x00" * 32:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 pub = encode_pubkey(pub, 'bin')
                 self._sender = utils.sha3(pub[1:])[-20:]
@@ -112,7 +114,7 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
-        if key in (0, '', '\x00' * 32, '0' * 64):
+        if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
 
@@ -124,8 +126,8 @@ class Transaction(rlp.Serializable):
         signature = pk.ecdsa_recoverable_serialize(
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
         )
-        signature = signature[0] + chr(signature[1])
-        self.v = ord(signature[64]) + 27
+        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        self.v = utils.safe_ord(signature[64]) + 27
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])
 
@@ -157,6 +159,7 @@ class Transaction(rlp.Serializable):
         d = self.to_dict()
         d['sender'] = encode_hex(d['sender'] or '')
         d['to'] = encode_hex(d['to'])
+        d['data'] = encode_hex(d['data'])
         return d
 
     @property
@@ -170,9 +173,8 @@ class Transaction(rlp.Serializable):
     @property
     def creates(self):
         "returns the address of a contract created by this tx"
-        if self.to in (b'', '\0'*20):
+        if self.to in (b'', '\0' * 20):
             return mk_contract_address(self.sender, self.nonce)
-
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
@@ -193,7 +195,7 @@ class Transaction(rlp.Serializable):
     # The >= operator is replaced by > because the integer division N/2 always produces the value
     # which is by 0.5 less than the real N/2
     def check_low_s(self):
-        if self.s > N/2 or self.s == 0:
+        if self.s > N // 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
 
 
