@@ -230,6 +230,7 @@ class VMExt():
         self.set_nonce = block.set_nonce
         self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
+        self.get_storage_bytes = block.get_storage_bytes
         self.log_storage = lambda x: block.account_to_dict(x)['storage']
         self.add_suicide = lambda x: block.suicides.append(x)
         self.add_refund = lambda x: \
