@@ -1448,7 +1448,7 @@ def genesis(env, **kwargs):
         if 'storage' in data:
             for k, v in data['storage'].items():
                 block.set_storage_data(addr, utils.big_endian_to_int(decode_hex(k[2:])),
-                                       utils.big_endian_to_int(decode_hex(v[2:])))
+                                       decode_hex(v[2:]))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization
