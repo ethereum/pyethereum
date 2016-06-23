@@ -1,6 +1,7 @@
 import logging
 import json
 import textwrap
+from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, isnumeric
 
@@ -155,6 +156,11 @@ class BoundLogger(object):
     fatal = critical = lambda self, *args, **kwargs: self._proxy('critical', *args, **kwargs)
 
 
+class _LogJSONEncoder(JSONEncoder):
+    def default(self, o):
+        return repr(o)
+
+
 class SLogger(logging.Logger):
 
     def __init__(self, name, level=DEFAULT_LOGLEVEL):
@@ -174,17 +180,20 @@ class SLogger(logging.Logger):
             message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
             message['level'] = logging.getLevelName(level)
             try:
-                message.update({
-                    k: v if isnumeric(v) or isinstance(v, (float, complex, list, str, dict)) else repr(v)
-                    for k, v in kwargs.items()
-                })
-                msg = json.dumps(message)
+                message.update(kwargs)
+                try:
+                    msg = json.dumps(message, cls=_LogJSONEncoder)
+                except TypeError:
+                    # Invalid value. With our custom encoder this can only happen with non-string
+                    # dict keys (see: https://bugs.python.org/issue18820).
+                    message = _stringify_dict_keys(message)
+                    msg = json.dumps(message, cls=_LogJSONEncoder)
             except UnicodeDecodeError:
                 message.update({
                     k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
                     for k, v in kwargs.items()
                 })
-                msg = json.dumps(message)
+                msg = json.dumps(message, cls=_LogJSONEncoder)
         else:
             msg = "{}{} {}{}".format(
                 bcolors.WARNING if highlight else "",
@@ -244,6 +253,21 @@ class SManager(logging.Manager):
 rootLogger = RootLogger(DEFAULT_LOGLEVEL)
 SLogger.root = rootLogger
 SLogger.manager = SManager(SLogger.root)
+
+
+def _stringify_dict_keys(input_):
+    if isinstance(input_, dict):
+        res = {}
+        for k, v in input_.items():
+            v = _stringify_dict_keys(v)
+            if not isinstance(k, (int, long, bool, None.__class__)):
+                k = str(k)
+            res[k] = v
+    elif isinstance(input_, (list, tuple)):
+        res = input_.__class__([_stringify_dict_keys(i) for i in input_])
+    else:
+        res = input_
+    return res
 
 
 def getLogger(name=None):
