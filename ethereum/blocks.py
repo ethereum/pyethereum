@@ -63,7 +63,9 @@ class lazy_encode(object):
 def calc_difficulty(parent, timestamp):
     config = parent.config
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
-    if parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
+    if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
+        sign = max(len(parent.uncles) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
+    elif parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
         sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     else:
         sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
