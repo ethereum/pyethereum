@@ -1112,7 +1112,7 @@ class Block(rlp.Serializable):
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
                 hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
-                    if v2 != '':
+                    if v2 != b'':
                         med_dict['storage'][hexkey] = \
                             b'0x' + encode_hex(v2)
                 elif v is not None:
