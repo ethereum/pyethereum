@@ -482,7 +482,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas_payment:
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gas_payment
-                data = ''.join(map(chr, mem[mstart: mstart + msize]))
+                data = b''.join(map(chr, mem[mstart: mstart + msize]))
                 ext.set_storage_data(msg.to, data)
                 ext.add_refund(refund)
             elif op == 'SSIZE':

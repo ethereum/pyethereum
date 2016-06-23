@@ -344,7 +344,7 @@ def encode_single(typ, arg):
             return zpad(arg, 32)
         elif len(arg) == 40:
             return zpad(decode_hex(arg), 32)
-        elif len(arg) == 42 and arg[:2] == '0x':
+        elif len(arg) == 42 and arg[:2] in {'0x', b'0x'}:
             return zpad(decode_hex(arg[2:]), 32)
         else:
             raise EncodingError("Could not parse address: %r" % arg)
