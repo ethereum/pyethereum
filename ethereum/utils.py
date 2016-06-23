@@ -145,7 +145,7 @@ def check_and_strip_checksum(x):
 
 
 def normalize_address(x, allow_blank=False):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return int_to_addr(x)
     if allow_blank and (x == '' or x == b''):
         return b''
