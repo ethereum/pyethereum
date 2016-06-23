@@ -62,8 +62,6 @@ else:
     def bytearray_to_bytestr(value):
         return bytes(value)
 
-isnumeric = is_numeric
-
 
 def mk_contract_address(sender, nonce):
     return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
@@ -145,7 +143,7 @@ def check_and_strip_checksum(x):
 
 
 def normalize_address(x, allow_blank=False):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return int_to_addr(x)
     if allow_blank and (x == '' or x == b''):
         return b''
@@ -426,17 +424,6 @@ int32 = BigEndianInt(32)
 int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
-
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[91m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
 def DEBUG(msg, *args, **kwargs):

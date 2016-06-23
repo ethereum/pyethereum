@@ -107,7 +107,7 @@ class Miner():
 
 
 def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
-    assert utils.isnumeric(start_nonce)
+    assert utils.is_numeric(start_nonce)
     cache = get_cache(block_number)
     nonce = start_nonce
     target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
