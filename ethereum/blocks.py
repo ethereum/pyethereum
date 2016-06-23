@@ -965,7 +965,7 @@ class Block(rlp.Serializable):
             for k in self.caches[CACHE_KEY]:
                 self.set_and_journal(CACHE_KEY, k, 0)
 
-    def get_storage_data(self, address, index):
+    def get_storage_bytes(self, address, index):
         """Get a specific item in the storage of an account.
 
         :param address: the address of the account (binary or hex string)
@@ -981,9 +981,16 @@ class Block(rlp.Serializable):
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         storage = self.get_storage(address).get(key)
         if storage:
-            return rlp.decode(storage, big_endian_int)
+            return rlp.decode(storage)
         else:
-            return 0
+            return ''
+
+    def get_storage_data(self, address, index):
+        bytez = self.get_storage_bytes(address, index)
+        if len(bytez) >= 32:
+            return big_endian_to_int(bytez[-32:])
+        else:
+            return big_endian_to_int(bytez) * (1 << (8 * (32 - len(bytes))))
 
     def set_storage_data(self, address, index, value):
         """Set a specific item in the storage of an account.

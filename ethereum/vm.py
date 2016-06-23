@@ -12,7 +12,7 @@ from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string
+from ethereum.utils import to_string, encode_int, zpad
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -435,7 +435,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost
                 ext.add_refund(refund)  # adds neg gascost as a refund if below zero
-                ext.set_storage_data(msg.to, s0, s1)
+                ext.set_storage_data(msg.to, s0, zpad(encode_int(s1), 32))
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][0] if \
@@ -456,6 +456,37 @@ def vm_execute(ext, msg, code):
                 stk.append(len(mem))
             elif op == 'GAS':
                 stk.append(compustate.gas)  # AFTER subtracting cost 1
+        elif 0xe0 <= opcode < 0xef:
+            if not ext.post_metropolis_hardfork():
+                return vm_exception('OPCODE RANGE INACTIVE', opcode=opcode)
+            if op == 'SLOADBYTES':
+                key, mstart, msize = stk.pop(), stk.pop(), stk.pop()
+                bytez = map(ord, ext.get_storage_bytes(msg.to, key))
+                if not mem_extend(mem, compustate, op, mstart, min(msize, mstart + len(bytez))):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                for i in range(min(msize, len(bytez))):
+                    mem[mstart + i] = bytez[i]
+                stk.append(ext.get_storage_data(msg.to, stk.pop()))
+            elif op == 'SSTOREBYTES':
+                key, mstart, msize = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, mstart, min(msize, mstart + len(bytez))):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                prev_adjbyte_count = len(ext.get_storage_data(msg.to, key))
+                if prev_adjbyte_count >= 0:
+                    prev_adjbyte_count += 32
+                post_adjbyte_count = msize + (32 if msize else 0)
+                gas_cost = opcodes.GSTORAGEBASE + opcodes.GSTORAGEBYTESTORAGE * \
+                    (post_adjbyte_count - prev_adjbyte_count) + opcodes.GSTORAGEBYTECHANGE * post_adjbyte_count
+                gas_payment = max(opcodes.GSTORAGEMIN, gas_cost)
+                refund = gas_payment - gas_cost
+                if compustate.gas < gas_payment:
+                    return vm_exception('OUT OF GAS')
+                compustate.gas -= gas_payment
+                data = ''.join(map(chr, mem[mstart: mstart + msize]))
+                ext.set_storage_data(msg.to, data)
+                ext.add_refund(refund)
+            elif op == 'SSIZE':
+                stk.append(len(ext.get_storage_bytes(msg.to, stk.pop())))
         elif op[:4] == 'PUSH':
             pushnum = int(op[4:])
             compustate.pc += pushnum
