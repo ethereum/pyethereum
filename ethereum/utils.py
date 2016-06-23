@@ -145,11 +145,11 @@ def check_and_strip_checksum(x):
 
 
 def normalize_address(x, allow_blank=False):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return int_to_addr(x)
     if allow_blank and (x == '' or x == b''):
         return b''
-    if len(x) in (42, 50) and x[:2] == '0x':
+    if len(x) in (42, 50) and x[:2] == b'0x':
         x = x[2:]
     if len(x) in (40, 48):
         x = decode_hex(x)
