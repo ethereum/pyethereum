@@ -8,7 +8,7 @@ from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
-from ethereum.utils import to_string, safe_ord, parse_int_or_hex
+from ethereum.utils import to_string, safe_ord, parse_int_or_hex, zpad
 from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
 from ethereum.config import Env
 import json
@@ -58,7 +58,10 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    return s if len(s) > 2 else b'0x00'
+    s = (s if len(s) > 2 else b'0x00')
+    if len(s) < 66:
+        s = s[:2] + b'0' * (66 - len(s)) + s[2:]
+    return s
 
 
 def acct_standard_form(a):
@@ -154,7 +157,7 @@ def run_vm_test(params, mode, profiler=None):
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(decode_hex(k[2:])),
-                                 utils.big_endian_to_int(decode_hex(v[2:])))
+                                 zpad(decode_hex(v[2:]), 32))
 
     # execute transactions
     sender = decode_hex(exek['caller'])  # a party that originates a call
@@ -306,7 +309,7 @@ def run_state_test(params, mode):
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(decode_hex(k[2:])),
-                                 utils.big_endian_to_int(decode_hex(v[2:])))
+                                 zpad(decode_hex(v[2:]), 32))
 
     for address, h in list(pre.items()):
         address = decode_hex(address)

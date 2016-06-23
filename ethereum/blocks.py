@@ -14,7 +14,8 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string,
+from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum.utils import big_endian_to_int
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -990,7 +991,7 @@ class Block(rlp.Serializable):
         if len(bytez) >= 32:
             return big_endian_to_int(bytez[-32:])
         else:
-            return big_endian_to_int(bytez) * (1 << (8 * (32 - len(bytes))))
+            return big_endian_to_int(bytez) * (1 << (8 * (32 - len(bytez))))
 
     def set_storage_data(self, address, index, value):
         """Set a specific item in the storage of an account.
@@ -1006,6 +1007,7 @@ class Block(rlp.Serializable):
         if CACHE_KEY not in self.caches:
             self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
+        assert isinstance(value, (str, bytes))
         self.set_and_journal(CACHE_KEY, index, value)
 
     def account_exists(self, address):

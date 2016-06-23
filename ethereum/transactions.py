@@ -3,7 +3,10 @@ import rlp
 from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import encode_hex, str_to_bytes, ascii_chr
-from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
+try:
+    from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
+except:
+    pass
 
 from ethereum.exceptions import InvalidTransaction
 from ethereum import bloom
@@ -82,19 +85,27 @@ class Transaction(rlp.Serializable):
                 rlpdata = rlp.encode(self, UnsignedTransaction)
                 rawhash = utils.sha3(rlpdata)
 
-                pk = PublicKey(flags=ALL_FLAGS)
                 try:
-                    pk.public_key = pk.ecdsa_recover(
-                        rawhash,
-                        pk.ecdsa_recoverable_deserialize(
-                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
-                            self.v - 27
-                        ),
-                        raw=True
-                    )
-                    pub = pk.serialize(compressed=False)
-                except Exception:
-                    raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
+                    pk = PublicKey(flags=ALL_FLAGS)
+                    using_pk = 1
+                except:
+                    pk, using_pk = None, 0
+                if not using_pk:
+                    recovered_addr = bitcoin.ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
+                    pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
+                else:
+                    try:
+                        pk.public_key = pk.ecdsa_recover(
+                            rawhash,
+                            pk.ecdsa_recoverable_deserialize(
+                                zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
+                                self.v - 27
+                            ),
+                            raw=True
+                        )
+                        pub = pk.serialize(compressed=False)
+                    except Exception:
+                        raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
 
                 if pub[1:] == b"\x00" * 32:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")

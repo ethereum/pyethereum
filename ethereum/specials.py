@@ -1,7 +1,10 @@
 # -*- coding: utf8 -*-
 import bitcoin
 from rlp.utils import ascii_chr
-from secp256k1 import PublicKey, ALL_FLAGS
+try:
+    from secp256k1 import PublicKey, ALL_FLAGS
+except:
+    pass
 
 from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex
@@ -30,26 +33,32 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, []
 
-    signature_bytes = [0] * 64
-    msg.data.extract_copy(signature_bytes, 0, 64, 32)
-    msg.data.extract_copy(signature_bytes, 32, 96, 32)
-    signature = b''.join(map(ascii_chr, signature_bytes))
-
-    pk = PublicKey(flags=ALL_FLAGS)
     try:
-        pk.public_key = pk.ecdsa_recover(
-            message_hash,
-            pk.ecdsa_recoverable_deserialize(
-                signature,
-                v - 27
-            ),
-            raw=True
-        )
-    except Exception:
-        # Recovery failed
-        return 1, msg.gas - gas_cost, []
-
-    pub = pk.serialize(compressed=False)
+        signature_bytes = [0] * 64
+        msg.data.extract_copy(signature_bytes, 0, 64, 32)
+        msg.data.extract_copy(signature_bytes, 32, 96, 32)
+        signature = b''.join(map(ascii_chr, signature_bytes))
+    
+        pk = PublicKey(flags=ALL_FLAGS)
+        try:
+            pk.public_key = pk.ecdsa_recover(
+                message_hash,
+                pk.ecdsa_recoverable_deserialize(
+                    signature,
+                    v - 27
+                ),
+                raw=True
+            )
+        except Exception:
+            # Recovery failed
+            return 1, msg.gas - gas_cost, []
+    
+        pub = pk.serialize(compressed=False)
+    except:
+        recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
+        if recovered_addr in (False, (0, 0)):
+            return 1, msg.gas - gas_cost, []
+        pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
 
