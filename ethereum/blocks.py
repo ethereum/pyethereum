@@ -1447,7 +1447,8 @@ def genesis(env, **kwargs):
             block.set_nonce(addr, utils.parse_int_or_hex(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                block.set_storage_data(addr, utils.big_endian_to_int(decode_hex(k[2:])),
+                block.set_storage_data(addr,
+                                       utils.big_endian_to_int(decode_hex(k[2:])),
                                        decode_hex(v[2:]))
     block.commit_state()
     block.state.db.commit()
