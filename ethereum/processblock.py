@@ -146,6 +146,7 @@ def apply_transaction(block, tx):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     intrinsic_gas = tx.intrinsic_gas_used
+    print 'b1', block.get_balance(tx.sender)
     if block.number >= block.config['HOMESTEAD_FORK_BLKNUM']:
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
@@ -164,6 +165,7 @@ def apply_transaction(block, tx):
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
+    print 'b2', block.get_balance(tx.sender)
     # MESSAGE
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
@@ -213,6 +215,7 @@ def apply_transaction(block, tx):
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []
+    print 'b3', block.get_balance(tx.sender), success
     return success, output
 
 
@@ -308,7 +311,7 @@ def create_contract(ext, msg):
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     code = msg.data.extract_all()
-    if ext._block.number >= ext._block.METROPOLIS_FORK_BLKNUM:
+    if ext._block.number >= ext._block.config["METROPOLIS_FORK_BLKNUM"]:
         msg.to = mk_metropolis_contract_address(msg.sender, code)
         if ext.get_code(msg.to):
             if ext.get_nonce(msg.to) >= 2**40:

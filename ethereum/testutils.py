@@ -30,7 +30,7 @@ env = {
 }
 
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace'
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 FILL = 1
@@ -157,7 +157,7 @@ def run_vm_test(params, mode, profiler=None):
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(decode_hex(k[2:])),
-                                 zpad(decode_hex(v[2:]), 32))
+                                 decode_hex(v[2:]))
 
     # execute transactions
     sender = decode_hex(exek['caller'])  # a party that originates a call
@@ -297,6 +297,7 @@ def run_state_test(params, mode):
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
     blk = blocks.Block(header, env=db_env)
+    blk.config['HOMESTEAD_FORK_BLKNUM'] = 1000000
 
     # setup state
     for address, h in list(pre.items()):
@@ -309,7 +310,7 @@ def run_state_test(params, mode):
         for k, v in h['storage'].items():
             blk.set_storage_data(address,
                                  utils.big_endian_to_int(decode_hex(k[2:])),
-                                 zpad(decode_hex(v[2:]), 32))
+                                 decode_hex(v[2:]))
 
     for address, h in list(pre.items()):
         address = decode_hex(address)
@@ -360,12 +361,19 @@ def run_state_test(params, mode):
             assert False
 
         time_pre = time.time()
+        blk.commit_state()
+        snapshot = blk.snapshot()
         try:
             print('trying')
             success, output = pb.apply_transaction(blk, tx)
+            assert success
             blk.commit_state()
             print('success', blk.get_receipts()[-1].gas_used)
         except InvalidTransaction:
+            success, output = False, b''
+            blk.commit_state()
+            pass
+        except AssertionError:
             success, output = False, b''
             blk.commit_state()
             pass
@@ -392,11 +400,13 @@ def run_state_test(params, mode):
         compare_post_states(shouldbe, reallyis)
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'postStateRoot']:
-            shouldbe = params1.get(k, None)
-            reallyis = params2.get(k, None)
-            if shouldbe != reallyis:
+            _shouldbe = params1.get(k, None)
+            _reallyis = params2.get(k, None)
+            if _shouldbe != _reallyis:
+                print 's', shouldbe
+                print 'r', reallyis
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
-                                (shouldbe, reallyis))
+                                (_shouldbe, _reallyis))
 
     elif mode == TIME:
         return time_post - time_pre

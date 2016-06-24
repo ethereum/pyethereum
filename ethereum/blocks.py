@@ -991,7 +991,7 @@ class Block(rlp.Serializable):
         if len(bytez) >= 32:
             return big_endian_to_int(bytez[-32:])
         else:
-            return big_endian_to_int(bytez) * (1 << (8 * (32 - len(bytez))))
+            return big_endian_to_int(bytez)
 
     def set_storage_data(self, address, index, value):
         """Set a specific item in the storage of an account.
@@ -1112,9 +1112,9 @@ class Block(rlp.Serializable):
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
                 hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
-                    if v2 != 0:
+                    if v2 != '':
                         med_dict['storage'][hexkey] = \
-                            b'0x' + encode_hex(utils.int_to_big_endian(v2))
+                            b'0x' + encode_hex(v2)
                 elif v is not None:
                     med_dict['storage'][hexkey] = b'0x' + encode_hex(rlp.decode(v))
 

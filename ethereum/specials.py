@@ -55,7 +55,7 @@ def proc_ecrecover(ext, msg):
     
         pub = pk.serialize(compressed=False)
     except:
-        recovered_addr = bitcoin.ecdsa_raw_recover(h, (v, r, s))
+        recovered_addr = bitcoin.ecdsa_raw_recover(message_hash, (v, r, s))
         if recovered_addr in (False, (0, 0)):
             return 1, msg.gas - gas_cost, []
         pub = bitcoin.encode_pubkey(recovered_addr, 'bin')

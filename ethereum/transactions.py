@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import rlp
-from bitcoin import encode_pubkey, N, encode_privkey
+from bitcoin import encode_pubkey, N, encode_privkey, ecdsa_raw_sign
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import encode_hex, str_to_bytes, ascii_chr
 try:
@@ -133,14 +133,17 @@ class Transaction(rlp.Serializable):
             # we need a binary key
             key = encode_privkey(key, 'bin')
 
-        pk = PrivateKey(key, raw=True)
-        signature = pk.ecdsa_recoverable_serialize(
-            pk.ecdsa_sign_recoverable(rawhash, raw=True)
-        )
-        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
-        self.v = utils.safe_ord(signature[64]) + 27
-        self.r = big_endian_to_int(signature[0:32])
-        self.s = big_endian_to_int(signature[32:64])
+        try:
+            pk = PrivateKey(key, raw=True)
+            signature = pk.ecdsa_recoverable_serialize(
+                pk.ecdsa_sign_recoverable(rawhash, raw=True)
+            )
+            signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+            self.v = utils.safe_ord(signature[64]) + 27
+            self.r = big_endian_to_int(signature[0:32])
+            self.s = big_endian_to_int(signature[32:64])
+        except:
+            self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
 
         self.sender = utils.privtoaddr(key)
         return self

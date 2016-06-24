@@ -435,7 +435,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OUT OF GAS')
                 compustate.gas -= gascost
                 ext.add_refund(refund)  # adds neg gascost as a refund if below zero
-                ext.set_storage_data(msg.to, s0, zpad(encode_int(s1), 32))
+                ext.set_storage_data(msg.to, s0, encode_int(s1))
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
                 opnew = processed_code[compustate.pc][0] if \
