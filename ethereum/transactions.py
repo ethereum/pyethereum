@@ -220,3 +220,51 @@ def contract(nonce, gasprice, startgas, endowment, code, v=0, r=0, s=0):
     """A contract is a special transaction without the `to` argument."""
     tx = Transaction(nonce, gasprice, startgas, '', endowment, code, v, r, s)
     return tx
+
+
+class TransactionPool(object):
+    """
+    A data structure for pooling transactions.
+    """
+
+    MAX_SIZE = 14
+
+    def __init__(self):
+        self.pool = []
+
+    def pool_transaction(self, tx):
+        """
+        Put `tx` into pool, indexed by the current block number `at_block`.
+        :param at_block: the current block number
+        :param tx: the transaction
+        """
+        assert tx not in self.pool, 'duplicate tx in pool'
+        assert tx.nonce is not None
+        assert tx.sender is not None
+        if len(self.pool) > TransactionPool.MAX_SIZE:
+            # FIXME: better error for this
+            raise ValueError("transaction pool full")
+        self.pool.append(tx)
+
+    def pop_transaction(self):
+        """
+        Get the first transaction from the pool. Transactions
+        are sorted by their nonce.
+        Note: this pop's from the pool. Re-add transactions if necessary!
+        :return: the 'next' transaction from the pool or None
+        """
+        self.pool.sort(key=lambda tx: tx.nonce, reverse=True)
+        if len(self.pool):
+            return self.pool.pop()
+        return None
+
+    def get_highest_nonce(self, address):
+        """
+        Return the highest nonce for `address` from the transaction pool.
+        :param address: the sender address
+        :return: nonce or None
+        """
+        txs_for_address = filter(lambda tx: tx.sender == address, self.pool)
+        if any(txs_for_address):
+            return max(tx.nonce for tx in txs_for_address)
+        return None

@@ -5,11 +5,12 @@ from ethereum import pruning_trie as trie
 from ethereum.refcount_db import RefcountDB
 from ethereum.db import OverlayDB
 from ethereum.utils import to_string, is_string
+from ethereum.transactions import TransactionPool
 import rlp
 from rlp.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
-from ethereum.exceptions import VerificationFailed, InvalidTransaction
+from ethereum.exceptions import VerificationFailed, InvalidTransaction, BlockGasLimitReached, InvalidNonce
 from ethereum.slogging import get_logger
 from ethereum.config import Env
 log = get_logger('eth.chain')
@@ -114,6 +115,7 @@ class Chain(object):
         assert isinstance(env, Env)
         self.env = env
         self.db = self.blockchain = env.db
+        self.transaction_pool = TransactionPool()
         self.new_head_cb = new_head_cb
         self.index = Index(self.env)
         self._coinbase = coinbase
@@ -199,6 +201,12 @@ class Chain(object):
             self.new_head_cb(block)
 
     def _update_head_candidate(self, forward_pending_transactions=True):
+        """
+        Move to next head candidate.
+        Re-apply transactions from previous head_candidate and transaction_pool.
+        :param forward_pending_transactions:
+        :return:
+        """
         "after new head is set"
         log.debug('updating head candidate', head=self.head)
         # collect uncles
@@ -234,9 +242,22 @@ class Chain(object):
                 if forward_pending_transactions:
                     log.debug('forwarding pending transactions', num=len(pending))
                     for tx in pending:
-                        self.add_transaction(tx)
+                        try:
+                            self.transaction_pool.pool_transaction(tx)
+                        except ValueError as e:
+                            log.error("could not add tx to pool", tx=tx, err=e)
                 else:
                     log.debug('discarding pending transactions', num=len(pending))
+        pooled_tx = self.transaction_pool.pop_transaction()
+        assert self.head != self.head_candidate
+        while pooled_tx:
+            if not self.add_transaction(pooled_tx):
+                log.debug("could not add pooled tx", tx=pooled_tx)
+                # we could not apply the tx; `add_transaction` will add to pool
+                break
+            else:
+                assert pooled_tx in head_candidate.get_transactions()
+            pooled_tx = self.transaction_pool.pop_transaction()
 
     def get_uncles(self, block):
         """Return the uncles of `block`."""
@@ -351,6 +372,31 @@ class Chain(object):
         head_candidate.state_root = self.pre_finalize_state_root
         try:
             success, output = processblock.apply_transaction(head_candidate, transaction)
+        except BlockGasLimitReached as e:
+            if len(head_candidate.transaction_list):
+                log.debug("enqueuing tx over BlockGasLimit", exc=e)
+                try:
+                    self.transaction_pool.pool_transaction(transaction)
+                except ValueError as e:
+                    log.error("could not pool transaction", tx=transaction, err=e)
+            else:
+                log.debug("tx will always be over BlockGasLimit", tx=transaction)
+            return False
+        except InvalidNonce as e:
+            log.debug("checking for currently invalid nonce being valid with tx pool",
+                    tx=transaction,
+                    head_candidate_nonce=head_candidate.get_nonce(transaction.sender))
+            highest_nonce = self.transaction_pool.get_highest_nonce(transaction.sender)
+
+            if highest_nonce is not None and highest_nonce + 1 == transaction.nonce:
+                log.debug("nonce is good after applying tx pool")
+                try:
+                    self.transaction_pool.pool_transaction(transaction)
+                except ValueError as e:
+                    log.error("could not pool transaction", tx=transaction, err=e)
+            else:
+                log.debug("nonce is invalid, even with tx pool", tx=transaction)
+            return False
         except InvalidTransaction as e:
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
@@ -358,8 +404,9 @@ class Chain(object):
             head_candidate.state_root = old_state_root  # reset
             return False
 
-        log.debug('valid tx')
+        log.debug('valid tx', tx=transaction, nonce=transaction.nonce)
 
+        # FIXME: this sounds terrible
         # we might have a new head_candidate (due to ctx switches in pyethapp)
         if self.head_candidate != head_candidate:
             log.debug('head_candidate changed during validation, trying again')
@@ -367,7 +414,7 @@ class Chain(object):
 
         self.pre_finalize_state_root = head_candidate.state_root
         head_candidate.finalize()
-        log.debug('tx applied', result=output)
+        log.debug('valid tx applied', result=(output or 'pooled'), tx=transaction, nonce=transaction.nonce)
         assert old_state_root != head_candidate.state_root
         return True
 
