@@ -81,7 +81,6 @@ def calc_difficulty(parent, timestamp):
     return o
 
 
-
 class Account(rlp.Serializable):
 
     """An Ethereum account.
@@ -399,7 +398,7 @@ class Block(rlp.Serializable):
                  parent=None, making=False):
         assert isinstance(env, Env), "No Env object given"
         assert isinstance(env.db, BaseDB), "No database object given"
-        self.env = env # don't re-set after init
+        self.env = env  # don't re-set after init
         self.db = env.db
         self.config = env.config
 
@@ -445,7 +444,7 @@ class Block(rlp.Serializable):
                 raise ValueError("Gas used exceeds gas limit")
             if self.timestamp <= parent.header.timestamp:
                 raise ValueError("Timestamp equal to or before parent")
-            if self.timestamp >= 2**256:
+            if self.timestamp >= 2 ** 256:
                 raise ValueError("Timestamp waaaaaaaaaaayy too large")
 
         for uncle in uncles:
@@ -534,7 +533,7 @@ class Block(rlp.Serializable):
         if not self.check_fields():
             raise ValueError("Block is invalid")
         if len(to_string(self.header.extra_data)) > self.config['MAX_EXTRADATA_LENGTH']:
-            raise ValueError("Extra data cannot exceed %d bytes" \
+            raise ValueError("Extra data cannot exceed %d bytes"
                              % default_config['MAX_EXTRADATA_LENGTH'])
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
@@ -698,7 +697,7 @@ class Block(rlp.Serializable):
         if n == 0 or self.header.number == 0:
             return []
         p = self.get_parent()
-        return [p] + p.get_ancestor_list(n-1)
+        return [p] + p.get_ancestor_list(n - 1)
 
     def get_ancestor_hash(self, n):
         assert n > 0
@@ -709,7 +708,7 @@ class Block(rlp.Serializable):
                 self.ancestor_hashes.append(
                     get_block(self.env,
                               self.ancestor_hashes[-1]).get_parent().hash)
-        return self.ancestor_hashes[n-1]
+        return self.ancestor_hashes[n - 1]
 
     # def get_ancestor(self, n):
     #     return self.get_block(self.get_ancestor_hash(n))
@@ -788,7 +787,7 @@ class Block(rlp.Serializable):
         new_value = self._get_acct_item(address, param) + value
         if new_value < 0:
             return False
-        self._set_acct_item(address, param, new_value % 2**256)
+        self._set_acct_item(address, param, new_value % 2 ** 256)
         return True
 
     def mk_transaction_receipt(self, tx):
