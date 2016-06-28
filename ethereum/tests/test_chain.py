@@ -80,7 +80,9 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None):
     return b
 
 
-def mine_next_block(parent, coinbase=None, transactions=[]):
+def mine_next_block(parent, coinbase=None, transactions=[], chain=None):
+    if chain:
+        c = chain
     if coinbase:
         c = Chain(env=parent.env, genesis=parent, coinbase=coinbase)
     else:
@@ -101,10 +103,10 @@ def test_mining(db):
 
 
 @pytest.fixture(scope="module")
-def get_transaction(gasprice=0, nonce=0):
+def get_transaction(gasprice=0, nonce=0, startgas=100000):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
-        nonce, gasprice, startgas=100000,
+        nonce, gasprice, startgas=startgas,
         to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
