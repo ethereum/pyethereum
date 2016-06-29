@@ -98,9 +98,16 @@ class ContractCreationFailed(Exception):
 
 class ABIContract(object):  # pylint: disable=too-few-public-methods
 
-    def __init__(self, test_state, abi_translator, address, listen=True, log_listener=None, default_key=None):  # pylint: disable=too-many-arguments
+    def __init__(self, _state, _abi, address, listen=True,  # pylint: disable=too-many-arguments
+                 log_listener=None, default_key=None):
         self.address = address
         self.default_key = default_key or DEFAULT_KEY
+
+        if isinstance(_abi, ContractTranslator):
+            abi_translator = _abi
+        else:
+            abi_translator = ContractTranslator(_abi)
+
         self.translator = abi_translator
 
         def listener(log):
@@ -110,10 +117,10 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
                 log_listener(result)
 
         if listen:
-            test_state.block.log_listeners.append(listener)
+            _state.block.log_listeners.append(listener)
 
         for function_name in self.translator.function_data:
-            function = self.method_factory(test_state, function_name)
+            function = self.method_factory(_state, function_name)
             method = types.MethodType(function, self)
             setattr(self, function_name, method)
 
@@ -377,10 +384,13 @@ class state(object):
         return recorder.pop_records()
 
     def mine(self, number_of_blocks=1, coinbase=DEFAULT_ACCOUNT, **kwargs):
-        if 'n' in kwargs: # compatibility 
+        if 'n' in kwargs:  # compatibility
             number_of_blocks = kwargs['n']
-            warnings.warn('The argument \'n\' is deprecated and its support will be removed '\
-                'in the future versions. Please use the name \'number_of_blocks\'.')
+            warnings.warn(
+                "The argument 'n' is deprecated and its support will be removed "
+                "in the future versions. Please use the name 'number_of_blocks'."
+            )
+
         for _ in range(number_of_blocks):
             self.block.finalize()
             self.block.commit_state()
