@@ -227,10 +227,13 @@ class VMExt():
     def __init__(self, block, tx):
         self._block = block
         self.get_code = block.get_code
+        self.set_code = block.set_code
         self.get_balance = block.get_balance
         self.set_balance = block.set_balance
+        self.delta_balance = block.delta_balance
         self.get_nonce = block.get_nonce
         self.set_nonce = block.set_nonce
+        self.increment_nonce = block.increment_nonce
         self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
         self.get_storage_bytes = block.get_storage_bytes
@@ -254,6 +257,10 @@ class VMExt():
         self.account_exists = block.account_exists
         self.post_homestead_hardfork = lambda: block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
         self.post_metropolis_hardfork = lambda: block.number >= block.config['METROPOLIS_FORK_BLKNUM']
+        self.snapshot = block.snapshot
+        self.revert = block.revert
+        self.transfer_value = block.transfer_value
+        self.reset_storage = block.reset_storage
 
 
 def apply_msg(ext, msg):
@@ -275,9 +282,9 @@ def _apply_msg(ext, msg, code):
                             state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
-    snapshot = ext._block.snapshot()
+    snapshot = ext.snapshot()
     if msg.transfers_value:
-        if not ext._block.transfer_value(msg.sender, msg.to, msg.value):
+        if not ext.transfer_value(msg.sender, msg.to, msg.value):
             log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                           want=msg.value)
             return 1, msg.gas, []
@@ -301,7 +308,7 @@ def _apply_msg(ext, msg, code):
 
     if res == 0:
         log_msg.debug('REVERTING')
-        ext._block.revert(snapshot)
+        ext.revert(snapshot)
 
     return res, gas, dat
 
@@ -311,7 +318,7 @@ def create_contract(ext, msg):
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     code = msg.data.extract_all()
-    if ext._block.number >= ext._block.config["METROPOLIS_FORK_BLKNUM"]:
+    if ext.post_metropolis_hardfork():
         msg.to = mk_metropolis_contract_address(msg.sender, code)
         if ext.get_code(msg.to):
             if ext.get_nonce(msg.to) >= 2**40:
@@ -322,19 +329,19 @@ def create_contract(ext, msg):
                 msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
     else:
         if ext.tx_origin != msg.sender:
-            ext._block.increment_nonce(msg.sender)
-        nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
+            ext.increment_nonce(msg.sender)
+        nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
-        ext._block.set_nonce(msg.to, 0)
-        ext._block.set_code(msg.to, b'')
-        ext._block.reset_storage(msg.to)
+        ext.set_nonce(msg.to, 0)
+        ext.set_code(msg.to, b'')
+        ext.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
-    snapshot = ext._block.snapshot()
+    snapshot = ext.snapshot()
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
 
@@ -346,11 +353,11 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext._block.number)
-            if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
-                ext._block.revert(snapshot)
+            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext.block_number)
+            if ext.post_homestead_hardfork():
+                ext.revert(snapshot)
                 return 0, 0, b''
-        ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
+        ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
         return 0, gas, b''
