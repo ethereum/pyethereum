@@ -54,7 +54,11 @@ default_config = dict(
     METROPOLIS_WRAPAROUND=65536,
     METROPOLIS_GETTER_CODE='6000355460205260206020f3'.decode('hex'),
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
-    # Metropolis fork
+    # DAO fork
+    DAO_FORK_BLKNUM = 9999998,
+    DAO_ADDRESS_LIST = [],
+    DAO_MAIN_ADDR = '0xbb9bc244d798123fde783fcc1c72d3bb8c189413',
+    DAO_NEWCODE = ''
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

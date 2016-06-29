@@ -1177,6 +1177,14 @@ class Block(rlp.Serializable):
         self.ether_delta = mysnapshot['ether_delta']
 
     def initialize(self, parent):
+        # DAO fork
+        if self.number == self.config["DAO_FORK_BLKNUM"]:
+            dao_main_addr = utils.normalize_address(self.config["DAO_MAIN_ADDR"])
+            for acct in map(utils.normalize_address, self.config["DAO_ADDRESS_LIST"]):
+                self.delta_balance(dao_main_addr, self.get_balance(addr))
+                self.set_balance(addr, 0)
+            self.set_code(dao_main_addr, self.config["DAO_NEWCODE"])
+        # Likely metropolis changes
         if self.number == self.config["METROPOLIS_FORK_BLKNUM"]:
             self.set_code(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
             self.set_code(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
