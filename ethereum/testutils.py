@@ -502,8 +502,8 @@ def run_state_test(params, mode):
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
             if _shouldbe != _reallyis:
-                print 's', shouldbe
-                print 'r', reallyis
+                print('s', shouldbe)
+                print('r', reallyis)
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
                                 (_shouldbe, _reallyis))
 

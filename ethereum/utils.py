@@ -62,8 +62,6 @@ else:
     def bytearray_to_bytestr(value):
         return bytes(value)
 
-isnumeric = is_numeric
-
 
 def mk_contract_address(sender, nonce):
     return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
@@ -120,7 +118,7 @@ def sha3(seed):
     # print seed
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3('')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -146,11 +144,11 @@ def check_and_strip_checksum(x):
 
 
 def normalize_address(x, allow_blank=False):
-    if isinstance(x, (int, long)):
+    if is_numeric(x):
         return int_to_addr(x)
-    if allow_blank and (x == '' or x == b''):
+    if allow_blank and x in {'', b''}:
         return b''
-    if len(x) in (42, 50) and x[:2] == '0x':
+    if len(x) in (42, 50) and x[:2] in {'0x', b'0x'}:
         x = x[2:]
     if len(x) in (40, 48):
         x = decode_hex(x)
@@ -174,7 +172,7 @@ def zunpad(x):
 
 
 def int_to_addr(x):
-    o = [''] * 20
+    o = [b''] * 20
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
@@ -427,17 +425,6 @@ int32 = BigEndianInt(32)
 int256 = BigEndianInt(256)
 hash32 = Binary.fixed_length(32)
 trie_root = Binary.fixed_length(32, allow_empty=True)
-
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[91m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
 def DEBUG(msg, *args, **kwargs):
