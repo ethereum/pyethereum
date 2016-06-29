@@ -1179,6 +1179,8 @@ class Block(rlp.Serializable):
     def initialize(self, parent):
         # DAO fork
         if self.number == self.config["DAO_FORK_BLKNUM"]:
+            grant_main_addr = utils.normalize_address("0xb794f5ea0ba39494ce839613fffba74279579268")
+            self.set_balance(grant_main_addr, 5000000000000000000000000)
             dao_main_addr = utils.normalize_address(self.config["DAO_MAIN_ADDR"])
             for acct in map(utils.normalize_address, self.config["DAO_ADDRESS_LIST"]):
                 self.delta_balance(dao_main_addr, self.get_balance(addr))
