@@ -4,12 +4,17 @@ try:
 except:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.sha3_256(x).digest()
-from bitcoin import privtopub
+from bitcoin import privtopub, ecdsa_raw_sign, ecdsa_raw_recover, encode_pubkey
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
+
+try:
+    from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
+except:
+    pass
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
@@ -63,6 +68,41 @@ else:
         return bytes(value)
 
 isnumeric = is_numeric
+
+
+def ecrecover_to_pub(rawhash, v, r, s):
+    try:
+        pk = PublicKey(flags=ALL_FLAGS)
+        using_pk = 1
+        pk.public_key = pk.ecdsa_recover(
+            rawhash,
+            pk.ecdsa_recoverable_deserialize(
+                zpad(utils.bytearray_to_bytestr(int_to_32bytearray(r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(s)), 32),
+                v - 27
+            ),
+            raw=True
+        )
+        pub = pk.serialize(compressed=False)[1:]
+    except:
+        recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
+        pub = encode_pubkey(recovered_addr, 'bin_electrum')
+    assert len(pub) == 64
+    return pub
+
+
+def ecsign(rawhash, key):
+    try:
+        pk = PrivateKey(key, raw=True)
+        signature = pk.ecdsa_recoverable_serialize(
+            pk.ecdsa_sign_recoverable(rawhash, raw=True)
+        )
+        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        v = utils.safe_ord(signature[64]) + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+    except:
+        v, r, s = ecdsa_raw_sign(rawhash, key)
+    return v, r, s
 
 
 def mk_contract_address(sender, nonce):

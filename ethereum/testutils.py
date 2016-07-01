@@ -10,7 +10,11 @@ import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex
 from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
+from ethereum.block import FakeHeader
 from ethereum.config import Env
+from ethereum.config import default_config
+from ethereum import state_transition
+from state import State
 import json
 import os
 import time
@@ -42,7 +46,7 @@ fill_vm_test = lambda params: run_vm_test(params, FILL)
 check_vm_test = lambda params: run_vm_test(params, VERIFY)
 time_vm_test = lambda params: run_vm_test(params, TIME)
 fill_state_test = lambda params: run_state_test(params, FILL)
-check_state_test = lambda params: run_state_test(params, VERIFY)
+check_state_test = lambda params: run_state_test1(params, VERIFY)
 time_state_test = lambda params: run_state_test(params, TIME)
 fill_ethash_test = lambda params: run_ethash_test(params, FILL)
 check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
@@ -58,7 +62,13 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    return s if len(s) > 2 else b'0x00'
+    if s[:2] != '0x':
+        s = '0x' + s
+    if s == '0x':
+        s = '0x00'
+    if len(s) < 66:
+        s = s[:2] + b'0' * (66 - len(s)) + s[2:]
+    return s
 
 
 def acct_standard_form(a):
@@ -271,6 +281,133 @@ def run_vm_test(params, mode, profiler=None):
             if shouldbe != reallyis:
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
                                 (shouldbe, reallyis))
+    elif mode == TIME:
+        return time_post - time_pre
+
+fake_headers = {}
+
+
+def mk_fake_header(blknum):
+    if blknum not in fake_headers:
+        fake_headers[blknum] = FakeHeader(utils.sha3(to_string(blknum)))
+    return fake_headers[blknum]
+
+
+def run_state_test1(params, mode):
+    pre = params['pre']
+    exek = params['transaction']
+    env = params['env']
+
+    assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
+                                   'previousHash', 'currentCoinbase',
+                                   'currentDifficulty', 'currentNumber'])
+    assert len(env['currentCoinbase']) == 40
+
+    default_config['HOMESTEAD_FORK_BLKNUM'] = 1000000
+
+    state = State(db=db,
+                  prev_headers=[mk_fake_header(i) for i in range(
+                      parse_int_or_hex(env['currentNumber']) - 1,
+                      max(-1, parse_int_or_hex(env['currentNumber']) - 257), -1)],
+                  block_number=parse_int_or_hex(env['currentNumber']),
+                  block_coinbase=utils.normalize_address(env['currentCoinbase']),
+                  timestamp=parse_int_or_hex(env['currentTimestamp']),
+                  gas_limit=parse_int_or_hex(env['currentGasLimit']),
+                  block_difficulty=parse_int_or_hex(env['currentDifficulty']))
+    # setup state
+    for address, h in list(pre.items()):
+        assert len(address) == 40
+        address = decode_hex(address)
+        assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
+        state.set_nonce(address, parse_int_or_hex(h['nonce']))
+        state.set_balance(address, parse_int_or_hex(h['balance']))
+        state.set_code(address, decode_hex(h['code'][2:]))
+        for k, v in h['storage'].items():
+            state.set_storage_data(address,
+                                   utils.big_endian_to_int(decode_hex(k[2:])),
+                                   decode_hex(v[2:]))
+
+    for address, h in list(pre.items()):
+        address = decode_hex(address)
+        assert state.get_nonce(address) == parse_int_or_hex(h['nonce'])
+        assert state.get_balance(address) == parse_int_or_hex(h['balance'])
+        assert state.get_code(address) == decode_hex(h['code'][2:])
+        for k, v in h['storage'].items():
+            assert state.get_storage_data(address, utils.big_endian_to_int(
+                decode_hex(k[2:]))) == utils.big_endian_to_int(decode_hex(v[2:]))
+
+    try:
+        tx = transactions.Transaction(
+            nonce=parse_int_or_hex(exek['nonce'] or b"0"),
+            gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
+            startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
+            to=normalize_address(exek['to'], allow_blank=True),
+            value=parse_int_or_hex(exek['value'] or b"0"),
+            data=decode_hex(remove_0x_head(exek['data'])))
+    except InvalidTransaction:
+        tx = None
+        success, output = False, b''
+        time_pre = time.time()
+        time_post = time_pre
+        state.commit()
+    else:
+        if 'secretKey' in exek:
+            tx.sign(exek['secretKey'])
+        elif all(key in exek for key in ['v', 'r', 's']):
+            tx.v = decode_hex(remove_0x_head(exek['v']))
+            tx.r = decode_hex(remove_0x_head(exek['r']))
+            tx.s = decode_hex(remove_0x_head(exek['s']))
+        else:
+            assert False
+
+        time_pre = time.time()
+        state.commit()
+        snapshot = state.snapshot()
+        assert snapshot
+        try:
+            print('trying')
+            success, output, logs = state_transition.apply_transaction(state, tx)
+            assert success
+            state.commit()
+            print('success')
+        except InvalidTransaction:
+            success, output = False, b''
+            state.commit()
+            pass
+        except AssertionError:
+            success, output = False, b''
+            state.commit()
+            pass
+        time_post = time.time()
+
+        if tx.to == b'':
+            output = state.get_code(output) if output else b''
+
+    params2 = copy.deepcopy(params)
+    if success:
+        params2['logs'] = [log.to_dict() for log in logs]
+
+    params2['out'] = b'0x' + encode_hex(output)
+    params2['post'] = copy.deepcopy(state.to_dict())
+    params2['postStateRoot'] = encode_hex(state.trie.root_hash)
+
+    if mode == FILL:
+        return params2
+    elif mode == VERIFY:
+        params1 = copy.deepcopy(params)
+        shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
+        compare_post_states(shouldbe, reallyis)
+        for k in ['pre', 'exec', 'env', 'callcreates',
+                  'out', 'gas', 'logs', 'postStateRoot']:
+            _shouldbe = params1.get(k, None)
+            _reallyis = params2.get(k, None)
+            if _shouldbe != _reallyis:
+                print 's', shouldbe
+                print 'r', reallyis
+                print state.trie.to_dict()
+                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
+                                (_shouldbe, _reallyis))
+
     elif mode == TIME:
         return time_post - time_pre
 
