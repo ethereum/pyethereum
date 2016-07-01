@@ -793,7 +793,7 @@ class Block(rlp.Serializable):
     def mk_transaction_receipt(self, tx):
         """Create a receipt for a transaction."""
         if self.number >= self.config["METROPOLIS_FORK_BLKNUM"]:
-            return Receipt('\x00' * 32, self.gas_used, self.logs)
+            return Receipt(b'\x00' * 32, self.gas_used, self.logs)
         else:
             return Receipt(self.state_root, self.gas_used, self.logs)
 
@@ -983,7 +983,7 @@ class Block(rlp.Serializable):
         if storage:
             return rlp.decode(storage)
         else:
-            return ''
+            return b''
 
     def get_storage_data(self, address, index):
         bytez = self.get_storage_bytes(address, index)
@@ -1111,7 +1111,7 @@ class Block(rlp.Serializable):
                 v2 = subcache.get(utils.big_endian_to_int(k), None)
                 hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
-                    if v2 != '':
+                    if v2 != b'':
                         med_dict['storage'][hexkey] = \
                             b'0x' + encode_hex(v2)
                 elif v is not None:
@@ -1454,8 +1454,9 @@ def genesis(env, **kwargs):
             block.set_nonce(addr, utils.parse_int_or_hex(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                block.set_storage_data(addr, utils.big_endian_to_int(decode_hex(k[2:])),
-                                       utils.big_endian_to_int(decode_hex(v[2:])))
+                block.set_storage_data(addr,
+                                       utils.big_endian_to_int(decode_hex(k[2:])),
+                                       decode_hex(v[2:]))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization

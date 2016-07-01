@@ -8,7 +8,7 @@ from rlp.utils import decode_hex, encode_hex
 
 from ethereum import utils
 from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
-from ethereum.utils import isnumeric, TT256, TT255
+from ethereum.utils import TT256, TT255
 
 
 def json_decode(data):
@@ -327,7 +327,7 @@ def encode_single(typ, arg):
     elif base == 'hash':
         if not (int(sub) and int(sub) <= 32):
             raise EncodingError("too long: %r" % arg)
-        if isnumeric(arg):
+        if is_numeric(arg):
             return zpad(encode_int(arg), 32)
         elif len(arg) == int(sub):
             return zpad(arg, 32)
@@ -338,13 +338,13 @@ def encode_single(typ, arg):
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
-        if isnumeric(arg):
+        if is_numeric(arg):
             return zpad(encode_int(arg), 32)
         elif len(arg) == 20:
             return zpad(arg, 32)
         elif len(arg) == 40:
             return zpad(decode_hex(arg), 32)
-        elif len(arg) == 42 and arg[:2] == '0x':
+        elif len(arg) == 42 and arg[:2] in {'0x', b'0x'}:
             return zpad(decode_hex(arg[2:]), 32)
         else:
             raise EncodingError("Could not parse address: %r" % arg)
