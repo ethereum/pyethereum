@@ -10,7 +10,9 @@ import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex, zpad
 from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
+from ethereum.block import FakeHeader
 from ethereum.config import Env
+from ethereum.config import default_config
 from ethereum import state_transition
 from state import State
 import json
@@ -44,7 +46,7 @@ fill_vm_test = lambda params: run_vm_test(params, FILL)
 check_vm_test = lambda params: run_vm_test(params, VERIFY)
 time_vm_test = lambda params: run_vm_test(params, TIME)
 fill_state_test = lambda params: run_state_test(params, FILL)
-check_state_test = lambda params: run_state_test(params, VERIFY)
+check_state_test = lambda params: run_state_test1(params, VERIFY)
 time_state_test = lambda params: run_state_test(params, TIME)
 fill_ethash_test = lambda params: run_ethash_test(params, FILL)
 check_ethash_test = lambda params: run_ethash_test(params, VERIFY)
@@ -60,7 +62,10 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    s = (s if len(s) > 2 else b'0x00')
+    if s[:2] != '0x':
+        s = '0x' + s
+    if s == '0x':
+        s = '0x00'
     if len(s) < 66:
         s = s[:2] + b'0' * (66 - len(s)) + s[2:]
     return s
@@ -278,12 +283,6 @@ def run_vm_test(params, mode, profiler=None):
     elif mode == TIME:
         return time_post - time_pre
 
-
-class FakeHeader():
-    def __init__(self, h):
-        self.hash = h
-        self.uncles = []
-
 fake_headers = {}
 
 def mk_fake_header(blknum):
@@ -300,13 +299,16 @@ def run_state_test1(params, mode):
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
+
+    default_config['HOMESTEAD_FORK_BLKNUM'] = 1000000
     
     state = State(db=db,
                   prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
                   block_number=parse_int_or_hex(env['currentNumber']),
                   block_coinbase=utils.normalize_address(env['currentCoinbase']),
                   timestamp=parse_int_or_hex(env['currentTimestamp']),
-                  gas_limit=parse_int_or_hex(env['currentGasLimit']))
+                  gas_limit=parse_int_or_hex(env['currentGasLimit']),
+                  block_difficulty=parse_int_or_hex(env['currentDifficulty']))
     # setup state
     for address, h in list(pre.items()):
         assert len(address) == 40
@@ -342,6 +344,7 @@ def run_state_test1(params, mode):
         success, output = False, b''
         time_pre = time.time()
         time_post = time_pre
+        state.commit()
     else:
         if 'secretKey' in exek:
             tx.sign(exek['secretKey'])
@@ -354,7 +357,6 @@ def run_state_test1(params, mode):
 
         time_pre = time.time()
         state.commit()
-        print state.to_dict()
         snapshot = state.snapshot()
         try:
             print('trying')
@@ -372,8 +374,39 @@ def run_state_test1(params, mode):
             pass
         time_post = time.time()
 
+
         if tx.to == b'':
             output = state.get_code(output) if output else b''
+
+
+    params2 = copy.deepcopy(params)
+    if success:
+        params2['logs'] = [log.to_dict() for log in logs]
+
+
+    params2['out'] = b'0x' + encode_hex(output)
+    params2['post'] = copy.deepcopy(state.to_dict())
+    params2['postStateRoot'] = encode_hex(state.trie.root_hash)
+
+    if mode == FILL:
+        return params2
+    elif mode == VERIFY:
+        params1 = copy.deepcopy(params)
+        shouldbe, reallyis = params1.get('post', None), params2.get('post', None)
+        compare_post_states(shouldbe, reallyis)
+        for k in ['pre', 'exec', 'env', 'callcreates',
+                  'out', 'gas', 'logs', 'postStateRoot']:
+            _shouldbe = params1.get(k, None)
+            _reallyis = params2.get(k, None)
+            if _shouldbe != _reallyis:
+                print 's', shouldbe
+                print 'r', reallyis
+                print state.trie.to_dict()
+                raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
+                                (_shouldbe, _reallyis))
+
+    elif mode == TIME:
+        return time_post - time_pre
 
 
 # Fills up a vm test without post data, or runs the test
