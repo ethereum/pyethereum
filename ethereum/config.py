@@ -1,7 +1,7 @@
 from rlp.utils import decode_hex
 
 from ethereum import utils
-from ethereum.db import BaseDB
+from ethereum.db import BaseDB, EphemDB
 
 default_config = dict(
     # Genesis block difficulty
@@ -68,7 +68,7 @@ assert default_config['NEPHEW_REWARD'] == \
 
 class Env(object):
 
-    def __init__(self, db, config=None, global_config=None):
+    def __init__(self, db=EphemDB(), config=None, global_config=None):
         assert isinstance(db, BaseDB)
         self.db = db
         self.config = config or dict(default_config)

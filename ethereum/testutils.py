@@ -300,9 +300,10 @@ def run_state_test1(params, mode):
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
 
-    default_config['HOMESTEAD_FORK_BLKNUM'] = 1000000
+    konfig = copy.deepcopy(default_config)
+    konfig['HOMESTEAD_FORK_BLKNUM'] = 1000000
     
-    state = State(db=db,
+    state = State(env=Env(db, konfig),
                   prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
                   block_number=parse_int_or_hex(env['currentNumber']),
                   block_coinbase=utils.normalize_address(env['currentCoinbase']),

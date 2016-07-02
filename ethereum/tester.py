@@ -161,8 +161,7 @@ class state(object):
 
     def __init__(self, num_accounts=len(keys)):
         self.temp_data_dir = tempfile.mkdtemp()
-        self.db = db.EphemDB()
-        self.env = Env(self.db)
+        self.env = Env()
         self.last_tx = None
         self.log_listeners = []
 
@@ -187,7 +186,7 @@ class state(object):
             "timestamp": "1410973349",
             "coinbase": DEFAULT_ACCOUNT.encode('hex'),
             "gas_limit": "1000000000"
-        }, self.db)
+        }, self.env)
 
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
@@ -411,4 +410,4 @@ class state(object):
         return parse_genesis_declaration.to_snapshot(self.state)
 
     def revert(self, data):
-        self.state = parse_genesis_declaration.state_from_snapshot(data, self.db)
+        self.state = parse_genesis_declaration.state_from_snapshot(data, self.env)

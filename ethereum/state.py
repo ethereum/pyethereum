@@ -7,7 +7,7 @@ from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
-from config import default_config
+from config import default_config, Env
 from db import BaseDB, EphemDB
 import sys
 if sys.version_info.major == 2:
@@ -52,14 +52,22 @@ STATE_DEFAULTS = {
 
 class State():
 
-    def __init__(self, root='', db=EphemDB(), **kwargs):
-        self.db = db
+    def __init__(self, root='', env=Env(), **kwargs):
+        self.env = env
         self.trie = SecureTrie(Trie(self.db, root))
         for k, v in STATE_DEFAULTS.items():
             setattr(self, k, kwargs.get(k, v))
         self.journal = []
         self.cache = {}
         self.modified = {}
+
+    @property
+    def db(self):
+        return self.env.db
+
+    @property
+    def config(self):
+        return self.env.config
 
     def get_block_hash(self, n):
         if self.block_number < n or n > 256 or n < 0:
@@ -112,7 +120,7 @@ class State():
             o._mutable = True
             return o
         else:
-            return Account.blank_account(self.db, default_config['ACCOUNT_INITIAL_NONCE'])
+            return Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
 
     def get_storage(self, addr, k):
         if isinstance(k, (int, long)):
@@ -238,7 +246,7 @@ class State():
         if len(address) == 40:
             address = decode_hex(address)
         assert len(address) == 20
-        blank_acct = Account.blank_account(self.db, default_config['ACCOUNT_INITIAL_NONCE'])
+        blank_acct = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
         for param in ACCOUNT_OUTPUTTABLE_PARAMS:
             self.set_storage(address, param, getattr(blank_acct, param))
         self.set_storage(address, 'deleted', True)
@@ -291,7 +299,7 @@ class State():
         for address, v in self.cache.items():
             if encode_hex(address) not in state_dump:
                 state_dump[encode_hex(address)] = {"storage":{}}
-                blanky = Account.blank_account(self.db, default_config['ACCOUNT_INITIAL_NONCE'])
+                blanky = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
                 for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                     state_dump[encode_hex(address)][c] = snapshot_form(getattr(blanky, c))
             acct_dump = state_dump[encode_hex(address)]
