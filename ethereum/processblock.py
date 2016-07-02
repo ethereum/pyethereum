@@ -146,7 +146,6 @@ def apply_transaction(block, tx):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     intrinsic_gas = tx.intrinsic_gas_used
-    print('b1', block.get_balance(tx.sender))
     if block.number >= block.config['HOMESTEAD_FORK_BLKNUM']:
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
@@ -165,7 +164,6 @@ def apply_transaction(block, tx):
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
-    print('b2', block.get_balance(tx.sender))
     # MESSAGE
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
@@ -215,7 +213,6 @@ def apply_transaction(block, tx):
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []
-    print('b3', block.get_balance(tx.sender), success)
     return success, output
 
 
