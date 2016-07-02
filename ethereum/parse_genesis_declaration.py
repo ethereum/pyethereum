@@ -12,21 +12,26 @@ def parse_as_int(s):
 
 def state_from_snapshot(snapshot_data, db):
     state = State(db = db)
-    for addr, data in snapshot_data["alloc"].items():
-        if len(addr) == 40:
-            addr = decode_hex(addr)
-        assert len(addr) == 20
-        if 'wei' in data:
-            state.set_balance(addr, parse_as_int(data['wei']))
-        if 'balance' in data:
-            state.set_balance(addr, parse_as_int(data['balance']))
-        if 'code' in data:
-            state.set_code(addr, parse_as_bin(data['code']))
-        if 'nonce' in data:
-            state.set_nonce(addr, parse_as_int(data['nonce']))
-        if 'storage' in data:
-            for k, v in data['storage'].items():
-                state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
+    if "alloc" in snapshot_data:
+        for addr, data in snapshot_data["alloc"].items():
+            if len(addr) == 40:
+                addr = decode_hex(addr)
+            assert len(addr) == 20
+            if 'wei' in data:
+                state.set_balance(addr, parse_as_int(data['wei']))
+            if 'balance' in data:
+                state.set_balance(addr, parse_as_int(data['balance']))
+            if 'code' in data:
+                state.set_code(addr, parse_as_bin(data['code']))
+            if 'nonce' in data:
+                state.set_nonce(addr, parse_as_int(data['nonce']))
+            if 'storage' in data:
+                for k, v in data['storage'].items():
+                    state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
+    elif "state_root" in snapshot_data:
+        state.trie.root_hash = parse_as_bin(snapshot_data["state_root"])
+    else:
+        raise Exception("Must specify either alloc or state root parameter")
     for k, default in STATE_DEFAULTS.items():
         v = snapshot_data[k] if k in snapshot_data else None
         if isinstance(default, (int, long)):
@@ -59,9 +64,12 @@ def state_from_snapshot(snapshot_data, db):
     return state
 
 
-def to_snapshot(state):        
+def to_snapshot(state, root_only=False):
     snapshot = {}
-    snapshot["alloc"] = state.to_dict()
+    if root_only:
+        snapshot["state_root"] = '0x'+encode_hex(state.trie.root_hash)
+    else:
+        snapshot["alloc"] = state.to_dict()
     for k, default in STATE_DEFAULTS.items():
         v = getattr(state, k)
         if isinstance(default, (int, long)):
