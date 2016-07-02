@@ -14,6 +14,7 @@ from ethereum.config import Env
 from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
 from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
+from ethereum import parse_genesis_declaration, state_transition
 
 TRACE_LVL_MAP = [
     ':info',
@@ -117,7 +118,7 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
                 log_listener(result)
 
         if listen:
-            _state.block.log_listeners.append(listener)
+            _state.log_listeners.append(listener)
 
         for function_name in self.translator.function_data:
             function = self.method_factory(_state, function_name)
@@ -163,25 +164,30 @@ class state(object):
         self.db = db.EphemDB()
         self.env = Env(self.db)
         self.last_tx = None
+        self.log_listeners = []
+
+        # For backward compatibility purposes
+        class FakeBlock():
+            def __init__(self2):
+                self2.log_listeners = self.log_listeners
+        self.block = FakeBlock()
 
         initial_balances = {}
 
         for i in range(num_accounts):
             account = accounts[i]
-            initial_balances[account] = {'wei': 10 ** 24}
+            initial_balances[account.encode('hex')] = {'wei': str(10**24)}
 
         for i in range(1, 5):
             address = int_to_addr(i)
-            initial_balances[address] = {'wei': 1}
+            initial_balances[address.encode('hex')] = {'wei': "1"}
 
-        self.block = blocks.genesis(
-            self.env,
-            start_alloc=initial_balances,
-        )
-        self.blocks = [self.block]
-        self.block.timestamp = 1410973349
-        self.block.coinbase = DEFAULT_ACCOUNT
-        self.block.gas_limit = 10 ** 9
+        self.state = parse_genesis_declaration.state_from_snapshot({
+            "alloc": initial_balances,
+            "timestamp": "1410973349",
+            "coinbase": DEFAULT_ACCOUNT.encode('hex'),
+            "gas_limit": "1000000000"
+        }, self.db)
 
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
@@ -200,7 +206,7 @@ class state(object):
 
         address = self.evm(bytecode, sender, endowment)
 
-        if len(self.block.get_code(address)) == 0:
+        if len(self.state.get_code(address)) == 0:
             raise Exception('Contract code empty')
 
         return address
@@ -239,11 +245,11 @@ class state(object):
         )
 
     def clear_listeners(self):
-        while len(self.block.log_listeners):
-            self.block.log_listeners.pop()
+        while len(self.log_listeners):
+            self.log_listeners.pop()
 
     def evm(self, code, sender=DEFAULT_KEY, endowment=0, gas=None):
-        sendnonce = self.block.get_nonce(privtoaddr(sender))
+        sendnonce = self.state.get_nonce(privtoaddr(sender))
 
         transaction = transactions.contract(sendnonce, gas_price, gas_limit, endowment, code)
         transaction.sign(sender)
@@ -251,7 +257,10 @@ class state(object):
         if gas is not None:
             transaction.startgas = gas
 
-        (success, output) = processblock.apply_transaction(self.block, transaction)
+        (success, output, logs) = state_transition.apply_transaction(self.state, transaction)
+        for listener in self.log_listeners:
+            for log in logs:
+                listener(log)
 
         if not success:
             raise ContractCreationFailed()
@@ -275,9 +284,9 @@ class state(object):
             )
 
         start_time = time.time()
-        gas_used = self.block.gas_used
+        gas_used = self.state.gas_used
 
-        sendnonce = self.block.get_nonce(privtoaddr(sender))
+        sendnonce = self.state.get_nonce(privtoaddr(sender))
         transaction = transactions.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
         self.last_tx = transaction
         transaction.sign(sender)
@@ -290,7 +299,10 @@ class state(object):
             )
 
         try:
-            (success, output) = processblock.apply_transaction(self.block, transaction)
+            (success, output, logs) = state_transition.apply_transaction(self.state, transaction)
+            for listener in self.log_listeners:
+                for log in logs:
+                    listener(log)
 
             if not success:
                 raise TransactionFailed()
@@ -310,7 +322,7 @@ class state(object):
                 intrinsic_gas_used = base_gas_cost + zero_bytes_cost + nonzero_bytes_cost
 
                 out['time'] = time.time() - start_time
-                out['gas'] = self.block.gas_used - gas_used - intrinsic_gas_used
+                out['gas'] = self.state.gas_used - gas_used - intrinsic_gas_used
 
             if profiling > 1:
                 trace = recorder.pop_records()
@@ -392,27 +404,11 @@ class state(object):
             )
 
         for _ in range(number_of_blocks):
-            self.block.finalize()
-            self.block.commit_state()
-            self.db.put(self.block.hash, rlp.encode(self.block))
-            timestamp = self.block.timestamp + 6 + rand() % 12
-
-            block = blocks.Block.init_from_parent(
-                self.block,
-                coinbase,
-                timestamp=timestamp,
-            )
-
-            self.block = block
-            self.blocks.append(self.block)
+            self.state.block_number += 1
+            self.state.timestamp += (6 + rand() % 12)
 
     def snapshot(self):
-        return rlp.encode(self.block)
+        return parse_genesis_declaration.to_snapshot(self.state)
 
     def revert(self, data):
-        self.block = rlp.decode(data, blocks.Block, env=self.env)
-        # pylint: disable=protected-access
-        self.block._mutable = True
-        self.block.header._mutable = True
-        self.block._cached_rlp = None
-        self.block.header._cached_rlp = None
+        self.state = parse_genesis_declaration.state_from_snapshot(data, self.db)
