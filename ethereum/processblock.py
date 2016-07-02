@@ -341,6 +341,7 @@ def create_contract(ext, msg):
     snapshot = ext.snapshot()
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
+    log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat)
 
     if res:
         if not len(dat):
@@ -355,6 +356,7 @@ def create_contract(ext, msg):
                 ext.revert(snapshot)
                 return 0, 0, b''
         ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
+        log_msg.debug('SETTING CODE', addr=msg.to.encode('hex'))
         return 1, gas, msg.to
     else:
         return 0, gas, b''

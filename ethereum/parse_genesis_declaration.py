@@ -28,26 +28,32 @@ def state_from_snapshot(snapshot_data, db):
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
     for k, default in STATE_DEFAULTS.items():
-        v = snapshot_data[k] if k in snapshot_data else default
+        v = snapshot_data[k] if k in snapshot_data else None
         if isinstance(default, (int, long)):
-            setattr(state, k, parse_as_int(v))
+            setattr(state, k, parse_as_int(v) if k in snapshot_data else default)
         elif isinstance(default, (str, bytes)):
-            setattr(state, k, parse_as_bin(v))
+            setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
         elif k == 'prev_headers':
             headers = []
-            for i, h in enumerate(v):
-                headers.append(FakeHeader(hash=parse_as_bin(h['hash']),
-                                          number=state.block_number - i,
-                                          timestamp=parse_as_int(h['timestamp']),
-                                          difficulty=parse_as_int(h['difficulty']),
-                                          gas_limit=parse_as_int(h['gas_limit'])))
+            if k in snapshot_data:
+                for i, h in enumerate(v):
+                    headers.append(FakeHeader(hash=parse_as_bin(h['hash']),
+                                              number=state.block_number - i,
+                                              timestamp=parse_as_int(h['timestamp']),
+                                              difficulty=parse_as_int(h['difficulty']),
+                                              gas_limit=parse_as_int(h['gas_limit'])))
+            else:
+                headers = default
             setattr(state, k, headers)
         elif k == 'recent_uncles':
-            uncles = {}
-            for height, _uncles in v.items():
-                uncles[int(height)] = []
-                for uncle in _uncles:
-                    uncles[int(height)].append(parse_as_bin(uncle))
+            if k in snapshot_data:
+                uncles = {}
+                for height, _uncles in v.items():
+                    uncles[int(height)] = []
+                    for uncle in _uncles:
+                        uncles[int(height)].append(parse_as_bin(uncle))
+            else:
+                uncles = default
             setattr(state, k, uncles)
     state.commit()
     return state
