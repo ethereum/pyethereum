@@ -45,31 +45,31 @@ def initialize(state, block):
     state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
     state.block_coinbase = block.header.coinbase
     state.block_difficulty = block.header.difficulty
-    if state.block_number == default_config["METROPOLIS_FORK_BLKNUM"]:
-        self.set_code(utils.normalize_address(default_config["METROPOLIS_STATEROOT_STORE"]), default_config["METROPOLIS_GETTER_CODE"])
-        self.set_code(utils.normalize_address(default_config["METROPOLIS_BLOCKHASH_STORE"]), default_config["METROPOLIS_GETTER_CODE"])
-    if state.block_number >= default_config["METROPOLIS_FORK_BLKNUM"]:
-        self.set_storage_data(utils.normalize_address(default_config["METROPOLIS_STATEROOT_STORE"]),
-                              state.block_number % default_config["METROPOLIS_WRAPAROUND"],
+    if state.block_number == state.config["METROPOLIS_FORK_BLKNUM"]:
+        self.set_code(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
+        self.set_code(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
+    if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
+        self.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                              state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                               pre_root)
-        self.set_storage_data(utils.normalize_address(default_config["METROPOLIS_BLOCKHASH_STORE"]),
-                              state.block_number % default_config["METROPOLIS_WRAPAROUND"],
+        self.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                              state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                               state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
 
 def finalize(state, block):
     """Apply rewards and commit."""
-    delta = int(default_config['BLOCK_REWARD'] + default_config['NEPHEW_REWARD'] * len(block.uncles))
+    delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
     state.delta_balance(state.block_coinbase, delta)
 
-    br = default_config['BLOCK_REWARD']
-    udpf = default_config['UNCLE_DEPTH_PENALTY_FACTOR']
+    br = state.config['BLOCK_REWARD']
+    udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
 
     for uncle in block.uncles:
         r = int(br * (udpf + uncle.number - state.block_number) // udpf)
 
         state.delta_balance(uncle.coinbase, r)
-    if state.block_number - default_config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
-        del state.recent_uncles[state.block_number - default_config['MAX_UNCLE_DEPTH']]
+    if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
+        del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
     state.commit()
     state.add_block_header(block.header)
 
@@ -91,7 +91,7 @@ def apply_block(state, block, creating=False):
             print 'lost', [k for k in d1.keys() if k not in d2]
             print 'old', {k: d1.get(k, None) for k in d2.keys() if d2[k] != d1.get(k, None)}
             print 'new', {k: d2[k] for k in d2.keys() if d2[k] != d1.get(k, None)}
-        if state.block_number >= default_config["METROPOLIS_FORK_BLKNUM"]:
+        if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
             r = Receipt('\x00' * 32, state.gas_used, logs)
         else:
             r = Receipt(state.trie.root_hash, state.gas_used, logs)
@@ -116,11 +116,11 @@ def validate_transaction(state, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
-        if state.block_number >= default_config["METROPOLIS_FORK_BLKNUM"]:
-            tx._sender = normalize_address(default_config["METROPOLIS_ENTRY_POINT"])
+        if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
+            tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
         else:
             raise UnsignedTransaction(tx)
-    if state.block_number >= default_config["HOMESTEAD_FORK_BLKNUM"]:
+    if state.block_number >= state.config["HOMESTEAD_FORK_BLKNUM"]:
             tx.check_low_s()
 
     # (2) the transaction nonce is valid (equivalent to the
@@ -160,7 +160,7 @@ def apply_transaction(state, tx):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     intrinsic_gas = tx.intrinsic_gas_used
-    if state.block_number >= default_config['HOMESTEAD_FORK_BLKNUM']:
+    if state.block_number >= state.config['HOMESTEAD_FORK_BLKNUM']:
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
             intrinsic_gas += opcodes.CREATE[3]
@@ -225,7 +225,7 @@ def apply_transaction(state, tx):
         state.del_account(s)
     logs = state.logs
     state.logs = []
-    if state.block_number < default_config['METROPOLIS_FORK_BLKNUM']:
+    if state.block_number < state.config['METROPOLIS_FORK_BLKNUM']:
         state.commit()
     return success, output, logs
 
@@ -246,9 +246,9 @@ def validate_block_header(state, header):
             raise ValueError("Block's prevhash and parent's hash do not match")
         if header.number != parent.number + 1:
             raise ValueError("Block's number is not the successor of its parent number")
-        if not check_gaslimit(parent, header.gas_limit):
+        if not check_gaslimit(parent, header.gas_limit, config=state.config):
             raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
-        if header.difficulty != calc_difficulty(parent, header.timestamp):
+        if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
             raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
         if header.gas_used > header.gas_limit:
             raise ValueError("Gas used exceeds gas limit")
@@ -263,8 +263,7 @@ def validate_block(state, block):
 
 
 # Gas limit adjustment algo
-def calc_gaslimit(parent):
-    config = parent.config
+def calc_gaslimit(parent, config=default_config):
     decay = parent.gas_limit // config['GASLIMIT_EMA_FACTOR']
     new_contribution = ((parent.gas_used * config['BLKLIM_FACTOR_NOM']) //
                         config['BLKLIM_FACTOR_DEN'] // config['GASLIMIT_EMA_FACTOR'])
@@ -272,12 +271,11 @@ def calc_gaslimit(parent):
     if gl < config['GENESIS_GAS_LIMIT']:
         gl2 = parent.gas_limit + decay
         gl = min(config['GENESIS_GAS_LIMIT'], gl2)
-    assert check_gaslimit(parent, gl)
+    assert check_gaslimit(parent, gl, config=config)
     return gl
 
 
-def check_gaslimit(parent, gas_limit):
-    config = default_config
+def check_gaslimit(parent, gas_limit, config=default_config):
     #  block.gasLimit - parent.gasLimit <= parent.gasLimit // GasLimitBoundDivisor
     gl = parent.gas_limit // config['GASLIMIT_ADJMAX_FACTOR']
     a = bool(abs(gas_limit - parent.gas_limit) <= gl)
@@ -286,8 +284,7 @@ def check_gaslimit(parent, gas_limit):
 
 
 # Difficulty adjustment algo
-def calc_difficulty(parent, timestamp):
-    config = default_config
+def calc_difficulty(parent, timestamp, config=default_config):
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
         sign = max(len(parent.uncles) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
@@ -311,14 +308,14 @@ def validate_uncles(state, block):
     if utils.sha3(rlp.encode(block.uncles)) != block.header.uncles_hash:
         return False
     # Enforce maximum number of uncles
-    if len(block.uncles) > default_config['MAX_UNCLES']:
+    if len(block.uncles) > state.config['MAX_UNCLES']:
         return False
     # Uncle must have lower block number than blockj
     for uncle in block.uncles:
         assert uncle.number < block.header.number
 
     # Check uncle validity
-    MAX_UNCLE_DEPTH = default_config['MAX_UNCLE_DEPTH']
+    MAX_UNCLE_DEPTH = state.config['MAX_UNCLE_DEPTH']
     ancestor_chain = [block.header] + [a for a in state.prev_headers[:MAX_UNCLE_DEPTH + 1] if a]
     assert len(ancestor_chain) == min(block.header.number + 1, MAX_UNCLE_DEPTH + 2)
     # Uncles of this block cannot be direct ancestors and cannot also
@@ -335,7 +332,7 @@ def validate_uncles(state, block):
                       uncle_prevhash=encode_hex(uncle.prevhash))
             return False
         parent = [x for x in ancestor_chain if x.hash == uncle.prevhash][0]
-        if uncle.difficulty != calc_difficulty(parent, uncle.timestamp):
+        if uncle.difficulty != calc_difficulty(parent, uncle.timestamp, config=state.config):
             return False
         if uncle.number != parent.number + 1:
             return False
@@ -383,8 +380,8 @@ class VMExt():
         self.create = lambda msg: create_contract(self, msg)
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = state.account_exists
-        self.post_homestead_hardfork = lambda: state.block_number >= default_config['HOMESTEAD_FORK_BLKNUM']
-        self.post_metropolis_hardfork = lambda: state.block_number >= default_config['METROPOLIS_FORK_BLKNUM']
+        self.post_homestead_hardfork = lambda: state.block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
+        self.post_metropolis_hardfork = lambda: state.block_number >= state.config['METROPOLIS_FORK_BLKNUM']
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = state.transfer_value

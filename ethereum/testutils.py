@@ -34,7 +34,7 @@ env = {
 }
 
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace'
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 FILL = 1
@@ -303,9 +303,10 @@ def run_state_test1(params, mode):
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
 
-    default_config['HOMESTEAD_FORK_BLKNUM'] = 1000000
+    konfig = copy.deepcopy(default_config)
+    konfig['HOMESTEAD_FORK_BLKNUM'] = 1000000
 
-    state = State(db=db,
+    state = State(env=Env(db, konfig),
                   prev_headers=[mk_fake_header(i) for i in range(
                       parse_int_or_hex(env['currentNumber']) - 1,
                       max(-1, parse_int_or_hex(env['currentNumber']) - 257), -1)],

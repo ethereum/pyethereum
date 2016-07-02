@@ -10,8 +10,8 @@ def parse_as_int(s):
     return int(s[2:], 16) if s[:2] == '0x' else int(s)
 
 
-def state_from_snapshot(snapshot_data, db):
-    state = State(db = db)
+def state_from_snapshot(snapshot_data, env):
+    state = State(env = env)
     if "alloc" in snapshot_data:
         for addr, data in snapshot_data["alloc"].items():
             if len(addr) == 40:
@@ -88,7 +88,7 @@ def to_snapshot(state, root_only=False):
     
 
 
-def state_from_genesis_declaration(genesis_data, db):
+def state_from_genesis_declaration(genesis_data, env):
     h = BlockHeader(nonce=parse_as_bin(genesis_data["nonce"]),
                     difficulty=parse_as_int(genesis_data["difficulty"]),
                     mixhash=parse_as_bin(genesis_data["mixhash"]),
@@ -98,7 +98,7 @@ def state_from_genesis_declaration(genesis_data, db):
                     extra_data=parse_as_bin(genesis_data["extraData"]),
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
     blk = Block(h, [], [])
-    state = State(db=db)
+    state = State(env=env)
     for addr, data in genesis_data["alloc"].items():
         if len(addr) == 40:
             addr = decode_hex(addr)

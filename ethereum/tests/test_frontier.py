@@ -1,5 +1,6 @@
 from ethereum import parse_genesis_declaration, db
 from ethereum.block import Block
+from ethereum.config import Env
 from ethereum.state_transition import apply_block
 import rlp
 import json
@@ -11,13 +12,13 @@ import sys
 # configure_logging(config_string=config_string)
 
 if 'saved_state.json' in os.listdir(os.getcwd()):
-    s = parse_genesis_declaration.state_from_snapshot(json.load(open('saved_state.json')), db.EphemDB())
+    s = parse_genesis_declaration.state_from_snapshot(json.load(open('saved_state.json')), Env())
     print 'state generated from saved state'
 elif 'genesis_frontier.json' not in os.listdir(os.getcwd()):
     print 'Please download genesis_frontier.json from http://vitalik.ca/files/genesis_frontier.json'
     sys.exit()
 else:
-    s = parse_genesis_declaration.state_from_genesis_declaration(json.load(open('genesis_frontier.json')), db.EphemDB())
+    s = parse_genesis_declaration.state_from_genesis_declaration(json.load(open('genesis_frontier.json')), Env())
     assert s.trie.root_hash.encode('hex') == 'd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544'
     assert s.prev_headers[0].hash.encode('hex') == 'd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3'
     print 'state generated from genesis'
@@ -31,7 +32,7 @@ for block in block_rlps:
     apply_block(s, block)
     if block.header.number % 1000 == 0:
         snapshot = parse_genesis_declaration.to_snapshot(s)
-        s = parse_genesis_declaration.state_from_snapshot(snapshot, s.db)
+        s = parse_genesis_declaration.state_from_snapshot(snapshot, s.env)
         snapshot2 = parse_genesis_declaration.to_snapshot(s)
         if snapshot != snapshot2:
             open('/tmp/1', 'w').write(json.dumps(snapshot))
