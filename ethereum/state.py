@@ -1,13 +1,15 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_hex, encode_int, \
-    big_endian_to_int, int_to_addr, zpad, parse_as_bin, parse_as_int
+    big_endian_to_int, int_to_addr, zpad, parse_as_bin, parse_as_int, \
+    decode_hex
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from config import default_config, Env
+from ethereum.block import FakeHeader
 from db import BaseDB, EphemDB
 import sys
 if sys.version_info.major == 2:
@@ -309,7 +311,7 @@ class State():
 
     # Creates a state from a snapshot
     @classmethod
-    def from_snapshot(snapshot_data, env):
+    def from_snapshot(cls, snapshot_data, env):
         state = State(env = env)
         if "alloc" in snapshot_data:
             for addr, data in snapshot_data["alloc"].items():

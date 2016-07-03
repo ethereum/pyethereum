@@ -1,7 +1,7 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
-    safe_ord
+    safe_ord, int_to_addr
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import utils
@@ -35,9 +35,8 @@ CREATE_CONTRACT_ADDRESS = b''
 
 VERIFIERS = {
     'ethash': lambda state, header: header.check_pow(),
-    'contract': lambda state, header: not not apply_const_message(state, header.signing_hash()+header.extra_data)
+    'contract': lambda state, header: not not apply_const_message(state, vm.Message('\xff' * 20, int_to_addr(255), 0, 1000000, header.signing_hash()+header.extra_data, code_address=int_to_addr(255)))
 }
-
 
 def initialize(state, block):
     pre_root = state.trie.root_hash or ('\x00' * 32)
