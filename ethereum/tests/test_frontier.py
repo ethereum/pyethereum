@@ -32,12 +32,12 @@ for block in block_rlps:
     block = rlp.decode(block.strip().decode('hex'), Block)
     assert c.add_block(block)
     if block.header.number % 1000 == 0:
-        snapshot = parse_genesis_declaration.to_snapshot(c.state)
+        snapshot = c.state.to_snapshot()
         if block.header.number % 2000 == 0:
             c = chain.Chain(env=c.env)
         else:
             c = chain.Chain(snapshot, Env())
-        snapshot2 = parse_genesis_declaration.to_snapshot(c.state)
+        snapshot2 = c.state.to_snapshot()
         if snapshot != snapshot2:
             open('/tmp/1', 'w').write(json.dumps(snapshot))
             open('/tmp/2', 'w').write(json.dumps(snapshot2))

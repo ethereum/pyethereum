@@ -57,6 +57,10 @@ default_config = dict(
     METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
     # Metropolis fork
+    # Consensus algorithm (for verification): ethash, contract
+    CONSENSUS_ALGO='ethash',
+    # Default consensus strategy: ethash, poa, casper, pbft
+    CONSENSUS_STRATEGY='ethash'
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
