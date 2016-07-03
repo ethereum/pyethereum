@@ -80,22 +80,14 @@ def finalize(state, block):
 
 
 def apply_block(state, block, creating=False):
+    # Pre-processing and verification
     initialize(state, block)
     assert validate_block_header(state, block.header)
     assert validate_uncles(state, block)
-    if block.header.number == 999999:
-        d1 = state.to_dict()
     receipts = []
+    # Process transactions
     for tx in block.transactions:
         success, output, logs = apply_transaction(state, tx)
-        if block.header.number == 999999:
-            d2 = state.to_dict()
-            print tx.to_dict()
-            print state.block_coinbase.encode('hex')
-            print state.gas_used
-            print 'lost', [k for k in d1.keys() if k not in d2]
-            print 'old', {k: d1.get(k, None) for k in d2.keys() if d2[k] != d1.get(k, None)}
-            print 'new', {k: d2[k] for k in d2.keys() if d2[k] != d1.get(k, None)}
         if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
             r = Receipt('\x00' * 32, state.gas_used, logs)
         else:
@@ -103,7 +95,9 @@ def apply_block(state, block, creating=False):
         receipts.append(r)
         state.bloom |= r.bloom  # int
         state.txindex += 1
+    # Finalize (incl paying block rewards)
     finalize(state, block)
+    # Verify state root, tx list root, receipt root
     if creating:
         block.header.receipts_root = mk_receipt_sha(receipts)
         block.header.tx_list_root = mk_transaction_sha(block.transactions)

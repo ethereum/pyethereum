@@ -146,15 +146,14 @@ class State():
         return v
 
     get_balance = lambda self, addr: self.get_storage(addr, 'balance')
+
     # set_balance = lambda self, addr, v: self.set_storage(addr, 'balance', v)
     def set_balance( self, addr, v):
-        # if self.block_number > 62500:
-        #     print 'setbal', repr(addr.encode('hex')), self.get_balance(addr), v
         self.set_storage(addr, 'balance', v)
+
     delta_balance = lambda self, addr, v: self.set_balance(addr, self.get_balance(addr) + v)
 
     def transfer_value(self, from_addr, to_addr, value):
-        # print 'transferring value', (from_addr, to_addr, value)
         assert value >= 0
         if self.get_balance(from_addr) >= value:
             self.delta_balance(from_addr, -value)
@@ -169,19 +168,16 @@ class State():
     set_code = lambda self, addr, v: self.set_storage(addr, 'code', v)
     get_storage_bytes = lambda self, addr, k: self.get_storage(addr, k)
     set_storage_bytes = lambda self, addr, k, v: self.set_storage(addr, k, v)
+
     # get_storage_data = lambda self, addr, k: big_endian_to_int(self.get_storage(addr, k)[-32:])
     def get_storage_data (self, addr, k):
-        # print 'getting storage', repr(k)
         o = big_endian_to_int(self.get_storage(addr, k)[-32:])
-        # print o
         return o
+
     # set_storage_data = lambda self, addr, k, v: self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) else v)
     def set_storage_data (self, addr, k, v):
-        # print 'setting storage', repr(addr), repr(k), repr(self.get_storage_data(addr, k)), repr(v)
         self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) and k not in ACCOUNT_SPECIAL_PARAMS else v)
-        # print 'sstoring', repr(k), repr(v), repr(self.get_storage(addr, k))
-    # account_exists = lambda self, addr: self._get_account_unsafe(addr) or addr in self.modified and \
-    #     ((not self.cache[addr]) or (not self.cache[addr].get('deleted', False)))
+
     def account_exists(self, addr):
         if addr not in self.modified:
             o = self.trie.get(addr) != trie.BLANK_NODE
@@ -198,11 +194,8 @@ class State():
                 if k not in ACCOUNT_SPECIAL_PARAMS:
                     self.set_storage(addr, k, '')
 
+    # Commit the cache to the trie
     def commit(self):
-        # if self.block_number >= 50233:
-        #     print 'modified', self.modified
-        # print 'c', self.cache
-        # print 'm', self.modified
         rt = self.trie.root_hash
         for addr, subcache in self.cache.items():
             if addr not in self.modified:
