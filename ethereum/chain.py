@@ -72,6 +72,8 @@ class Chain(object):
         except:
             return None
 
+    # Add a record allowing you to later look up the provided block's
+    # parent hash and see that it is one of its children
     def add_child(self, child):
         try:
             existing = self.db.get('child:'+child.header.prevhash)
@@ -85,6 +87,7 @@ class Chain(object):
         except:
             return None
 
+    # Get the hashes of all known children of a given block
     def get_child_hashes(self, blockhash):
         o = []
         try:
@@ -95,6 +98,7 @@ class Chain(object):
         except:
             return []
 
+    # Get the score (AKA total difficulty in PoW) of a given block
     def get_score(self, block):
         KEY = 'score:'+block.header.hash
         if key not in self.db:
@@ -102,6 +106,10 @@ class Chain(object):
             self.db.put(key, str(parent_score + block.difficulty + random.randrange(10)))
         return int(self.db.get(key))
 
+    # These two functions should be called periodically so as to
+    # process blocks that were received but laid aside because
+    # either the parent was missing or they were received
+    # too early
     def process_time_queue(self):
         now = int(time.time())
         while len(self.time_queue) and self.time_queue[0].timestamp <= now:
@@ -114,6 +122,7 @@ class Chain(object):
                     self.add_block(block)
                 del self.parent_queue[parent_hash]
 
+    # Call upon receiving a block
     def add_block(self, block):
         now = int(time.time())
         if block.header.timestamp > now:
@@ -166,6 +175,8 @@ class Chain(object):
              len(block.transactions), block.header.gas_used)
         return True
 
+    # This should be called when a miner sees a transaction, and may
+    # potentially be interested in including it in a block
     def add_transaction(self, tx):
         if tx.gasprice >= self.min_gasprice:
             i = 0
@@ -176,6 +187,7 @@ class Chain(object):
         else:
             print 'Gasprice too low!'
 
+    # Get a transaction to include into a candidate block
     def get_transaction(self, gaslimit, excluded={}):
         i = 0
         while i < len(self.transaction_queue) and (self.transaction_queue[i].hash in excluded or
@@ -183,6 +195,7 @@ class Chain(object):
             i += 1
         return self.transaction_queue[i] if i < len(self.transaction_queue) else None
 
+    # Make a candidate block for mining
     def make_head_candidate(self):
         # clone the state so we can play with it without affecting the original
         temp_state = parse_genesis_declaration.state_from_snapshot(parse_genesis_declaration.to_snapshot(state, root_only=True), self.env)
@@ -239,7 +252,6 @@ class Chain(object):
         blk.state_root = temp_state.trie.root_hash
         blk.bloom = temp_state.bloom
         return blk
-
 
     @property
     def db(self):
