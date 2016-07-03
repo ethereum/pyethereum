@@ -33,6 +33,11 @@ log_state = get_logger('eth.pb.msg.state')
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = b''
 
+VERIFIERS = {
+    'ethash': lambda state, header: header.check_pow(),
+    'contract': lambda state, header: not not apply_const_message(state, header.signing_hash()+header.extra_data)
+}
+
 
 def initialize(state, block):
     pre_root = state.trie.root_hash or ('\x00' * 32)
@@ -147,6 +152,12 @@ def validate_transaction(state, tx):
     return True
 
 
+def apply_const_message(state, msg):
+    state1 = state.ephemeral_clone()
+    ext = VMExt(state1, tx)
+    result, gas_remained, data = apply_msg(ext, message)
+    return data if result else None
+
 
 def apply_transaction(state, tx):
     state.logs = []
@@ -239,7 +250,7 @@ def mk_receipt_sha(receipts):
 mk_transaction_sha = mk_receipt_sha
 
 def validate_block_header(state, header):
-    assert header.check_pow()
+    assert VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
@@ -375,8 +386,6 @@ class VMExt():
         self.block_gas_limit = state.gas_limit
         self.log = lambda addr, topics, data: \
             state.add_log(Log(addr, topics, data))
-        self.tx_origin = tx.sender
-        self.tx_gasprice = tx.gasprice
         self.create = lambda msg: create_contract(self, msg)
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = state.account_exists
@@ -386,6 +395,8 @@ class VMExt():
         self.revert = state.revert
         self.transfer_value = state.transfer_value
         self.reset_storage = state.reset_storage
+        self.tx_origin = tx.sender if tx else '\x00'*32
+        self.tx_gasprice = tx.gasprice if tx else 0
 
 
 class Receipt(rlp.Serializable):

@@ -60,7 +60,11 @@ default_config = dict(
     DAO_FORK_BLKNUM = 9999998,
     DAO_ADDRESS_LIST = [],
     DAO_MAIN_ADDR = '0xbb9bc244d798123fde783fcc1c72d3bb8c189413',
-    DAO_NEWCODE = ''
+    DAO_NEWCODE = '',
+    # Consensus algorithm (for verification): ethash, contract
+    CONSENSUS_ALGO = 'ethash',
+    # Default consensus strategy: ethash, poa, casper, pbft
+    CONSENSUS_STRATEGY = 'ethash'
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

@@ -98,6 +98,10 @@ class BlockHeader(rlp.Serializable):
     def mining_hash(self):
         return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
+    @property
+    def signing_hash(self):
+        return utils.sha3(rlp.encode(self, BlockHeader.exclude(['extra_data'])))
+
     def check_pow(self, nonce=None):
         """Check if the proof-of-work of the block is valid.
 

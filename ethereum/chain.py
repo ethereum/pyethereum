@@ -40,7 +40,7 @@ class Chain(object):
             self.state = parse_genesis_declaration.state_from_genesis_declaration(genesis, self.env)
             print 'Initializing chain from provided genesis declaration'
         elif "prev_headers" in genesis:
-            self.state = parse_genesis_declaration.state_from_snapshot(genesis, self.env)
+            self.state = State.from_snapshot(genesis, self.env)
             print 'Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8]))
         else:

@@ -1,7 +1,7 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_hex, encode_int, \
-    big_endian_to_int, int_to_addr, zpad
+    big_endian_to_int, int_to_addr, zpad, parse_as_bin, parse_as_int
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
@@ -14,6 +14,7 @@ if sys.version_info.major == 2:
     from repoze.lru import lru_cache
 else:
     from functools import lru_cache
+
 
 ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
 ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
@@ -282,7 +283,7 @@ class State():
                 if not premod:
                     del self.modified[addr]
 
-    # Converts the state to a dictionary
+    # Converts the state tree to a dictionary
     def to_dict(self):
         state_dump = {}
         for address in self.trie.to_dict().keys():
@@ -313,6 +314,96 @@ class State():
                         del acct_dump["storage"][val]
         return state_dump
 
+    # Creates a state from a snapshot
+    @classmethod
+    def from_snapshot(snapshot_data, env):
+        state = State(env = env)
+        if "alloc" in snapshot_data:
+            for addr, data in snapshot_data["alloc"].items():
+                if len(addr) == 40:
+                    addr = decode_hex(addr)
+                assert len(addr) == 20
+                if 'wei' in data:
+                    state.set_balance(addr, parse_as_int(data['wei']))
+                if 'balance' in data:
+                    state.set_balance(addr, parse_as_int(data['balance']))
+                if 'code' in data:
+                    state.set_code(addr, parse_as_bin(data['code']))
+                if 'nonce' in data:
+                    state.set_nonce(addr, parse_as_int(data['nonce']))
+                if 'storage' in data:
+                    for k, v in data['storage'].items():
+                        state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
+        elif "state_root" in snapshot_data:
+            state.trie.root_hash = parse_as_bin(snapshot_data["state_root"])
+        else:
+            raise Exception("Must specify either alloc or state root parameter")
+        for k, default in STATE_DEFAULTS.items():
+            v = snapshot_data[k] if k in snapshot_data else None
+            if isinstance(default, (int, long)):
+                setattr(state, k, parse_as_int(v) if k in snapshot_data else default)
+            elif isinstance(default, (str, bytes)):
+                setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
+            elif k == 'prev_headers':
+                headers = []
+                if k in snapshot_data:
+                    for i, h in enumerate(v):
+                        headers.append(FakeHeader(hash=parse_as_bin(h['hash']),
+                                                  number=state.block_number - i,
+                                                  timestamp=parse_as_int(h['timestamp']),
+                                                  difficulty=parse_as_int(h['difficulty']),
+                                                  gas_limit=parse_as_int(h['gas_limit'])))
+                else:
+                    headers = default
+                setattr(state, k, headers)
+            elif k == 'recent_uncles':
+                if k in snapshot_data:
+                    uncles = {}
+                    for height, _uncles in v.items():
+                        uncles[int(height)] = []
+                        for uncle in _uncles:
+                            uncles[int(height)].append(parse_as_bin(uncle))
+                else:
+                    uncles = default
+                setattr(state, k, uncles)
+        state.commit()
+        return state
+    
+    # Creates a snapshot from a state
+    def to_snapshot(self, root_only=False, no_prevblocks=False):
+        snapshot = {}
+        if root_only:
+            # Smaller snapshot format that only includes the state root
+            # (requires original DB to re-initialize)
+            snapshot["state_root"] = '0x'+encode_hex(self.trie.root_hash)
+        else:
+            # "Full" snapshot
+            snapshot["alloc"] = self.to_dict()
+        # Save non-state-root variables
+        for k, default in STATE_DEFAULTS.items():
+            v = getattr(self, k)
+            if isinstance(default, (int, long)):
+                snapshot[k] = str(v)
+            elif isinstance(default, (str, bytes)):
+                snapshot[k] = '0x'+encode_hex(v)
+            elif k == 'prev_headers' and not no_prevblocks:
+                snapshot[k] = [{"hash": '0x'+encode_hex(h.hash),
+                                "number": str(h.number),
+                                "timestamp": str(h.timestamp),
+                                "difficulty": str(h.difficulty),
+                                "gas_limit": str(h.gas_limit)} for h in v]
+            elif k == 'recent_uncles' and not no_prevblocks:
+                snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
+        return snapshot
+
+    def ephemeral_clone(self):
+        snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
+        env2 = Env(OverlayDB(self.env.db), state.env.config)
+        s = State.from_snapshot(snapshot, env2)
+        s.recent_uncles = self.recent_uncles
+        s.prev_headers = self.prev_headers
+        return s
+        
 
 class Account(rlp.Serializable):
 
