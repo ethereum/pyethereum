@@ -117,7 +117,7 @@ def sha3(seed):
     sha3_count[0] += 1
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3('')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -143,9 +143,11 @@ def check_and_strip_checksum(x):
 
 
 def normalize_address(x, allow_blank=False):
-    if allow_blank and (x == '' or x == b''):
+    if is_numeric(x):
+        return int_to_addr(x)
+    if allow_blank and x in {'', b''}:
         return b''
-    if len(x) in (42, 50) and x[:2] == '0x':
+    if len(x) in (42, 50) and x[:2] in {'0x', b'0x'}:
         x = x[2:]
     if len(x) in (40, 48):
         x = decode_hex(x)
@@ -169,7 +171,7 @@ def zunpad(x):
 
 
 def int_to_addr(x):
-    o = [''] * 20
+    o = [b''] * 20
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
