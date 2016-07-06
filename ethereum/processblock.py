@@ -306,7 +306,7 @@ def create_contract(ext, msg):
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     code = msg.data.extract_all()
-    if ext._block.number >= ext._block.METROPOLIS_FORK_BLKNUM:
+    if ext._block.number >= ext._block.config['METROPOLIS_FORK_BLKNUM']:
         msg.to = mk_metropolis_contract_address(msg.sender, code)
         if ext.get_code(msg.to):
             if ext.get_nonce(msg.to) >= 2 ** 40:
