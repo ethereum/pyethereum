@@ -255,8 +255,8 @@ def decint(n, signed=False):
         n = utils.to_string(n)
 
     if is_numeric(n):
-        min, max = (-TT255,TT255-1) if signed else (0,TT256-1)
-        if n > max or n < min:
+        min_, max_ = (-TT255, TT255 - 1) if signed else (0, TT256 - 1)
+        if n > max_ or n < min_:
             raise EncodingError("Number out of range: %r" % n)
         return n
     elif is_string(n):
@@ -274,6 +274,7 @@ def decint(n, signed=False):
     else:
         raise EncodingError("Cannot encode integer: %r" % n)
 
+
 # Encodes a base datum
 def encode_single(typ, arg):
     base, sub, _ = typ
@@ -282,7 +283,7 @@ def encode_single(typ, arg):
         sub = int(sub)
         i = decint(arg, False)
 
-        if not 0 <= i < 2**sub:
+        if not 0 <= i < 2 ** sub:
             raise ValueOutOfBounds(repr(arg))
         return zpad(encode_int(i), 32)
     # bool: int<sz>
@@ -293,22 +294,22 @@ def encode_single(typ, arg):
     elif base == 'int':
         sub = int(sub)
         i = decint(arg, True)
-        if not -2**(sub - 1) <= i < 2**(sub - 1):
+        if not -2 ** (sub - 1) <= i < 2 ** (sub - 1):
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int(i % 2**sub), 32)
+        return zpad(encode_int(i % 2 ** sub), 32)
     # Unsigned reals: ureal<high>x<low>
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
-        if not 0 <= arg < 2**high:
+        if not 0 <= arg < 2 ** high:
             raise ValueOutOfBounds(repr(arg))
-        return zpad(encode_int(int(arg * 2**low)), 32)
+        return zpad(encode_int(int(arg * 2 ** low)), 32)
     # Signed reals: real<high>x<low>
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
-        if not -2**(high - 1) <= arg < 2**(high - 1):
+        if not -2 ** (high - 1) <= arg < 2 ** (high - 1):
             raise ValueOutOfBounds(repr(arg))
-        i = int(arg * 2**low)
-        return zpad(encode_int(i % 2**(high+low)), 32)
+        i = int(arg * 2 ** low)
+        return zpad(encode_int(i % 2 ** (high + low)), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
         if not is_string(arg):
@@ -480,7 +481,7 @@ def decode_single(typ, data):
     if base == 'address':
         return encode_hex(data[12:])
     elif base == 'hash':
-        return data[32-int(sub):]
+        return data[32 - int(sub):]
     elif base == 'string' or base == 'bytes':
         if len(sub):
             return data[:int(sub)]
@@ -491,15 +492,15 @@ def decode_single(typ, data):
         return big_endian_to_int(data)
     elif base == 'int':
         o = big_endian_to_int(data)
-        return (o - 2**int(sub)) if o >= 2**(int(sub) - 1) else o
+        return (o - 2 ** int(sub)) if o >= 2 ** (int(sub) - 1) else o
     elif base == 'ureal':
         high, low = [int(x) for x in sub.split('x')]
-        return big_endian_to_int(data) * 1.0 // 2**low
+        return big_endian_to_int(data) * 1.0 // 2 ** low
     elif base == 'real':
         high, low = [int(x) for x in sub.split('x')]
         o = big_endian_to_int(data)
-        i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
-        return (i * 1.0 // 2**low)
+        i = (o - 2 ** (high + low)) if o >= 2 ** (high + low - 1) else o
+        return (i * 1.0 // 2 ** low)
     elif base == 'bool':
         return bool(int(encode_hex(data), 16))
 
