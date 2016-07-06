@@ -21,7 +21,7 @@ def test_abicontract_interface():
     simple_address = tester_state.evm(simple_compiled['Simple']['bin'])
 
     # ABIContract class must accept json_abi
-    abi_json = json.dumps(simple_compiled['Simple']['abi'])
+    abi_json = json.dumps(simple_compiled['Simple']['abi']).encode('utf-8')
 
     abi = ABIContract(
         _state=tester_state,
