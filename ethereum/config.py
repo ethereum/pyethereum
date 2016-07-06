@@ -1,3 +1,4 @@
+from rlp.utils import decode_hex
 from ethereum import utils
 from ethereum.db import BaseDB
 
@@ -52,7 +53,7 @@ default_config = dict(
     METROPOLIS_STATEROOT_STORE=0x10,
     METROPOLIS_BLOCKHASH_STORE=0x20,
     METROPOLIS_WRAPAROUND=65536,
-    METROPOLIS_GETTER_CODE='6000355460205260206020f3'.decode('hex'),
+    METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
