@@ -68,6 +68,8 @@ isnumeric = is_numeric
 def mk_contract_address(sender, nonce):
     return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
 
+def mk_metropolis_contract_address(sender, initcode):
+    return sha3(normalize_address(sender) + initcode)[12:]
 
 def safe_ord(value):
     if isinstance(value, int):
