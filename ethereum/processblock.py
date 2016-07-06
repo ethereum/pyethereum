@@ -10,7 +10,7 @@ from ethereum import vm as vm
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
         BlockGasLimitReached, InsufficientBalance, VerificationFailed
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
-    mk_metropolis_contract_address, int_to_addr, big_endian_to_int
+    mk_metropolis_contract_address, big_endian_to_int
 from ethereum import transactions
 import ethereum.config as config
 
@@ -309,12 +309,12 @@ def create_contract(ext, msg):
     if ext._block.number >= ext._block.METROPOLIS_FORK_BLKNUM:
         msg.to = mk_metropolis_contract_address(msg.sender, code)
         if ext.get_code(msg.to):
-            if ext.get_nonce(msg.to) >= 2**40:
-                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2**160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+            if ext.get_nonce(msg.to) >= 2 ** 40:
+                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2 ** 160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
             else:
-                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2**160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2 ** 160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
     else:
         if ext.tx_origin != msg.sender:
             ext._block.increment_nonce(msg.sender)
