@@ -54,6 +54,8 @@ default_config = dict(
     METROPOLIS_BLOCKHASH_STORE=0x20,
     METROPOLIS_WRAPAROUND=65536,
     METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
+    METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
+    # Metropolis fork
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
