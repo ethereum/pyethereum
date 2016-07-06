@@ -7,7 +7,8 @@ from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
-from ethereum.exceptions import *
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+        BlockGasLimitReached, InsufficientBalance, VerificationFailed
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
     mk_metropolis_contract_address, int_to_addr, big_endian_to_int
 from ethereum import transactions
@@ -37,7 +38,7 @@ def verify(block, parent):
                             env=parent.env, parent=parent)
         assert block == block2
         return True
-    except blocks.VerificationFailed:
+    except VerificationFailed:
         return False
 
 
