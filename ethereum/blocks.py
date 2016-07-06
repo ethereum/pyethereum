@@ -14,7 +14,7 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum.utils import address, int256, trie_root, hash32, to_string, big_endian_to_int
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
