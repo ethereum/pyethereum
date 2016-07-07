@@ -340,14 +340,8 @@ class State():
             elif isinstance(default, (str, bytes)):
                 setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
             elif k == 'prev_headers':
-                headers = []
                 if k in snapshot_data:
-                    for i, h in enumerate(v):
-                        headers.append(FakeHeader(hash=parse_as_bin(h['hash']),
-                                                  number=state.block_number - i,
-                                                  timestamp=parse_as_int(h['timestamp']),
-                                                  difficulty=parse_as_int(h['difficulty']),
-                                                  gas_limit=parse_as_int(h['gas_limit'])))
+                    headers = [dict_to_prev_header(h) for h in v]
                 else:
                     headers = default
                 setattr(state, k, headers)
@@ -382,11 +376,7 @@ class State():
             elif isinstance(default, (str, bytes)):
                 snapshot[k] = '0x'+encode_hex(v)
             elif k == 'prev_headers' and not no_prevblocks:
-                snapshot[k] = [{"hash": '0x'+encode_hex(h.hash),
-                                "number": str(h.number),
-                                "timestamp": str(h.timestamp),
-                                "difficulty": str(h.difficulty),
-                                "gas_limit": str(h.gas_limit)} for h in v]
+                snapshot[k] = [prev_header_to_dict(h) for h in v]
             elif k == 'recent_uncles' and not no_prevblocks:
                 snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
         return snapshot
@@ -398,8 +388,27 @@ class State():
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
         return s
-        
 
+
+def prev_header_to_dict(h):
+    return {
+        "hash": '0x'+encode_hex(h.hash),
+        "number": str(h.number),
+        "timestamp": str(h.timestamp),
+        "difficulty": str(h.difficulty),
+        "gas_used": str(h.gas_used),
+        "gas_limit": str(h.gas_limit)
+    }
+
+
+def dict_to_prev_header(h):
+    return FakeHeader(hash=parse_as_bin(h['hash']),
+                      number=parse_as_int(h['number']),
+                      timestamp=parse_as_int(h['timestamp']),
+                      difficulty=parse_as_int(h['difficulty']),
+                      gas_used=parse_as_int(h.get('gas_used', '0')),
+                      gas_limit=parse_as_int(h['gas_limit']))
+        
 class Account(rlp.Serializable):
 
     """An Ethereum account.

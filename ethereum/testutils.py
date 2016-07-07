@@ -10,9 +10,10 @@ import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex, zpad
 from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
-from ethereum.block import FakeHeader
+from ethereum.block import FakeHeader, Block
 from ethereum.config import Env
 from ethereum.config import default_config
+from ethereum.parse_genesis_declaration import state_from_genesis_declaration
 from ethereum import state_transition
 from state import State
 import json
@@ -638,28 +639,19 @@ def run_genesis_test(params, mode):
     if 'coinbase' not in params:
         params['coinbase'] = '0x' + '3' * 40
     x = time.time()
-    b = blocks.genesis(EphemDB(), start_alloc=params['alloc'],
-                       difficulty=parse_int_or_hex(params['difficulty']),
-                       timestamp=parse_int_or_hex(params['timestamp']),
-                       extra_data=decode_hex(remove_0x_head(params['extraData'])),
-                       gas_limit=parse_int_or_hex(params['gasLimit']),
-                       mixhash=decode_hex(remove_0x_head(params['mixhash'])),
-                       prevhash=decode_hex(remove_0x_head(params['parentHash'])),
-                       coinbase=decode_hex(remove_0x_head(params['coinbase'])),
-                       nonce=decode_hex(remove_0x_head(params['nonce'])))
-    assert b.difficulty == parse_int_or_hex(params['difficulty'])
-    assert b.timestamp == parse_int_or_hex(params['timestamp'])
-    assert b.extra_data == decode_hex(remove_0x_head(params['extraData']))
-    assert b.gas_limit == parse_int_or_hex(params['gasLimit'])
-    assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
-    assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
-    assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
-    print(9)
+    s = state_from_genesis_declaration(params, Env())
+    assert s.block_difficulty == parse_int_or_hex(params['difficulty'])
+    assert s.timestamp == parse_int_or_hex(params['timestamp'])
+    assert s.prev_headers[0].extra_data == decode_hex(remove_0x_head(params['extraData']))
+    assert s.gas_limit == parse_int_or_hex(params['gasLimit'])
+    assert s.prev_headers[0].mixhash == decode_hex(remove_0x_head(params['mixhash']))
+    assert s.prev_headers[0].prevhash == decode_hex(remove_0x_head(params['parentHash']))
+    assert s.prev_headers[0].nonce == decode_hex(remove_0x_head(params['nonce']))
     if mode == FILL:
-        params['result'] = encode_hex(rlp.encode(b))
+        params['result'] = encode_hex(Block(s.prev_headers[0]))
         return params
     elif mode == VERIFY:
-        assert params['result'] == encode_hex(rlp.encode(b))
+        assert params['result'] == encode_hex(rlp.encode(Block(s.prev_headers[0])))
     elif mode == TIME:
         return {
             'creation': time.time() - x

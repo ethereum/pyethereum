@@ -4,19 +4,24 @@ from ethereum import utils
 from ethereum import pruning_trie as trie
 from ethereum.refcount_db import RefcountDB
 from ethereum.db import OverlayDB
-from ethereum.utils import to_string, is_string
+from ethereum.utils import to_string, is_string, parse_as_bin, \
+    big_endian_to_int
+from ethereum.transactions import Transaction
 from ethereum import parse_genesis_declaration
 from ethereum.state_transition import apply_block, initialize, \
-    finalize, apply_transaction, mk_receipt_sha, mk_transaction_sha
+    finalize, apply_transaction, mk_receipt_sha, mk_transaction_sha, \
+    calc_difficulty, calc_gaslimit, Receipt
 import rlp
 from rlp.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+        BlockGasLimitReached, InsufficientBalance
 from ethereum.slogging import get_logger
 from ethereum.config import Env
-from ethereum.state import State
-from ethereum.block import Block
+from ethereum.state import State, dict_to_prev_header
+from ethereum.block import Block, BlockHeader, FakeHeader
 import time
 import random
 import json
@@ -24,13 +29,13 @@ log = get_logger('eth.chain')
 
 
 class Chain(object):
-    def __init__(self, genesis=None, env=Env(), coinbase=b'\x00' * 20):
-        self.env = env
+    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, **kwargs):
+        self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:
-            block = rlp.decode(self.db.get(self.db.get('head_hash')), Block)
-            self.state = parse_genesis_declaration.mk_poststate_of_block(block, self.env)
-            print 'Initializing chain from saved head, #%d (%s)' % (block.header.number, encode_hex(block.header.hash[:8]))
+            self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
+            print 'Initializing chain from saved head, #%d (%s)' % \
+                (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
@@ -44,22 +49,69 @@ class Chain(object):
             print 'Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8]))
         else:
-            self.state = parse_genesis_declaration.mk_basic_state(genesis, {
-                "number": 0,
-                "gas_limit": 4712388,
-                "timestamp": 1467446877,
-                "difficulty": 2**25,
-                "hash": '\x00' * 32
-            }, env)
             print 'Initializing chain from new state based on alloc'
+            self.state = parse_genesis_declaration.mk_basic_state(genesis, {
+                "number": kwargs.get('number', 0),
+                "gas_limit": kwargs.get('gas_limit', 4712388),
+                "gas_used": kwargs.get('gas_used', 0),
+                "timestamp": kwargs.get('timestamp', 1467446877),
+                "difficulty": kwargs.get('difficulty', 2**25),
+                "hash": kwargs.get('prevhash', '00' * 32)
+            }, self.env)
         self.head_hash = self.state.prev_headers[0].hash
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
+        self.db.put('score:'+self.state.prev_headers[0].hash, "0")
+        self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
+        self.db.put(self.head_hash, 'GENESIS')
         self.transaction_queue = []
-        self.min_gasprice = 5*10**9
+        self.min_gasprice = kwargs.get('min_gasprice', 5*10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
         self.time_queue = []
         self.parent_queue = {}
+
+    @property
+    def head(self):
+        try:
+            return rlp.decode(self.db.get(self.head_hash), Block)
+        except:
+            return None
+
+    def mk_poststate_of_blockhash(self, blockhash):
+        if blockhash not in self.db:
+            raise Exception("Block hash %s not found" % encode_hex(blockhash))
+        if self.db.get(blockhash) == 'GENESIS':
+            return State.from_snapshot(json.loads(self.db.get('GENESIS_STATE')), self.env)
+        state = State(env=self.env)
+        block = rlp.decode(self.db.get(blockhash), Block)
+        state.trie.root_hash = block.header.state_root
+        initialize(state, block)
+        state.gas_used = block.header.gas_used
+        state.txindex = len(block.transactions)
+        state.recent_uncles = {}
+        state.prev_headers = []
+        b = block
+        for i in range(257):
+            state.prev_headers.append(b.header)
+            if i < 6:
+                state.recent_uncles[state.block_number - i] = []
+                for u in b.uncles:
+                    state.recent_uncles[state.block_number - i].append(u.hash)
+            try:
+                b = rlp.decode(state.db.get(b.header.prevhash), Block)
+            except:
+                break
+        if i < 256:
+            if state.db.get(b.header.prevhash) == 'GENESIS':
+                jsondata = json.loads(state.db.get('GENESIS_STATE'))
+                for h in jsondata["prev_headers"][:257 - i - 1]:
+                    state.prev_headers.append(dict_to_prev_header(h))
+                for blknum, uncles in jsondata["recent_uncles"].items():
+                    if blknum >= state.block_number - 6:
+                        state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
+            else:
+                raise Exception("Dangling prevhash")
+        return state
 
     def get_parent(self, block):
         if block.header.number == int(self.db.get('GENESIS_NUMBER')):
@@ -87,6 +139,9 @@ class Chain(object):
         except:
             return None
 
+    def get_block_by_number(self, number):
+        return self.get_block(self.get_blockhash_by_number(number))
+
     # Get the hashes of all known children of a given block
     def get_child_hashes(self, blockhash):
         o = []
@@ -98,12 +153,25 @@ class Chain(object):
         except:
             return []
 
+    def get_children(self, block):
+        if isinstance(block, Block):
+            block = block.header.hash
+        if isinstance(block, (BlockHeader, FakeHeader)):
+            block = block.hash
+        return [self.get_block(h) for h in self.get_child_hashes(block)]
+        
+
     # Get the score (AKA total difficulty in PoW) of a given block
     def get_score(self, block):
-        KEY = 'score:'+block.header.hash
+        if not block:
+            return 0
+        key = 'score:'+block.header.hash
         if key not in self.db:
-            parent_score = self.get_score(block.parent)
-            self.db.put(key, str(parent_score + block.difficulty + random.randrange(10)))
+            try:
+                parent_score = self.get_score(self.get_parent(block))
+                self.db.put(key, str(parent_score + block.difficulty + random.randrange(10)))
+            except:
+                return int(self.db.get('score:'+block.prevhash))
         return int(self.db.get(key))
 
     # These two functions should be called periodically so as to
@@ -133,32 +201,60 @@ class Chain(object):
             print 'Block received too early. Delaying for now'
             return False
         if block.header.prevhash == self.head_hash:
+            # print 'Adding to head'
             try:
                 apply_block(self.state, block)
             except Exception, e:
                 print 'Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash))
                 print e
                 return False
-            self.db.put(block.header.hash, rlp.encode(block))
             self.db.put('block:'+str(block.header.number), block.header.hash)
             self.head_hash = block.header.hash
+            for i, tx in enumerate(block.transactions):
+                self.db.put('txindex:'+tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
-            pre_state = parse_genesis_declaration.mk_poststate_of_block(self.get_parent(block), self.env)
+            # print 'Receiving block not on head, adding to secondary post state'
+            pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(pre_state, block)
-            except:
+            except Exception, e:
                 print 'Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash))
+                print e
                 return False
             block_score = self.get_score(block)
             # Replace the head
-            if block_score > int(self.db.get('score:'+ self.head_hash)):
+            if block_score > self.get_score(self.head):
                 b = block
+                new_chain = {}
                 while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
-                    if self.db.get('block:'+str(b.header.number)) == b.header.hash:
+                    new_chain[b.header.number] = b
+                    key = 'block:'+str(b.header.number)
+                    orig_at_height = self.db.get(key) if key in self.db else None
+                    if orig_at_height == b.header.hash:
                         break
-                    self.db.put('block:'+str(b.header.number), b.header.hash)
+                    if b.prevhash not in self.db or self.db.get(b.prevhash) == 'GENESIS':
+                        break
                     b = self.get_parent(b)
+                replace_from = b.header.number
+                for i in xrange(replace_from, 2**63 - 1):
+                    print 'Rewriting height %d' % i
+                    key = 'block:'+str(i)
+                    orig_at_height = self.db.get(key) if key in self.db else None
+                    if orig_at_height:
+                        self.db.delete(key)
+                        orig_block_at_height = self.get_block(orig_at_height)
+                        for tx in orig_block_at_height.transactions:
+                            if 'txindex:'+tx.hash in self.db:
+                                self.db.delete('txindex:'+tx.hash)
+                    if i in new_chain:
+                        new_block_at_height = new_chain[i]
+                        self.db.put(key, new_block_at_height.header.hash)
+                        for i, tx in enumerate(new_block_at_height.transactions):
+                            self.db.put('txindex:'+tx.hash, rlp.encode([new_block_at_height.number, i]))
+                    if i not in new_chain and not orig_at_height:
+                        break
                 self.head_hash = block.header.hash
+                self.state = pre_state
         else:
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
@@ -168,12 +264,51 @@ class Chain(object):
         blk_txhashes = {tx.hash:True for tx in block.transactions}
         self.transaction_queue = [x for x in self.transaction_queue if x.hash in blk_txhashes]
         self.add_child(block)
-        self.db.commit()
         self.db.put('head_hash', self.head_hash)
-        print 'Adding block %d (%s) with %d txs and %d gas' % \
-            (block.header.number, encode_hex(block.header.hash[:8]),
+        self.db.put(block.header.hash, rlp.encode(block))
+        self.db.commit()
+        print 'Added block %d (%s) with %d txs and %d gas' % \
+            (block.header.number, encode_hex(block.header.hash),
              len(block.transactions), block.header.gas_used)
         return True
+
+    def __contains__(self, blk):
+        if isinstance(blk, (str, bytes)):
+            try:
+                blk = rlp.decode(self.db.get(blk), Block)
+            except:
+                return False
+        try:
+            o = self.get_block(self.get_blockhash_by_number(blk.number)).hash
+            assert o == blk.hash
+            return True
+        except:
+            return False
+
+    def has_block(self, block):
+        return block in self
+
+    def get_chain(self, frm=None, to=2**63-1):
+        if frm is None:
+            frm = int(self.db.get('GENESIS_NUMBER')) + 1
+        chain = []
+        for i in xrange(frm, to):
+            h = self.get_blockhash_by_number(i)
+            if not h:
+                return chain
+            chain.append(self.get_block(h))
+
+    # Recover transaction and the block that contains it
+    def get_transaction(self, tx):
+        if not isinstance(tx, (str, bytes)):
+            tx = tx.hash
+        if 'txindex:'+tx in self.db:
+            data = rlp.decode(self.db.get('txindex:'+tx))
+            blk, index = self.get_block_by_number(big_endian_to_int(data[0])), big_endian_to_int(data[1])
+            tx = blk.transactions[index]
+            return tx, blk, index
+        else:
+            return None
 
     # This should be called when a miner sees a transaction, and may
     # potentially be interested in including it in a block
@@ -181,14 +316,14 @@ class Chain(object):
         if tx.gasprice >= self.min_gasprice:
             i = 0
             while i < len(self.transaction_queue) and tx.gasprice < self.transaction_queue[i]:
-                i += i
+                i += 1
             self.transaction_queue.insert(i, tx)
             print 'Added transaction to queue'
         else:
             print 'Gasprice too low!'
 
     # Get a transaction to include into a candidate block
-    def get_transaction(self, gaslimit, excluded={}):
+    def get_candidate_transaction(self, gaslimit, excluded={}):
         i = 0
         while i < len(self.transaction_queue) and (self.transaction_queue[i].hash in excluded or
                                                    self.transaction_queue[i].startgas > gaslimit):
@@ -196,15 +331,18 @@ class Chain(object):
         return self.transaction_queue[i] if i < len(self.transaction_queue) else None
 
     # Make a candidate block for mining
-    def make_head_candidate(self):
+    def make_head_candidate(self, parent=None, coinbase=None, timestamp=None):
         # clone the state so we can play with it without affecting the original
-        temp_state = parse_genesis_declaration.state_from_snapshot(parse_genesis_declaration.to_snapshot(state, root_only=True), self.env)
-        blk = Block()
-        now = int(time.time())
+        if parent is None:
+            temp_state = State.from_snapshot(self.state.to_snapshot(root_only=True), self.env)
+        else:
+            temp_state = self.mk_poststate_of_blockhash(parent.hash)
+        blk = Block(BlockHeader())
+        now = timestamp or int(time.time())
         blk.header.number = temp_state.block_number + 1
-        blk.header.difficulty = state_transition.calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
-        blk.header.gas_limit = state_transition.calc_gaslimit(temp_state.prev_headers[0], self.env.config)
-        blk.header.coinbase = self.coinbase
+        blk.header.difficulty = calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
+        blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
+        blk.header.coinbase = coinbase or self.coinbase
         blk.header.timestamp = now
         blk.header.extra_data = self.extra_data
         blk.header.prevhash = temp_state.prev_headers[0].hash
@@ -216,7 +354,7 @@ class Chain(object):
         # Add transactions (highest fee first formula)
         excluded = {}
         while 1:
-            tx = self.get_transaction(temp_state.gas_limit - temp_state.gas_used)
+            tx = self.get_candidate_transaction(temp_state.gas_limit - temp_state.gas_used, excluded)
             if tx is None:
                 break
             try:
@@ -228,17 +366,19 @@ class Chain(object):
                 blk.transactions.append(tx)
                 receipts.append(r)
                 temp_state.bloom |= r.bloom  # int
-            except:
+            except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas, InvalidNonce, UnsignedTransaction):
                 pass
             excluded[tx.hash] = True
         # Add uncles
         uncles = []
         ineligible = {}
-        for h, uncles in temp_state.recent_uncles:
+        for h, uncles in temp_state.recent_uncles.items():
             for u in uncles:
                 ineligible[u.hash] = True
+        for i in range(0, min(6, len((temp_state.prev_headers)))):
+            ineligible[temp_state.prev_headers[i].hash] = True
         for i in range(1, min(6, len(temp_state.prev_headers))):
-            child_hashes = self.get_child_hashes(temp_state[i].hash)
+            child_hashes = self.get_child_hashes(temp_state.prev_headers[i].hash)
             for c in child_hashes:
                 if c not in ineligible and len(uncles) < 2:
                     uncles.append(self.get_block(c).header)
@@ -246,13 +386,19 @@ class Chain(object):
                 break
         blk.uncles = uncles
         finalize(temp_state, blk)
-        blk.receipts_root = mk_receipt_sha(receipts)
-        blk.receipts_root = mk_transaction_sha(blk.transactions)
+        blk.header.receipts_root = mk_receipt_sha(receipts)
+        blk.header.tx_list_root = mk_transaction_sha(blk.transactions)
+        blk.header.uncles_hash = utils.sha3(rlp.encode(blk.uncles))
         temp_state.commit()
-        blk.state_root = temp_state.trie.root_hash
-        blk.bloom = temp_state.bloom
+        blk.header.state_root = temp_state.trie.root_hash
+        blk.header.gas_used = temp_state.gas_used
+        blk.header.bloom = temp_state.bloom
         return blk
 
     @property
     def db(self):
         return self.env.db
+
+    @property
+    def config(self):
+        return self.env.config

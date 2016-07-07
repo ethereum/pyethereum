@@ -49,7 +49,7 @@ default_config = dict(
     HOMESTEAD_FORK_BLKNUM=1150000,
     HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
     # Metropolis fork
-    METROPOLIS_FORK_BLKNUM=9999999,
+    METROPOLIS_FORK_BLKNUM=2**99,
     METROPOLIS_ENTRY_POINT=2**160 - 1,
     METROPOLIS_STATEROOT_STORE=0x10,
     METROPOLIS_BLOCKHASH_STORE=0x20,
@@ -72,8 +72,9 @@ assert default_config['NEPHEW_REWARD'] == \
 
 class Env(object):
 
-    def __init__(self, db=EphemDB(), config=None, global_config=None):
-        assert isinstance(db, BaseDB)
-        self.db = db
+    def __init__(self, db=None, config=None, global_config=None):
+        print 'new env'
+        self.db = db or EphemDB()
+        assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()

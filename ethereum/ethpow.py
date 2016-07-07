@@ -101,8 +101,9 @@ class Miner():
         bin_nonce, mixhash = mine(blk.number, blk.difficulty, blk.mining_hash,
                                   start_nonce=start_nonce, rounds=rounds)
         if bin_nonce:
-            blk.mixhash = mixhash
-            blk.nonce = bin_nonce
+            blk.header.mixhash = mixhash
+            blk.header.nonce = bin_nonce
+            assert blk.check_pow()
             return blk
 
 
