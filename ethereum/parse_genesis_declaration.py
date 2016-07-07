@@ -10,11 +10,13 @@ import rlp
 def state_from_genesis_declaration(genesis_data, env):
     h = BlockHeader(nonce=parse_as_bin(genesis_data["nonce"]),
                     difficulty=parse_as_int(genesis_data["difficulty"]),
-                    mixhash=parse_as_bin(genesis_data["mixhash"]),
+                    mixhash=parse_as_bin(genesis_data.get("mixhash", genesis_data["mixHash"])),
                     coinbase=parse_as_bin(genesis_data["coinbase"]),
+                    bloom=parse_as_int(genesis_data.get("bloom", "0")),
                     timestamp=parse_as_int(genesis_data["timestamp"]),
                     prevhash=parse_as_bin(genesis_data["parentHash"]),
                     extra_data=parse_as_bin(genesis_data["extraData"]),
+                    gas_used=parse_as_int(genesis_data["gasUsed"]),
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
     blk = Block(h, [], [])
     state = State(env=env)
@@ -42,13 +44,13 @@ def state_from_genesis_declaration(genesis_data, env):
 
 def mk_basic_state(alloc, header, env):
     state = State(env=env)
-    state["prev_headers"] = [FakeHeader(hash=parse_as_bin(header['hash']),
-                                        number=parse_as_int(header['number']),
-                                        timestamp=parse_as_int(header['timestamp']),
-                                        difficulty=parse_as_int(header['difficulty']),
-                                        gas_limit=parse_as_int(header['gas_limit']))]
+    state.prev_headers = [FakeHeader(hash=parse_as_bin(header['hash']),
+                                     number=parse_as_int(header['number']),
+                                     timestamp=parse_as_int(header['timestamp']),
+                                     difficulty=parse_as_int(header['difficulty']),
+                                     gas_limit=parse_as_int(header['gas_limit']))]
     
-    for addr, data in genesis_data["alloc"].items():
+    for addr, data in alloc.items():
         if len(addr) == 40:
             addr = decode_hex(addr)
         assert len(addr) == 20
@@ -69,28 +71,6 @@ def mk_basic_state(alloc, header, env):
     state.timestamp = header["timestamp"]
     state.block_difficulty = header["difficulty"]
     state.commit()
-    return state
-
-
-def mk_poststate_of_block(block, env):
-    state = State(env=env)
-    state.trie.root_hash = block.header.state_root
-    initialize(state, block)
-    state.gas_used = block.header.gas_used
-    state.txindex = len(block.transactions)
-    state.recent_uncles = {}
-    state.prev_headers = []
-    b = block
-    for i in range(257):
-        state.prev_headers.append(b.header)
-        if i < 6:
-            state.recent_uncles[state.block_number - i] = []
-            for u in b.uncles:
-                state.recent_uncles[state.block_number - i].append(u.hash)
-        try:
-            b = rlp.decode(state.db.get(b.header.prevhash), Block)
-        except:
-            break
     return state
 
 

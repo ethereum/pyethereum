@@ -1,7 +1,9 @@
 import pytest
 
-from ethereum import blocks, utils, db
+from ethereum import utils, db, chain
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
+from ethereum.block import Block
+from ethereum.config import Env
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
@@ -21,7 +23,6 @@ def translate_keys(olddict, keymap, valueconv, deletes):
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
 
-env = blocks.Env(db._EphemDB())
 
 translator_list = {
     "extra_data": "extraData",
@@ -45,66 +46,37 @@ def valueconv(k, v):
 
 
 def run_block_test(params, config_overrides = {}):
-    b = blocks.genesis(env, start_alloc=params["pre"])
-    gbh = params["genesisBlockHeader"]
-    b.bloom = utils.scanners['int256b'](gbh["bloom"])
-    b.timestamp = utils.scanners['int'](gbh["timestamp"])
-    b.nonce = utils.scanners['bin'](gbh["nonce"])
-    b.extra_data = utils.scanners['bin'](gbh["extraData"])
-    b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
-    b.gas_used = utils.scanners['int'](gbh["gasUsed"])
-    b.coinbase = utils.scanners['addr'](decode_hex(gbh["coinbase"]))
-    b.difficulty = utils.parse_int_or_hex(gbh["difficulty"])
-    b.prevhash = utils.scanners['bin'](gbh["parentHash"])
-    b.mixhash = utils.scanners['bin'](gbh["mixHash"])
-    assert b.receipts.root_hash == \
-        utils.scanners['bin'](gbh["receiptTrie"])
-    assert b.transactions.root_hash == \
-        utils.scanners['bin'](gbh["transactionsTrie"])
-    assert utils.sha3rlp(b.uncles) == \
-        utils.scanners['bin'](gbh["uncleHash"])
-    h = encode_hex(b.state.root_hash)
-    if h != str_to_bytes(gbh["stateRoot"]):
-        raise Exception("state root mismatch")
-    if b.hash != utils.scanners['bin'](gbh["hash"]):
-        raise Exception("header hash mismatch")
-    # assert b.header.check_pow()
-    blockmap = {b.hash: b}
-    env.db.put(b.hash, rlp.encode(b))
+    env = Env(db.EphemDB())
+    genesis_decl = {}
+    for param in ("bloom", "timestamp", "nonce", "extraData",
+                  "gasLimit", "coinbase", "difficulty",
+                  "parentHash", "mixHash", "gasUsed"):
+        genesis_decl[param] = params["genesisBlockHeader"][param]
+    genesis_decl["alloc"] = params["pre"]
+    c = chain.Chain(genesis=genesis_decl, env=env)
+    assert c.state.prev_headers[0].state_root == decode_hex(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.trie.root_hash == decode_hex(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.prev_headers[0].hash == decode_hex(params["genesisBlockHeader"]["hash"])
+
+
     old_config = copy.deepcopy(env.config)
     for k, v in config_overrides.items():
         env.config[k] = v
-    b2 = None
+
+
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
+            success = True
             try:
                 rlpdata = decode_hex(blk["rlp"][2:])
-                blkparent = rlp.decode(
-                    rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-                b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-                success = b2.validate_uncles()
+                success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction, KeyError):
                 success = False
             assert not success
         else:
             rlpdata = decode_hex(blk["rlp"][2:])
-            blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-            b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-            assert b2.validate_uncles()
-            blockmap[b2.hash] = b2
-            env.db.put(b2.hash, rlp.encode(b2))
-        if b2:
-            print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
-        # blkdict = b.to_dict(False, True, False, True)
-        # assert blk["blockHeader"] == \
-        #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
-        # assert blk["transactions"] == \
-        #     [translate_keys(t, translator_list, valueconv, ['hash'])
-        #      for t in blkdict["transactions"]]
-        # assert blk["uncleHeader"] == \
-        #     [translate_keys(u, translator_list, lambda x: x, [])
-        #      for u in blkdict["uncles"]]
+            c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 
 

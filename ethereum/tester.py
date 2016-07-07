@@ -15,6 +15,7 @@ from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
 from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
 from ethereum import parse_genesis_declaration, state_transition
+from ethereum.state import State
 
 TRACE_LVL_MAP = [
     ':info',
@@ -181,7 +182,7 @@ class state(object):
             address = int_to_addr(i)
             initial_balances[address.encode('hex')] = {'wei': "1"}
 
-        self.state = parse_genesis_declaration.state_from_snapshot({
+        self.state = State.from_snapshot({
             "alloc": initial_balances,
             "timestamp": "1410973349",
             "coinbase": DEFAULT_ACCOUNT.encode('hex'),
@@ -407,7 +408,7 @@ class state(object):
             self.state.timestamp += (6 + rand() % 12)
 
     def snapshot(self):
-        return parse_genesis_declaration.to_snapshot(self.state)
+        return self.state.to_snapshot()
 
     def revert(self, data):
-        self.state = parse_genesis_declaration.state_from_snapshot(data, self.env)
+        self.state = State.from_snapshot(data, self.env)

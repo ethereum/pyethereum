@@ -95,6 +95,10 @@ class BlockHeader(rlp.Serializable):
         return utils.sha3(rlp.encode(self))
 
     @property
+    def hex_hash(self):
+        return encode_hex(self.hash)
+
+    @property
     def mining_hash(self):
         return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
@@ -179,11 +183,18 @@ class Block(rlp.Serializable):
         self.transactions = transactions
         self.uncles = uncles
         self.uncles = list(self.uncles)
- 
+
+    def __getattribute__(self, name):
+        try:
+            return rlp.Serializable.__getattribute__(self, name)
+        except:
+            return getattr(self.header, name)
+
 class FakeHeader():
-    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1, gas_limit=3141592):
+    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1, gas_limit=3141592, gas_used=0):
         self.hash = hash
         self.number = number
         self.timestamp = timestamp
         self.difficulty = difficulty
         self.gas_limit = gas_limit
+        self.gas_used = gas_used

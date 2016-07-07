@@ -102,12 +102,24 @@ def apply_block(state, block, creating=False):
         block.header.tx_list_root = mk_transaction_sha(block.transactions)
         block.header.state_root = state.trie.root_hash
     else:
-        assert block.header.receipts_root == mk_receipt_sha(receipts), (block.header.receipts_root, mk_receipt_sha(receipts), receipts)
-        assert block.header.tx_list_root == mk_transaction_sha(block.transactions)
-        assert block.header.state_root == state.trie.root_hash
+        if block.header.receipts_root != mk_receipt_sha(receipts):
+            raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
+                             (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts))), len(receipts))
+        if block.header.tx_list_root != mk_transaction_sha(block.transactions):
+            raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %
+                             (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
+                              len(block.transactions)))
+        if block.header.state_root != state.trie.root_hash:
+            raise ValueError("State root mismatch: header %s computed %s" %
+                             (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
+        if block.header.bloom != state.bloom:
+            raise ValueError("Bloom mismatch: header %d computed %d" % (block.header.bloom, state.bloom))
+        if block.header.gas_used != state.gas_used:
+            raise ValueError("Gas used mismatch: header %d computed %d" % (block.header.gas_used, state.gas_used))
     return state, receipts
 
 def validate_transaction(state, tx):
+    print 'validating transaction'
 
     def rp(what, actual, target):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
@@ -135,8 +147,10 @@ def validate_transaction(state, tx):
     # (4) the sender account balance contains at least the
     # cost, v0, required in up-front payment.
     total_cost = tx.value + tx.gasprice * tx.startgas
+
     if state.get_balance(tx.sender) < total_cost:
         raise InsufficientBalance(rp('balance', state.get_balance(tx.sender), total_cost))
+
 
     # check block gas limit
     if state.gas_used + tx.startgas > state.gas_limit:
@@ -256,6 +270,8 @@ def validate_block_header(state, header):
             raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
         if header.gas_used > header.gas_limit:
             raise ValueError("Gas used exceeds gas limit")
+        if len(header.extra_data) > 32:
+            raise ValueError("Extra data too long")
         if header.timestamp <= parent.timestamp:
             raise ValueError("Timestamp equal to or before parent")
         if header.timestamp >= 2**256:
@@ -310,10 +326,10 @@ def validate_uncles(state, block):
     """Validate the uncles of this block."""
     # Make sure hash matches up
     if utils.sha3(rlp.encode(block.uncles)) != block.header.uncles_hash:
-        return False
+        assert False
     # Enforce maximum number of uncles
     if len(block.uncles) > state.config['MAX_UNCLES']:
-        return False
+        assert False
     # Uncle must have lower block number than blockj
     for uncle in block.uncles:
         assert uncle.number < block.header.number
@@ -334,20 +350,20 @@ def validate_uncles(state, block):
             log.error("Uncle does not have a valid ancestor", block=self,
                       eligible=[encode_hex(x) for x in eligible_ancestor_hashes],
                       uncle_prevhash=encode_hex(uncle.prevhash))
-            return False
+            assert False
         parent = [x for x in ancestor_chain if x.hash == uncle.prevhash][0]
         if uncle.difficulty != calc_difficulty(parent, uncle.timestamp, config=state.config):
-            return False
+            assert False
         if uncle.number != parent.number + 1:
-            return False
+            assert False
         if uncle.timestamp < parent.timestamp:
-            return False
+            assert False
         if not uncle.check_pow():
-            return False
+            assert False
         if uncle.hash in ineligible:
-            log.error("Duplicate uncle", block=self,
+            log.error("Duplicate uncle", block=block,
                       uncle=encode_hex(utils.sha3(rlp.encode(uncle))))
-            return False
+            assert False
         ineligible.append(uncle.hash)
     return True
 
