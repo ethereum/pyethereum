@@ -119,7 +119,6 @@ def apply_block(state, block, creating=False):
     return state, receipts
 
 def validate_transaction(state, tx):
-    print 'validating transaction'
 
     def rp(what, actual, target):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)

@@ -389,7 +389,7 @@ def parse_as_bin(s):
     return decode_hex(s[2:] if s[:2] == '0x' else s)
 
 def parse_as_int(s):
-    return s if isinstance(s, (int, long)) else int(s[2:], 16) if s[:2] == '0x' else int(s)
+    return s if isinstance(s, (int, long)) else int('0'+s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):

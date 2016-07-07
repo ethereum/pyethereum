@@ -10,13 +10,13 @@ import rlp
 def state_from_genesis_declaration(genesis_data, env):
     h = BlockHeader(nonce=parse_as_bin(genesis_data["nonce"]),
                     difficulty=parse_as_int(genesis_data["difficulty"]),
-                    mixhash=parse_as_bin(genesis_data.get("mixhash", genesis_data["mixHash"])),
+                    mixhash=parse_as_bin(genesis_data.get("mixhash", genesis_data.get("mixHash", "0"*64))),
                     coinbase=parse_as_bin(genesis_data["coinbase"]),
                     bloom=parse_as_int(genesis_data.get("bloom", "0")),
                     timestamp=parse_as_int(genesis_data["timestamp"]),
                     prevhash=parse_as_bin(genesis_data["parentHash"]),
                     extra_data=parse_as_bin(genesis_data["extraData"]),
-                    gas_used=parse_as_int(genesis_data["gasUsed"]),
+                    gas_used=parse_as_int(genesis_data.get("gasUsed", "0")),
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
     blk = Block(h, [], [])
     state = State(env=env)

@@ -34,7 +34,8 @@ class Chain(object):
         # Initialize the state
         if 'head_hash' in self.db:
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
-            print 'Initializing chain from saved head, #%d (%s)' % (block.header.number, encode_hex(block.header.hash[:8]))
+            print 'Initializing chain from saved head, #%d (%s)' % \
+                (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
@@ -100,15 +101,16 @@ class Chain(object):
                 b = rlp.decode(state.db.get(b.header.prevhash), Block)
             except:
                 break
-        if state.db.get(b.header.prevhash) == 'GENESIS':
-            jsondata = json.loads(state.db.get('GENESIS_STATE'))
-            for h in jsondata["prev_headers"][:257 - i - 1]:
-                state.prev_headers.append(dict_to_prev_header(h))
-            for blknum, uncles in jsondata["recent_uncles"].items():
-                if blknum >= state.block_number - 6:
-                    state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
-        else:
-            raise Exception("Dangling prevhash")
+        if i < 256:
+            if state.db.get(b.header.prevhash) == 'GENESIS':
+                jsondata = json.loads(state.db.get('GENESIS_STATE'))
+                for h in jsondata["prev_headers"][:257 - i - 1]:
+                    state.prev_headers.append(dict_to_prev_header(h))
+                for blknum, uncles in jsondata["recent_uncles"].items():
+                    if blknum >= state.block_number - 6:
+                        state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
+            else:
+                raise Exception("Dangling prevhash")
         return state
 
     def get_parent(self, block):
@@ -199,8 +201,7 @@ class Chain(object):
             print 'Block received too early. Delaying for now'
             return False
         if block.header.prevhash == self.head_hash:
-            print 'Adding to head'
-            # apply_block(self.state, block)
+            # print 'Adding to head'
             try:
                 apply_block(self.state, block)
             except Exception, e:
@@ -212,7 +213,7 @@ class Chain(object):
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:'+tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
-            print 'Receiving block not on head, adding to secondary post state'
+            # print 'Receiving block not on head, adding to secondary post state'
             pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(pre_state, block)

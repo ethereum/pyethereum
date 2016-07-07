@@ -25,7 +25,7 @@ def test_transaction(filename, testname, testdata):
         o = {}
         tx = rlp.decode(rlpdata, transactions.Transaction)
         blknum = int(testdata["blocknumber"])
-        if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
+        if blknum >= 1000000:  # config.default_config["HOMESTEAD_FORK_BLKNUM"]:
             tx.check_low_s()
         o["sender"] = tx.sender
         o["transaction"] = {
