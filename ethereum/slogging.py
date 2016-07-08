@@ -1,9 +1,9 @@
-import sys
 import logging
 import json
 import textwrap
 from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
+from ethereum.utils import bcolors, isnumeric
 
 
 DEFAULT_LOGLEVEL = 'INFO'
@@ -18,33 +18,6 @@ TRACE = 5
 known_loggers = set()
 
 log_listeners = []
-
-
-if sys.version_info.major == 2:
-    integer_types = (int, long)
-    number_types = (int, long, float, complex)
-else:
-    integer_types = (int,)
-    number_types = (int, float, complex)
-
-
-def is_integer(value):
-    return isinstance(value, integer_types)
-
-
-def is_number(value):
-    return isinstance(value, number_types)
-
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[91m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
 def _inject_into_logger(name, code, namespace=None):
@@ -217,7 +190,7 @@ class SLogger(logging.Logger):
                     msg = json.dumps(message, cls=_LogJSONEncoder)
             except UnicodeDecodeError:
                 message.update({
-                    k: v if is_number(v) else repr(v)
+                    k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
                     for k, v in kwargs.items()
                 })
                 msg = json.dumps(message, cls=_LogJSONEncoder)
@@ -287,7 +260,7 @@ def _stringify_dict_keys(input_):
         res = {}
         for k, v in input_.items():
             v = _stringify_dict_keys(v)
-            if not is_integer(k) and not isinstance(k, (bool, None.__class__)):
+            if not isinstance(k, (int, long, bool, None.__class__)):
                 k = str(k)
             res[k] = v
     elif isinstance(input_, (list, tuple)):

@@ -23,12 +23,12 @@ script:
   - tox -e $TOX_ENV -- --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
   - tox -e $TOX_ENV -- ethereum/tests/test_vm.py
   - tox -e $TOX_ENV -- ethereum/tests/test_state.py
-  - cd .tox/$TOX_ENV && coverage report --show-missing
+  - coverage report --show-missing
 after_success:
   - travis_retry pip install coveralls
   - cd .tox/$TOX_ENV && coveralls
 after_script:
-  - cat .tox/$TOX_ENV/log/*.log
+  - cat .tox/$TOX_ENV/log/*.log; true
 notifications:
   slack:
     secure: W/UAhQ/GgYwMWrl3aiVAVOWr4WGdWrxUOX/rTB3ZgwDwGqDYLzQO5UqbsQlo1JXPZ6JOWfIPMURhHu7DSfue9dBW6xQ+NL+bFHe9lSXG4nqFK3IjezYyTBzNRJRDbGUvSSqgj6D5cwhJ8BjfUIRPbJz3CxL64KmsNXezEaMY60w=

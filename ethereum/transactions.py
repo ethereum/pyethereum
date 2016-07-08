@@ -1,15 +1,16 @@
 # -*- coding: utf8 -*-
 import rlp
-from bitcoin import encode_pubkey, N, encode_privkey, ecdsa_raw_sign
+from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import encode_hex, str_to_bytes, ascii_chr
+from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
 
 from ethereum.exceptions import InvalidTransaction
 from ethereum import bloom
 from ethereum import opcodes
 from ethereum import utils
 from ethereum.slogging import get_logger
-from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int, ecsign, ecrecover_to_pub
+from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int
 
 
 log = get_logger('eth.chain.tx')
@@ -80,10 +81,25 @@ class Transaction(rlp.Serializable):
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
                 rawhash = utils.sha3(rlpdata)
-                pub = ecrecover_to_pub(rawhash, self.v, self.r, self.s)
-                if pub == b"\x00" * 64:
+
+                pk = PublicKey(flags=ALL_FLAGS)
+                try:
+                    pk.public_key = pk.ecdsa_recover(
+                        rawhash,
+                        pk.ecdsa_recoverable_deserialize(
+                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
+                            self.v - 27
+                        ),
+                        raw=True
+                    )
+                    pub = pk.serialize(compressed=False)
+                except Exception:
+                    raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
+
+                if pub[1:] == b"\x00" * 32:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
-                self._sender = utils.sha3(pub)[-20:]
+                pub = encode_pubkey(pub, 'bin')
+                self._sender = utils.sha3(pub[1:])[-20:]
                 assert self.sender == self._sender
             else:
                 self._sender = 0
@@ -106,7 +122,14 @@ class Transaction(rlp.Serializable):
             # we need a binary key
             key = encode_privkey(key, 'bin')
 
-        self.v, self.r, self.s = ecsign(rawhash, key)
+        pk = PrivateKey(key, raw=True)
+        signature = pk.ecdsa_recoverable_serialize(
+            pk.ecdsa_sign_recoverable(rawhash, raw=True)
+        )
+        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        self.v = utils.safe_ord(signature[64]) + 27
+        self.r = big_endian_to_int(signature[0:32])
+        self.s = big_endian_to_int(signature[32:64])
 
         self.sender = utils.privtoaddr(key)
         return self

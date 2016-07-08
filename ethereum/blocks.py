@@ -14,8 +14,7 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string
-from ethereum.utils import big_endian_to_int
+from ethereum.utils import address, int256, trie_root, hash32, to_string, big_endian_to_int
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -76,9 +75,9 @@ def calc_difficulty(parent, timestamp):
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, config['MIN_DIFF'])))
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
-        o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+        o = max(o + 2 ** (period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+    # print('Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o))
     return o
-
 
 
 class Account(rlp.Serializable):
@@ -333,7 +332,7 @@ class BlockHeader(rlp.Serializable):
         return isinstance(other, BlockHeader) and self.hash == other.hash
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -398,7 +397,7 @@ class Block(rlp.Serializable):
                  parent=None, making=False):
         assert isinstance(env, Env), "No Env object given"
         assert isinstance(env.db, BaseDB), "No database object given"
-        self.env = env # don't re-set after init
+        self.env = env  # don't re-set after init
         self.db = env.db
         self.config = env.config
 
@@ -444,8 +443,11 @@ class Block(rlp.Serializable):
                 raise ValueError("Gas used exceeds gas limit")
             if self.timestamp <= parent.header.timestamp:
                 raise ValueError("Timestamp equal to or before parent")
-            if self.timestamp >= 2**256:
+            if self.timestamp >= 2 ** 256:
                 raise ValueError("Timestamp waaaaaaaaaaayy too large")
+
+        if self.gas_limit > 2 ** 63 - 1:
+            raise ValueError("Block's gaslimit went too high!")
 
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
@@ -533,7 +535,7 @@ class Block(rlp.Serializable):
         if not self.check_fields():
             raise ValueError("Block is invalid")
         if len(to_string(self.header.extra_data)) > self.config['MAX_EXTRADATA_LENGTH']:
-            raise ValueError("Extra data cannot exceed %d bytes" \
+            raise ValueError("Extra data cannot exceed %d bytes"
                              % default_config['MAX_EXTRADATA_LENGTH'])
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
@@ -697,7 +699,7 @@ class Block(rlp.Serializable):
         if n == 0 or self.header.number == 0:
             return []
         p = self.get_parent()
-        return [p] + p.get_ancestor_list(n-1)
+        return [p] + p.get_ancestor_list(n - 1)
 
     def get_ancestor_hash(self, n):
         assert n > 0
@@ -708,7 +710,7 @@ class Block(rlp.Serializable):
                 self.ancestor_hashes.append(
                     get_block(self.env,
                               self.ancestor_hashes[-1]).get_parent().hash)
-        return self.ancestor_hashes[n-1]
+        return self.ancestor_hashes[n - 1]
 
     # def get_ancestor(self, n):
     #     return self.get_block(self.get_ancestor_hash(n))
@@ -787,7 +789,7 @@ class Block(rlp.Serializable):
         new_value = self._get_acct_item(address, param) + value
         if new_value < 0:
             return False
-        self._set_acct_item(address, param, new_value % 2**256)
+        self._set_acct_item(address, param, new_value % 2 ** 256)
         return True
 
     def mk_transaction_receipt(self, tx):
@@ -965,7 +967,7 @@ class Block(rlp.Serializable):
             for k in self.caches[CACHE_KEY]:
                 self.set_and_journal(CACHE_KEY, k, 0)
 
-    def get_storage_bytes(self, address, index):
+    def get_storage_data(self, address, index):
         """Get a specific item in the storage of an account.
 
         :param address: the address of the account (binary or hex string)
@@ -981,16 +983,9 @@ class Block(rlp.Serializable):
         key = utils.zpad(utils.coerce_to_bytes(index), 32)
         storage = self.get_storage(address).get(key)
         if storage:
-            return rlp.decode(storage)
+            return rlp.decode(storage, big_endian_int)
         else:
-            return b''
-
-    def get_storage_data(self, address, index):
-        bytez = self.get_storage_bytes(address, index)
-        if len(bytez) >= 32:
-            return big_endian_to_int(bytez[-32:])
-        else:
-            return big_endian_to_int(bytez)
+            return 0
 
     def set_storage_data(self, address, index, value):
         """Set a specific item in the storage of an account.
@@ -1006,7 +1001,6 @@ class Block(rlp.Serializable):
         if CACHE_KEY not in self.caches:
             self.caches[CACHE_KEY] = {}
             self.set_and_journal('all', address, True)
-        assert isinstance(value, (str, bytes))
         self.set_and_journal(CACHE_KEY, index, value)
 
     def account_exists(self, address):
@@ -1108,12 +1102,12 @@ class Block(rlp.Serializable):
                        for kk in list(subcache.keys())]
             for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
-                v2 = subcache.get(utils.big_endian_to_int(k), None)
+                v2 = subcache.get(big_endian_to_int(k), None)
                 hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
-                    if v2 != b'':
+                    if v2 != 0:
                         med_dict['storage'][hexkey] = \
-                            b'0x' + encode_hex(v2)
+                            b'0x' + encode_hex(utils.int_to_big_endian(v2))
                 elif v is not None:
                     med_dict['storage'][hexkey] = b'0x' + encode_hex(rlp.decode(v))
 
@@ -1177,14 +1171,6 @@ class Block(rlp.Serializable):
         self.ether_delta = mysnapshot['ether_delta']
 
     def initialize(self, parent):
-        # DAO fork
-        if self.number == self.config["DAO_FORK_BLKNUM"]:
-            dao_main_addr = utils.normalize_address(self.config["DAO_MAIN_ADDR"])
-            for acct in map(utils.normalize_address, self.config["DAO_ADDRESS_LIST"]):
-                self.delta_balance(dao_main_addr, self.get_balance(addr))
-                self.set_balance(addr, 0)
-            self.set_code(dao_main_addr, self.config["DAO_NEWCODE"])
-        # Likely metropolis changes
         if self.number == self.config["METROPOLIS_FORK_BLKNUM"]:
             self.set_code(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
             self.set_code(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
@@ -1308,7 +1294,7 @@ class Block(rlp.Serializable):
         return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -1366,7 +1352,7 @@ class CachedBlock(Block):
         pass
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     @property
     def hash(self):
@@ -1454,9 +1440,8 @@ def genesis(env, **kwargs):
             block.set_nonce(addr, utils.parse_int_or_hex(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                block.set_storage_data(addr,
-                                       utils.big_endian_to_int(decode_hex(k[2:])),
-                                       decode_hex(v[2:]))
+                block.set_storage_data(addr, big_endian_to_int(decode_hex(k[2:])),
+                                       big_endian_to_int(decode_hex(v[2:])))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization

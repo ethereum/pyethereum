@@ -7,10 +7,10 @@ from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
-from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
-    mk_metropolis_contract_address, int_to_addr, big_endian_to_int
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-        BlockGasLimitReached, InsufficientBalance
+        BlockGasLimitReached, InsufficientBalance, VerificationFailed
+from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
+    mk_metropolis_contract_address, big_endian_to_int
 from ethereum import transactions
 import ethereum.config as config
 
@@ -38,7 +38,7 @@ def verify(block, parent):
                             env=parent.env, parent=parent)
         assert block == block2
         return True
-    except blocks.VerificationFailed:
+    except VerificationFailed:
         return False
 
 
@@ -146,7 +146,6 @@ def apply_transaction(block, tx):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     intrinsic_gas = tx.intrinsic_gas_used
-    print('b1', block.get_balance(tx.sender))
     if block.number >= block.config['HOMESTEAD_FORK_BLKNUM']:
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
@@ -165,7 +164,6 @@ def apply_transaction(block, tx):
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
     message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
-    print('b2', block.get_balance(tx.sender))
     # MESSAGE
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
@@ -215,7 +213,6 @@ def apply_transaction(block, tx):
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []
-    print('b3', block.get_balance(tx.sender), success)
     return success, output
 
 
@@ -227,16 +224,12 @@ class VMExt():
     def __init__(self, block, tx):
         self._block = block
         self.get_code = block.get_code
-        self.set_code = block.set_code
         self.get_balance = block.get_balance
         self.set_balance = block.set_balance
-        self.delta_balance = block.delta_balance
         self.get_nonce = block.get_nonce
         self.set_nonce = block.set_nonce
-        self.increment_nonce = block.increment_nonce
         self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
-        self.get_storage_bytes = block.get_storage_bytes
         self.log_storage = lambda x: block.account_to_dict(x)['storage']
         self.add_suicide = lambda x: block.suicides.append(x)
         self.add_refund = lambda x: \
@@ -256,11 +249,6 @@ class VMExt():
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = block.account_exists
         self.post_homestead_hardfork = lambda: block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
-        self.post_metropolis_hardfork = lambda: block.number >= block.config['METROPOLIS_FORK_BLKNUM']
-        self.snapshot = block.snapshot
-        self.revert = block.revert
-        self.transfer_value = block.transfer_value
-        self.reset_storage = block.reset_storage
 
 
 def apply_msg(ext, msg):
@@ -282,9 +270,9 @@ def _apply_msg(ext, msg, code):
                             state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
-    snapshot = ext.snapshot()
+    snapshot = ext._block.snapshot()
     if msg.transfers_value:
-        if not ext.transfer_value(msg.sender, msg.to, msg.value):
+        if not ext._block.transfer_value(msg.sender, msg.to, msg.value):
             log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
                           want=msg.value)
             return 1, msg.gas, []
@@ -308,7 +296,7 @@ def _apply_msg(ext, msg, code):
 
     if res == 0:
         log_msg.debug('REVERTING')
-        ext.revert(snapshot)
+        ext._block.revert(snapshot)
 
     return res, gas, dat
 
@@ -318,30 +306,30 @@ def create_contract(ext, msg):
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     code = msg.data.extract_all()
-    if ext.post_metropolis_hardfork():
+    if ext._block.number >= ext._block.config['METROPOLIS_FORK_BLKNUM']:
         msg.to = mk_metropolis_contract_address(msg.sender, code)
         if ext.get_code(msg.to):
-            if ext.get_nonce(msg.to) >= 2**40:
-                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2**160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+            if ext.get_nonce(msg.to) >= 2 ** 40:
+                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2 ** 160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
             else:
-                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2**160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2**160)
+                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2 ** 160)
+                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
     else:
         if ext.tx_origin != msg.sender:
-            ext.increment_nonce(msg.sender)
-        nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
+            ext._block.increment_nonce(msg.sender)
+        nonce = utils.encode_int(ext._block.get_nonce(msg.sender) - 1)
         msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
-        ext.set_nonce(msg.to, 0)
-        ext.set_code(msg.to, b'')
-        ext.reset_storage(msg.to)
+        ext._block.set_nonce(msg.to, 0)
+        ext._block.set_code(msg.to, b'')
+        ext._block.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
-    snapshot = ext.snapshot()
+    snapshot = ext._block.snapshot()
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
 
@@ -353,11 +341,11 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext.block_number)
-            if ext.post_homestead_hardfork():
-                ext.revert(snapshot)
+            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext._block.number)
+            if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
+                ext._block.revert(snapshot)
                 return 0, 0, b''
-        ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
+        ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
         return 1, gas, msg.to
     else:
         return 0, gas, b''
