@@ -389,11 +389,15 @@ def run_state_test(params, mode):
         compare_post_states(shouldbe, reallyis)
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'postStateRoot']:
-            shouldbe = params1.get(k, None)
-            reallyis = params2.get(k, None)
-            if shouldbe != reallyis:
+            _shouldbe = params1.get(k, None)
+            _reallyis = params2.get(k, None)
+            if _shouldbe != _reallyis:
+                print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
+                       'post: {shouldbe_post} != {reallyis_post}').format(
+                    shouldbe_key=_shouldbe, reallyis_key=_reallyis,
+                    shouldbe_post=shouldbe, reallyis_post=reallyis, key=k))
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
-                                (shouldbe, reallyis))
+                                (_shouldbe, _reallyis))
 
     elif mode == TIME:
         return time_post - time_pre
