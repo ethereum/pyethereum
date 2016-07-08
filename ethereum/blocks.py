@@ -446,6 +446,9 @@ class Block(rlp.Serializable):
             if self.timestamp >= 2 ** 256:
                 raise ValueError("Timestamp waaaaaaaaaaayy too large")
 
+        if self.gas_limit > 2 ** 63 - 1:
+            raise ValueError("Block's gaslimit went too high!")
+
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
 
