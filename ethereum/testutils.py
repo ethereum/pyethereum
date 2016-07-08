@@ -297,7 +297,7 @@ def run_state_test1(params, mode):
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
-    
+
     state = State(db=db,
                   prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
                   block_number=parse_int_or_hex(env['currentNumber']),
@@ -351,7 +351,7 @@ def run_state_test1(params, mode):
 
         time_pre = time.time()
         state.commit()
-        print state.to_dict()
+        print(state.to_dict())
         snapshot = state.snapshot()
         try:
             print('trying')
