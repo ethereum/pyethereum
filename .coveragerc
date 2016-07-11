@@ -1,8 +1,6 @@
 [run]
 source = pyethereum
 
-To exclude parts of your source from coverage, for example migrations folders:
-
 [report]
 omit =
   */fixtures/*
@@ -11,7 +9,6 @@ omit =
   */ethereum/fastvm.py
   */ethereum/spv.py
 
-[report]
 exclude_lines =
   pragma: no cover
   def __repr__

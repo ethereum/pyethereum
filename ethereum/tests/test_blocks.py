@@ -1,3 +1,5 @@
+import pytest
+
 from ethereum import blocks, utils, db
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
@@ -6,6 +8,7 @@ from rlp import DecodingError, DeserializationError
 import os
 import sys
 import ethereum.testutils as testutils
+import copy
 
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -41,7 +44,7 @@ def valueconv(k, v):
     return v
 
 
-def run_block_test(params):
+def run_block_test(params, config_overrides = {}):
     b = blocks.genesis(env, start_alloc=params["pre"])
     gbh = params["genesisBlockHeader"]
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
@@ -65,9 +68,13 @@ def run_block_test(params):
         raise Exception("state root mismatch")
     if b.hash != utils.scanners['bin'](gbh["hash"]):
         raise Exception("header hash mismatch")
-    assert b.header.check_pow()
+    # assert b.header.check_pow()
     blockmap = {b.hash: b}
     env.db.put(b.hash, rlp.encode(b))
+    old_config = copy.deepcopy(env.config)
+    for k, v in config_overrides.items():
+        env.config[k] = v
+    b2 = None
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             try:
@@ -87,6 +94,8 @@ def run_block_test(params):
             assert b2.validate_uncles()
             blockmap[b2.hash] = b2
             env.db.put(b2.hash, rlp.encode(b2))
+        if b2:
+            print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
         # blkdict = b.to_dict(False, True, False, True)
         # assert blk["blockHeader"] == \
         #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
@@ -96,19 +105,29 @@ def run_block_test(params):
         # assert blk["uncleHeader"] == \
         #     [translate_keys(u, translator_list, lambda x: x, [])
         #      for u in blkdict["uncles"]]
+    env.config = old_config
 
 
-def do_test_block(filename, testname=None, testdata=None, limit=99999999):
-    print('\nrunning test:%r in %r' % (testname, filename))
-    run_block_test(testdata)
-
-excludes = [('bcWalletTest.json', u'walletReorganizeOwners'),
-            ('bl10251623GO.json', u'randomBlockTest'),
-            ('bl201507071825GO.json', u'randomBlockTest')
-            ]
+def test_block(filename, testname, testdata):
+    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
 
 
-if __name__ == '__main__':
+excludes = {
+    ('bcWalletTest.json', u'walletReorganizeOwners'),
+    ('bl10251623GO.json', u'randomBlockTest'),
+    ('bl201507071825GO.json', u'randomBlockTest')
+}
+
+
+def pytest_generate_tests(metafunc):
+    testutils.generate_test_params(
+        'BlockchainTests',
+        metafunc,
+        lambda filename, testname, _: (filename.split('/')[-1], testname) in excludes
+    )
+
+
+def main():
     assert len(sys.argv) >= 2, "Please specify file or dir name"
     fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
     if len(sys.argv) >= 3:
@@ -116,23 +135,17 @@ if __name__ == '__main__':
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata)
+                    run_block_test(testdata, {
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
+                        else 1000000})
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata)
-else:
-    fixtures = testutils.get_tests_from_file_or_dir(
-        os.path.join(testutils.fixture_path, 'BlockchainTests'))
+                    run_block_test(testdata, {
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000})
 
-    def mk_test_func(filename, testname, testdata):
-        return lambda: do_test_block(filename, testname, testdata)
 
-    for filename, tests in list(fixtures.items()):
-        for testname, testdata in list(tests.items())[:500]:
-            func_name = 'test_%s_%s' % (filename, testname)
-            if (filename.split('/')[-1], testname) not in excludes:
-                # print 'making function', (filename.split('/')[-1], testname)
-                globals()[func_name] = mk_test_func(filename, testname, testdata)
+if __name__ == '__main__':
+    main()

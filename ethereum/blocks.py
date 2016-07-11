@@ -6,6 +6,7 @@ dump_block_on_failed_verification = False
 import time
 from itertools import count
 import sys
+from collections import Iterable
 import rlp
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex
@@ -13,7 +14,7 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string
+from ethereum.utils import address, int256, trie_root, hash32, to_string, big_endian_to_int
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -34,21 +35,49 @@ log_state = get_logger('eth.msg.state')
 Log = processblock.Log
 
 
+class lazy_encode(object):
+    def __init__(self, data):
+        self.data = data
+
+    def encode_entry(self, entry):
+        assert isinstance(entry, Iterable)
+        if len(entry) == 3:
+            name, addr, v = entry
+            if name == 'code':
+                return [name, encode_hex(addr), encode_hex(v)]
+            else:
+                return [name, encode_hex(addr), v]
+        elif len(entry) == 4:
+            name, addr, k, v = entry
+            return [name, encode_hex(addr), encode_hex(k), encode_hex(v)]
+        assert False, ("unexpected entry format", entry)
+
+    def __repr__(self):
+        return repr([self.encode_entry(entry) for entry in self.data])
+
+    def __str__(self):
+        return str(repr(self))
+
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp):
     config = parent.config
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
-    sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
+    if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
+        sign = max(len(parent.uncles) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
+    elif parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
+        sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
+    else:
+        sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, config['MIN_DIFF'])))
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
-        o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+        o = max(o + 2 ** (period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+    # print('Calculating difficulty of block %d, timestamp difference %d, parent diff %d, child diff %d' % (parent.number + 1, timestamp - parent.timestamp, parent.difficulty, o))
     return o
-
 
 
 class Account(rlp.Serializable):
@@ -93,7 +122,7 @@ class Account(rlp.Serializable):
         self.db.inc_refcount(self.code_hash, value)
 
     @classmethod
-    def blank_account(cls, db):
+    def blank_account(cls, db, initial_nonce=0):
         """Create a blank account
 
         The returned account will have zero nonce and balance, a blank storage
@@ -103,7 +132,7 @@ class Account(rlp.Serializable):
         """
         code_hash = utils.sha3(b'')
         db.put(code_hash, b'')
-        return cls(0, 0, trie.BLANK_ROOT, code_hash, db)
+        return cls(initial_nonce, 0, trie.BLANK_ROOT, code_hash, db)
 
 
 class Receipt(rlp.Serializable):
@@ -116,11 +145,14 @@ class Receipt(rlp.Serializable):
     ]
 
     def __init__(self, state_root, gas_used, logs, bloom=None):
+        # does not call super.__init__ as bloom should not be an attribute but a property
         self.state_root = state_root
         self.gas_used = gas_used
         self.logs = logs
         if bloom is not None and bloom != self.bloom:
             raise ValueError("Invalid bloom filter")
+        self._cached_rlp = None
+        self._mutable = True
 
     @property
     def bloom(self):
@@ -250,12 +282,10 @@ class BlockHeader(rlp.Serializable):
         else:
             self._receipts_root = value
 
-    _fimxe_hash = None
-
     @property
     def hash(self):
         """The binary block hash"""
-        return self._fimxe_hash or utils.sha3(rlp.encode(self))
+        return utils.sha3(rlp.encode(self))
 
     def hex_hash(self):
         """The hex encoded block hash"""
@@ -302,7 +332,7 @@ class BlockHeader(rlp.Serializable):
         return isinstance(other, BlockHeader) and self.hash == other.hash
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -367,14 +397,13 @@ class Block(rlp.Serializable):
                  parent=None, making=False):
         assert isinstance(env, Env), "No Env object given"
         assert isinstance(env.db, BaseDB), "No database object given"
-        self.env = env # don't re-set after init
+        self.env = env  # don't re-set after init
         self.db = env.db
         self.config = env.config
 
         self.header = header
         self.uncles = uncles
 
-        self.uncles = uncles
         self.suicides = []
         self.logs = []
         self.log_listeners = []
@@ -414,6 +443,11 @@ class Block(rlp.Serializable):
                 raise ValueError("Gas used exceeds gas limit")
             if self.timestamp <= parent.header.timestamp:
                 raise ValueError("Timestamp equal to or before parent")
+            if self.timestamp >= 2 ** 256:
+                raise ValueError("Timestamp waaaaaaaaaaayy too large")
+
+        if self.gas_limit > 2 ** 63 - 1:
+            raise ValueError("Block's gaslimit went too high!")
 
         for uncle in uncles:
             assert isinstance(uncle, BlockHeader)
@@ -424,7 +458,11 @@ class Block(rlp.Serializable):
             'difficulty': header.difficulty,
             'uncles_hash': header.uncles_hash,
             'bloom': header.bloom,
+            'header_mutable': self.header._mutable,
         }
+        assert self._mutable
+        self._cached_rlp = None
+        self.header._mutable = True
 
         self.transactions = Trie(self.db, trie.BLANK_ROOT)
         self.receipts = Trie(self.db, trie.BLANK_ROOT)
@@ -443,6 +481,7 @@ class Block(rlp.Serializable):
             self.transaction_count = 0
             self.gas_used = 0
             # replay
+            self.initialize(parent)
             for tx in transaction_list:
                 success, output = processblock.apply_transaction(self, tx)
             self.finalize()
@@ -490,12 +529,13 @@ class Block(rlp.Serializable):
 
         # from now on, trie roots refer to block instead of header
         header.block = self
+        self.header._mutable = original_values['header_mutable']
 
         # Basic consistency verifications
         if not self.check_fields():
             raise ValueError("Block is invalid")
         if len(to_string(self.header.extra_data)) > self.config['MAX_EXTRADATA_LENGTH']:
-            raise ValueError("Extra data cannot exceed %d bytes" \
+            raise ValueError("Extra data cannot exceed %d bytes"
                              % default_config['MAX_EXTRADATA_LENGTH'])
         if self.header.coinbase == '':
             raise ValueError("Coinbase cannot be empty address")
@@ -545,6 +585,7 @@ class Block(rlp.Serializable):
         block = Block(header, [], uncles, env=env or parent.env,
                       parent=parent, making=True)
         block.ancestor_hashes = [parent.hash] + parent.ancestor_hashes
+        block.log_listeners = parent.log_listeners
         return block
 
     def check_fields(self):
@@ -632,12 +673,16 @@ class Block(rlp.Serializable):
             parent = get_block(self.env, uncle.prevhash)
             if uncle.difficulty != calc_difficulty(parent, uncle.timestamp):
                 return False
+            if uncle.number != parent.number + 1:
+                return False
+            if uncle.timestamp < parent.timestamp:
+                return False
             if not uncle.check_pow():
                 return False
             if uncle.prevhash not in eligible_ancestor_hashes:
                 log.error("Uncle does not have a valid ancestor", block=self,
-                          eligible=[x.encode('hex') for x in eligible_ancestor_hashes],
-                          uncle_prevhash=uncle.prevhash.encode('hex'))
+                          eligible=[encode_hex(x) for x in eligible_ancestor_hashes],
+                          uncle_prevhash=encode_hex(uncle.prevhash))
                 return False
             if uncle in ineligible:
                 log.error("Duplicate uncle", block=self,
@@ -654,7 +699,7 @@ class Block(rlp.Serializable):
         if n == 0 or self.header.number == 0:
             return []
         p = self.get_parent()
-        return [p] + p.get_ancestor_list(n-1)
+        return [p] + p.get_ancestor_list(n - 1)
 
     def get_ancestor_hash(self, n):
         assert n > 0
@@ -665,7 +710,7 @@ class Block(rlp.Serializable):
                 self.ancestor_hashes.append(
                     get_block(self.env,
                               self.ancestor_hashes[-1]).get_parent().hash)
-        return self.ancestor_hashes[n-1]
+        return self.ancestor_hashes[n - 1]
 
     # def get_ancestor(self, n):
     #     return self.get_block(self.get_ancestor_hash(n))
@@ -685,8 +730,10 @@ class Block(rlp.Serializable):
         rlpdata = self.state.get(address)
         if rlpdata != trie.BLANK_NODE:
             acct = rlp.decode(rlpdata, Account, db=self.db)
+            acct._mutable = True
+            acct._cached_rlp = None
         else:
-            acct = Account.blank_account(self.db)
+            acct = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
         return acct
 
     def _get_acct_item(self, address, param):
@@ -742,12 +789,15 @@ class Block(rlp.Serializable):
         new_value = self._get_acct_item(address, param) + value
         if new_value < 0:
             return False
-        self._set_acct_item(address, param, new_value % 2**256)
+        self._set_acct_item(address, param, new_value % 2 ** 256)
         return True
 
     def mk_transaction_receipt(self, tx):
         """Create a receipt for a transaction."""
-        return Receipt(self.state_root, self.gas_used, self.logs)
+        if self.number >= self.config["METROPOLIS_FORK_BLKNUM"]:
+            return Receipt(b'\x00' * 32, self.gas_used, self.logs)
+        else:
+            return Receipt(self.state_root, self.gas_used, self.logs)
 
     def add_transaction_to_list(self, tx):
         """Add a transaction to the transaction trie.
@@ -840,15 +890,10 @@ class Block(rlp.Serializable):
         :param address: the address of the account (binary or hex string)
         :returns: `True` if successful, otherwise `False`
         """
-        return self._delta_item(address, 'nonce', 1)
-
-    def decrement_nonce(self, address):
-        """Decrement the nonce of an account.
-
-        :param address: the address of the account (binary or hex string)
-        :returns: `True` if successful, otherwise `False`
-        """
-        return self._delta_item(address, 'nonce', -1)
+        if self.get_nonce(address) == 0:
+            return self._delta_item(address, 'nonce', self.config['ACCOUNT_INITIAL_NONCE'] + 1)
+        else:
+            return self._delta_item(address, 'nonce', 1)
 
     def get_balance(self, address):
         """Get the balance of an account.
@@ -998,7 +1043,7 @@ class Block(rlp.Serializable):
                 #     except:
                 #         pass
                 #     sys.stderr.write("pre: %r\n" % self.account_to_dict(addr)['storage'])
-                #     sys.stderr.write("pre: %r\n" % self.get_storage(addr).root_hash.encode('hex'))
+                #     sys.stderr.write("pre: %r\n" % encode_hex(self.get_storage(addr).root_hash))
                 #     sys.stderr.write("changed: %s %s %s\n" % (encode_hex(addr), encode_hex(enckey), encode_hex(val)))
                 if v:
                     t.update(enckey, val)
@@ -1006,7 +1051,7 @@ class Block(rlp.Serializable):
                     t.delete(enckey)
             acct.storage = t.root_hash
             self.state.update(addr, rlp.encode(acct))
-        log_state.trace('delta', changes=changes)
+        log_state.trace('delta', changes=lazy_encode(changes))
         self.reset_cache()
         self.db.put_temporarily(b'validated:' + self.hash, '1')
 
@@ -1057,7 +1102,7 @@ class Block(rlp.Serializable):
                        for kk in list(subcache.keys())]
             for k in list(d.keys()) + subkeys:
                 v = d.get(k, None)
-                v2 = subcache.get(utils.big_endian_to_int(k), None)
+                v2 = subcache.get(big_endian_to_int(k), None)
                 hexkey = b'0x' + encode_hex(utils.zunpad(k))
                 if v2 is not None:
                     if v2 != 0:
@@ -1125,17 +1170,30 @@ class Block(rlp.Serializable):
         self._get_transactions_cache = []
         self.ether_delta = mysnapshot['ether_delta']
 
+    def initialize(self, parent):
+        if self.number == self.config["METROPOLIS_FORK_BLKNUM"]:
+            self.set_code(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
+            self.set_code(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
+        if self.number >= self.config["METROPOLIS_FORK_BLKNUM"]:
+            self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]),
+                                  self.number % self.config["METROPOLIS_WRAPAROUND"],
+                                  parent.state_root)
+            self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
+                                  self.number % self.config["METROPOLIS_WRAPAROUND"],
+                                  self.prevhash)
+
     def finalize(self):
         """Apply rewards and commit."""
         delta = int(self.config['BLOCK_REWARD'] + self.config['NEPHEW_REWARD'] * len(self.uncles))
         self.delta_balance(self.coinbase, delta)
         self.ether_delta += delta
 
+        br = self.config['BLOCK_REWARD']
+        udpf = self.config['UNCLE_DEPTH_PENALTY_FACTOR']
+
         for uncle in self.uncles:
-            r = self.config['BLOCK_REWARD'] * \
-                (self.config['UNCLE_DEPTH_PENALTY_FACTOR'] + uncle.number - self.number) \
-                / self.config['UNCLE_DEPTH_PENALTY_FACTOR']
-            r = int(r)
+            r = int(br * (udpf + uncle.number - self.number) // udpf)
+
             self.delta_balance(uncle.coinbase, r)
             self.ether_delta += r
         self.commit_state()
@@ -1236,7 +1294,7 @@ class Block(rlp.Serializable):
         return isinstance(other, (Block, CachedBlock)) and self.hash == other.hash
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -1270,7 +1328,7 @@ def calc_gaslimit(parent):
 
 def check_gaslimit(parent, gas_limit):
     config = parent.config
-    #  block.gasLimit - parent.gasLimit <= parent.gasLimit / GasLimitBoundDivisor
+    #  block.gasLimit - parent.gasLimit <= parent.gasLimit // GasLimitBoundDivisor
     gl = parent.gas_limit // config['GASLIMIT_ADJMAX_FACTOR']
     a = bool(abs(gas_limit - parent.gas_limit) <= gl)
     b = bool(gas_limit >= config['MIN_GAS_LIMIT'])
@@ -1294,7 +1352,7 @@ class CachedBlock(Block):
         pass
 
     def __hash__(self):
-        return utils.big_endian_to_int(self.hash)
+        return big_endian_to_int(self.hash)
 
     @property
     def hash(self):
@@ -1330,15 +1388,22 @@ def get_block(env, blockhash):
     return CachedBlock.create_cached(blk)
 
 
-# def has_block(blockhash):
-#    return blockhash in db.DB(utils.get_db_path())
-
-
 def genesis(env, **kwargs):
+    """ Build the genesis block. """
     assert isinstance(env, Env)
-    """Build the genesis block."""
-    allowed_args = set(['start_alloc', 'prevhash', 'coinbase', 'difficulty', 'gas_limit',
-                        'timestamp', 'extra_data', 'mixhash', 'nonce'])
+
+    allowed_args = set([
+        'start_alloc',
+        'prevhash',
+        'coinbase',
+        'difficulty',
+        'gas_limit',
+        'timestamp',
+        'extra_data',
+        'mixhash',
+        'nonce',
+    ])
+
     assert set(kwargs.keys()).issubset(allowed_args)
 
     # https://ethereum.etherpad.mozilla.org/11
@@ -1375,8 +1440,8 @@ def genesis(env, **kwargs):
             block.set_nonce(addr, utils.parse_int_or_hex(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                block.set_storage_data(addr, utils.big_endian_to_int(decode_hex(k[2:])),
-                                       utils.big_endian_to_int(decode_hex(v[2:])))
+                block.set_storage_data(addr, big_endian_to_int(decode_hex(k[2:])),
+                                       big_endian_to_int(decode_hex(v[2:])))
     block.commit_state()
     block.state.db.commit()
     # genesis block has predefined state root (so no additional finalization

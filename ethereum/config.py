@@ -1,3 +1,5 @@
+from rlp.utils import decode_hex
+
 from ethereum import utils
 from ethereum.db import BaseDB
 
@@ -40,7 +42,21 @@ default_config = dict(
     MAX_EXTRADATA_LENGTH=32,
     # Exponential difficulty timebomb period
     EXPDIFF_PERIOD=100000,
-    EXPDIFF_FREE_PERIODS=2
+    EXPDIFF_FREE_PERIODS=2,
+    # Blank account initial nonce
+    ACCOUNT_INITIAL_NONCE=0,
+    # Homestead fork
+    HOMESTEAD_FORK_BLKNUM=1150000,
+    HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
+    # Metropolis fork
+    METROPOLIS_FORK_BLKNUM=2 ** 100,
+    METROPOLIS_ENTRY_POINT=2 ** 160 - 1,
+    METROPOLIS_STATEROOT_STORE=0x10,
+    METROPOLIS_BLOCKHASH_STORE=0x20,
+    METROPOLIS_WRAPAROUND=65536,
+    METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
+    METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
+    # Metropolis fork
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

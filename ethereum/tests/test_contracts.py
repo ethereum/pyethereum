@@ -1,15 +1,14 @@
-import bitcoin
+# -*- coding: utf8 -*-
 import os
-import pytest
-from ethereum import tester, utils, abi
-import serpent
-from rlp.utils import decode_hex, encode_hex
-from ethereum.utils import safe_ord
-from ethereum.slogging import set_level
 
-# customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(0)
+import bitcoin
+from secp256k1 import PrivateKey
+import pytest
+import serpent
+from rlp.utils import decode_hex
+
+from ethereum import tester, utils, abi
+from ethereum.utils import safe_ord, big_endian_to_int
 
 
 # Test EVM contracts
@@ -50,7 +49,7 @@ sixten_code =\
 def test_sixten():
     s = tester.state()
     c = decode_hex('1231231231231234564564564564561231231231')
-    s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
+    s.block.set_code(c, serpent.compile_lll(sixten_code))
     o1 = s.send(tester.k0, c, 0)
     assert utils.big_endian_to_int(o1) == 610
 
@@ -342,13 +341,13 @@ def test_hedge():
     c2 = s.abi_contract(hedge_code, sender=tester.k0)
     # Have the first party register, sending 10^16 wei and
     # asking for a hedge using currency code 500
-    o1 = c2.main(c.address, 500, value=10**16)
+    o1 = c2.main(c.address, 500, value=10 ** 16)
     assert o1 == 1
     # Have the second party register. It should receive the
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
-    o2 = c2.main(0, 0, value=10**16, sender=tester.k2)
+    o2 = c2.main(0, 0, value=10 ** 16, sender=tester.k2)
     assert o2 == 7260000000000000000
     snapshot = s.snapshot()
     # Set the price of the asset down to 300 wei
@@ -467,12 +466,12 @@ def recurse():
 
 def test_reverter():
     s = tester.state()
-    c = s.abi_contract(reverter_code, endowment=10**15)
+    c = s.abi_contract(reverter_code, endowment=10 ** 15)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(decode_hex('0'*39+'7')) == 9
+    assert s.block.get_balance(decode_hex('0' * 39 + '7')) == 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(decode_hex('0'*39+'8')) == 0
+    assert s.block.get_balance(decode_hex('0' * 39 + '8')) == 0
 
 # Test stateless contracts
 
@@ -932,8 +931,6 @@ def kall():
 
 """
 
-import bitcoin
-
 
 def test_saveload():
     s = tester.state()
@@ -1052,7 +1049,6 @@ def sort(args:arr):
 
 @pytest.mark.timeout(100)
 def test_sort():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(sort_code)
     assert c.sort([9]) == [9]
@@ -1077,12 +1073,11 @@ def test(args:arr):
 
 @pytest.mark.timeout(100)
 def test_indirect_sort():
-    set_level(None, 'info')
     s = tester.state()
     open(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
-    assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
     os.remove(filename9)
+    assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
 multiarg_code = """
 def kall(a:arr, b, c:arr, d:str, e):
@@ -1194,7 +1189,7 @@ def test_types():
 
 
 ecrecover_code = """
-def test_ecrecover(h, v, r, s):
+def test_ecrecover(h:uint256, v:uint256, r:uint256, s:uint256):
     return(ecrecover(h, v, r, s))
 """
 
@@ -1203,17 +1198,26 @@ def test_ecrecover():
     s = tester.state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
+    priv = utils.sha3('some big long brainwallet password')
     pub = bitcoin.privtopub(priv)
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = bitcoin.ecdsa_raw_sign(msghash, priv)
+    msghash = utils.sha3('the quick brown fox jumps over the lazy dog')
+
+    pk = PrivateKey(priv, raw=True)
+    signature = pk.ecdsa_recoverable_serialize(
+        pk.ecdsa_sign_recoverable(msghash, raw=True)
+    )
+    signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+    V = utils.safe_ord(signature[64]) + 27
+    R = big_endian_to_int(signature[0:32])
+    S = big_endian_to_int(signature[32:64])
+
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
     addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
     assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
-    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
+    result = c.test_ecrecover(utils.big_endian_to_int(msghash), V, R, S)
     assert result == addr
 
 
@@ -1227,13 +1231,32 @@ def test_sha256():
     s = tester.state()
     c = s.abi_contract(sha256_code)
     assert c.main() == [
-        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
-        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256
+        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2 ** 256,
+        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256
     ]
+
+
+ripemd160_code = """
+def main():
+    return([ripemd160(0, chars=0), ripemd160(3), ripemd160(text("doge"), chars=3), ripemd160(text("dog"):str), ripemd160([0,0,0,0,0]:arr), ripemd160([0,0,0,0,0,0], items=5)]:arr)
+"""
+
+
+def test_ripemd160():
+    s = tester.state()
+    c = s.abi_contract(ripemd160_code)
+    assert c.main() == [
+        0x9c1185a5c5e9fc54612808977ee8f548b2258d31,
+        0x44d90e2d3714c8663b632fcf0f9d5f22192cc4c8,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x9164cab7f680fd7a790080f2e76e049811074349,
+        0x9164cab7f680fd7a790080f2e76e049811074349]
+
 
 sha3_code = """
 def main():
@@ -1245,12 +1268,12 @@ def test_sha3():
     s = tester.state()
     c = s.abi_contract(sha3_code)
     assert c.main() == [
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
-        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2 ** 256,
+        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2 ** 256,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256
     ]
 
 types_in_functions_code = """
@@ -1311,14 +1334,14 @@ def get_prevhashes(k):
     return(o:arr)
 """
 
+
 @pytest.mark.timeout(100)
 def test_prevhashes():
-    set_level(None, 'info')
     s = tester.state()
     c = s.abi_contract(prevhashes_code)
     s.mine(7)
     # Hashes of last 14 blocks including existing one
-    o1 = [x % 2**256 for x in c.get_prevhashes(14)]
+    o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
     # hash of self = 0, hash of blocks back to genesis block as is, hash of
     # blocks before genesis block = 0
     t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
@@ -1326,7 +1349,7 @@ def test_prevhashes():
     assert o1 == t1
     s.mine(256)
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2**256 for x in c.get_prevhashes(270)]
+    o2 = [x % 2 ** 256 for x in c.get_prevhashes(270)]
     t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
         + [0] * 13
     assert o2 == t2
@@ -1503,7 +1526,7 @@ def test_abi_logging():
     s = tester.state()
     c = s.abi_contract(abi_logging_code)
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    s.block.log_listeners.append(lambda x: o.append(c.translator.listen(x)))
     c.test_rabbit(3)
     assert o == [{"_event_type": b"rabbit", "x": 3}]
     o.pop()
@@ -1592,6 +1615,83 @@ def test_inner_abi_address_output():
     assert c.get_address(125) == b'5656565656565656565656565656565656565656'
 
 
+string_logging_code = """
+event foo(x:string:indexed, y:bytes:indexed, z:str:indexed)
+
+def moo():
+    log(type=foo, text("bob"), text("cow"), text("dog"))
+"""
+
+
+def test_string_logging():
+    s = tester.state()
+    c = s.abi_contract(string_logging_code)
+    o = []
+    s.block.log_listeners.append(lambda x: o.append(c.translator.listen(x)))
+    c.moo()
+    assert o == [{
+        "_event_type": b"foo",
+        "x": b"bob",
+        "__hash_x": utils.sha3(b"bob"),
+        "y": b"cow",
+        "__hash_y": utils.sha3(b"cow"),
+        "z": b"dog",
+        "__hash_z": utils.sha3(b"dog"),
+    }]
+
+
+params_code = """
+data blah
+
+
+def init():
+    self.blah = $FOO
+
+
+def garble():
+    return(self.blah)
+
+def marble():
+    return(text($BAR):str)
+"""
+
+
+def test_params_contract():
+    s = tester.state()
+    c = s.abi_contract(params_code, FOO=4, BAR='horse')
+    assert c.garble() == 4
+    assert c.marble() == b'horse'
+
+prefix_types_in_functions_code = """
+type fixedp: fp_
+
+macro fixedp($x) * fixedp($y):
+    fixedp($x * $y / 2^64)
+
+macro fixedp($x) / fixedp($y):
+    fixedp($x * 2^64 / $y)
+
+macro raw_unfixedp(fixedp($x)):
+    $x / 2^64
+
+macro set(fixedp($x), $y):
+    $x = 2^64 * $y
+
+macro fixedp($x) = fixedp($y):
+    $x = $y
+
+def sqrdiv(fp_a, fp_b):
+    return(raw_unfixedp((fp_a / fp_b) * (fp_a / fp_b)))
+"""
+
+
+def test_prefix_types_in_functions():
+    s = tester.state()
+    c = s.abi_contract(prefix_types_in_functions_code)
+    assert c.sqrdiv(25, 2) == 156
+
+
+
 # test_evm = None
 # test_sixten = None
 # test_with = None
@@ -1639,3 +1739,6 @@ def test_inner_abi_address_output():
 # test_abi_logging = None
 # test_new_format = None
 # test_abi_address_output = None
+# test_string_logging = None
+# test_params_contract = None
+# test_prefix_types_in_functions = None

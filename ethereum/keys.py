@@ -2,6 +2,8 @@ import os
 import pbkdf2
 import sys
 
+from rlp.utils import encode_hex, decode_hex
+
 try:
     scrypt = __import__('scrypt')
 except ImportError:
@@ -23,9 +25,11 @@ your wallet file.
 import binascii
 import struct
 from math import ceil
-from sha3 import sha3_256
+from Crypto.Hash import keccak
+sha3_256 = lambda x: keccak.new(digest_bits=256, data=x)
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
+from Crypto.Util import Counter
 
 # TODO: make it compatible!
 
@@ -46,11 +50,7 @@ PBKDF2_CONSTANTS = {
 
 def aes_ctr_encrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    o = [0]
-
-    def ctr():
-        o[0] += 1
-        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
+    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
@@ -58,11 +58,7 @@ def aes_ctr_encrypt(text, key, params):
 
 def aes_ctr_decrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    o = [0]
-
-    def ctr():
-        o[0] += 1
-        return zpad(int_to_big_endian(((o[0] - 1) + iv) % 2**128), 16)
+    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
@@ -155,6 +151,32 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     }
 
 
+def check_keystore_json(jsondata):
+    """Check if ``jsondata`` has the structure of a keystore file version 3.
+
+    Note that this test is not complete, e.g. it doesn't check key derivation or cipher parameters.
+
+    :param jsondata: dictionary containing the data from the json file
+    :returns: `True` if the data appears to be valid, otherwise `False`
+    """
+    if 'crypto' not in jsondata and 'Crypto' not in jsondata:
+        return False
+    if 'version' not in jsondata:
+        return False
+    if jsondata['version'] != 3:
+        return False
+    crypto = jsondata.get('crypto', jsondata.get('Crypto'))
+    if 'cipher' not in crypto:
+        return False
+    if 'ciphertext' not in crypto:
+        return False
+    if 'kdf' not in crypto:
+        return False
+    if 'mac' not in crypto:
+        return False
+    return True
+
+
 def decode_keystore_json(jsondata, pw):
     # Get KDF function and parameters
     if "crypto" in jsondata:
@@ -205,16 +227,6 @@ def zpad(x, l):
 
 if sys.version_info.major == 2:
 
-    def decode_hex(s):
-        if not isinstance(s, (str, unicode)):
-            raise TypeError('Value must be an instance of str or unicode')
-        return s.decode('hex')
-
-    def encode_hex(s):
-        if not isinstance(s, (str, unicode)):
-            raise TypeError('Value must be an instance of str or unicode')
-        return s.encode('hex')
-
     def int_to_big_endian(value):
         cs = []
         while value > 0:
@@ -227,29 +239,15 @@ if sys.version_info.major == 2:
         if len(value) == 1:
             return ord(value)
         elif len(value) <= 8:
-            return struct.unpack('>Q', value.rjust(8, '\x00'))[0]
+            return struct.unpack('>Q', value.rjust(8, b'\x00'))[0]
         else:
             return int(encode_hex(value), 16)
 
 
 if sys.version_info.major == 3:
 
-    def decode_hex(s):
-        if isinstance(s, str):
-            return bytes.fromhex(s)
-        if isinstance(s, bytes):
-            return binascii.unhexlify(s)
-        raise TypeError('Value must be an instance of str or bytes')
-
-    def encode_hex(b):
-        if isinstance(b, str):
-            b = bytes(b, 'utf-8')
-        if isinstance(b, bytes):
-            return binascii.hexlify(b)
-        raise TypeError('Value must be an instance of str or bytes')
-
     def int_to_big_endian(value):
-        byte_length = ceil(value.bit_length() / 8)
+        byte_length = ceil(value.bit_length() // 8)
         return (value).to_bytes(byte_length, byteorder='big')
 
     def big_endian_to_int(value):

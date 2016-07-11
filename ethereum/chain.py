@@ -9,9 +9,9 @@ import rlp
 from rlp.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
+from ethereum.exceptions import VerificationFailed, InvalidTransaction
 from ethereum.slogging import get_logger
 from ethereum.config import Env
-import sys
 log = get_logger('eth.chain')
 
 
@@ -110,7 +110,7 @@ class Chain(object):
     """
     head_candidate = None
 
-    def __init__(self, env, genesis=None, new_head_cb=None, coinbase='\x00' * 20):
+    def __init__(self, env, genesis=None, new_head_cb=None, coinbase=b'\x00' * 20):
         assert isinstance(env, Env)
         self.env = env
         self.db = self.blockchain = env.db
@@ -121,7 +121,7 @@ class Chain(object):
             self._initialize_blockchain(genesis)
         log.debug('chain @', head_hash=self.head)
         self.genesis = self.get(self.index.get_block_by_number(0))
-        log.debug('got genesis', nonce=self.genesis.nonce.encode('hex'),
+        log.debug('got genesis', nonce=encode_hex(self.genesis.nonce),
                   difficulty=self.genesis.difficulty)
         self._update_head_candidate()
 
@@ -168,7 +168,7 @@ class Chain(object):
             block.to_dict(with_state=True)
             n = trie.proof.get_nodelist()
             trie.proof.pop()
-            sys.stderr.write('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
+            # log.debug('State size: %d\n' % sum([(len(rlp.encode(a)) + 32) for a in n]))
         # Fork detected, revert death row and change logs
         if block.number > 0:
             b = block.get_parent()
@@ -191,15 +191,16 @@ class Chain(object):
                     processblock.verify(bc, bc.get_parent())
         self.blockchain.put('HEAD', block.hash)
         assert self.blockchain.get('HEAD') == block.hash
-        sys.stderr.write('New head: %s %d\n' % (utils.encode_hex(block.hash), block.number))
         self.index.update_blocknumbers(self.head)
+        assert self.head == block
+        log.debug('set new head', head=self.head)
         self._update_head_candidate(forward_pending_transactions)
         if self.new_head_cb and not block.is_genesis():
             self.new_head_cb(block)
 
     def _update_head_candidate(self, forward_pending_transactions=True):
         "after new head is set"
-        log.debug('updating head candidate')
+        log.debug('updating head candidate', head=self.head)
         # collect uncles
         blk = self.head  # parent of the block we are collecting uncles for
         uncles = set(u.header for u in self.get_brothers(blk))
@@ -225,12 +226,17 @@ class Chain(object):
         # add transactions from previous head candidate
         old_head_candidate = self.head_candidate
         self.head_candidate = head_candidate
-        if old_head_candidate is not None and forward_pending_transactions:
-            log.debug('forwarding pending transactions')
-            for tx in old_head_candidate.get_transactions():
-                self.add_transaction(tx)
-        else:
-            log.debug('discarding pending transactions')
+        if old_head_candidate is not None:
+            tx_hashes = self.head.get_transaction_hashes()
+            pending = [tx for tx in old_head_candidate.get_transactions()
+                       if tx.hash not in tx_hashes]
+            if pending:
+                if forward_pending_transactions:
+                    log.debug('forwarding pending transactions', num=len(pending))
+                    for tx in pending:
+                        self.add_transaction(tx)
+                else:
+                    log.debug('discarding pending transactions', num=len(pending))
 
     def get_uncles(self, block):
         """Return the uncles of `block`."""
@@ -254,6 +260,10 @@ class Chain(object):
         assert is_string(blockhash)
         assert len(blockhash) == 32
         return blocks.get_block(self.env, blockhash)
+
+    def get_bloom(self, blockhash):
+        h = rlp.decode(rlp.descend(self.db.get(blockhash), 0, 6))
+        return utils.big_endian_to_int(h)
 
     def has_block(self, blockhash):
         assert is_string(blockhash)
@@ -284,18 +294,14 @@ class Chain(object):
             _log.debug('invalid uncles')
             return False
 
-        if not len(block.nonce) == 8:
-            _log.debug('nonce not set')
-            return False
-        elif not block.header.check_pow(nonce=block.nonce) and\
-                not block.is_genesis():
+        elif not block.header.check_pow() and not block.is_genesis():
             _log.debug('invalid nonce')
             return False
 
         if block.has_parent():
             try:
                 processblock.verify(block, block.get_parent())
-            except processblock.VerificationFailed as e:
+            except VerificationFailed as e:
                 _log.critical('VERIFICATION FAILED', error=e)
                 f = os.path.join(utils.data_dir, 'badblock.log')
                 open(f, 'w').write(to_string(block.hex_serialize()))
@@ -310,7 +316,7 @@ class Chain(object):
 
         # set to head if this makes the longest chain w/ most work for that number
         if block.chain_difficulty() > self.head.chain_difficulty():
-            _log.debug('new head')
+            _log.debug('new head', num_tx=block.num_transactions())
             self._update_head(block, forward_pending_transactions)
         elif block.number > self.head.number:
             _log.warn('has higher blk number than head but lower chain_difficulty',
@@ -345,7 +351,7 @@ class Chain(object):
         head_candidate.state_root = self.pre_finalize_state_root
         try:
             success, output = processblock.apply_transaction(head_candidate, transaction)
-        except processblock.InvalidTransaction as e:
+        except InvalidTransaction as e:
             # if unsuccessful the prerequisites were not fullfilled
             # and the tx is invalid, state must not have changed
             log.debug('invalid tx', error=e)
@@ -357,8 +363,7 @@ class Chain(object):
         # we might have a new head_candidate (due to ctx switches in pyethapp)
         if self.head_candidate != head_candidate:
             log.debug('head_candidate changed during validation, trying again')
-            self.add_transaction(transaction)
-            return
+            return self.add_transaction(transaction)
 
         self.pre_finalize_state_root = head_candidate.state_root
         head_candidate.finalize()

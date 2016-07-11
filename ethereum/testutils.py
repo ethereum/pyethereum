@@ -1,3 +1,5 @@
+import pytest
+
 from ethereum import tester as t
 from ethereum import blocks, utils, transactions, vm, abi, opcodes
 from ethereum.exceptions import InvalidTransaction
@@ -7,7 +9,7 @@ from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex
-from ethereum.utils import remove_0x_head, int_to_hex
+from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
 from ethereum.config import Env
 import json
 import os
@@ -26,6 +28,10 @@ env = {
     "currentTimestamp": "1",
     "previousHash": b"5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
 }
+
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace'
+# configure_logging(config_string=config_string)
 
 FILL = 1
 VERIFY = 2
@@ -61,7 +67,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip(b'0') != b'0x'}
     }
 
 
@@ -135,6 +141,7 @@ def run_vm_test(params, mode, profiler=None):
         difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
+
     blk = blocks.Block(header, env=db_env)
 
     # setup state
@@ -285,9 +292,13 @@ def run_state_test(params, mode):
         number=parse_int_or_hex(env['currentNumber']),
         coinbase=decode_hex(env['currentCoinbase']),
         difficulty=parse_int_or_hex(env['currentDifficulty']),
-        gas_limit=parse_int_or_hex(env['currentGasLimit']),
-        timestamp=parse_int_or_hex(env['currentTimestamp']))
+        timestamp=parse_int_or_hex(env['currentTimestamp']),
+        # work around https://github.com/ethereum/pyethereum/issues/390 [1]:
+        gas_limit=min(2 ** 63 - 1, parse_int_or_hex(env['currentGasLimit'])))
     blk = blocks.Block(header, env=db_env)
+
+    # work around https://github.com/ethereum/pyethereum/issues/390 [2]:
+    blk.gas_limit = parse_int_or_hex(env['currentGasLimit'])
 
     # setup state
     for address, h in list(pre.items()):
@@ -332,7 +343,7 @@ def run_state_test(params, mode):
             nonce=parse_int_or_hex(exek['nonce'] or b"0"),
             gasprice=parse_int_or_hex(exek['gasPrice'] or b"0"),
             startgas=parse_int_or_hex(exek['gasLimit'] or b"0"),
-            to=decode_hex(exek['to'][2:] if exek['to'][:2] == b'0x' else exek['to']),
+            to=normalize_address(exek['to'], allow_blank=True),
             value=parse_int_or_hex(exek['value'] or b"0"),
             data=decode_hex(remove_0x_head(exek['data'])))
     except InvalidTransaction:
@@ -352,9 +363,11 @@ def run_state_test(params, mode):
 
         time_pre = time.time()
         try:
+            print('trying')
             success, output = pb.apply_transaction(blk, tx)
             blk.commit_state()
-        except pb.InvalidTransaction:
+            print('success', blk.get_receipts()[-1].gas_used)
+        except InvalidTransaction:
             success, output = False, b''
             blk.commit_state()
             pass
@@ -372,7 +385,6 @@ def run_state_test(params, mode):
     params2['out'] = b'0x' + encode_hex(output)
     params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
     params2['postStateRoot'] = encode_hex(blk.state.root_hash)
-    assert 'post' in params  # we always have a post state in the tests
 
     if mode == FILL:
         return params2
@@ -382,11 +394,15 @@ def run_state_test(params, mode):
         compare_post_states(shouldbe, reallyis)
         for k in ['pre', 'exec', 'env', 'callcreates',
                   'out', 'gas', 'logs', 'postStateRoot']:
-            shouldbe = params1.get(k, None)
-            reallyis = params2.get(k, None)
-            if shouldbe != reallyis:
+            _shouldbe = params1.get(k, None)
+            _reallyis = params2.get(k, None)
+            if _shouldbe != _reallyis:
+                print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
+                       'post: {shouldbe_post} != {reallyis_post}').format(
+                    shouldbe_key=_shouldbe, reallyis_key=_reallyis,
+                    shouldbe_post=shouldbe, reallyis_post=reallyis, key=k))
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
-                                (shouldbe, reallyis))
+                                (_shouldbe, _reallyis))
 
     elif mode == TIME:
         return time_post - time_pre
@@ -469,7 +485,7 @@ def run_abi_test(params, mode):
 def run_genesis_test(params, mode):
     params = copy.deepcopy(params)
     if 'difficulty' not in params:
-        params['difficulty'] = int_to_hex(2**34)
+        params['difficulty'] = int_to_hex(2 ** 34)
     if 'mixhash' not in params:
         params['mixhash'] = '0x' + '0' * 64
     if 'nonce' not in params:
@@ -501,7 +517,7 @@ def run_genesis_test(params, mode):
     assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
     assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
     assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
-    print 9
+    print(9)
     if mode == FILL:
         params['result'] = encode_hex(rlp.encode(b))
         return params
@@ -516,7 +532,8 @@ def run_genesis_test(params, mode):
 def get_tests_from_file_or_dir(dname, json_only=False):
     if os.path.isfile(dname):
         if dname[-5:] == '.json' or not json_only:
-            return {dname: json.load(open(dname))}
+            with open(dname) as f:
+                return {dname: json.load(f)}
         else:
             return {}
     else:
@@ -556,3 +573,34 @@ def fixture_to_bytes(value):
         return ret
     else:
         return value
+
+
+def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+    if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
+        return
+
+    fixtures = get_tests_from_file_or_dir(
+        os.path.join(fixture_path, testsource))
+
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    params = []
+    for filename, tests in fixtures.items():
+        if isinstance(tests, dict):
+            filename = os.path.relpath(filename, base_dir)
+            for testname, testdata in tests.items():
+                if exclude_func and exclude_func(filename, testname, testdata):
+                    continue
+                if skip_func:
+                    skipif = pytest.mark.skipif(
+                        skip_func(filename, testname, testdata),
+                        reason="Excluded"
+                    )
+                    params.append(skipif((filename, testname, testdata)))
+                else:
+                    params.append((filename, testname, testdata))
+
+    metafunc.parametrize(
+        ('filename', 'testname', 'testdata'),
+        params
+    )
+    return params

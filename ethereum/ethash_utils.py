@@ -1,4 +1,11 @@
-import sha3
+try:
+    from Crypto.Hash import keccak
+    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
+    sha3_512 = lambda x: keccak.new(digest_bits=512, data=x)
+except:
+    import sha3 as _sha3
+    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
+    sha3_512 = lambda x: _sha3.sha3_512(x).digest()
 from rlp.utils import decode_hex, encode_hex
 import sys
 
@@ -59,11 +66,11 @@ def to_bytes(x):
 
 # sha3 hash function, outputs 64 bytes
 def sha3_512(x):
-    return hash_words(lambda v: sha3.sha3_512(to_bytes(v)).digest(), 64, x)
+    return hash_words(sha3_512(to_bytes(v)).digest(), 64, x)
 
 
 def sha3_256(x):
-    return hash_words(lambda v: sha3.sha3_256(to_bytes(v)).digest(), 32, x)
+    return hash_words(sha3_256(to_bytes(v)).digest(), 32, x)
 
 
 def xor(a, b):
@@ -87,7 +94,7 @@ deserialize_dataset = deserialize_cache
 class ListWrapper(list):
     def __init__(self, data):
         self.data = data
-        self.len = len(data) / HASH_BYTES
+        self.len = len(data) // HASH_BYTES
 
     def __len__(self):
         return self.len
@@ -115,7 +122,7 @@ def isprime(x):
 def get_cache_size(block_number):
     sz = CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
     sz -= HASH_BYTES
-    while not isprime(sz / HASH_BYTES):
+    while not isprime(sz // HASH_BYTES):
         sz -= 2 * HASH_BYTES
     return sz
 
@@ -123,6 +130,6 @@ def get_cache_size(block_number):
 def get_full_size(block_number):
     sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
     sz -= MIX_BYTES
-    while not isprime(sz / MIX_BYTES):
+    while not isprime(sz // MIX_BYTES):
         sz -= 2 * MIX_BYTES
     return sz

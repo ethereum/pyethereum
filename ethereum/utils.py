@@ -1,8 +1,9 @@
 try:
-    import Crypto.Hash.SHA3_256 as _SHA3_256  # from pycryptodome
-    sha3_256 = _SHA3_256.new
-except ImportError:
-    from sha3 import sha3_256
+    from Crypto.Hash import keccak
+    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
+except:
+    import sha3 as _sha3
+    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
 from bitcoin import privtopub
 import sys
 import rlp
@@ -34,6 +35,9 @@ if sys.version_info.major == 2:
         return str(value)
     unicode = unicode
 
+    def bytearray_to_bytestr(value):
+        return bytes(''.join(chr(c) for c in value))
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -55,8 +59,17 @@ else:
         return str(to_string(value), 'utf-8')
     unicode = str
 
+    def bytearray_to_bytestr(value):
+        return bytes(value)
+
 isnumeric = is_numeric
 
+
+def mk_contract_address(sender, nonce):
+    return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
+
+def mk_metropolis_contract_address(sender, initcode):
+    return sha3(normalize_address(sender) + initcode)[12:]
 
 def safe_ord(value):
     if isinstance(value, int):
@@ -100,10 +113,13 @@ def int_to_32bytearray(i):
         i >>= 8
     return o
 
+sha3_count = [0]
 
 def sha3(seed):
-    return sha3_256(to_string(seed)).digest()
-assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+    sha3_count[0] += 1
+    return sha3_256(to_string(seed))
+
+assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -128,19 +144,36 @@ def check_and_strip_checksum(x):
     return x[:20]
 
 
+def normalize_address(x, allow_blank=False):
+    if is_numeric(x):
+        return int_to_addr(x)
+    if allow_blank and x in {'', b''}:
+        return b''
+    if len(x) in (42, 50) and x[:2] in {'0x', b'0x'}:
+        x = x[2:]
+    if len(x) in (40, 48):
+        x = decode_hex(x)
+    if len(x) == 24:
+        assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
+        x = x[:20]
+    if len(x) != 20:
+        raise Exception("Invalid address format: %r" % x)
+    return x
+
+
 def zpad(x, l):
     return b'\x00' * max(0, l - len(x)) + x
 
 
 def zunpad(x):
     i = 0
-    while i < len(x) and (x[i] == 0 or x[i] == '\x00'):
+    while i < len(x) and (x[i] == 0 or x[i] == b'\x00'):
         i += 1
     return x[i:]
 
 
 def int_to_addr(x):
-    o = [''] * 20
+    o = [b''] * 20
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
@@ -225,7 +258,7 @@ def decode_addr(v):
 
 def decode_int(v):
     '''decodes and integer from serialization'''
-    if len(v) > 0 and (v[0] == '\x00' or v[0] == 0):
+    if len(v) > 0 and (v[0] == b'\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
@@ -306,7 +339,7 @@ scanners = {
 
 def int_to_hex(x):
     o = encode_hex(encode_int(x))
-    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
+    return b'0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
 
 
 def remove_0x_head(s):

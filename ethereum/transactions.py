@@ -1,18 +1,23 @@
-from bitcoin import encode_pubkey, N, P
-try:
-    from ecdsa_recover import ecdsa_raw_sign, ecdsa_raw_recover
-except ImportError:
-    from bitcoin import ecdsa_raw_sign, ecdsa_raw_recover
+# -*- coding: utf8 -*-
 import rlp
+from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import decode_hex, encode_hex
-from ethereum import bloom
-from ethereum import utils
-from ethereum.processblock import mk_contract_address, intrinsic_gas_used
-from ethereum.utils import TT256
+from rlp.utils import encode_hex, str_to_bytes, ascii_chr
+from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
+
 from ethereum.exceptions import InvalidTransaction
+from ethereum import bloom
+from ethereum import opcodes
+from ethereum import utils
 from ethereum.slogging import get_logger
+from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int
+
+
 log = get_logger('eth.chain.tx')
+
+# in the yellow paper it is specified that s should be smaller than secpk1n (eq.205)
+secpk1n = 115792089237316195423570985008687907852837564279074904382605163141518161494337
+
 
 class Transaction(rlp.Serializable):
 
@@ -49,10 +54,9 @@ class Transaction(rlp.Serializable):
     _sender = None
 
     def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
-        if len(to) in (40, 48):
-            to = decode_hex(to)
-        if len(to) == 24:
-            to = utils.check_and_strip_checksum(to)
+        self.data = None
+
+        to = utils.normalize_address(to, allow_blank=True)
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
         self.logs = []
@@ -60,25 +64,39 @@ class Transaction(rlp.Serializable):
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
             raise InvalidTransaction("Values way too high!")
-        if self.startgas < intrinsic_gas_used(self):
+        if self.startgas < self.intrinsic_gas_used:
             raise InvalidTransaction("Startgas too low")
 
         log.debug('deserialized tx', tx=encode_hex(self.hash)[:8])
 
     @property
     def sender(self):
+
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= P or self.v < 27 or self.v > 28 or self.r == 0 or self.s == 0:
+                if self.r >= N or self.s >= N or self.v < 27 or self.v > 28 \
+                or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
                 rawhash = utils.sha3(rlpdata)
-                pub = ecdsa_raw_recover(rawhash, (self.v, self.r, self.s))
-                if pub is False:
+
+                pk = PublicKey(flags=ALL_FLAGS)
+                try:
+                    pk.public_key = pk.ecdsa_recover(
+                        rawhash,
+                        pk.ecdsa_recoverable_deserialize(
+                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
+                            self.v - 27
+                        ),
+                        raw=True
+                    )
+                    pub = pk.serialize(compressed=False)
+                except Exception:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
-                if pub == (0, 0):
+
+                if pub[1:] == b"\x00" * 32:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 pub = encode_pubkey(pub, 'bin')
                 self._sender = utils.sha3(pub[1:])[-20:]
@@ -96,10 +114,23 @@ class Transaction(rlp.Serializable):
 
         A potentially already existing signature would be overridden.
         """
-        if key in (0, '', '\x00' * 32):
+        if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
         rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
-        self.v, self.r, self.s = ecdsa_raw_sign(rawhash, key)
+
+        if len(key) == 64:
+            # we need a binary key
+            key = encode_privkey(key, 'bin')
+
+        pk = PrivateKey(key, raw=True)
+        signature = pk.ecdsa_recoverable_serialize(
+            pk.ecdsa_sign_recoverable(rawhash, raw=True)
+        )
+        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        self.v = utils.safe_ord(signature[64]) + 27
+        self.r = big_endian_to_int(signature[0:32])
+        self.s = big_endian_to_int(signature[32:64])
+
         self.sender = utils.privtoaddr(key)
         return self
 
@@ -128,14 +159,22 @@ class Transaction(rlp.Serializable):
         d = self.to_dict()
         d['sender'] = encode_hex(d['sender'] or '')
         d['to'] = encode_hex(d['to'])
+        d['data'] = encode_hex(d['data'])
         return d
+
+    @property
+    def intrinsic_gas_used(self):
+        num_zero_bytes = str_to_bytes(self.data).count(ascii_chr(0))
+        num_non_zero_bytes = len(self.data) - num_zero_bytes
+        return (opcodes.GTXCOST
+                + opcodes.GTXDATAZERO * num_zero_bytes
+                + opcodes.GTXDATANONZERO * num_non_zero_bytes)
 
     @property
     def creates(self):
         "returns the address of a contract created by this tx"
-        if self.to == '':
+        if self.to in (b'', '\0' * 20):
             return mk_contract_address(self.sender, self.nonce)
-
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
@@ -151,6 +190,13 @@ class Transaction(rlp.Serializable):
 
     def __structlog__(self):
         return encode_hex(self.hash)
+
+    # This method should be called for block numbers >= HOMESTEAD_FORK_BLKNUM only.
+    # The >= operator is replaced by > because the integer division N/2 always produces the value
+    # which is by 0.5 less than the real N/2
+    def check_low_s(self):
+        if self.s > N // 2 or self.s == 0:
+            raise InvalidTransaction("Invalid signature S value!")
 
 
 UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])

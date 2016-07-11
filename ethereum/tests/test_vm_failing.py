@@ -1,8 +1,6 @@
-import json
 import os
-import sys
 import ethereum.testutils as testutils
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
@@ -52,10 +50,17 @@ for func_name, filename, testname, testdata in collected:
 def test_testutils_check_vm_test():
     func_name, filename, testname, testdata = collected[1]
     testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
-    # manipulate post data
-    storage = testdata['post'].values()[0]['storage']
-    assert storage['0x23'] == '0x01'
-    storage['0x23'] = '0x02'
+    for address_data in testdata['post'].values():
+        storage = address_data['storage']
+        if "0x23" not in storage:
+            continue
+        assert storage['0x23'] == '0x01'
+        # manipulate post data
+        storage['0x23'] = '0x02'
+        break
+    else:
+        raise AssertionError("Did not find `0x23` in storage values")
+
     failed_as_expected = False
     try:
         testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
