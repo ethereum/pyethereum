@@ -32,6 +32,8 @@ after_script:
 notifications:
   slack:
     secure: W/UAhQ/GgYwMWrl3aiVAVOWr4WGdWrxUOX/rTB3ZgwDwGqDYLzQO5UqbsQlo1JXPZ6JOWfIPMURhHu7DSfue9dBW6xQ+NL+bFHe9lSXG4nqFK3IjezYyTBzNRJRDbGUvSSqgj6D5cwhJ8BjfUIRPbJz3CxL64KmsNXezEaMY60w=
+before_deploy:
+- cd $TRAVIS_BUILD_DIR
 deploy:
   provider: pypi
   user: ethereum_pypi_automated
