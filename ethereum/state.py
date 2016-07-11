@@ -10,7 +10,8 @@ from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from config import default_config, Env
 from ethereum.block import FakeHeader
-from db import BaseDB, EphemDB
+from db import BaseDB, EphemDB, OverlayDB
+import copy
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -383,8 +384,13 @@ class State():
 
     def ephemeral_clone(self):
         snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
-        env2 = Env(OverlayDB(self.env.db), state.env.config)
+        env2 = Env(OverlayDB(self.env.db), self.env.config)
         s = State.from_snapshot(snapshot, env2)
+        s.cache = copy.deepcopy(self.cache)
+        s.modified = copy.deepcopy(self.modified)
+        s.journal = copy.deepcopy(self.journal)
+        for param in STATE_DEFAULTS:
+            setattr(s, param, getattr(self, param))
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
         return s

@@ -50,7 +50,7 @@ default_config = dict(
     HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
     # Metropolis fork
     METROPOLIS_FORK_BLKNUM=2**99,
-    METROPOLIS_ENTRY_POINT=2**160 - 1,
+    METROPOLIS_ENTRY_POINT=utils.int_to_addr(2**160 - 1),
     METROPOLIS_STATEROOT_STORE=0x10,
     METROPOLIS_BLOCKHASH_STORE=0x20,
     METROPOLIS_WRAPAROUND=65536,
@@ -64,7 +64,9 @@ default_config = dict(
     # Consensus algorithm (for verification): ethash, contract
     CONSENSUS_ALGO = 'ethash',
     # Default consensus strategy: ethash, poa, casper, pbft
-    CONSENSUS_STRATEGY = 'ethash'
+    CONSENSUS_STRATEGY = 'ethash',
+    # Serenity fork
+    SERENITY_FORK_BLKNUM = 2**99,
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
@@ -73,7 +75,6 @@ assert default_config['NEPHEW_REWARD'] == \
 class Env(object):
 
     def __init__(self, db=None, config=None, global_config=None):
-        print 'new env'
         self.db = db or EphemDB()
         assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)

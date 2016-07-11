@@ -129,8 +129,10 @@ def validate_transaction(state, tx):
             tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
         else:
             raise UnsignedTransaction(tx)
-    if state.block_number >= state.config["HOMESTEAD_FORK_BLKNUM"]:
-            tx.check_low_s()
+    if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
+            tx.check_low_s_metropolis()
+    elif state.block_number >= state.config["HOMESTEAD_FORK_BLKNUM"]:
+            tx.check_low_s_homestead()
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
@@ -160,8 +162,8 @@ def validate_transaction(state, tx):
 
 def apply_const_message(state, msg):
     state1 = state.ephemeral_clone()
-    ext = VMExt(state1, tx)
-    result, gas_remained, data = apply_msg(ext, message)
+    ext = VMExt(state1, transactions.Transaction(0, 0, 21000, '', 0, ''))
+    result, gas_remained, data = apply_msg(ext, msg)
     return data if result else None
 
 
@@ -381,6 +383,7 @@ class VMExt():
         self.set_storage_data = state.set_storage_data
         self.get_storage_data = state.get_storage_data
         self.get_storage_bytes = state.get_storage_bytes
+        self.set_storage_bytes = state.set_storage_bytes
         self.log_storage = lambda x: 'storage logging stub'
         self.add_suicide = lambda x: state.add_suicide(x)
         self.add_refund = lambda x: \
@@ -396,15 +399,56 @@ class VMExt():
             state.add_log(Log(addr, topics, data))
         self.create = lambda msg: create_contract(self, msg)
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
+        self.blackbox_msg = lambda msg, code: _apply_msg(BlankVMExt(state), msg, code)
         self.account_exists = state.account_exists
         self.post_homestead_hardfork = lambda: state.block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
         self.post_metropolis_hardfork = lambda: state.block_number >= state.config['METROPOLIS_FORK_BLKNUM']
+        self.post_serenity_hardfork = lambda: state.block_number >= state.config['SERENITY_FORK_BLKNUM']
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = state.transfer_value
         self.reset_storage = state.reset_storage
-        self.tx_origin = tx.sender if tx else '\x00'*32
+        self.tx_origin = tx.sender if tx else '\x00'*20
         self.tx_gasprice = tx.gasprice if tx else 0
+
+class BlankVmExt():
+
+    def __init__(self, state):
+        self._state = state
+        self.get_code = lambda addr: ''
+        self.set_code = lambda addr, code: None
+        self.get_balance = lambda addr: 0
+        self.set_balance = lambda addr, value: None
+        self.get_nonce = lambda addr: 0
+        self.set_nonce = lambda addr, value: None
+        self.increment_nonce = lambda addr: None
+        self.set_storage_data = lambda addr, value: None
+        self.get_storage_data = lambda addr: 0
+        self.get_storage_bytes = lambda addr: None
+        self.set_storage_bytes = lambda addr, value: None
+        self.log_storage = lambda x: 'storage logging stub'
+        self.add_suicide = lambda x: None
+        self.add_refund = lambda x: None
+        self.block_hash = lambda x: '\x00' * 32
+        self.block_coinbase = '\x00' * 20
+        self.block_timestamp = 0
+        self.block_number = 0
+        self.block_difficulty = 0
+        self.block_gas_limit = 0
+        self.log = lambda addr, topics, data: None
+        self.create = lambda msg: None
+        self.msg = lambda msg: None
+        self.blackbox_msg = lambda msg, code: None
+        self.account_exists = lambda addr: False
+        self.post_homestead_hardfork = lambda: block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
+        self.post_metropolis_hardfork = lambda: block_number >= state.config['METROPOLIS_FORK_BLKNUM']
+        self.post_serenity_hardfork = lambda: block_number >= state.config['SERENITY_FORK_BLKNUM']
+        self.snapshot = state.snapshot
+        self.revert = state.revert
+        self.transfer_value = lambda x, y, z: None
+        self.reset_storage = lambda addr: None
+        self.tx_origin = '\x00' * 20
+        self.tx_gasprice = 0
 
 
 class Receipt(rlp.Serializable):
