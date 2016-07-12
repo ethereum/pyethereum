@@ -2,7 +2,7 @@ import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_hex, encode_int, \
     big_endian_to_int, int_to_addr, zpad, parse_as_bin, parse_as_int, \
-    decode_hex
+    decode_hex, sha3
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
@@ -64,6 +64,7 @@ class State():
         self.journal = []
         self.cache = {}
         self.modified = {}
+        self.log_listeners = []
 
     @property
     def db(self):
@@ -249,6 +250,8 @@ class State():
         self.set_storage(address, 'deleted', True)
 
     def add_log(self, log):
+        for listener in self.log_listeners:
+            listener(log)
         self.journal.append(('~logs', None, len(self.logs), None))
         self.logs.append(log)
 
@@ -403,9 +406,12 @@ def prev_header_to_dict(h):
         "timestamp": str(h.timestamp),
         "difficulty": str(h.difficulty),
         "gas_used": str(h.gas_used),
-        "gas_limit": str(h.gas_limit)
+        "gas_limit": str(h.gas_limit),
+        "uncles_hash": '0x'+encode_hex(h.uncles_hash)
     }
 
+
+BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 
 def dict_to_prev_header(h):
     return FakeHeader(hash=parse_as_bin(h['hash']),
@@ -413,7 +419,8 @@ def dict_to_prev_header(h):
                       timestamp=parse_as_int(h['timestamp']),
                       difficulty=parse_as_int(h['difficulty']),
                       gas_used=parse_as_int(h.get('gas_used', '0')),
-                      gas_limit=parse_as_int(h['gas_limit']))
+                      gas_limit=parse_as_int(h['gas_limit']),
+                      uncles_hash=parse_as_bin(h.get('uncles_hash', '0x'+encode_hex(BLANK_UNCLES_HASH))))
         
 class Account(rlp.Serializable):
 

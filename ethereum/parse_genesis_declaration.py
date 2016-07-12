@@ -1,5 +1,5 @@
 from ethereum.state import State, STATE_DEFAULTS
-from ethereum.block import Block, BlockHeader, FakeHeader
+from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int
 from ethereum.state_transition import initialize
@@ -44,11 +44,18 @@ def state_from_genesis_declaration(genesis_data, env):
 
 def mk_basic_state(alloc, header, env):
     state = State(env=env)
+    if not header:
+        header = {
+            "number": 0, "gas_limit": 4712388, "gas_used": 0,
+            "timestamp": 1467446877, "difficulty": 2**25, "hash": '00' * 32,
+            "uncles_hash": '0x'+encode_hex(BLANK_UNCLES_HASH)
+        }
     state.prev_headers = [FakeHeader(hash=parse_as_bin(header['hash']),
                                      number=parse_as_int(header['number']),
                                      timestamp=parse_as_int(header['timestamp']),
                                      difficulty=parse_as_int(header['difficulty']),
-                                     gas_limit=parse_as_int(header['gas_limit']))]
+                                     gas_limit=parse_as_int(header['gas_limit']),
+                                     uncles_hash=parse_as_bin(header['uncles_hash']))]
     
     for addr, data in alloc.items():
         if len(addr) == 40:

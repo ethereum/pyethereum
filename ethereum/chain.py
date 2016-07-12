@@ -21,7 +21,7 @@ from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTran
 from ethereum.slogging import get_logger
 from ethereum.config import Env
 from ethereum.state import State, dict_to_prev_header
-from ethereum.block import Block, BlockHeader, FakeHeader
+from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
 import time
 import random
 import json
@@ -56,7 +56,8 @@ class Chain(object):
                 "gas_used": kwargs.get('gas_used', 0),
                 "timestamp": kwargs.get('timestamp', 1467446877),
                 "difficulty": kwargs.get('difficulty', 2**25),
-                "hash": kwargs.get('prevhash', '00' * 32)
+                "hash": kwargs.get('prevhash', '00' * 32),
+                "uncles_hash": kwargs.get('uncles_hash', '0x'+encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
         self.head_hash = self.state.prev_headers[0].hash
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
@@ -344,6 +345,7 @@ class Chain(object):
         blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
         blk.header.coinbase = coinbase or self.coinbase
         blk.header.timestamp = now
+        print 'ts', (blk.header.timestamp, now, timestamp, self.state.timestamp)
         blk.header.extra_data = self.extra_data
         blk.header.prevhash = temp_state.prev_headers[0].hash
         blk.header.bloom = 0

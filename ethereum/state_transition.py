@@ -1,7 +1,7 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
-    safe_ord, int_to_addr
+    safe_ord, int_to_addr, sha3, big_endian_to_int
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import utils
@@ -14,6 +14,7 @@ from ethereum import opcodes
 from ethereum.state import get_block
 from ethereum.processblock import apply_msg, create_contract, _apply_msg, Log
 from ethereum import vm
+from ethereum.specials import specials
 from config import default_config
 from db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -35,7 +36,7 @@ CREATE_CONTRACT_ADDRESS = b''
 
 VERIFIERS = {
     'ethash': lambda state, header: header.check_pow(),
-    'contract': lambda state, header: not not apply_const_message(state, vm.Message('\xff' * 20, int_to_addr(255), 0, 1000000, header.signing_hash()+header.extra_data, code_address=int_to_addr(255)))
+    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash+header.extra_data]), code_address=int_to_addr(255)))))
 }
 
 def initialize(state, block):
@@ -53,12 +54,12 @@ def initialize(state, block):
         self.set_code(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
         self.set_code(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
     if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
-        self.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
-                              state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                              pre_root)
-        self.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
-                              state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                              state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               pre_root)
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
 
 def finalize(state, block):
     """Apply rewards and commit."""
@@ -258,7 +259,9 @@ def mk_receipt_sha(receipts):
 mk_transaction_sha = mk_receipt_sha
 
 def validate_block_header(state, header):
-    assert VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
+    o = VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
+    assert o
+    # print 'Consensus verification result:', repr(o)
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
@@ -268,10 +271,13 @@ def validate_block_header(state, header):
         if not check_gaslimit(parent, header.gas_limit, config=state.config):
             raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
         if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
-            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty")
+            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
+                (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
         if header.gas_used > header.gas_limit:
             raise ValueError("Gas used exceeds gas limit")
-        if len(header.extra_data) > 32:
+        if len(header.extra_data) > 32 and state.block_number < state.config['SERENITY_FORK_BLKNUM']:
+            raise ValueError("Extra data too long")
+        if len(header.extra_data) > 1024:
             raise ValueError("Extra data too long")
         if header.timestamp <= parent.timestamp:
             raise ValueError("Timestamp equal to or before parent")
@@ -308,7 +314,7 @@ def check_gaslimit(parent, gas_limit, config=default_config):
 def calc_difficulty(parent, timestamp, config=default_config):
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
-        sign = max(len(parent.uncles) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
+        sign = max((2 if parent.uncles_hash != sha3(rlp.encode([])) else 1) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
     elif parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
         sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     else:
@@ -411,7 +417,7 @@ class VMExt():
         self.tx_origin = tx.sender if tx else '\x00'*20
         self.tx_gasprice = tx.gasprice if tx else 0
 
-class BlankVmExt():
+class BlankVMExt():
 
     def __init__(self, state):
         self._state = state
@@ -436,19 +442,25 @@ class BlankVmExt():
         self.block_difficulty = 0
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: None
-        self.create = lambda msg: None
-        self.msg = lambda msg: None
-        self.blackbox_msg = lambda msg, code: None
+        self.create = lambda msg: 0, 0, ''
+        self.msg = lambda msg: _apply_msg(self, msg, '') if msg.code_address in specials else (0, 0, '')
+        self.blackbox_msg = lambda msg, code: 0, 0, ''
         self.account_exists = lambda addr: False
         self.post_homestead_hardfork = lambda: block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
         self.post_metropolis_hardfork = lambda: block_number >= state.config['METROPOLIS_FORK_BLKNUM']
         self.post_serenity_hardfork = lambda: block_number >= state.config['SERENITY_FORK_BLKNUM']
         self.snapshot = state.snapshot
         self.revert = state.revert
-        self.transfer_value = lambda x, y, z: None
+        self.transfer_value = lambda x, y, z: True
         self.reset_storage = lambda addr: None
         self.tx_origin = '\x00' * 20
         self.tx_gasprice = 0
+
+    # def msg(self, msg):
+    #     print repr(msg.to), repr(msg.code_address), specials.keys(), msg.code_address in specials
+    #     o = _apply_msg(self, msg, '') if msg.code_address in specials else (0, 0, '')
+    #     print o
+    #     return o
 
 
 class Receipt(rlp.Serializable):

@@ -1,6 +1,6 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
-    big_endian_int, address, int256, encode_hex, encode_int
+    big_endian_int, address, int256, encode_hex, encode_int, sha3
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
@@ -190,11 +190,14 @@ class Block(rlp.Serializable):
         except:
             return getattr(self.header, name)
 
+BLANK_UNCLES_HASH = sha3(rlp.encode([]))
+
 class FakeHeader():
-    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1, gas_limit=3141592, gas_used=0):
+    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1, gas_limit=3141592, gas_used=0, uncles_hash=BLANK_UNCLES_HASH):
         self.hash = hash
         self.number = number
         self.timestamp = timestamp
         self.difficulty = difficulty
         self.gas_limit = gas_limit
         self.gas_used = gas_used
+        self.uncles_hash = uncles_hash
