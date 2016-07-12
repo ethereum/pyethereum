@@ -22,6 +22,12 @@ def setGenesisTimestamp(t:uint256):
     if not self.genesisTimestamp:
         self.genesisTimestamp = t
 
+def const getValidationCode(i, j):
+    storage_index = ref(self.validators[i][j].validation_code)
+    o = string(~ssize(storage_index))
+    ~sloadbytes(storage_index, o, len(o))
+    return(o:str)
+
 def deposit(validation_code:str, randao):
     i = 0
     success = 0
