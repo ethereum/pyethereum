@@ -329,6 +329,7 @@ def test_reward_uncles(db):
     blk1 = mine_on_chain(chain, blk0, coinbase=local_coinbase)
     # next block should reward uncles
     blk2 = mine_on_chain(chain, blk1, coinbase=local_coinbase)
+    # print [x.hash for x in chain.get_chain()], [blk0.hash, uncle.hash, blk1.hash, blk2.hash]
     assert blk1.hash in chain
     assert uncle.header.hash in [u.hash for u in blk2.uncles]
     assert chain.head == blk2

@@ -60,7 +60,7 @@ class State():
         self.env = env
         self.trie = SecureTrie(Trie(self.db, root))
         for k, v in STATE_DEFAULTS.items():
-            setattr(self, k, kwargs.get(k, v))
+            setattr(self, k, kwargs.get(k, copy.copy(v)))
         self.journal = []
         self.cache = {}
         self.modified = {}
@@ -338,6 +338,7 @@ class State():
         else:
             raise Exception("Must specify either alloc or state root parameter")
         for k, default in STATE_DEFAULTS.items():
+            default = copy.copy(default)
             v = snapshot_data[k] if k in snapshot_data else None
             if isinstance(default, (int, long)):
                 setattr(state, k, parse_as_int(v) if k in snapshot_data else default)
@@ -374,6 +375,7 @@ class State():
             snapshot["alloc"] = self.to_dict()
         # Save non-state-root variables
         for k, default in STATE_DEFAULTS.items():
+            default = copy.copy(default)
             v = getattr(self, k)
             if isinstance(default, (int, long)):
                 snapshot[k] = str(v)

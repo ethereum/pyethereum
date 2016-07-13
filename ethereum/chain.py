@@ -170,7 +170,7 @@ class Chain(object):
         if key not in self.db:
             try:
                 parent_score = self.get_score(self.get_parent(block))
-                self.db.put(key, str(parent_score + block.difficulty + random.randrange(10)))
+                self.db.put(key, str(parent_score + block.difficulty + random.randrange(block.difficulty // 10**6 + 1)))
             except:
                 return int(self.db.get('score:'+block.prevhash))
         return int(self.db.get(key))
@@ -345,7 +345,6 @@ class Chain(object):
         blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
         blk.header.coinbase = coinbase or self.coinbase
         blk.header.timestamp = now
-        print 'ts', (blk.header.timestamp, now, timestamp, self.state.timestamp)
         blk.header.extra_data = self.extra_data
         blk.header.prevhash = temp_state.prev_headers[0].hash
         blk.header.bloom = 0
