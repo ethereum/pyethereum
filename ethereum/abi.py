@@ -338,6 +338,8 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         if not is_string(arg):
             raise EncodingError('Expecting string: %r' % arg)
 
+        arg = utils.to_string(arg)  # py2: force unicode into str
+
         if len(sub):  # fixed length
             if not 0 <= len(arg) <= int(sub):
                 raise ValueError('string must be utf8 encoded')
