@@ -29,7 +29,7 @@ if '200kblocks.rlp' not in os.listdir(os.getcwd()):
     sys.exit()
 
 batch_size = 1024 * 10240 # approximately 10000 blocks
-f = open('200kblocks.rlp')
+f = open('1700kblocks.rlp')
 
 # skip already processed blocks
 skip = c.state.block_number + 1
@@ -51,9 +51,9 @@ while len(block_rlps) > 0:
         # print 'prevh:', s.prev_headers
         block = rlp.decode(block.strip().decode('hex'), Block)
         assert c.add_block(block)
-        if (block.header.number+1) % 1000 == 0:
+        if (block.header.number+1) % 10000 == 0:
             snapshot = c.state.to_snapshot()
-            if (block.header.number+1) % 2000 == 0:
+            if (block.header.number+1) % 20000 == 0:
                 c = chain.Chain(env=c.env)
             else:
                 c = chain.Chain(snapshot, Env())
