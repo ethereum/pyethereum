@@ -13,8 +13,9 @@ import sys
 # configure_logging(config_string=config_string)
 
 if 'saved_state.json' in os.listdir(os.getcwd()):
+    print 'loading state from saved_state.json ...'
     c = chain.Chain(json.load(open('saved_state.json')), Env())
-    print 'state generated from saved state'
+    print 'loaded.'
 elif 'genesis_frontier.json' not in os.listdir(os.getcwd()):
     print 'Please download genesis_frontier.json from http://vitalik.ca/files/genesis_frontier.json'
     sys.exit()
@@ -26,22 +27,42 @@ else:
 if '200kblocks.rlp' not in os.listdir(os.getcwd()):
     print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp and put it in this directory to continue the test'
     sys.exit()
-block_rlps = open('200kblocks.rlp').readlines()[c.state.block_number + 1:]
-for block in block_rlps:
-    # print 'prevh:', s.prev_headers
-    block = rlp.decode(block.strip().decode('hex'), Block)
-    assert c.add_block(block)
-    if block.header.number % 1000 == 0:
-        snapshot = c.state.to_snapshot()
-        if block.header.number % 2000 == 0:
-            c = chain.Chain(env=c.env)
-        else:
-            c = chain.Chain(snapshot, Env())
-        snapshot2 = c.state.to_snapshot()
-        if snapshot != snapshot2:
-            open('/tmp/1', 'w').write(json.dumps(snapshot))
-            open('/tmp/2', 'w').write(json.dumps(snapshot2))
-            raise Exception("snapshot difference")
-        open('saved_state.json', 'w').write(json.dumps(snapshot, indent=4))
+
+batch_size = 1024 * 10240 # approximately 10000 blocks
+f = open('1700kblocks.rlp')
+
+# skip already processed blocks
+skip = c.state.block_number + 1
+count = 0
+block_rlps = f.readlines(batch_size)
+while len(block_rlps) > 0:
+    if len(block_rlps) + count <= skip:
+        count += len(block_rlps)
+        block_rlps = f.readlines(batch_size)
+    else:
+        block_rlps = block_rlps[skip-count:]
+        count = skip
+        break
+print "skipped %d processed blocks" % skip
+
+# process blocks
+while len(block_rlps) > 0:
+    for block in block_rlps:
+        # print 'prevh:', s.prev_headers
+        block = rlp.decode(block.strip().decode('hex'), Block)
+        assert c.add_block(block)
+        if (block.header.number+1) % 10000 == 0:
+            snapshot = c.state.to_snapshot()
+            if (block.header.number+1) % 20000 == 0:
+                c = chain.Chain(env=c.env)
+            else:
+                c = chain.Chain(snapshot, Env())
+            snapshot2 = c.state.to_snapshot()
+            if snapshot != snapshot2:
+                open('/tmp/1', 'w').write(json.dumps(snapshot))
+                open('/tmp/2', 'w').write(json.dumps(snapshot2))
+                raise Exception("snapshot difference")
+            open('saved_state.json', 'w').write(json.dumps(snapshot, indent=4))
+    block_rlps = f.readlines(batch_size)
 
 print 'Test successful'
