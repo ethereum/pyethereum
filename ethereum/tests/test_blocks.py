@@ -76,12 +76,15 @@ def run_block_test(params, config_overrides = {}):
             assert not success
         else:
             rlpdata = decode_hex(blk["rlp"][2:])
-            c.add_block(rlp.decode(rlpdata, Block))
+            assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
+    run_block_test(testdata, {
+        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
+        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
+    })
 
 
 excludes = {
@@ -108,15 +111,18 @@ def main():
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
-                        else 1000000})
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
+                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
+                    })
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000})
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
+                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
+                    })
 
 
 if __name__ == '__main__':

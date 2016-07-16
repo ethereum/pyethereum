@@ -9,6 +9,7 @@ data validatorCounts[2**40]
 data validatorSlotQueue[2**40][2**40]
 data validatorSlotQueueLength[2**40]
 data totalDeposits
+data historicalTotalDeposits[2**40]
 data randao
 data aunts[]
 data genesisTimestamp
@@ -27,6 +28,12 @@ def const getValidationCode(i, j):
     o = string(~ssize(storage_index))
     ~sloadbytes(storage_index, o, len(o))
     return(o:str)
+
+def const getHistoricalValidatorCount(epoch, i):
+    return(self.historicalValidatorCounts[epoch][i])
+
+def const getHistoricalTotalDeposits(epoch):
+    return(self.historicalTotalDeposits[epoch])
 
 def deposit(validation_code:str, randao):
     i = 0
@@ -59,6 +66,7 @@ def deposit(validation_code:str, randao):
         while q < len(validatorSizes):
             self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
             q += 1
+        self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
     log(type=NewValidator, i, j)
     return([i, j]:arr)
 
@@ -66,8 +74,8 @@ def const getTotalDeposits():
     return(self.totalDeposits)
 
 def const getValidator(skips):
-    validatorGroupIndexSource = sha3(self.randao + skips) % self.totalDeposits
     epoch = max(0, block.number / EPOCH_LENGTH - 1)
+    validatorGroupIndexSource = mod(sha3(self.randao + skips), self.historicalTotalDeposits[epoch])
     while 1:
         # return([validatorGroupIndexSource]:arr)
         validatorGroupIndex = 0
@@ -104,6 +112,8 @@ def any():
         min_timestamp = self.getMinTimestamp(skips)
         if block.timestamp < min_timestamp:
             ~return(0, 0)
+        if block.difficulty != 1:
+            ~return(0, 0)
         # Get the validator that should be creating this block
         validatorData = self.getValidator(skips, outitems=2)
         vcIndex = ref(self.validators[validatorData[0]][validatorData[1]].validation_code)
@@ -132,6 +142,7 @@ def any():
                 while i < len(validatorSizes):
                     self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
                     i += 1
+                self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
             # Block header signature valid!
             return(1)
         else:

@@ -1,7 +1,7 @@
 from ethereum.state import State
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
-    parse_as_bin, parse_as_int
+    parse_as_bin, parse_as_int, normalize_address
 from ethereum.state_transition import initialize
 from ethereum.config import Env
 from ethereum.db import OverlayDB
@@ -21,8 +21,7 @@ def state_from_genesis_declaration(genesis_data, env):
     blk = Block(h, [], [])
     state = State(env=env)
     for addr, data in genesis_data["alloc"].items():
-        if len(addr) == 40:
-            addr = decode_hex(addr)
+        addr = normalize_address(addr)
         assert len(addr) == 20
         if 'wei' in data:
             state.set_balance(addr, parse_as_int(data['wei']))
@@ -58,8 +57,7 @@ def mk_basic_state(alloc, header, env):
                                      uncles_hash=parse_as_bin(header['uncles_hash']))]
     
     for addr, data in alloc.items():
-        if len(addr) == 40:
-            addr = decode_hex(addr)
+        addr = normalize_address(addr)
         assert len(addr) == 20
         if 'wei' in data:
             state.set_balance(addr, parse_as_int(data['wei']))

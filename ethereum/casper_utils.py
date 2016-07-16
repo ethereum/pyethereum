@@ -102,8 +102,8 @@ def call_casper(state, fun, args, gas=1000000, value=0):
 def get_skips_and_block_making_time(chain, my_indices, max_lookup=100):
     skips = 0
     while skips < max_lookup:
-        i, j = call_casper(chain.state, 'getValidator', [skips])
-        if (my_indices[0], my_indices[1]) == (i, j):
+        indices = call_casper(chain.state, 'getValidator', [skips])
+        if indices and (my_indices[0], my_indices[1]) == (indices[0], indices[1]):
             return skips, call_casper(chain.state, 'getMinTimestamp', [skips]) + 3
         skips += 1
     return None, None

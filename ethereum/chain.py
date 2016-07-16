@@ -180,7 +180,7 @@ class Chain(object):
     # either the parent was missing or they were received
     # too early
     def process_time_queue(self):
-        now = int(time.time())
+        now = self.time()
         while len(self.time_queue) and self.time_queue[0].timestamp <= now:
             self.add_block(self.time_queue.pop())
 
@@ -191,9 +191,12 @@ class Chain(object):
                     self.add_block(block)
                 del self.parent_queue[parent_hash]
 
+    def time(self):
+        return int(time.time())
+
     # Call upon receiving a block
     def add_block(self, block):
-        now = int(time.time())
+        now = self.time()
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -202,7 +205,7 @@ class Chain(object):
             print 'Block received too early. Delaying for now'
             return False
         if block.header.prevhash == self.head_hash:
-            # print 'Adding to head'
+            # print 'Adding to head', repr(block.header.prevhash), repr(self.head_hash)
             try:
                 apply_block(self.state, block)
             except Exception, e:
@@ -339,7 +342,7 @@ class Chain(object):
         else:
             temp_state = self.mk_poststate_of_blockhash(parent.hash)
         blk = Block(BlockHeader())
-        now = timestamp or int(time.time())
+        now = timestamp or self.time()
         blk.header.number = temp_state.block_number + 1
         blk.header.difficulty = calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
         blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)

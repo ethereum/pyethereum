@@ -60,6 +60,9 @@ def initialize(state, block):
         state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
                                state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
+    if state.block_number == state.config['DAO_FORK_BLKNUM']:
+        for acct in state.config['CHILD_DAO_LIST']:
+            state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
 
 def finalize(state, block):
     """Apply rewards and commit."""
@@ -81,9 +84,10 @@ def finalize(state, block):
 
 def apply_block(state, block, creating=False):
     # Pre-processing and verification
-    initialize(state, block)
+    snapshot = state.snapshot()
     assert validate_block_header(state, block.header)
     assert validate_uncles(state, block)
+    initialize(state, block)
     receipts = []
     # Process transactions
     for tx in block.transactions:
@@ -104,18 +108,23 @@ def apply_block(state, block, creating=False):
         block.header.state_root = state.trie.root_hash
     else:
         if block.header.receipts_root != mk_receipt_sha(receipts):
+            state.revert(snapshot)
             raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
                              (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts))), len(receipts))
         if block.header.tx_list_root != mk_transaction_sha(block.transactions):
+            state.revert(snapshot)
             raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %
                              (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
                               len(block.transactions)))
         if block.header.state_root != state.trie.root_hash:
+            state.revert(snapshot)
             raise ValueError("State root mismatch: header %s computed %s" %
                              (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
         if block.header.bloom != state.bloom:
+            state.revert(snapshot)
             raise ValueError("Bloom mismatch: header %d computed %d" % (block.header.bloom, state.bloom))
         if block.header.gas_used != state.gas_used:
+            state.revert(snapshot)
             raise ValueError("Gas used mismatch: header %d computed %d" % (block.header.gas_used, state.gas_used))
     return state, receipts
 
@@ -163,6 +172,7 @@ def validate_transaction(state, tx):
 
 def apply_const_message(state, msg):
     state1 = state.ephemeral_clone()
+    assert state1.config == state.config
     ext = VMExt(state1, transactions.Transaction(0, 0, 21000, '', 0, ''))
     result, gas_remained, data = apply_msg(ext, msg)
     return data if result else None
@@ -265,7 +275,8 @@ def validate_block_header(state, header):
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
-            raise ValueError("Block's prevhash and parent's hash do not match")
+            raise ValueError("Block's prevhash and parent's hash do not match: block prevhash %s parent hash %s" %
+                             (encode_hex(header.prevhash), encode_hex(parent.hash)))
         if header.number != parent.number + 1:
             raise ValueError("Block's number is not the successor of its parent number")
         if not check_gaslimit(parent, header.gas_limit, config=state.config):
@@ -283,6 +294,8 @@ def validate_block_header(state, header):
             raise ValueError("Timestamp equal to or before parent")
         if header.timestamp >= 2**256:
             raise ValueError("Timestamp waaaaaaaaaaayy too large")
+    if header.gas_limit >= 2**63:
+        raise ValueError("Header gas limit too high")
     return True
 
 def validate_block(state, block):

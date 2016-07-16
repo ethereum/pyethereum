@@ -82,7 +82,8 @@ class State():
         return o
 
     def add_block_header(self, block_header):
-        self.prev_headers = [block_header] + self.prev_headers[:256]
+        self.journal.append(('~prev_headers', None, len(self.prev_headers), None))
+        self.prev_headers = [block_header] + self.prev_headers
 
     def typecheck_storage(self, k, v):
         if k == 'nonce' or k == 'balance':
@@ -275,6 +276,8 @@ class State():
                 self.logs = self.logs[:preval]
             elif addr == '~suicides':
                 self.suicides = self.suicides[:preval]
+            elif addr == '~prev_headers':
+                self.prev_headers = self.prev_headers[-preval:]
             elif addr in STATE_DEFAULTS:
                 setattr(self, addr, preval)
             else:
@@ -382,7 +385,7 @@ class State():
             elif isinstance(default, (str, bytes)):
                 snapshot[k] = '0x'+encode_hex(v)
             elif k == 'prev_headers' and not no_prevblocks:
-                snapshot[k] = [prev_header_to_dict(h) for h in v]
+                snapshot[k] = [prev_header_to_dict(h) for h in v[:256]]
             elif k == 'recent_uncles' and not no_prevblocks:
                 snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
         return snapshot
