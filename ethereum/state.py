@@ -408,6 +408,28 @@ class State():
         s.prev_headers = self.prev_headers
         return s
 
+    # forks
+
+    def _is_X_fork(self, name, at_fork_height=False):
+        height =  self.config[name + '_FORK_BLKNUM']
+        if self.block_number < height:
+            return False
+        elif at_fork_height and self.block_number > height:
+            return False
+        return True
+
+    def is_METROPOLIS(self, at_fork_height=False):
+        return self._is_X_fork('METROPOLIS', at_fork_height)
+
+    def is_HOMESTEAD(self, at_fork_height=False):
+        return self._is_X_fork('HOMESTEAD', at_fork_height)
+
+    def is_SERENITY(self, at_fork_height=False):
+        return self._is_X_fork('SERENITY', at_fork_height)
+
+    def is_DAO(self, at_fork_height=False):
+        return self._is_X_fork('DAO', at_fork_height)
+
 
 def prev_header_to_dict(h):
     return {

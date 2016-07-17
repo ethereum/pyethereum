@@ -50,19 +50,22 @@ def initialize(state, block):
     state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
     state.block_coinbase = block.header.coinbase
     state.block_difficulty = block.header.difficulty
-    if state.block_number == state.config["METROPOLIS_FORK_BLKNUM"]:
-        self.set_code(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
-        self.set_code(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
-    if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
+    if state.is_METROPOLIS(at_fork_height=True):
+        self.set_code(utils.normalize_address(
+            state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
+        self.set_code(utils.normalize_address(
+            state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
+    if state.is_METROPOLIS():
         state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
                                state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                pre_root)
         state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
                                state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
-    if state.block_number == state.config['DAO_FORK_BLKNUM']:
+    if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
             state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
+
 
 def finalize(state, block):
     """Apply rewards and commit."""
@@ -136,14 +139,14 @@ def validate_transaction(state, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
-        if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
+        if state.is_METROPOLIS():
             tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
         else:
             raise UnsignedTransaction(tx)
-    if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
-            tx.check_low_s_metropolis()
-    elif state.block_number >= state.config["HOMESTEAD_FORK_BLKNUM"]:
-            tx.check_low_s_homestead()
+    if state.is_METROPOLIS():
+        tx.check_low_s_metropolis()
+    elif state.is_HOMESTEAD():
+        tx.check_low_s_homestead()
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
@@ -191,7 +194,7 @@ def apply_transaction(state, tx):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
 
     intrinsic_gas = tx.intrinsic_gas_used
-    if state.block_number >= state.config['HOMESTEAD_FORK_BLKNUM']:
+    if state.is_HOMESTEAD():
         assert tx.s * 2 < transactions.secpk1n
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
             intrinsic_gas += opcodes.CREATE[3]
@@ -256,9 +259,10 @@ def apply_transaction(state, tx):
         state.del_account(s)
     logs = state.logs
     state.logs = []
-    if state.block_number < state.config['METROPOLIS_FORK_BLKNUM']:
+    if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
     return success, output, logs
+
 
 def mk_receipt_sha(receipts):
     t = trie.Trie(EphemDB())
@@ -284,10 +288,10 @@ def validate_block_header(state, header):
             raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
         if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
             raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
-                (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
+                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
         if header.gas_used > header.gas_limit:
             raise ValueError("Gas used exceeds gas limit")
-        if len(header.extra_data) > 32 and state.block_number < state.config['SERENITY_FORK_BLKNUM']:
+        if len(header.extra_data) > 32 and not state.is_SERENITY():
             raise ValueError("Extra data too long")
         if len(header.extra_data) > 1024:
             raise ValueError("Extra data too long")
@@ -421,15 +425,16 @@ class VMExt():
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.blackbox_msg = lambda msg, code: _apply_msg(BlankVMExt(state), msg, code)
         self.account_exists = state.account_exists
-        self.post_homestead_hardfork = lambda: state.block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
-        self.post_metropolis_hardfork = lambda: state.block_number >= state.config['METROPOLIS_FORK_BLKNUM']
-        self.post_serenity_hardfork = lambda: state.block_number >= state.config['SERENITY_FORK_BLKNUM']
+        self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
+        self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
+        self.post_serenity_hardfork = lambda: state.is_SERENITY()
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = state.transfer_value
         self.reset_storage = state.reset_storage
-        self.tx_origin = tx.sender if tx else '\x00'*20
+        self.tx_origin = tx.sender if tx else '\x00' * 20
         self.tx_gasprice = tx.gasprice if tx else 0
+
 
 class BlankVMExt():
 
@@ -457,12 +462,13 @@ class BlankVMExt():
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: None
         self.create = lambda msg: 0, 0, ''
-        self.msg = lambda msg: _apply_msg(self, msg, '') if msg.code_address in specials else (0, 0, '')
+        self.msg = lambda msg: _apply_msg(
+            self, msg, '') if msg.code_address in specials else (0, 0, '')
         self.blackbox_msg = lambda msg, code: 0, 0, ''
         self.account_exists = lambda addr: False
-        self.post_homestead_hardfork = lambda: block_number >= state.config['HOMESTEAD_FORK_BLKNUM']
-        self.post_metropolis_hardfork = lambda: block_number >= state.config['METROPOLIS_FORK_BLKNUM']
-        self.post_serenity_hardfork = lambda: block_number >= state.config['SERENITY_FORK_BLKNUM']
+        self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
+        self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
+        self.post_serenity_hardfork = lambda: state.is_SERENITY()
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = lambda x, y, z: True
