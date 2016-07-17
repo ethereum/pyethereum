@@ -362,7 +362,8 @@ class Chain(object):
                 blk.transactions.append(tx)
                 receipts.append(r)
                 temp_state.bloom |= r.bloom  # int
-            except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas, InvalidNonce, UnsignedTransaction):
+            except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
+                    InvalidNonce, UnsignedTransaction):
                 pass
             excluded[tx.hash] = True
         # Add uncles

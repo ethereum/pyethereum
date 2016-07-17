@@ -18,7 +18,7 @@ from ethereum.specials import specials
 from config import default_config
 from db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-        BlockGasLimitReached, InsufficientBalance
+    BlockGasLimitReached, InsufficientBalance
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -40,8 +40,9 @@ SKIP_MEDSTATES = False
 
 VERIFIERS = {
     'ethash': lambda state, header: header.check_pow(),
-    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash+header.extra_data]), code_address=int_to_addr(255)))))
+    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash + header.extra_data]), code_address=int_to_addr(255)))))
 }
+
 
 def initialize(state, block):
     pre_root = state.trie.root_hash or ('\x00' * 32)
@@ -135,11 +136,14 @@ def apply_block(state, block, creating=False):
                              (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
         if block.header.bloom != state.bloom:
             state.revert(snapshot)
-            raise ValueError("Bloom mismatch: header %d computed %d" % (block.header.bloom, state.bloom))
+            raise ValueError("Bloom mismatch: header %d computed %d" %
+                             (block.header.bloom, state.bloom))
         if block.header.gas_used != state.gas_used:
             state.revert(snapshot)
-            raise ValueError("Gas used mismatch: header %d computed %d" % (block.header.gas_used, state.gas_used))
+            raise ValueError("Gas used mismatch: header %d computed %d" %
+                             (block.header.gas_used, state.gas_used))
     return state, receipts
+
 
 def validate_transaction(state, tx):
 
@@ -174,7 +178,6 @@ def validate_transaction(state, tx):
 
     if state.get_balance(tx.sender) < total_cost:
         raise InsufficientBalance(rp('balance', state.get_balance(tx.sender), total_cost))
-
 
     # check block gas limit
     if state.gas_used + tx.startgas > state.gas_limit:
@@ -282,6 +285,7 @@ def mk_receipt_sha(receipts):
 
 mk_transaction_sha = mk_receipt_sha
 
+
 def validate_block_header(state, header):
     o = VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
     assert o
@@ -312,6 +316,7 @@ def validate_block_header(state, header):
         raise ValueError("Header gas limit too high")
     return True
 
+
 def validate_block(state, block):
     state_prime, receipts = apply_block(state, block)
 
@@ -341,9 +346,11 @@ def check_gaslimit(parent, gas_limit, config=default_config):
 def calc_difficulty(parent, timestamp, config=default_config):
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
-        sign = max((2 if parent.uncles_hash != sha3(rlp.encode([])) else 1) - ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
+        sign = max((2 if parent.uncles_hash != sha3(rlp.encode([])) else 1) -
+                   ((timestamp - parent.timestamp) // config['METROPOLIS_DIFF_ADJUSTMENT_CUTOFF']), -99)
     elif parent.number >= (config['HOMESTEAD_FORK_BLKNUM'] - 1):
-        sign = max(1 - ((timestamp - parent.timestamp) // config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
+        sign = max(1 - ((timestamp - parent.timestamp) //
+                        config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     else:
         sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
     # If we enter a special mode where the genesis difficulty starts off below

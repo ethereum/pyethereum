@@ -370,7 +370,7 @@ class State():
                 setattr(state, k, uncles)
         state.commit()
         return state
-    
+
     # Creates a snapshot from a state
     def to_snapshot(self, root_only=False, no_prevblocks=False):
         snapshot = {}
@@ -453,7 +453,7 @@ def dict_to_prev_header(h):
                       gas_used=parse_as_int(h.get('gas_used', '0')),
                       gas_limit=parse_as_int(h['gas_limit']),
                       uncles_hash=parse_as_bin(h.get('uncles_hash', '0x'+encode_hex(BLANK_UNCLES_HASH))))
-        
+
 class Account(rlp.Serializable):
 
     """An Ethereum account.
