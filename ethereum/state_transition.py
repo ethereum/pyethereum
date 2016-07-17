@@ -34,6 +34,10 @@ log_state = get_logger('eth.pb.msg.state')
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = b''
 
+# DEV OPTIONS
+SKIP_RECEIPT_ROOT_VALIDATION = False
+SKIP_MEDSTATES = False
+
 VERIFIERS = {
     'ethash': lambda state, header: header.check_pow(),
     'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash+header.extra_data]), code_address=int_to_addr(255)))))
@@ -86,6 +90,13 @@ def finalize(state, block):
     state.add_block_header(block.header)
 
 
+
+def mk_receipt(state, logs):
+    if state.is_METROPOLIS() or SKIP_RECEIPT_ROOT_VALIDATION:
+        return Receipt('\x00' * 32, state.gas_used, logs)
+    return Receipt(state.trie.root_hash, state.gas_used, logs)
+
+
 def apply_block(state, block, creating=False):
     # Pre-processing and verification
     snapshot = state.snapshot()
@@ -96,10 +107,7 @@ def apply_block(state, block, creating=False):
     # Process transactions
     for tx in block.transactions:
         success, output, logs = apply_transaction(state, tx)
-        if state.block_number >= state.config["METROPOLIS_FORK_BLKNUM"]:
-            r = Receipt('\x00' * 32, state.gas_used, logs)
-        else:
-            r = Receipt(state.trie.root_hash, state.gas_used, logs)
+        r = mk_receipt(state, logs)
         receipts.append(r)
         state.bloom |= r.bloom  # int
         state.txindex += 1
@@ -111,10 +119,11 @@ def apply_block(state, block, creating=False):
         block.header.tx_list_root = mk_transaction_sha(block.transactions)
         block.header.state_root = state.trie.root_hash
     else:
-        if block.header.receipts_root != mk_receipt_sha(receipts):
-            state.revert(snapshot)
-            raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
-                             (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts))), len(receipts))
+        if not SKIP_RECEIPT_ROOT_VALIDATION:
+            if block.header.receipts_root != mk_receipt_sha(receipts):
+                state.revert(snapshot)
+                raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
+                                 (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts)), len(receipts)))
         if block.header.tx_list_root != mk_transaction_sha(block.transactions):
             state.revert(snapshot)
             raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %

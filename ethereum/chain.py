@@ -4,7 +4,7 @@ from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
 from ethereum.state_transition import apply_block, initialize, \
     finalize, apply_transaction, mk_receipt_sha, mk_transaction_sha, \
-    calc_difficulty, calc_gaslimit, Receipt
+    calc_difficulty, calc_gaslimit, Receipt, mk_receipt
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -358,10 +358,7 @@ class Chain(object):
                 break
             try:
                 success, gas, logs = apply_transaction(temp_state, tx)
-                if temp_state.block_number >= self.config["METROPOLIS_FORK_BLKNUM"]:
-                    r = Receipt('\x00' * 32, temp_state.gas_used, logs)
-                else:
-                    r = Receipt(temp_state.trie.root_hash, temp_state.gas_used, logs)
+                r = mk_receipt(temp_state, logs)
                 blk.transactions.append(tx)
                 receipts.append(r)
                 temp_state.bloom |= r.bloom  # int

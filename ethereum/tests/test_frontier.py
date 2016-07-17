@@ -1,7 +1,7 @@
 from ethereum import parse_genesis_declaration, db
 from ethereum.block import Block, BlockHeader
 from ethereum.config import Env
-from ethereum.state_transition import apply_block
+import ethereum.state_transition as state_transition
 from ethereum import chain
 import rlp
 import json
@@ -12,6 +12,9 @@ import time
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
+
+state_transition.SKIP_RECEIPT_ROOT_VALIDATION = True
+state_transition.SKIP_MEDSTATES = True
 
 STATE_STORE_FN = 'saved_state.json'
 STATE_SNAPSHOT_FN = 'saved_snapshot_{}k.json'
