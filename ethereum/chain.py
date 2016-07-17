@@ -200,7 +200,8 @@ class Chain(object):
             # print 'Adding to head', repr(block.header.prevhash), repr(self.head_hash)
             try:
                 apply_block(self.state, block)
-            except Exception, e:  # FIXME catchall exception
+            # except Exception, e:  # FIXME catchall exception makes it unable to debug,
+            except KeyError, e:  # FIXME add relevant exceptions here
                 print 'Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
@@ -212,7 +213,8 @@ class Chain(object):
             pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(pre_state, block)
-            except Exception, e:  # FIXME catchall exception
+            # except Exception, e:  # FIXME catchall exception makes it unable to debug,
+            except KeyError, e:  # FIXME add relevant exceptions here
                 print 'Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash))
                 return False
             block_score = self.get_score(block)
