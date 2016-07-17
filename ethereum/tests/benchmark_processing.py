@@ -1,8 +1,8 @@
 from ethereum import parse_genesis_declaration, db
 from ethereum.block import Block
 from ethereum.config import Env
-from ethereum.state_transition import apply_block
 from ethereum import chain
+from ethereum import state_transition
 import rlp
 import json
 import os
@@ -45,6 +45,18 @@ while len(block_rlps) > 0:
         count = skip
         break
 print "skipped %d processed blocks" % skip
+
+include_db_commit = os.environ.get('INCLUDE_DB_COMMIT', '0') == '1'
+if not include_db_commit:
+    def commit(self):
+        pass
+    setattr(c.env.db.__class__, 'commit', commit)
+
+validate_receipt_root = os.environ.get('VALIDATE_RECEIPT_ROOT', '0') == '1'
+if not validate_receipt_root:
+    def validate_receipt_root(block, receipts):
+        return True
+    state_transition.validate_receipt_root = validate_receipt_root
 
 processed_blocks = 0
 processed_txs = 0
