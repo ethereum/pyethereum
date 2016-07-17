@@ -108,8 +108,10 @@ def ecsign(rawhash, key):
 def mk_contract_address(sender, nonce):
     return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
 
+
 def mk_metropolis_contract_address(sender, initcode):
     return sha3(normalize_address(sender) + initcode)[12:]
+
 
 def safe_ord(value):
     if isinstance(value, int):
@@ -154,6 +156,7 @@ def int_to_32bytearray(i):
     return o
 
 sha3_count = [0]
+
 
 def sha3(seed):
     sha3_count[0] += 1
@@ -390,8 +393,9 @@ def remove_0x_head(s):
 def parse_as_bin(s):
     return decode_hex(s[2:] if s[:2] == '0x' else s)
 
+
 def parse_as_int(s):
-    return s if isinstance(s, (int, long)) else int('0'+s[2:], 16) if s[:2] == '0x' else int(s)
+    return s if isinstance(s, (int, long)) else int('0' + s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
