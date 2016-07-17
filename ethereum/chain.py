@@ -265,7 +265,7 @@ class Chain(object):
         self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
         print 'Added block %d (%s) with %d txs and %d gas' % \
-            (block.header.number, encode_hex(block.header.hash),
+            (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used)
         return True
 

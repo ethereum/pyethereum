@@ -81,20 +81,24 @@ BlockHeader.check_pow = lambda *args: True
 while len(block_rlps) > 0:
     st = time.time()
     num_txs = 0
+    gas_used = 0
     for block in block_rlps:
         # print 'prevh:', s.prev_headers
         block = rlp.decode(block.strip().decode('hex'), Block)
         assert c.add_block(block)
         num_txs += len(block.transactions)
+        gas_used += block.gas_used
         num_blocks = block.header.number + 1
         if num_blocks % REPORT_INTERVAL == 0:
             # report
             elapsed = time.time() - st
             tps = num_txs / elapsed
             bps = REPORT_INTERVAL / elapsed
-            print 'elapsed:%d bps:%d tps:%d' % (elapsed, bps, tps)
+            gps = gas_used / elapsed
+            print 'elapsed:%d bps:%d tps:%d gps:%d' % (elapsed, bps, tps, gps)
             st = time.time()
             num_txs = 0
+            gas_used = 0
         if num_blocks % SAVE_INTERVAL == 0:
             # snapshot
             print 'creating snapshot'
