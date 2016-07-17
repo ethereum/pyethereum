@@ -72,7 +72,7 @@ SNAPSHOT_INTERVAL = 100 * 1000
 
 
 # don't check pow
-# BlockHeader.check_pow = lambda *args: True
+BlockHeader.check_pow = lambda *args: True
 
 # process blocks
 while len(block_rlps) > 0:
