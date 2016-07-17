@@ -1,7 +1,7 @@
 try:
     from Crypto.Hash import keccak
     sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
-except:
+except ImportError:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.sha3_256(x).digest()
 from bitcoin import privtopub, ecdsa_raw_sign, ecdsa_raw_recover, encode_pubkey

@@ -31,7 +31,7 @@ if not __version__:
         match = GIT_DESCRIBE_RE.match(rev)
         if match:
             __version__ = "{}+git-{}".format(match.group("version"), match.group("git"))
-    except:
+    except:  # FIXME!
         pass
 
 if not __version__:

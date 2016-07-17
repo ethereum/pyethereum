@@ -187,7 +187,7 @@ class Block(rlp.Serializable):
     def __getattribute__(self, name):
         try:
             return rlp.Serializable.__getattribute__(self, name)
-        except:
+        except AttributeError:
             return getattr(self.header, name)
 
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
