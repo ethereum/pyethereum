@@ -79,6 +79,7 @@ def finalize(state, block):
     if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
         del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
     state.commit()
+    state.reset_journal()
     state.add_block_header(block.header)
 
 

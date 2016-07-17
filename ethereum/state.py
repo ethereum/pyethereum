@@ -233,9 +233,14 @@ class State():
                     self.trie.update(addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)
-        self.journal.append(('~root', (self.cache, self.modified), rt, None))
+        self.journal.append(('~root', (self.cache, self.modified), rt, None))  # FIXME USED?
         self.cache = {}
         self.modified = {}
+
+    def reset_journal(self):
+        "resets the journal. should be called after State.commit unless there is a better strategy"
+        self.journal = []
+
 
     def del_account(self, address):
         """Delete an account.
@@ -261,7 +266,7 @@ class State():
         self.suicides.append(suicide)
 
     # Returns a value x, where State.revert(x) at any later point will return
-    # you to the point at which the snapshot was made.
+    # you to the point at which the snapshot was made (unless journal_reset was called).
     def snapshot(self):
         return len(self.journal)
 
@@ -269,7 +274,7 @@ class State():
     def revert(self, snapshot):
         while len(self.journal) > snapshot:
             addr, key, preval, premod = self.journal.pop()
-            if addr == '~root':
+            if addr == '~root':  # FIXME IS THIS USED?
                 self.trie.root_hash = preval
                 self.cache, self.modified = key
             elif addr == '~logs':
