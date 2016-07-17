@@ -107,7 +107,7 @@ def apply_block(state, block, creating=False):
         block.header.tx_list_root = mk_transaction_sha(block.transactions)
         block.header.state_root = state.trie.root_hash
     else:
-        if block.header.receipts_root != mk_receipt_sha(receipts):
+        if not validate_receipt_root(block, receipts):
             state.revert(snapshot)
             raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
                              (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts))), len(receipts))
@@ -168,7 +168,6 @@ def validate_transaction(state, tx):
         raise BlockGasLimitReached(rp('gaslimit', state.gas_used + tx.startgas, state.gas_limit))
 
     return True
-
 
 def apply_const_message(state, msg):
     state1 = state.ephemeral_clone()
@@ -301,6 +300,8 @@ def validate_block_header(state, header):
 def validate_block(state, block):
     state_prime, receipts = apply_block(state, block)
 
+def validate_receipt_root(block, receipts):
+    return block.header.receipts_root == mk_receipt_sha(receipts)
 
 # Gas limit adjustment algo
 def calc_gaslimit(parent, config=default_config):
