@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+from pprint import pprint
 
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
@@ -70,7 +71,7 @@ def check_snapshot_consistency(snapshot, env=None):
             open(fn, 'w').write(json.dumps(snapshot))
         raise Exception("snapshot difference, see {}*".format(fn[:-1]))
 
-REPORT_INTERVAL = 1000
+REPORT_INTERVAL = 100
 SAVE_INTERVAL = 10 * 1000
 SNAPSHOT_INTERVAL = 100 * 1000
 
@@ -79,6 +80,8 @@ MANUAL_SNAPSHOTS = [909330]
 # don't check pow
 BlockHeader.check_pow = lambda *args: True
 
+
+
 # process blocks
 while len(block_rlps) > 0:
     st = time.time()
@@ -86,8 +89,12 @@ while len(block_rlps) > 0:
     gas_used = 0
     for block in block_rlps:
         # print 'prevh:', s.prev_headers
+        c.state.tracker.start('decode_block')
         block = rlp.decode(block.strip().decode('hex'), Block)
+        c.state.tracker.stop('decode_block')
+        c.state.tracker.start('add_block')
         assert c.add_block(block)
+        c.state.tracker.stop('add_block')
         num_txs += len(block.transactions)
         gas_used += block.gas_used
         num_blocks = block.header.number + 1
@@ -101,10 +108,13 @@ while len(block_rlps) > 0:
             st = time.time()
             num_txs = 0
             gas_used = 0
+            pprint(c.state.tracker.report())
         if num_blocks % SAVE_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
             # snapshot
             print 'creating snapshot'
+            c.state.tracker.start('snapshot')
             snapshot = c.state.to_snapshot()
+            c.state.tracker.stop('snapshot')
             if (num_blocks / SAVE_INTERVAL) % 2 == 1:
                 check_snapshot_consistency(snapshot, env=None)
             else:

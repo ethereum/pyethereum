@@ -107,7 +107,9 @@ def apply_block(state, block, creating=False):
     receipts = []
     # Process transactions
     for tx in block.transactions:
+        state.tracker.start('apply_transaction')
         success, output, logs = apply_transaction(state, tx)
+        state.tracker.stop('apply_transaction')
         r = mk_receipt(state, logs)
         receipts.append(r)
         state.bloom |= r.bloom  # int
@@ -194,11 +196,42 @@ def apply_const_message(state, msg):
     return data if result else None
 
 
+def recover_sender(state, tx):
+    state.tracker.start('apply_tx.ecrecover.rlpenc')
+    rlpdata = rlp.encode(tx, transactions.UnsignedTransaction)
+    rawhash = utils.sha3(rlpdata)
+    state.tracker.stop('apply_tx.ecrecover.rlpenc')
+    state.tracker.start('apply_tx.ecrecover.ecrecover_to_pub')
+    pub = utils.ecrecover_to_pub(rawhash, tx.v, tx.r, tx.s)
+    state.tracker.stop('apply_tx.ecrecover.ecrecover_to_pub')
+    return utils.sha3(pub)[-20:]
+
+import c_secp256k1
+def recover_sender2(state, tx):
+    state.tracker.start('apply_tx.ecrecover_raw')
+    rlpdata = rlp.encode(tx, transactions.UnsignedTransaction)
+    rawhash = utils.sha3(rlpdata)
+    # Takes a rawhash message of length 32 bytes and a (v, r, s) tuple
+    # Returns a public key for the private key used in the sign function
+    pub = c_secp256k1.ecdsa_recover_raw(rawhash, (tx.v, tx.r, tx.s))
+    state.tracker.stop('apply_tx.ecrecover_raw')
+    return utils.sha3(pub)[-20:]
+
+
 def apply_transaction(state, tx):
+    state.tracker.start('apply_tx.ecrecover')
+    tx.sender = recover_sender(state, tx)
+    state.tracker.stop('apply_tx.ecrecover')
+    s2 = recover_sender2(state, tx)
+    # print s2 == tx.sender
+
+    state.tracker.start('apply_tx.pre_apply_msg')
     state.logs = []
     state.suicides = []
     state.refunds = 0
+    state.tracker.start('apply_tx.validate_tx')
     validate_transaction(state, tx)
+    state.tracker.stop('apply_tx.validate_tx')
 
     # print(block.get_nonce(tx.sender), '@@@')
 
@@ -217,6 +250,8 @@ def apply_transaction(state, tx):
     # start transacting #################
     state.increment_nonce(tx.sender)
 
+    state.tracker.stop('apply_tx.pre_apply_msg')
+    state.tracker.start('apply_tx.apply_msg')
     # buy startgas
     assert state.get_balance(tx.sender) >= tx.startgas * tx.gasprice
     state.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
@@ -233,7 +268,8 @@ def apply_transaction(state, tx):
         result, gas_remained, data = create_contract(ext, message)
         assert utils.is_numeric(gas_remained)
         log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=data)
-
+    state.tracker.stop('apply_tx.apply_msg')
+    state.tracker.start('apply_tx.post_apply_msg')
     assert gas_remained >= 0
 
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
@@ -271,8 +307,10 @@ def apply_transaction(state, tx):
         state.del_account(s)
     logs = state.logs
     state.logs = []
+
     if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
+    state.tracker.stop('apply_tx.post_apply_msg')
     return success, output, logs
 
 

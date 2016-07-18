@@ -1,3 +1,4 @@
+import time
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_hex, encode_int, \
@@ -65,6 +66,8 @@ class State():
         self.cache = {}
         self.modified = {}
         self.log_listeners = []
+        self.tracker = TimeTracker()
+
 
     @property
     def db(self):
@@ -201,6 +204,12 @@ class State():
 
     # Commit the cache to the trie
     def commit(self):
+        self.tracker.start('commit')
+        self._commit()
+        self.tracker.stop('commit')
+
+
+    def _commit(self):
         rt = self.trie.root_hash
         for addr, subcache in self.cache.items():
             if addr not in self.modified:
@@ -511,3 +520,41 @@ class Account(rlp.Serializable):
         o = cls(initial_nonce, 0, trie.BLANK_ROOT, code_hash, db)
         o._mutable = True
         return o
+
+
+class TimeTracker(object):
+
+    def __init__(self):
+        self.tracker = dict()
+
+    def _add_tracker(self, name):
+        assert name not in self.tracker
+        self.tracker[name] = dict(started=False, times=[])
+
+    def start(self, name, restart=False):
+        if name not in self.tracker:
+            self._add_tracker(name)
+        if self.tracker[name]['started']:
+            assert restart
+            self.stop(name)
+        self.tracker[name]['started'] = time.time()
+
+    def stop(self, name):
+        if not self.tracker[name]['started']:
+            return
+        elapsed = time.time() - self.tracker[name]['started']
+        self.tracker[name]['times'].append(elapsed)
+        self.tracker[name]['started'] = False
+
+    def restart(self, name):
+        self.stop(name)
+        self.start(name)
+
+    def report(self):
+        r = dict()
+        for name, v in self.tracker.items():
+            r[name] = dict(calls=len(v['times']),
+                           total=sum(v['times']))
+        return r
+
+

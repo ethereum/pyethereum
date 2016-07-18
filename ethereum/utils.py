@@ -84,6 +84,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
         )
         pub = pk.serialize(compressed=False)[1:]
     else:
+        assert False
         recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
         pub = encode_pubkey(recovered_addr, 'bin_electrum')
     assert len(pub) == 64

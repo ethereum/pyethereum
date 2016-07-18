@@ -64,8 +64,11 @@ class Log(rlp.Serializable):
             (encode_hex(self.address), self.topics, self.data)
 
 def apply_msg(ext, msg):
-    return _apply_msg(ext, msg, ext.get_code(msg.code_address))
-
+    ext._state.tracker.start('apply_msg')
+    r = _apply_msg(ext, msg, ext.get_code(msg.code_address))
+    ext._state.tracker.stop('apply_msg')
+    ext._state.tracker.stop('vm_execute')
+    return r
 
 def _apply_msg(ext, msg, code):
     trace_msg = log_msg.is_active('trace')
@@ -82,7 +85,9 @@ def _apply_msg(ext, msg, code):
                             state=ext.log_storage(msg.to))
         # log_state.trace('CODE', code=code)
     # Transfer value, instaquit if not enough
+    ext._state.tracker.start('ext.snapshot')
     snapshot = ext.snapshot()
+    ext._state.tracker.stop('ext.snapshot')
     if msg.transfers_value:
         if not ext.transfer_value(msg.sender, msg.to, msg.value):
             log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to),
@@ -92,7 +97,9 @@ def _apply_msg(ext, msg, code):
     if msg.code_address in specials.specials:
         res, gas, dat = specials.specials[msg.code_address](ext, msg)
     else:
+        ext._state.tracker.start('vm_execute', restart=True)
         res, gas, dat = vm.vm_execute(ext, msg, code)
+        ext._state.tracker.stop('vm_execute')
     # gas = int(gas)
     # assert utils.is_numeric(gas)
     if trace_msg:
@@ -108,7 +115,9 @@ def _apply_msg(ext, msg, code):
 
     if res == 0:
         log_msg.debug('REVERTING')
+        ext._state.tracker.start('ext.revert')
         ext.revert(snapshot)
+        ext._state.tracker.stop('ext.revert')
 
     return res, gas, dat
 
