@@ -73,6 +73,7 @@ REPORT_INTERVAL = 1000
 SAVE_INTERVAL = 10 * 1000
 SNAPSHOT_INTERVAL = 100 * 1000
 
+MANUAL_SNAPSHOTS = [909330]
 
 # don't check pow
 BlockHeader.check_pow = lambda *args: True
@@ -99,7 +100,7 @@ while len(block_rlps) > 0:
             st = time.time()
             num_txs = 0
             gas_used = 0
-        if num_blocks % SAVE_INTERVAL == 0:
+        if num_blocks % SAVE_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
             # snapshot
             print 'creating snapshot'
             snapshot = c.state.to_snapshot()
@@ -110,6 +111,8 @@ while len(block_rlps) > 0:
             # store checkpoint
             if num_blocks % SNAPSHOT_INTERVAL == 0:
                 fn = STATE_SNAPSHOT_FN.format(num_blocks / 1000)
+            elif num_blocks in MANUAL_SNAPSHOTS:
+                fn = STATE_SNAPSHOT_FN.format(num_blocks)
             else:
                 fn = STATE_STORE_FN
             open(fn, 'w').write(json.dumps(snapshot, indent=4))
