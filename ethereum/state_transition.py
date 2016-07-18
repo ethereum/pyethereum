@@ -17,7 +17,7 @@ from ethereum import vm
 from ethereum.specials import specials
 from config import default_config
 from db import BaseDB, EphemDB
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransactionError, \
     BlockGasLimitReached, InsufficientBalance
 import sys
 if sys.version_info.major == 2:
@@ -155,7 +155,7 @@ def validate_transaction(state, tx):
         if state.is_METROPOLIS():
             tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
         else:
-            raise UnsignedTransaction(tx)
+            raise UnsignedTransactionError(tx)
     if state.is_METROPOLIS():
         tx.check_low_s_metropolis()
     elif state.is_HOMESTEAD():

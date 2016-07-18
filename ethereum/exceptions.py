@@ -10,7 +10,7 @@ class InvalidTransaction(Exception):
     pass
 
 
-class UnsignedTransaction(InvalidTransaction):
+class UnsignedTransactionError(InvalidTransaction):
     pass
 
 

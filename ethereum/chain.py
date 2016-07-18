@@ -7,7 +7,7 @@ from ethereum.state_transition import apply_block, initialize, \
     calc_difficulty, calc_gaslimit, Receipt, mk_receipt
 import rlp
 from rlp.utils import encode_hex
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransactionError, \
     BlockGasLimitReached, InsufficientBalance
 from ethereum.slogging import get_logger
 from ethereum.config import Env
@@ -363,7 +363,7 @@ class Chain(object):
                 receipts.append(r)
                 temp_state.bloom |= r.bloom  # int
             except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
-                    InvalidNonce, UnsignedTransaction):
+                    InvalidNonce, UnsignedTransactionError):
                 pass
             excluded[tx.hash] = True
         # Add uncles

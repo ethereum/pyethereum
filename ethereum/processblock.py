@@ -9,7 +9,7 @@ from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
     mk_metropolis_contract_address, int_to_addr, big_endian_to_int
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransactionError, \
         BlockGasLimitReached, InsufficientBalance
 from ethereum import transactions
 import ethereum.config as config
