@@ -13,8 +13,9 @@ import time
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
-state_transition.SKIP_RECEIPT_ROOT_VALIDATION = True
-state_transition.SKIP_MEDSTATES = True
+state_transition.SKIP_MEDSTATES = False
+state_transition.SKIP_RECEIPT_ROOT_VALIDATION = False
+assert not state_transition.SKIP_MEDSTATES or state_transition.SKIP_RECEIPT_ROOT_VALIDATION
 
 STATE_STORE_FN = 'saved_state.json'
 STATE_SNAPSHOT_FN = 'saved_snapshot_{}k.json'
