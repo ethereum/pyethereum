@@ -198,6 +198,11 @@ class State():
             for k in self.cache[addr]:
                 if k not in ACCOUNT_SPECIAL_PARAMS:
                     self.set_storage(addr, k, '')
+        t = SecureTrie(Trie(self.trie.db))
+        acct = self._get_account_unsafe(addr)
+        t.root_hash = acct.storage
+        for k in t.to_dict().keys():
+            self.set_storage(addr, k, '')
 
     # Commit the cache to the trie
     def commit(self):
@@ -253,6 +258,7 @@ class State():
         blank_acct = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
         for param in ACCOUNT_OUTPUTTABLE_PARAMS:
             self.set_storage(address, param, getattr(blank_acct, param))
+        self.reset_storage(address)
         self.set_storage(address, 'deleted', True)
 
     def add_log(self, log):

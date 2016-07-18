@@ -13,19 +13,28 @@ import time
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
-state_transition.SKIP_MEDSTATES = False
-state_transition.SKIP_RECEIPT_ROOT_VALIDATION = False
-assert not state_transition.SKIP_MEDSTATES or state_transition.SKIP_RECEIPT_ROOT_VALIDATION
+state_transition.SKIP_MEDSTATES = True
+state_transition.SKIP_RECEIPT_ROOT_VALIDATION = True
+# assert not state_transition.SKIP_MEDSTATES or state_transition.SKIP_RECEIPT_ROOT_VALIDATION
 
+STATE_LOAD_FN = 'saved_state.json'
 STATE_STORE_FN = 'saved_state.json'
 STATE_SNAPSHOT_FN = 'saved_snapshot_{}k.json'
 
-if STATE_STORE_FN in os.listdir(os.getcwd()):
-    print 'loading state from saved_state.json ...'
-    c = chain.Chain(json.load(open(STATE_STORE_FN)), Env())
+if '--saved_state' in sys.argv:
+    STATE_LOAD_FN = sys.argv[sys.argv.index('--saved_state') + 1]
+
+RLP_BLOCKS_FILE = '1700kblocks.rlp'
+
+if '--rlp_blocks' in sys.argv:
+    RLP_BLOCKS_FILE = sys.argv[sys.argv.index('--rlp_blocks') + 1]
+
+if STATE_LOAD_FN in os.listdir(os.getcwd()):
+    print 'loading state from %s ...' % STATE_LOAD_FN
+    c = chain.Chain(json.load(open(STATE_LOAD_FN)), Env())
     print 'loaded.'
 elif 'genesis_frontier.json' not in os.listdir(os.getcwd()):
-    print 'Please download genesis_frontier.json from' + \
+    print 'Please download genesis_frontier.json from ' + \
         'http://vitalik.ca/files/genesis_frontier.json'
     sys.exit()
 else:
@@ -35,16 +44,18 @@ else:
     assert c.state.prev_headers[0].hash.encode('hex') == \
         'd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3'
     print 'state generated from genesis'
-if '200kblocks.rlp' not in os.listdir(os.getcwd()):
+print 'Attempting to open %s' % RLP_BLOCKS_FILE
+if RLP_BLOCKS_FILE not in os.listdir(os.getcwd()):
     print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp' + \
           'and put it in this directory to continue the test'
     sys.exit()
 
 batch_size = 1024 * 10240  # approximately 10000 blocks
-f = open('1700kblocks.rlp')
+f = open(RLP_BLOCKS_FILE)
 
 # skip already processed blocks
 skip = c.state.block_number + 1
+print 'Skipping %d' % skip
 count = 0
 block_rlps = f.readlines(batch_size)
 while len(block_rlps) > 0:
@@ -74,7 +85,7 @@ REPORT_INTERVAL = 1000
 SAVE_INTERVAL = 10 * 1000
 SNAPSHOT_INTERVAL = 100 * 1000
 
-MANUAL_SNAPSHOTS = [909330]
+MANUAL_SNAPSHOTS = [68000, 68382, 68666, 69000, 909330]
 
 # don't check pow
 BlockHeader.check_pow = lambda *args: True
@@ -91,7 +102,7 @@ while len(block_rlps) > 0:
         num_txs += len(block.transactions)
         gas_used += block.gas_used
         num_blocks = block.header.number + 1
-        if num_blocks % REPORT_INTERVAL == 0:
+        if num_blocks % REPORT_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
             # report
             elapsed = time.time() - st
             tps = num_txs / elapsed
