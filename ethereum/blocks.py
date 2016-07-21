@@ -1171,14 +1171,6 @@ class Block(rlp.Serializable):
         self.ether_delta = mysnapshot['ether_delta']
 
     def initialize(self, parent):
-        # DAO fork
-        if self.number == self.config["DAO_FORK_BLKNUM"]:
-            dao_main_addr = utils.normalize_address(self.config["DAO_MAIN_ADDR"])
-            for acct in map(utils.normalize_address, self.config["DAO_ADDRESS_LIST"]):
-                self.delta_balance(dao_main_addr, self.get_balance(acct))
-                self.set_balance(acct, 0)
-            self.set_code(dao_main_addr, self.config["DAO_NEWCODE"])
-        # Likely metropolis changes
         if self.number == self.config["METROPOLIS_FORK_BLKNUM"]:
             self.set_code(utils.normalize_address(self.config["METROPOLIS_STATEROOT_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
             self.set_code(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]), self.config["METROPOLIS_GETTER_CODE"])
@@ -1189,6 +1181,9 @@ class Block(rlp.Serializable):
             self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
                                   self.number % self.config["METROPOLIS_WRAPAROUND"],
                                   self.prevhash)
+        if self.number == self.config['DAO_FORK_BLKNUM']:
+            for acct in self.config['CHILD_DAO_LIST']:
+                self.transfer_value(acct, self.config['DAO_WITHDRAWER'], self.get_balance(acct))
 
     def finalize(self):
         """Apply rewards and commit."""

@@ -1,11 +1,8 @@
-import pytest
-
 from ethereum import blocks, utils, db
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
-import os
 import sys
 import ethereum.testutils as testutils
 import copy
@@ -44,7 +41,7 @@ def valueconv(k, v):
     return v
 
 
-def run_block_test(params, config_overrides = {}):
+def run_block_test(params, config_overrides={}):
     b = blocks.genesis(env, start_alloc=params["pre"])
     gbh = params["genesisBlockHeader"]
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
@@ -109,7 +106,10 @@ def run_block_test(params, config_overrides = {}):
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {'HOMESTEAD_FORK_BLKNUM':0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000 })
+    run_block_test(testdata, {
+        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
+        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
+    })
 
 
 excludes = {
@@ -137,14 +137,16 @@ def main():
                     print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata, {
                         'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
-                        else 1000000})
+                        else 1000000,
+                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
                     run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000})
+                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
+                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
 
 
 if __name__ == '__main__':
