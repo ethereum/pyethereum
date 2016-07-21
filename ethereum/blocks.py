@@ -1181,6 +1181,9 @@ class Block(rlp.Serializable):
             self.set_storage_data(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
                                   self.number % self.config["METROPOLIS_WRAPAROUND"],
                                   self.prevhash)
+        if self.number == self.config['DAO_FORK_BLKNUM']:
+            for acct in self.config['CHILD_DAO_LIST']:
+                self.transfer_value(acct, self.config['DAO_WITHDRAWER'], self.get_balance(acct))
 
     def finalize(self):
         """Apply rewards and commit."""

@@ -1,11 +1,8 @@
-import pytest
-
 from ethereum import blocks, utils, db
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
-import os
 import sys
 import ethereum.testutils as testutils
 import copy
@@ -44,7 +41,7 @@ def valueconv(k, v):
     return v
 
 
-def run_block_test(params, config_overrides = {}):
+def run_block_test(params, config_overrides={}):
     b = blocks.genesis(env, start_alloc=params["pre"])
     gbh = params["genesisBlockHeader"]
     b.bloom = utils.scanners['int256b'](gbh["bloom"])
