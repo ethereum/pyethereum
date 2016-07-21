@@ -2,6 +2,8 @@ from rlp.utils import decode_hex
 
 from ethereum import utils
 from ethereum.db import BaseDB
+from ethereum.child_dao_list import L as child_dao_list
+
 
 default_config = dict(
     # Genesis block difficulty
@@ -57,6 +59,10 @@ default_config = dict(
     METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
     # Metropolis fork
+    # DAO fork
+    DAO_FORK_BLKNUM=1920000,
+    CHILD_DAO_LIST=map(utils.normalize_address, child_dao_list),
+    DAO_WITHDRAWER=utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
