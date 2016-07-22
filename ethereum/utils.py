@@ -162,7 +162,33 @@ def normalize_address(x, allow_blank=False):
 
 
 def zpad(x, l):
+    """ Left zero pad value `x` at least to length `l`.
+
+    >>> zpad('', 1)
+    '\x00'
+    >>> zpad('\xca\xfe', 4)
+    '\x00\x00\xca\xfe'
+    >>> zpad('\xff', 1)
+    '\xff'
+    >>> zpad('\xca\xfe', 2)
+    '\xca\xfe'
+    """
     return b'\x00' * max(0, l - len(x)) + x
+
+
+def rzpad(value, total_length):
+    """ Right zero pad value `x` at least to length `l`.
+
+    >>> zpad('', 1)
+    '\x00'
+    >>> zpad('\xca\xfe', 4)
+    '\xca\xfe\x00\x00'
+    >>> zpad('\xff', 1)
+    '\xff'
+    >>> zpad('\xca\xfe', 2)
+    '\xca\xfe'
+    """
+    return value + b'\x00' * max(0, total_length - len(value))
 
 
 def zunpad(x):
