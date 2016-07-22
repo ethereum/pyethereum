@@ -309,7 +309,7 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         return zpad(int_to_big_endian(value), 32)
 
     if base == 'string':
-        if isinstance(arg, unicode):
+        if isinstance(arg, utils.unicode):
             arg = arg.encode('utf8')
         else:
             try:

@@ -2,7 +2,7 @@
 import pytest
 
 from ethereum.utils import (
-    big_endian_to_int, int_to_big_endian, rzpad, sha3, zpad,
+    big_endian_to_int, int_to_big_endian, decode_hex, encode_hex, rzpad, sha3, zpad,
 )
 from ethereum.abi import (
     _canonical_type, decode_abi, decode_single, decint, encode_abi,
@@ -37,10 +37,10 @@ def test_canonical_types():
 
 def test_function_selector():
     # https://github.com/ethereum/wiki/wiki/Ethereum-Contract-ABI#function-selector-and-argument-encoding
-    baz_selector = big_endian_to_int('CDCD77C0'.decode('hex'))
-    bar_selector = big_endian_to_int('AB55044D'.decode('hex'))
-    sam_selector = big_endian_to_int('A5643BF2'.decode('hex'))
-    f_selector = big_endian_to_int('8BE65246'.decode('hex'))
+    baz_selector = big_endian_to_int(decode_hex('CDCD77C0'))
+    bar_selector = big_endian_to_int(decode_hex('AB55044D'))
+    sam_selector = big_endian_to_int(decode_hex('A5643BF2'))
+    f_selector = big_endian_to_int(decode_hex('8BE65246'))
 
     assert big_endian_to_int(sha3('baz(uint32,bool)')[:4]) == baz_selector
     assert big_endian_to_int(sha3('bar(fixed128x128[2])')[:4]) == bar_selector
@@ -79,7 +79,7 @@ def test_event():
 
     result = contract_abi.decode_event(topics, data)
 
-    assert result['_event_type'] == 'Test'
+    assert result['_event_type'] == b'Test'
     assert result['a'] == 1
     assert result['b'] == 2
 
@@ -126,32 +126,32 @@ def test_encode_int():
     int256 = ('int', '256', [])
 
     int256_maximum = (
-        '\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
     )
     int256_minimum = (
-        '\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-        '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        b'\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
     )
     int256_128 = (
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x80'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x80'
     )
     int256_2_to_31 = (
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x80\x00\x00\x00'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x80\x00\x00\x00'
     )
     int256_negative_one = (
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
     )
 
     assert encode_single(int256, int256_minimum) == int256_minimum
 
-    assert encode_single(int8, 0) == zpad('\x00', 32)
-    assert encode_single(int8, 2 ** 7 - 1) == zpad('\x7f', 32)
-    assert encode_single(int8, -1) == zpad('\xff', 32)
-    assert encode_single(int8, -2 ** 7) == zpad('\x80', 32)
+    assert encode_single(int8, 0) == zpad(b'\x00', 32)
+    assert encode_single(int8, 2 ** 7 - 1) == zpad(b'\x7f', 32)
+    assert encode_single(int8, -1) == zpad(b'\xff', 32)
+    assert encode_single(int8, -2 ** 7) == zpad(b'\x80', 32)
 
     with pytest.raises(ValueOutOfBounds):
         encode_single(int8, 128)
@@ -159,12 +159,12 @@ def test_encode_int():
     with pytest.raises(ValueOutOfBounds):
         encode_single(int8, -129)
 
-    assert encode_single(int32, 0) == zpad('\x00', 32)
-    assert encode_single(int32, 2 ** 7 - 1) == zpad('\x7f', 32)
-    assert encode_single(int32, 2 ** 31 - 1) == zpad('\x7f\xff\xff\xff', 32)
-    assert encode_single(int32, -1) == zpad('\xff\xff\xff\xff', 32)
-    assert encode_single(int32, -2 ** 7) == zpad('\xff\xff\xff\x80', 32)
-    assert encode_single(int32, -2 ** 31) == zpad('\x80\x00\x00\x00', 32)
+    assert encode_single(int32, 0) == zpad(b'\x00', 32)
+    assert encode_single(int32, 2 ** 7 - 1) == zpad(b'\x7f', 32)
+    assert encode_single(int32, 2 ** 31 - 1) == zpad(b'\x7f\xff\xff\xff', 32)
+    assert encode_single(int32, -1) == zpad(b'\xff\xff\xff\xff', 32)
+    assert encode_single(int32, -2 ** 7) == zpad(b'\xff\xff\xff\x80', 32)
+    assert encode_single(int32, -2 ** 31) == zpad(b'\x80\x00\x00\x00', 32)
 
     with pytest.raises(ValueOutOfBounds):
         encode_single(int32, 2 ** 32)
@@ -172,9 +172,9 @@ def test_encode_int():
     with pytest.raises(ValueOutOfBounds):
         encode_single(int32, -(2 ** 32))
 
-    assert encode_single(int256, 0) == zpad('\x00', 32)
-    assert encode_single(int256, 2 ** 7 - 1) == zpad('\x7f', 32)
-    assert encode_single(int256, 2 ** 31 - 1) == zpad('\x7f\xff\xff\xff', 32)
+    assert encode_single(int256, 0) == zpad(b'\x00', 32)
+    assert encode_single(int256, 2 ** 7 - 1) == zpad(b'\x7f', 32)
+    assert encode_single(int256, 2 ** 31 - 1) == zpad(b'\x7f\xff\xff\xff', 32)
     assert encode_single(int256, 2 ** 255 - 1) == int256_maximum
     assert encode_single(int256, -1) == int256_negative_one
     assert encode_single(int256, -2 ** 7) == int256_128
@@ -202,24 +202,24 @@ def test_encode_uint():
     with pytest.raises(ValueOutOfBounds):
         encode_single(uint256, -1)
 
-    assert encode_single(uint8, 0) == zpad('\x00', 32)
-    assert encode_single(uint32, 0) == zpad('\x00', 32)
-    assert encode_single(uint256, 0) == zpad('\x00', 32)
+    assert encode_single(uint8, 0) == zpad(b'\x00', 32)
+    assert encode_single(uint32, 0) == zpad(b'\x00', 32)
+    assert encode_single(uint256, 0) == zpad(b'\x00', 32)
 
-    assert encode_single(uint8, 1) == zpad('\x01', 32)
-    assert encode_single(uint32, 1) == zpad('\x01', 32)
-    assert encode_single(uint256, 1) == zpad('\x01', 32)
+    assert encode_single(uint8, 1) == zpad(b'\x01', 32)
+    assert encode_single(uint32, 1) == zpad(b'\x01', 32)
+    assert encode_single(uint256, 1) == zpad(b'\x01', 32)
 
-    assert encode_single(uint8, 2 ** 8 - 1) == zpad('\xff', 32)
-    assert encode_single(uint32, 2 ** 8 - 1) == zpad('\xff', 32)
-    assert encode_single(uint256, 2 ** 8 - 1) == zpad('\xff', 32)
+    assert encode_single(uint8, 2 ** 8 - 1) == zpad(b'\xff', 32)
+    assert encode_single(uint32, 2 ** 8 - 1) == zpad(b'\xff', 32)
+    assert encode_single(uint256, 2 ** 8 - 1) == zpad(b'\xff', 32)
 
-    assert encode_single(uint32, 2 ** 32 - 1) == zpad('\xff\xff\xff\xff', 32)
-    assert encode_single(uint256, 2 ** 32 - 1) == zpad('\xff\xff\xff\xff', 32)
+    assert encode_single(uint32, 2 ** 32 - 1) == zpad(b'\xff\xff\xff\xff', 32)
+    assert encode_single(uint256, 2 ** 32 - 1) == zpad(b'\xff\xff\xff\xff', 32)
 
     uint256_maximum = (
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-        '\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff'
     )
     assert encode_single(uint256, 2 ** 256 - 1) == uint256_maximum
 
@@ -228,8 +228,8 @@ def test_encode_bool():
     bool_ = ('bool', '', [])
     uint8 = ('uint', '8', [])
 
-    assert encode_single(bool_, True) == zpad('\x01', 32)
-    assert encode_single(bool_, False) == zpad('\x00', 32)
+    assert encode_single(bool_, True) == zpad(b'\x01', 32)
+    assert encode_single(bool_, False) == zpad(b'\x00', 32)
 
     assert encode_single(bool_, True) == encode_single(uint8, 1)
     assert encode_single(bool_, False) == encode_single(uint8, 0)
@@ -238,21 +238,21 @@ def test_encode_bool():
 def test_encode_fixed():
     fixed128x128 = ('fixed', '128x128', [])
 
-    _2_125 = (
-        '00000000000000000000000000000002'
-        '20000000000000000000000000000000'
-    ).decode('hex')
+    _2_125 = decode_hex(
+        b'00000000000000000000000000000002'
+        b'20000000000000000000000000000000'
+    )
 
-    _8_5 = (
-        '00000000000000000000000000000008'
-        '80000000000000000000000000000000'
-    ).decode('hex')
+    _8_5 = decode_hex(
+        b'00000000000000000000000000000008'
+        b'80000000000000000000000000000000'
+    )
 
     assert encode_single(fixed128x128, 2.125) == _2_125
     assert encode_single(fixed128x128, 8.5) == _8_5
 
-    assert encode_single(fixed128x128, 1.125) == (b'\x00'*15 + b'\x01\x20' + b'\x00'*15)
-    assert encode_single(fixed128x128, -1.125) == (b'\xff'*15 + b'\xfe' + b'\xe0' + b'\x00'*15)
+    assert encode_single(fixed128x128, 1.125) == (b'\x00' * 15 + b'\x01\x20' + b'\x00' * 15)
+    assert encode_single(fixed128x128, -1.125) == (b'\xff' * 15 + b'\xfe' + b'\xe0' + b'\x00' * 15)
 
     with pytest.raises(ValueOutOfBounds):
         encode_single(fixed128x128, 2 ** 127)
@@ -264,22 +264,22 @@ def test_encode_fixed():
 def test_encoded_ufixed():
     ufixed128x128 = ('ufixed', '128x128', [])
 
-    _2_125 = (
-        '00000000000000000000000000000002'
-        '20000000000000000000000000000000'
-    ).decode('hex')
+    _2_125 = decode_hex(
+        b'00000000000000000000000000000002'
+        b'20000000000000000000000000000000'
+    )
 
-    _8_5 = (
-        '00000000000000000000000000000008'
-        '80000000000000000000000000000000'
-    ).decode('hex')
+    _8_5 = decode_hex(
+        b'00000000000000000000000000000008'
+        b'80000000000000000000000000000000'
+    )
 
     assert encode_single(ufixed128x128, 2.125) == _2_125
     assert encode_single(ufixed128x128, 8.5) == _8_5
 
-    assert encode_single(ufixed128x128, 0) == (b'\x00'*32)
-    assert encode_single(ufixed128x128, 1.125) == (b'\x00'*15 + b'\x01\x20' + '\x00'*15)
-    assert encode_single(ufixed128x128, 2**127-1) == (b'\x7f' + b'\xff'*15 + b'\x00'*16)
+    assert encode_single(ufixed128x128, 0) == (b'\x00' * 32)
+    assert encode_single(ufixed128x128, 1.125) == (b'\x00' * 15 + b'\x01\x20' + b'\x00' * 15)
+    assert encode_single(ufixed128x128, 2**127 - 1) == (b'\x7f' + b'\xff' * 15 + b'\x00' * 16)
 
     with pytest.raises(ValueOutOfBounds):
         encode_single(ufixed128x128, 2 ** 128 + 1)
@@ -293,18 +293,18 @@ def test_encode_dynamic_bytes():
     uint256 = ('uint', '256', [])
 
     # only the size of the bytes
-    assert encode_single(dynamic_bytes, '') == zpad('\x00', 32)
+    assert encode_single(dynamic_bytes, b'') == zpad(b'\x00', 32)
 
-    a = encode_single(uint256, 1) + rzpad('\x61', 32)
-    assert encode_single(dynamic_bytes, '\x61') == a
+    a = encode_single(uint256, 1) + rzpad(b'\x61', 32)
+    assert encode_single(dynamic_bytes, b'\x61') == a
 
-    dave_bin = (
-        '0000000000000000000000000000000000000000000000000000000000000004'
-        '6461766500000000000000000000000000000000000000000000000000000000'
-    ).decode('hex')
-    dave = encode_single(uint256, 4) + rzpad('\x64\x61\x76\x65', 32)
-    assert encode_single(dynamic_bytes, '\x64\x61\x76\x65') == dave_bin
-    assert encode_single(dynamic_bytes, '\x64\x61\x76\x65') == dave
+    dave_bin = decode_hex(
+        b'0000000000000000000000000000000000000000000000000000000000000004'
+        b'6461766500000000000000000000000000000000000000000000000000000000'
+    )
+    dave = encode_single(uint256, 4) + rzpad(b'\x64\x61\x76\x65', 32)
+    assert encode_single(dynamic_bytes, b'\x64\x61\x76\x65') == dave_bin
+    assert encode_single(dynamic_bytes, b'\x64\x61\x76\x65') == dave
 
 
 def test_encode_dynamic_string():
@@ -325,7 +325,7 @@ def test_encode_hash():
     hash8 = ('hash', '8', [])
 
     assert encode_single(hash8, b'\x00' * 8) == b'\x00' * 32
-    assert encode_single(hash8, '00'*8) == b'\x00'*32
+    assert encode_single(hash8, b'00' * 8) == b'\x00' * 32
 
 
 def test_encode_address():
@@ -378,8 +378,8 @@ def test_encode_decode_fixed():
     fixed_data = encode_single(fixed128x128, 1)
     assert decode_single(fixed128x128, fixed_data) == 1
 
-    fixed_data = encode_single(fixed128x128, 2**127-1)
-    assert decode_single(fixed128x128, fixed_data) == (2**127-1)*1.0
+    fixed_data = encode_single(fixed128x128, 2**127 - 1)
+    assert decode_single(fixed128x128, fixed_data) == (2**127 - 1) * 1.0
 
     fixed_data = encode_single(fixed128x128, -1)
     assert decode_single(fixed128x128, fixed_data) == -1
@@ -414,12 +414,12 @@ def test_encode_decode_address():
         address3,
     ]
     all_addresses_encoded = [
-        address1.encode('hex'),
-        address2.encode('hex'),
-        address3.encode('hex'),
+        encode_hex(address1),
+        encode_hex(address2),
+        encode_hex(address3),
     ]
 
-    assert decode_abi(['address'], encode_abi(['address'], [address1]))[0] == address1.encode('hex')
+    assert decode_abi(['address'], encode_abi(['address'], [address1]))[0] == encode_hex(address1)
 
     addresses_encoded_together = encode_abi(['address[]'], [all_addresses])
     assert decode_abi(['address[]'], addresses_encoded_together)[0] == all_addresses_encoded
