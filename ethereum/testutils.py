@@ -141,7 +141,6 @@ def run_vm_test(params, mode, profiler=None):
         difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
-
     blk = blocks.Block(header, env=db_env)
 
     # setup state
@@ -292,13 +291,9 @@ def run_state_test(params, mode):
         number=parse_int_or_hex(env['currentNumber']),
         coinbase=decode_hex(env['currentCoinbase']),
         difficulty=parse_int_or_hex(env['currentDifficulty']),
-        timestamp=parse_int_or_hex(env['currentTimestamp']),
-        # work around https://github.com/ethereum/pyethereum/issues/390 [1]:
-        gas_limit=min(2 ** 63 - 1, parse_int_or_hex(env['currentGasLimit'])))
+        gas_limit=parse_int_or_hex(env['currentGasLimit']),
+        timestamp=parse_int_or_hex(env['currentTimestamp']))
     blk = blocks.Block(header, env=db_env)
-
-    # work around https://github.com/ethereum/pyethereum/issues/390 [2]:
-    blk.gas_limit = parse_int_or_hex(env['currentGasLimit'])
 
     # setup state
     for address, h in list(pre.items()):
