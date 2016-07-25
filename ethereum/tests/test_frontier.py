@@ -29,6 +29,10 @@ RLP_BLOCKS_FILE = '1700kblocks.rlp'
 if '--rlp_blocks' in sys.argv:
     RLP_BLOCKS_FILE = sys.argv[sys.argv.index('--rlp_blocks') + 1]
 
+BENCHMARK = 0
+if '--benchmark' in sys.argv:
+    BENCHMARK = int(sys.argv[sys.argv.index('--benchmark') + 1])
+
 if STATE_LOAD_FN in os.listdir(os.getcwd()):
     print 'loading state from %s ...' % STATE_LOAD_FN
     c = chain.Chain(json.load(open(STATE_LOAD_FN)), Env())
@@ -68,6 +72,13 @@ while len(block_rlps) > 0:
         break
 print "skipped %d processed blocks" % skip
 
+def report(st, num_blks, num_txs, gas_used):
+    now = time.time()
+    elapsed = now - st
+    tps = num_txs / elapsed
+    bps = num_blks / elapsed
+    gps = gas_used / elapsed
+    print '%.2f >>> elapsed:%d blocks:%d txs:%d gas:%d bps:%d tps:%d gps:%d' % (now, elapsed, num_blks, num_txs, gas_used, bps, tps, gps)
 
 def check_snapshot_consistency(snapshot, env=None):
     if env:
@@ -81,6 +92,22 @@ def check_snapshot_consistency(snapshot, env=None):
             open(fn, 'w').write(json.dumps(snapshot))
         raise Exception("snapshot difference, see {}*".format(fn[:-1]))
 
+def snapshot(c, num_blocks):
+    print 'creating snapshot'
+    snapshot = c.state.to_snapshot()
+    if (num_blocks / SAVE_INTERVAL) % 2 == 1:
+        check_snapshot_consistency(snapshot, env=None)
+    else:
+        check_snapshot_consistency(snapshot, env=c.env)
+    # store checkpoint
+    if num_blocks % SNAPSHOT_INTERVAL == 0:
+        fn = STATE_SNAPSHOT_FN.format(num_blocks / 1000)
+    elif num_blocks in MANUAL_SNAPSHOTS:
+        fn = STATE_SNAPSHOT_FN.format(num_blocks)
+    else:
+        fn = STATE_STORE_FN
+    open(fn, 'w').write(json.dumps(snapshot, indent=4))
+
 REPORT_INTERVAL = 1000
 SAVE_INTERVAL = 10 * 1000
 SNAPSHOT_INTERVAL = 100 * 1000
@@ -91,44 +118,37 @@ MANUAL_SNAPSHOTS = [68000, 68382, 68666, 69000, 909330]
 BlockHeader.check_pow = lambda *args: True
 
 # process blocks
+st = time.time()
+num_blks = 0
+num_txs = 0
+gas_used = 0
 while len(block_rlps) > 0:
-    st = time.time()
-    num_txs = 0
-    gas_used = 0
     for block in block_rlps:
         # print 'prevh:', s.prev_headers
         block = rlp.decode(block.strip().decode('hex'), Block)
         assert c.add_block(block)
+        num_blks += 1
         num_txs += len(block.transactions)
         gas_used += block.gas_used
-        num_blocks = block.header.number + 1
-        if num_blocks % REPORT_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
-            # report
-            elapsed = time.time() - st
-            tps = num_txs / elapsed
-            bps = REPORT_INTERVAL / elapsed
-            gps = gas_used / elapsed
-            print 'elapsed:%d bps:%d tps:%d gps:%d' % (elapsed, bps, tps, gps)
-            st = time.time()
-            num_txs = 0
-            gas_used = 0
-        if num_blocks % SAVE_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
-            # snapshot
-            print 'creating snapshot'
-            snapshot = c.state.to_snapshot()
-            if (num_blocks / SAVE_INTERVAL) % 2 == 1:
-                check_snapshot_consistency(snapshot, env=None)
-            else:
-                check_snapshot_consistency(snapshot, env=c.env)
-            # store checkpoint
-            if num_blocks % SNAPSHOT_INTERVAL == 0:
-                fn = STATE_SNAPSHOT_FN.format(num_blocks / 1000)
-            elif num_blocks in MANUAL_SNAPSHOTS:
-                fn = STATE_SNAPSHOT_FN.format(num_blocks)
-            else:
-                fn = STATE_STORE_FN
-            open(fn, 'w').write(json.dumps(snapshot, indent=4))
-            st = time.time()
+        if BENCHMARK > 0:
+            report(st, num_blks, num_txs, gas_used)
+            if num_blks == BENCHMARK:
+                print "Benchmark completed (%d blocks)." % num_blks
+                sys.exit()
+        else:
+            num_blocks = block.header.number + 1
+            if num_blocks % REPORT_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
+                report(st, REPORT_INTERVAL, num_txs, gas_used)
+                st = time.time()
+                num_blks = 0
+                num_txs = 0
+                gas_used = 0
+            if num_blocks % SAVE_INTERVAL == 0 or num_blocks in MANUAL_SNAPSHOTS:
+                snapshot(c, num_blocks)
+                st = time.time()
+                num_blks = 0
+                num_txs = 0
+                gas_used = 0
     block_rlps = f.readlines(batch_size)
 
 print 'Test successful'
