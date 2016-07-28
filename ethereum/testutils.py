@@ -391,6 +391,12 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
+            if k == 'out':
+                # see
+                # "https://github.com/ethereum/homestead-guide/blob/master/source/"...
+                #       "contracts-and-transactions/ethereum-tests/state_tests/index.rst"
+                if _shouldbe.startswith('#'):
+                    _reallyis = u"#{}".format(len(_reallyis[2:]) // 2)
             if _shouldbe != _reallyis:
                 print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
                        'post: {shouldbe_post} != {reallyis_post}').format(
