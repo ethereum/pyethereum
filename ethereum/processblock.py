@@ -4,7 +4,7 @@ from rlp.sedes import CountableList, binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import opcodes
 from ethereum import utils
-from ethereum import specials
+from ethereum.specials import specials as default_specials
 from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
@@ -89,8 +89,8 @@ def _apply_msg(ext, msg, code):
                           want=msg.value)
             return 1, msg.gas, []
     # Main loop
-    if msg.code_address in specials.specials:
-        res, gas, dat = specials.specials[msg.code_address](ext, msg)
+    if msg.code_address in ext.specials:
+        res, gas, dat = ext.specials[msg.code_address](ext, msg)
     else:
         res, gas, dat = vm.vm_execute(ext, msg, code)
     # gas = int(gas)

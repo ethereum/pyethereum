@@ -14,7 +14,7 @@ from ethereum import opcodes
 from ethereum.state import get_block
 from ethereum.processblock import apply_msg, create_contract, _apply_msg, Log
 from ethereum import vm
-from ethereum.specials import specials
+from ethereum.specials import specials as default_specials
 from config import default_config
 from db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -43,18 +43,22 @@ VERIFIERS = {
     'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash + header.extra_data]), code_address=int_to_addr(255)))))
 }
 
-
-def initialize(state, block):
-    pre_root = state.trie.root_hash or ('\x00' * 32)
-    state.txindex = 0
-    state.gas_used = 0
-    state.bloom = 0
+def update_block_env_variables(state, block):
     state.timestamp = block.header.timestamp
     state.gas_limit = block.header.gas_limit
     state.block_number = block.header.number
     state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
     state.block_coinbase = block.header.coinbase
     state.block_difficulty = block.header.difficulty
+    
+
+
+def initialize(state, block):
+    pre_root = state.trie.root_hash or ('\x00' * 32)
+    state.txindex = 0
+    state.gas_used = 0
+    state.bloom = 0
+    update_block_env_variables(state, block)
     if state.is_METROPOLIS(at_fork_height=True):
         self.set_code(utils.normalize_address(
             state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
@@ -64,9 +68,11 @@ def initialize(state, block):
         state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
                                state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                pre_root)
+        print 'setting %d stateroot to %s' % (state.block_number, pre_root.encode('hex'))
         state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
                                state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
+        print 'setting %d blockhash to %s' % (state.block_number, (state.prev_headers[0].hash if state.prev_headers else '\x00' * 32).encode('hex'))
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
             state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
@@ -101,9 +107,9 @@ def mk_receipt(state, logs):
 def apply_block(state, block, creating=False):
     # Pre-processing and verification
     snapshot = state.snapshot()
-    assert validate_block_header(state, block.header)
     assert validate_uncles(state, block)
     initialize(state, block)
+    assert validate_block_header(state, block.header)
     receipts = []
     # Process transactions
     for tx in block.transactions:
@@ -344,6 +350,9 @@ def check_gaslimit(parent, gas_limit, config=default_config):
 
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp, config=default_config):
+    # Special case for test chains
+    if parent.difficulty == 1:
+        return 1
     offset = parent.difficulty // config['BLOCK_DIFF_FACTOR']
     if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
         sign = max((2 if parent.uncles_hash != sha3(rlp.encode([])) else 1) -
@@ -394,12 +403,16 @@ def validate_uncles(state, block):
             assert False
         parent = [x for x in ancestor_chain if x.hash == uncle.prevhash][0]
         if uncle.difficulty != calc_difficulty(parent, uncle.timestamp, config=state.config):
+            log.error('difficulty mismatch')
             assert False
         if uncle.number != parent.number + 1:
+            log.error('number mismatch')
             assert False
         if uncle.timestamp < parent.timestamp:
+            log.error('timestamp mismatch')
             assert False
-        if not uncle.check_pow():
+        if VERIFIERS[state.config['CONSENSUS_ALGO']] == 'ethash' and not uncle.check_pow():
+            log.error('pow mismatch')
             assert False
         if uncle.hash in ineligible:
             log.error("Duplicate uncle", block=block,
@@ -412,6 +425,9 @@ def validate_uncles(state, block):
 class VMExt():
 
     def __init__(self, state, tx):
+        self.specials = {k:v for k, v in default_specials.items()}
+        for k, v in state.config['CUSTOM_SPECIALS']:
+            self.specials[k] = v
         self._state = state
         self.get_code = state.get_code
         self.set_code = state.set_code
@@ -455,6 +471,9 @@ class VMExt():
 class BlankVMExt():
 
     def __init__(self, state):
+        self.specials = {k:v for k, v in default_specials.items()}
+        for k, v in state.config['CUSTOM_SPECIALS']:
+            self.specials[k] = v
         self._state = state
         self.get_code = lambda addr: ''
         self.set_code = lambda addr, code: None
@@ -479,7 +498,7 @@ class BlankVMExt():
         self.log = lambda addr, topics, data: None
         self.create = lambda msg: 0, 0, ''
         self.msg = lambda msg: _apply_msg(
-            self, msg, '') if msg.code_address in specials else (0, 0, '')
+            self, msg, '') if msg.code_address in self.specials else (0, 0, '')
         self.blackbox_msg = lambda msg, code: 0, 0, ''
         self.account_exists = lambda addr: False
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()

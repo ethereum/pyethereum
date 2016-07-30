@@ -4,7 +4,8 @@ from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
 from ethereum.state_transition import apply_block, initialize, \
     finalize, apply_transaction, mk_receipt_sha, mk_transaction_sha, \
-    calc_difficulty, calc_gaslimit, Receipt, mk_receipt
+    calc_difficulty, calc_gaslimit, Receipt, mk_receipt, update_block_env_variables, \
+    validate_uncles
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -71,6 +72,7 @@ class Chain(object):
             return None
 
     def mk_poststate_of_blockhash(self, blockhash):
+        print 'Making poststate from blockhash'
         if blockhash not in self.db:
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
         if self.db.get(blockhash) == 'GENESIS':
@@ -78,13 +80,14 @@ class Chain(object):
         state = State(env=self.env)
         block = rlp.decode(self.db.get(blockhash), Block)
         state.trie.root_hash = block.header.state_root
-        initialize(state, block)
+        update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
         state.txindex = len(block.transactions)
         state.recent_uncles = {}
         state.prev_headers = []
         b = block
-        for i in range(257):
+        header_depth = state.config['PREV_HEADER_DEPTH']
+        for i in range(header_depth + 1):
             state.prev_headers.append(b.header)
             if i < 6:
                 state.recent_uncles[state.block_number - i] = []
@@ -94,13 +97,13 @@ class Chain(object):
                 b = rlp.decode(state.db.get(b.header.prevhash), Block)
             except:
                 break
-        if i < 256:
+        if i < header_depth:
             if state.db.get(b.header.prevhash) == 'GENESIS':
                 jsondata = json.loads(state.db.get('GENESIS_STATE'))
-                for h in jsondata["prev_headers"][:257 - i - 1]:
+                for h in jsondata["prev_headers"][:header_depth - i]:
                     state.prev_headers.append(dict_to_prev_header(h))
                 for blknum, uncles in jsondata["recent_uncles"].items():
-                    if blknum >= state.block_number - 6:
+                    if blknum >= state.block_number - state.config['MAX_UNCLE_DEPTH']:
                         state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
             else:
                 raise Exception("Dangling prevhash")
@@ -124,7 +127,11 @@ class Chain(object):
             existing = self.db.get('child:' + child.header.prevhash)
         except:
             existing = ''
-        self.db.put('child:' + child.header.prevhash, existing + child.header.hash)
+        existing_hashes = []
+        for i in range(0, len(existing), 32):
+            existing_hashes.append(existing[i: i+32])
+        if child.header.hash not in existing_hashes:
+            self.db.put('child:' + child.header.prevhash, existing + child.header.hash)
 
     def get_blockhash_by_number(self, number):
         try:
@@ -173,11 +180,16 @@ class Chain(object):
     # too early
     def process_time_queue(self):
         now = self.time()
-        while len(self.time_queue) and self.time_queue[0].timestamp <= now:
-            self.add_block(self.time_queue.pop())
+        i = 0
+        while i < len(self.time_queue) and self.time_queue[i].timestamp <= now:
+            log.info('Adding scheduled block')
+            pre_len = len(self.time_queue)
+            self.add_block(self.time_queue.pop(i))
+            if len(self.time_queue) == pre_len:
+                i += 1
 
     def process_parent_queue(self):
-        for parent_hash, blocks in self.parent_queue:
+        for parent_hash, blocks in self.parent_queue.items():
             if parent_hash in self.db:
                 for block in blocks:
                     self.add_block(block)
@@ -194,28 +206,29 @@ class Chain(object):
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
                 i += 1
             self.time_queue.insert(i, block)
-            print 'Block received too early. Delaying for now'
+            log.info('Block received too early. Delaying for %d seconds' % (block.header.timestamp - now))
+            print 'maah', 'ts', block.header.timestamp, 'now', now
             return False
         if block.header.prevhash == self.head_hash:
-            # print 'Adding to head', repr(block.header.prevhash), repr(self.head_hash)
+            log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
             # except Exception, e:  # FIXME catchall exception makes it unable to debug,
             except KeyError, e:  # FIXME add relevant exceptions here
-                print 'Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash))
+                log.info('Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash)))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
-            # print 'Receiving block not on head, adding to secondary post state'
+            log.info('Receiving block not on head, adding to secondary post state', prevhash=encode_hex(block.header.prevhash))
             pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(pre_state, block)
             # except Exception, e:  # FIXME catchall exception makes it unable to debug,
             except KeyError, e:  # FIXME add relevant exceptions here
-                print 'Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash))
+                log.info('Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash)))
                 return False
             block_score = self.get_score(block)
             # Replace the head
@@ -233,7 +246,7 @@ class Chain(object):
                     b = self.get_parent(b)
                 replace_from = b.header.number
                 for i in xrange(replace_from, 2**63 - 1):
-                    print 'Rewriting height %d' % i
+                    log.info('Rewriting height %d' % i)
                     key = 'block:' + str(i)
                     orig_at_height = self.db.get(key) if key in self.db else None
                     if orig_at_height:
@@ -256,7 +269,7 @@ class Chain(object):
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
             self.parent_queue[block.header.prevhash].append(block)
-            print 'No parent found. Delaying for now'
+            log.info('No parent found. Delaying for now')
             return False
         blk_txhashes = {tx.hash: True for tx in block.transactions}
         self.transaction_queue = [x for x in self.transaction_queue if x.hash in blk_txhashes]
@@ -264,9 +277,9 @@ class Chain(object):
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
-        print 'Added block %d (%s) with %d txs and %d gas' % \
+        log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
-             len(block.transactions), block.header.gas_used)
+             len(block.transactions), block.header.gas_used))
         return True
 
     def __contains__(self, blk):
@@ -316,9 +329,9 @@ class Chain(object):
             while i < len(self.transaction_queue) and tx.gasprice < self.transaction_queue[i]:
                 i += 1
             self.transaction_queue.insert(i, tx)
-            print 'Added transaction to queue'
+            log.info('Added transaction to queue')
         else:
-            print 'Gasprice too low!'
+            log.info('Gasprice too low!')
 
     # Get a transaction to include into a candidate block
     def get_candidate_transaction(self, gaslimit, excluded={}):
@@ -341,7 +354,7 @@ class Chain(object):
         blk.header.difficulty = calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
         blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
         blk.header.coinbase = coinbase or self.coinbase
-        blk.header.timestamp = now
+        blk.header.timestamp = max(now, temp_state.prev_headers[0].timestamp + 1)
         blk.header.extra_data = self.extra_data
         blk.header.prevhash = temp_state.prev_headers[0].hash
         blk.header.bloom = 0
@@ -349,6 +362,24 @@ class Chain(object):
         blk.uncles = []
         receipts = []
         initialize(temp_state, blk)
+        # Add uncles
+        uncles = []
+        ineligible = {}
+        for h, _uncles in temp_state.recent_uncles.items():
+            for u in _uncles:
+                ineligible[u] = True
+        for i in range(0, min(self.state.config['MAX_UNCLE_DEPTH'], len((temp_state.prev_headers)))):
+            ineligible[temp_state.prev_headers[i].hash] = True
+        for i in range(1, min(self.state.config['MAX_UNCLE_DEPTH'], len(temp_state.prev_headers))):
+            child_hashes = self.get_child_hashes(temp_state.prev_headers[i].hash)
+            for c in child_hashes:
+                if c not in ineligible and len(uncles) < 2:
+                    uncles.append(self.get_block(c).header)
+            if len(uncles) == 2:
+                break
+        blk.uncles = uncles
+        blk.header.uncles_hash = utils.sha3(rlp.encode(blk.uncles))
+        assert validate_uncles(temp_state, blk)
         # Add transactions (highest fee first formula)
         excluded = {}
         while 1:
@@ -366,26 +397,9 @@ class Chain(object):
                     InvalidNonce, UnsignedTransaction):
                 pass
             excluded[tx.hash] = True
-        # Add uncles
-        uncles = []
-        ineligible = {}
-        for h, uncles in temp_state.recent_uncles.items():
-            for u in uncles:
-                ineligible[u.hash] = True
-        for i in range(0, min(6, len((temp_state.prev_headers)))):
-            ineligible[temp_state.prev_headers[i].hash] = True
-        for i in range(1, min(6, len(temp_state.prev_headers))):
-            child_hashes = self.get_child_hashes(temp_state.prev_headers[i].hash)
-            for c in child_hashes:
-                if c not in ineligible and len(uncles) < 2:
-                    uncles.append(self.get_block(c).header)
-            if len(uncles) == 2:
-                break
-        blk.uncles = uncles
         finalize(temp_state, blk)
         blk.header.receipts_root = mk_receipt_sha(receipts)
         blk.header.tx_list_root = mk_transaction_sha(blk.transactions)
-        blk.header.uncles_hash = utils.sha3(rlp.encode(blk.uncles))
         temp_state.commit()
         blk.header.state_root = temp_state.trie.root_hash
         blk.header.gas_used = temp_state.gas_used

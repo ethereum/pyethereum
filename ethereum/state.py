@@ -75,11 +75,18 @@ class State():
         return self.env.config
 
     def get_block_hash(self, n):
-        if self.block_number < n or n > 256 or n < 0:
-            o = b'\x00' * 32
+        if self.is_METROPOLIS():
+            if self.block_number < n or n >= self.config['METROPOLIS_WRAPAROUND'] or n < 0:
+                o = b'\x00' * 32
+            sbytes = self.get_storage_bytes(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
+                                            (self.block_number - n - 1) % self.config['METROPOLIS_WRAPAROUND'])
+            return sbytes or (b'\x00' * 32)
         else:
-            o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
-        return o
+            if self.block_number < n or n > 256 or n < 0:
+                o = b'\x00' * 32
+            else:
+                o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
+            return o
 
     def add_block_header(self, block_header):
         self.journal.append(('~prev_headers', None, len(self.prev_headers), None))
@@ -396,7 +403,7 @@ class State():
             elif isinstance(default, (str, bytes)):
                 snapshot[k] = '0x'+encode_hex(v)
             elif k == 'prev_headers' and not no_prevblocks:
-                snapshot[k] = [prev_header_to_dict(h) for h in v[:256]]
+                snapshot[k] = [prev_header_to_dict(h) for h in v[:self.config['PREV_HEADER_DEPTH']]]
             elif k == 'recent_uncles' and not no_prevblocks:
                 snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
         return snapshot

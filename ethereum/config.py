@@ -67,6 +67,9 @@ default_config = dict(
     CONSENSUS_STRATEGY = 'ethash',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,
+    PREV_HEADER_DEPTH = 256,
+    # Custom specials
+    CUSTOM_SPECIALS = {}
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

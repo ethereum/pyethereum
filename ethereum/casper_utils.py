@@ -31,6 +31,8 @@ casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
 casper_config['CONSENSUS_ALGO'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
+casper_config['MAX_UNCLE_DEPTH'] = 0
+casper_config['PREV_HEADER_DEPTH'] = 1
 
 # RandaoManager object to be used by validators to provide randaos
 # when signing their block
@@ -108,6 +110,17 @@ def get_skips_and_block_making_time(chain, my_indices, max_lookup=100):
         skips += 1
     return None, None
 
+# Check a particular count of skips
+def check_skips(chain, my_indices, skips):
+    indices = call_casper(chain.state, 'getValidator', [skips])
+    return indices and (my_indices[0], my_indices[1]) == (indices[0], indices[1])
+
+# Get timestamp given a particular number of skips
+def get_timestamp(chain, skips):
+    # Add three because the context the function will be called in will be one
+    # block height later
+    return call_casper(chain.state, 'getMinTimestamp', [skips]) + 3 
+
 # Add a signature to a block
 def sign_block(block, key, randao_parent, skips):
     block.header.extra_data = randao_parent + utils.zpad(utils.encode_int(skips), 32)
@@ -116,8 +129,6 @@ def sign_block(block, key, randao_parent, skips):
     return block
 
 # Create and sign a block
-def make_block(chain, key, randao, my_indices):
-    skips, timestamp = get_skips_and_block_making_time(chain, my_indices)
-    h = chain.make_head_candidate(timestamp=timestamp)
-    print 'Making a block with %d skips' % skips
-    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [my_indices[0], my_indices[1]])), skips)
+def make_block(chain, key, randao, indices, skips):
+    h = chain.make_head_candidate(timestamp=get_timestamp(chain, skips))
+    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), skips)
