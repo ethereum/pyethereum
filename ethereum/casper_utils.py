@@ -138,8 +138,12 @@ def get_timestamp(chain, skips):
     return call_casper(chain.state, 'getMinTimestamp', [skips]) + 3 
 
 # Add a signature to a block
-def sign_block(block, key, randao_parent, skips):
-    block.header.extra_data = randao_parent + utils.zpad(utils.encode_int(skips), 32)
+def sign_block(block, key, randao_parent, indices, skips):
+    block.header.extra_data = \
+        randao_parent + \
+        utils.zpad(utils.encode_int(skips), 32) + \
+        utils.zpad(utils.encode_int(indices[0]), 32) + \
+        utils.zpad(utils.encode_int(indices[1]), 32)
     print 'key', repr(key), utils.privtoaddr(key).encode('hex')
     for val in utils.ecsign(block.header.signing_hash, key):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
@@ -148,4 +152,4 @@ def sign_block(block, key, randao_parent, skips):
 # Create and sign a block
 def make_block(chain, key, randao, indices, skips):
     h = chain.make_head_candidate(timestamp=get_timestamp(chain, skips))
-    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), skips)
+    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), indices, skips)

@@ -460,6 +460,7 @@ class VMExt():
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
         self.post_serenity_hardfork = lambda: state.is_SERENITY()
+        self.blockhash_store = state.config['METROPOLIS_BLOCKHASH_STORE']
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = state.transfer_value
@@ -504,6 +505,7 @@ class BlankVMExt():
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
         self.post_serenity_hardfork = lambda: state.is_SERENITY()
+        self.blockhash_store = state.config['METROPOLIS_BLOCKHASH_STORE']
         self.snapshot = state.snapshot
         self.revert = state.revert
         self.transfer_value = lambda x, y, z: True

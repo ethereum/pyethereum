@@ -11,10 +11,11 @@ data validatorSlotQueueLength[2**40]
 data totalDeposits
 data historicalTotalDeposits[2**40]
 data randao
-data aunts[]
+data dunkles[]
 data genesisTimestamp
 data totalSkips
 event NewValidator(i, j)
+event DunkleAdded(hash:bytes32)
 
 def const getLockDuration():
     return(max(min(self.totalDeposits / 10**18 / 2, 10000000), EPOCH_LENGTH * 2))
@@ -103,7 +104,14 @@ def const getRandao(i, j):
 
 macro require($x):
     if not($x):
-        ~stop()
+        ~invalid()
+
+macro extractRLPint($blockdata, $ind, $saveTo):
+    require($blockdata[$ind + 1] - blockdata[$ind] <= 32)
+    mcopy($saveTo + 32 - ($blockdata[$ind+1] - $blockdata[$ind]), $blockdata + $blockdata[$ind], $blockdata[$ind+1] - $blockdata[$ind])
+
+macro validateRLPint($blockdata, $ind):
+    require($blockdata[$ind + 1] - $blockdata[$ind] <= 32)
 
 def any():
     # Block header entry point; expects the block header as input
@@ -116,49 +124,44 @@ def any():
         blockdata = string(3096)
         ~call(50000, 253, 0, rawheader, ~calldatasize(), blockdata, 3096)
         # Extract difficulty
-        difficulty = 0
-        require(blockdata[8] - blockdata[7] <= 32)
-        mcopy(ref(difficulty) + 32 - (blockdata[8] - blockdata[7]), blockdata + blockdata[7], blockdata[8] - blockdata[7])
+        extractRLPint(blockdata, 7, ref(difficulty))
         # Extract timestamp
-        timestamp = 0
-        require(blockdata[12] - blockdata[11] <= 32)
-        mcopy(ref(timestamp) + 32 - (blockdata[12] - blockdata[11]), blockdata + blockdata[11], blockdata[12] - blockdata[11])
-        # Extract extra data (format: randao hash, skip count, signature)
+        extractRLPint(blockdata, 11, ref(timestamp))
+        # Block number validity check
+        validateRLPint(blockdata, 8)
+        # Extract extra data (format: randao hash, skip count, i, j, signature)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
         randao = extra_data[0]
         skips = extra_data[1]
-        ~log1(extra_data, len(extra_data), 5)
+        i = extra_data[2]
+        j = extra_data[3]
         # Get the signing hash
-        signing_hash = 0
         ~call(50000, 252, 0, rawheader, ~calldatasize(), ref(signing_hash), 32)
         # Check number of skips; with 0 skips, minimum lag is 3 seconds
-        min_timestamp = self.getMinTimestamp(skips)
-        require(block.timestamp >= min_timestamp)
-        require(block.difficulty == 1)
+        require(timestamp >= self.getMinTimestamp(skips))
+        require(difficulty == 1)
         # Get the validator that should be creating this block
         validatorData = self.getValidator(skips, outitems=2)
-        vcIndex = ref(self.validators[validatorData[0]][validatorData[1]].validation_code)
+        require(validatorData[0] == i)
+        require(validatorData[1] == j)
         # Get the validation code
+        vcIndex = ref(self.validators[i][j].validation_code)
         validation_code = string(~ssize(vcIndex))
         ~sloadbytes(vcIndex, validation_code, len(validation_code))
-        randaoIndex = ref(self.validators[validatorData[0]][validatorData[1]].randao)
+        randaoIndex = ref(self.validators[i][j].randao)
         # Check correctness of randao
         require(sha3(randao) == ~sload(randaoIndex))
-        ~log1(9, 9, 9)
         # Create a `sigdata` object that stores the hash+signature for verification
         sigdata = string(len(extra_data) - 32)
         sigdata[0] = signing_hash
-        mcopy(sigdata + 32, extra_data + 64, len(extra_data) - 64)
-        ~log1(sigdata, len(sigdata), 10)
+        mcopy(sigdata + 32, extra_data + 128, len(extra_data) - 128)
         # Check correctness of signature using validation code
-        x = 0
-        ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(x), 32)
-        require(x)
-        ~log1(12, 12, 12)
+        ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
+        require(verified)
         ~sstore(randaoIndex, sigdata[0])
         self.randao += sigdata[0]
-        self.validators[validatorData[0]][validatorData[1]].deposit += BLOCK_REWARD
+        self.validators[i][j].deposit += BLOCK_REWARD
         self.totalSkips += skips
         # Update historical validator counts if needed
         if block.number % EPOCH_LENGTH == 0:
@@ -168,24 +171,60 @@ def any():
                 i += 1
             self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
         # Block header signature valid!
-        return(1)
+        return(1:bool)
 
 # Like uncle inclusion, but this time the reward is negative
-def includeAunt(blocknumber, blockdata:str):
-    if ~blockhash(blocknumber) != blockdata[0]:
-        validatorData = self.getValidator(blocknumber, outitems=2)
-        vcIndex = ref(self.validators[validatorData[0]][validatorData[1]].validation_code)
-        randaoIndex = ref(self.validators[validatorData[0]][validatorData[1]].randao)
-        validation_code = string(~ssize(vcIndex))
-        ~sloadbytes(vcIndex, validation_code, len(validation_code))
-        sigdata = string(~calldatasize())
-        ~calldatacopy(sigdata, 0, ~calldatasize())
-        x = 0
-        # Check correctness of signature using validation code
-        ~callblackbox(500000, validation_code, len(validation_code), sigdata + 32, len(sigdata) - 32, ref(x), 32)
-        if x and self.aunts[blockdata[0]]:
-            self.validators[validatorData[0]][validatorData[1]].deposit -= BLOCK_REWARD
-            self.aunts[blockdata[0]] = 1
+def includeDunkle(rawheader:str):
+    require(len(rawheader) < 2048)
+    # RLP decode it
+    blockdata = string(3096)
+    ~call(50000, 253, 0, rawheader, len(rawheader), blockdata, 3096)
+    # Get the signing hash
+    ~call(50000, 252, 0, rawheader, len(rawheader), ref(signing_hash), 32)
+    # Extract extra data (format: randao hash, skip count, signature)
+    extra_data = string(blockdata[13] - blockdata[12])
+    mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
+    skips = extra_data[1]
+    i = extra_data[2]
+    j = extra_data[3]
+    # Get the validation code
+    vcIndex = ref(self.validators[i][j].validation_code)
+    validation_code = string(~ssize(vcIndex))
+    ~sloadbytes(vcIndex, validation_code, len(validation_code))
+    # Create a `sigdata` object that stores the hash+signature for verification
+    sigdata = string(len(extra_data) - 32)
+    sigdata[0] = signing_hash
+    mcopy(sigdata + 32, extra_data + 128, len(extra_data) - 128)
+    # Check correctness of signature using validation code
+    ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
+    require(verified)
+    # Make sure the dunkle has not yet been included
+    require(not self.dunkles[sha3(rawheader:str)])
+    # Extract block number, make sure that the dunkle is not a block
+    # at that number, and make sure that the block number is in the
+    # past
+    extractRLPint(blockdata, 8, ref(number))
+    header_hash = sha3(rawheader:str)
+    require(header_hash != ~blockhash(number))
+    require(number < block.number)
+    # Mark the dunkle included
+    self.dunkles[header_hash] = block.timestamp
+    # Penalize the dunkle creator
+    self.validators[i][j].deposit -= (BLOCK_REWARD - 1)
+    log(type=DunkleAdded, header_hash)
+    return(1:bool)
+
+# Incentivize cleanup of old dunkles
+def removeOldDunkleRecords(hashes):
+    i = 0
+    while i < len(hashes):
+        require(self.dunkles[hashes[i]] and (self.dunkles[hashes[i]] < block.timestamp - 10000000))
+        self.dunkles[hashes[i]] = 0
+        i += 1
+    send(msg.sender, BLOCK_REWARD * len(hashes) / 250)
+
+def const isDunkleIncluded(hash):
+    return(self.dunkles[hash] > 0:bool)
         
 def startWithdrawal(sig:str):
         # Check correctness of signature using validation code

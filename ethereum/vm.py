@@ -385,7 +385,7 @@ def vm_execute(ext, msg, code):
         elif opcode < 0x50:
             if op == 'BLOCKHASH':
                 if ext.post_metropolis_hardfork():
-                    bh_addr = ext._block.config["METROPOLIS_BLOCKHASH_STORE"]
+                    bh_addr = ext.blockhash_store
                     stk.append(ext.get_storage_data(bh_addr, stk.pop()))
                 else:
                     stk.append(utils.big_endian_to_int(ext.block_hash(stk.pop())))

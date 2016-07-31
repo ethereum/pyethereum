@@ -14,6 +14,7 @@ import serpent
 from ethereum.config import default_config, Env
 import copy
 import time
+import rlp
 
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
@@ -40,7 +41,7 @@ s = mk_basic_state({}, None, env=Env(config=casper_config))
 s.gas_limit = 10**9
 s.prev_headers[0].timestamp = int(time.time())
 s.prev_headers[0].difficulty = 1
-s.timestamp = int(time.time())
+s.timestamp = int(time.time()) - 10
 s.block_difficulty = 1
 s.set_code(casper_config['CASPER_ADDR'], casper_code)
 s.set_code(casper_config['RLP_DECODER_ADDR'], rlp_decoder_code)
@@ -62,7 +63,7 @@ for i, k, a, r, ds in zip(range(len(privkeys)), privkeys, addrs, randaos, deposi
     print 'Indices of validator %d: %d %d' % (i, indices[i][0], indices[i][1])
 
 # Set genesis time
-t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('setGenesisTimestamp', [int(time.time())]))
+t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('setGenesisTimestamp', [s.timestamp]))
 apply_transaction(s, t)
      
 s.commit()
@@ -78,10 +79,41 @@ print 'Index in set:', next_validator_index
 
 chains = [Chain(s.to_snapshot(), env=s.env) for i in range(NUM_PARTICIPANTS)]
 skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_index], indices[next_validator_index])
+assert skip_count == 0
 b = make_block(chains[next_validator_index], privkeys[next_validator_index],
                randaos[next_validator_index], indices[next_validator_index], skip_count)
+print 'Block timestamp:', b.header.timestamp, s.timestamp, timestamp
 initialize(s, b)
 print 'Validating block'
 print b.header.difficulty, s.block_difficulty
 assert validate_block_header(s, b.header)
 print 'Validation successful'
+assert chains[0].add_block(b)
+print 'Block added to chain'
+# Make another block
+next_validator = call_casper(chains[0].state, 'getValidator', [0])
+next_validator_index = [i for i in range(len(indices)) if indices[i] == next_validator][0]
+skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_index], indices[next_validator_index])
+assert skip_count == 0
+b2 = make_block(chains[0], privkeys[next_validator_index],
+                randaos[next_validator_index], indices[next_validator_index], skip_count)
+assert chains[0].add_block(b2)
+print 'Second block added to chain'
+# Make a dunkle and include it in a transaction
+next_validator = call_casper(chains[1].state, 'getValidator', [1])
+next_validator_index = [i for i in range(len(indices)) if indices[i] == next_validator][0]
+skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_index], indices[next_validator_index])
+assert skip_count == 1
+b3 = make_block(chains[1], privkeys[next_validator_index],
+                randaos[next_validator_index], indices[next_validator_index], skip_count)
+print 'Dunkle produced'
+t = Transaction(1, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+apply_transaction(chains[0].state, t)
+assert call_casper(chains[0].state, 'isDunkleIncluded', [utils.sha3(rlp.encode(b3.header))])
+print 'Dunkle added successfully'
+x = chains[0].state.gas_used
+t = Transaction(2, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+apply_transaction(chains[0].state, t)
+x2 = chains[0].state.gas_used
+assert x2 - x == t.startgas, (x2 - x, t.startgas)
+print 'Dunkle addition failed, as expected, since dunkle is a duplicate'
