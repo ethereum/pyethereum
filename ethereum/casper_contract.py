@@ -101,19 +101,41 @@ def const getMinTimestamp(skips):
 def const getRandao(i, j):
     return(self.validators[i][j].randao:bytes32)
 
+macro require($x):
+    if not($x):
+        ~stop()
 
 def any():
-    # Block header entry point; expects x+96 bytes in the format:
-    # [block header hash, randao, num_skips] + signature
-    # where everything after the block header hash is header extradata
+    # Block header entry point; expects the block header as input
     if msg.sender == 254:
+        # Get the block data (max 2048 bytes)
+        require(~calldatasize() <= 2048)
+        rawheader = string(~calldatasize())
+        ~calldatacopy(rawheader, 0, ~calldatasize())
+        # RLP decode it
+        blockdata = string(3096)
+        ~call(50000, 253, 0, rawheader, ~calldatasize(), blockdata, 3096)
+        # Extract difficulty
+        difficulty = 0
+        require(blockdata[8] - blockdata[7] <= 32)
+        mcopy(ref(difficulty) + 32 - (blockdata[8] - blockdata[7]), blockdata + blockdata[7], blockdata[8] - blockdata[7])
+        # Extract timestamp
+        timestamp = 0
+        require(blockdata[12] - blockdata[11] <= 32)
+        mcopy(ref(timestamp) + 32 - (blockdata[12] - blockdata[11]), blockdata + blockdata[11], blockdata[12] - blockdata[11])
+        # Extract extra data (format: randao hash, skip count, signature)
+        extra_data = string(blockdata[13] - blockdata[12])
+        mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
+        randao = extra_data[0]
+        skips = extra_data[1]
+        ~log1(extra_data, len(extra_data), 5)
+        # Get the signing hash
+        signing_hash = 0
+        ~call(50000, 252, 0, rawheader, ~calldatasize(), ref(signing_hash), 32)
         # Check number of skips; with 0 skips, minimum lag is 3 seconds
-        skips = ~calldataload(64)
         min_timestamp = self.getMinTimestamp(skips)
-        if block.timestamp < min_timestamp:
-            ~return(0, 0)
-        if block.difficulty != 1:
-            ~return(0, 0)
+        require(block.timestamp >= min_timestamp)
+        require(block.difficulty == 1)
         # Get the validator that should be creating this block
         validatorData = self.getValidator(skips, outitems=2)
         vcIndex = ref(self.validators[validatorData[0]][validatorData[1]].validation_code)
@@ -122,32 +144,31 @@ def any():
         ~sloadbytes(vcIndex, validation_code, len(validation_code))
         randaoIndex = ref(self.validators[validatorData[0]][validatorData[1]].randao)
         # Check correctness of randao
-        if sha3(~calldataload(32)) != ~sload(randaoIndex):
-            ~return(0, 0)
+        require(sha3(randao) == ~sload(randaoIndex))
+        ~log1(9, 9, 9)
         # Create a `sigdata` object that stores the hash+signature for verification
-        sigdata = string(~calldatasize() - 64)
-        sigdata[0] = ~calldataload(0)
-        ~calldatacopy(sigdata + 32, 96, ~calldatasize() - 64)
+        sigdata = string(len(extra_data) - 32)
+        sigdata[0] = signing_hash
+        mcopy(sigdata + 32, extra_data + 64, len(extra_data) - 64)
+        ~log1(sigdata, len(sigdata), 10)
         # Check correctness of signature using validation code
         x = 0
         ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(x), 32)
-        if x:
-            ~sstore(randaoIndex, sigdata[0])
-            self.randao += sigdata[0]
-            self.validators[validatorData[0]][validatorData[1]].deposit += BLOCK_REWARD
-            self.totalSkips += skips
-            # Update historical validator counts if needed
-            if block.number % EPOCH_LENGTH == 0:
-                i = 0
-                while i < len(validatorSizes):
-                    self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
-                    i += 1
-                self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
-            # Block header signature valid!
-            return(1)
-        else:
-            # Block header signature invalid
-            ~return(0, 0)
+        require(x)
+        ~log1(12, 12, 12)
+        ~sstore(randaoIndex, sigdata[0])
+        self.randao += sigdata[0]
+        self.validators[validatorData[0]][validatorData[1]].deposit += BLOCK_REWARD
+        self.totalSkips += skips
+        # Update historical validator counts if needed
+        if block.number % EPOCH_LENGTH == 0:
+            i = 0
+            while i < len(validatorSizes):
+                self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
+                i += 1
+            self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
+        # Block header signature valid!
+        return(1)
 
 # Like uncle inclusion, but this time the reward is negative
 def includeAunt(blocknumber, blockdata:str):

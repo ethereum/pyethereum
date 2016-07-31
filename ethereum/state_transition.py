@@ -40,7 +40,7 @@ SKIP_MEDSTATES = False
 
 VERIFIERS = {
     'ethash': lambda state, header: header.check_pow(),
-    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in header.signing_hash + header.extra_data]), code_address=int_to_addr(255)))))
+    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in rlp.encode(header)]), code_address=int_to_addr(255)))))
 }
 
 def update_block_env_variables(state, block):
@@ -512,8 +512,8 @@ class BlankVMExt():
         self.tx_gasprice = 0
 
     # def msg(self, msg):
-    #     print repr(msg.to), repr(msg.code_address), specials.keys(), msg.code_address in specials
-    #     o = _apply_msg(self, msg, '') if msg.code_address in specials else (0, 0, '')
+    #     print repr(msg.to), repr(msg.code_address), self.specials.keys(), msg.code_address in self.specials
+    #     o = _apply_msg(self, msg, '') if msg.code_address in self.specials else (0, 0, '')
     #     print o
     #     return o
 

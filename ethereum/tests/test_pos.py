@@ -8,7 +8,8 @@ from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import abi
 from ethereum.casper_utils import RandaoManager, generate_validation_code, call_casper, \
     get_skips_and_block_making_time, sign_block, make_block, get_contract_code, \
-    casper_config, get_casper_ct, get_casper_code
+    casper_config, get_casper_ct, get_casper_code, get_rlp_decoder_code, \
+    get_hash_without_ed_code
 import serpent
 from ethereum.config import default_config, Env
 import copy
@@ -31,7 +32,10 @@ print 'Constructing genesis'
 
 print 'Creating casper contract'
 casper_code = get_casper_code()
+rlp_decoder_code = get_rlp_decoder_code()
+hash_without_ed_code = get_hash_without_ed_code()
 ct = get_casper_ct()
+assert ct
 s = mk_basic_state({}, None, env=Env(config=casper_config))
 s.gas_limit = 10**9
 s.prev_headers[0].timestamp = int(time.time())
@@ -39,6 +43,8 @@ s.prev_headers[0].difficulty = 1
 s.timestamp = int(time.time())
 s.block_difficulty = 1
 s.set_code(casper_config['CASPER_ADDR'], casper_code)
+s.set_code(casper_config['RLP_DECODER_ADDR'], rlp_decoder_code)
+s.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], hash_without_ed_code)
 assert len(casper_code)
 print 'Casper contract created, code length %d' % len(casper_code)
 
@@ -71,8 +77,9 @@ print 'Index in set:', next_validator_index
 
 
 chains = [Chain(s.to_snapshot(), env=s.env) for i in range(NUM_PARTICIPANTS)]
-
-b = make_block(chains[next_validator_index], privkeys[next_validator_index], randaos[next_validator_index], indices[next_validator_index])
+skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_index], indices[next_validator_index])
+b = make_block(chains[next_validator_index], privkeys[next_validator_index],
+               randaos[next_validator_index], indices[next_validator_index], skip_count)
 initialize(s, b)
 print 'Validating block'
 print b.header.difficulty, s.block_difficulty

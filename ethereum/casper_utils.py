@@ -9,11 +9,23 @@ import copy
 import os
 mydir = os.path.split(__file__)[0]
 casper_path = os.path.join(mydir, 'casper_contract.py')
+rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
+hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
 
 # The casper Code
 def get_casper_code():
     import serpent
     return get_contract_code(serpent.compile(open(casper_path).read()))
+
+# RLP decoder code
+def get_rlp_decoder_code():
+    import serpent
+    return get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
+
+# RLP decoder code
+def get_hash_without_ed_code():
+    import serpent
+    return get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
 
 _casper_ct = None
 
@@ -31,6 +43,8 @@ casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
 casper_config['CONSENSUS_ALGO'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
+casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
+casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
 casper_config['MAX_UNCLE_DEPTH'] = 0
 casper_config['PREV_HEADER_DEPTH'] = 1
 
@@ -79,7 +93,9 @@ def generate_validation_code(addr):
     code = """
 # First 32 bytes of input = hash, remaining 96 = signature
 mustbe = %s
+~log1(0, 0, mustbe)
 a = ecrecover(~calldataload(0), ~calldataload(32), ~calldataload(64), ~calldataload(96))
+~log1(1, 1, a)
 if a != mustbe:
     ~invalid()
 return(1)
@@ -124,6 +140,7 @@ def get_timestamp(chain, skips):
 # Add a signature to a block
 def sign_block(block, key, randao_parent, skips):
     block.header.extra_data = randao_parent + utils.zpad(utils.encode_int(skips), 32)
+    print 'key', repr(key), utils.privtoaddr(key).encode('hex')
     for val in utils.ecsign(block.header.signing_hash, key):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
     return block
