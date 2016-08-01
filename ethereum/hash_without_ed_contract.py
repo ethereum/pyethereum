@@ -9,7 +9,7 @@ macro REMOVE_POS: 12
 def any():
     moose = string(~calldatasize())
     ~calldatacopy(moose, 0, ~calldatasize())
-    ~log1(moose, len(moose), 90)
+    # ~log1(moose, len(moose), 90)
     # Can only parse lists
     c0 = calldatachar(0)
     if c0 < 248:
@@ -46,7 +46,7 @@ def any():
         setch(hashdata, 1, totlen)
         calldatacopy(hashdata + 2, 1 + (c0 - 247), ed_start)
         calldatacopy(hashdata + 2 + ed_start, 1 + (c0 - 247) + ed_next_start, ~calldatasize() - ed_next_start)
-        ~log1(hashdata, totlen + 2, 91)
+        # ~log1(hashdata, totlen + 2, 91)
         return(~sha3(hashdata, totlen + 2))
     else:
         setch(hashdata, 0, 249)
@@ -54,5 +54,5 @@ def any():
         setch(hashdata, 2, mod(totlen, 256))
         calldatacopy(hashdata + 3, 1 + (c0 - 247), ed_start)
         calldatacopy(hashdata + 3 + ed_start, 1 + (c0 - 247) + ed_next_start, ~calldatasize() - ed_next_start)
-        ~log1(hashdata, totlen + 3, 92)
+        # ~log1(hashdata, totlen + 3, 92)
         return(~sha3(hashdata, totlen + 3))

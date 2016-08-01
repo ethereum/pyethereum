@@ -54,6 +54,8 @@ class Chain(object):
             }, self.env)
         self.head_hash = self.state.prev_headers[0].hash
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
+        self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
+        assert self.state.block_number == self.state.prev_headers[0].number
         self.db.put('score:' + self.state.prev_headers[0].hash, "0")
         self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
         self.db.put(self.head_hash, 'GENESIS')
@@ -207,7 +209,6 @@ class Chain(object):
                 i += 1
             self.time_queue.insert(i, block)
             log.info('Block received too early. Delaying for %d seconds' % (block.header.timestamp - now))
-            print 'maah', 'ts', block.header.timestamp, 'now', now
             return False
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
@@ -222,7 +223,8 @@ class Chain(object):
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
-            log.info('Receiving block not on head, adding to secondary post state', prevhash=encode_hex(block.header.prevhash))
+            log.info('Receiving block not on head (%d blocks behind), adding to secondary post state',
+                     prevhash=encode_hex(block.header.prevhash))
             pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(pre_state, block)
@@ -323,8 +325,11 @@ class Chain(object):
 
     # This should be called when a miner sees a transaction, and may
     # potentially be interested in including it in a block
-    def add_transaction(self, tx):
-        if tx.gasprice >= self.min_gasprice:
+    def add_transaction(self, tx, force=False):
+        if force:
+            self.transaction_queue.insert(0, tx)
+            log.info('Forcibly added transaction to queue')
+        elif tx.gasprice >= self.min_gasprice:
             i = 0
             while i < len(self.transaction_queue) and tx.gasprice < self.transaction_queue[i]:
                 i += 1
@@ -394,7 +399,7 @@ class Chain(object):
                 receipts.append(r)
                 temp_state.bloom |= r.bloom  # int
             except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
-                    InvalidNonce, UnsignedTransaction):
+                    InvalidNonce, UnsignedTransaction), e:
                 pass
             excluded[tx.hash] = True
         finalize(temp_state, blk)
@@ -405,6 +410,15 @@ class Chain(object):
         blk.header.gas_used = temp_state.gas_used
         blk.header.bloom = temp_state.bloom
         return blk
+
+    def get_descendants(self, block):
+        output = []
+        blocks = [block]
+        while len(blocks):
+            b = blocks.pop()
+            blocks.extend(self.get_children(b))
+            output.append(b)
+        return output
 
     @property
     def db(self):

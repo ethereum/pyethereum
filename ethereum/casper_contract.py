@@ -14,6 +14,7 @@ data randao
 data dunkles[]
 data genesisTimestamp
 data totalSkips
+data totalDunklesIncluded
 event NewValidator(i, j)
 event DunkleAdded(hash:bytes32)
 
@@ -211,6 +212,7 @@ def includeDunkle(rawheader:str):
     self.dunkles[header_hash] = block.timestamp
     # Penalize the dunkle creator
     self.validators[i][j].deposit -= (BLOCK_REWARD - 1)
+    self.totalDunklesIncluded += 1
     log(type=DunkleAdded, header_hash)
     return(1:bool)
 
@@ -225,6 +227,9 @@ def removeOldDunkleRecords(hashes):
 
 def const isDunkleIncluded(hash):
     return(self.dunkles[hash] > 0:bool)
+
+def const getTotalDunklesIncluded():
+    return(self.totalDunklesIncluded)
         
 def startWithdrawal(sig:str):
         # Check correctness of signature using validation code
