@@ -1,8 +1,7 @@
 validatorSizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 BLOCK_REWARD = 10**17
-EPOCH_LENGTH = 1000
 # validator[sizegroup][index]
-data validators[2**40][2**40](validation_code, address, start_epoch, end_epoch, deposit, randao, lock_duration)
+data validators[2**40][2**40](validation_code, address, start_epoch, end_epoch, deposit, randao, lock_duration, active)
 data historicalValidatorCounts[2**40][2**40]
 # validator_group_sizes[epoch][sizegroup]
 data validatorCounts[2**40]
@@ -10,20 +9,38 @@ data validatorSlotQueue[2**40][2**40]
 data validatorSlotQueueLength[2**40]
 data totalDeposits
 data historicalTotalDeposits[2**40]
+data totalDepositDeltas[2**40]
 data randao
 data dunkles[]
 data genesisTimestamp
 data totalSkips
 data totalDunklesIncluded
+data currentEpoch
+data initialized
 event NewValidator(i, j)
+data epochLength
 event DunkleAdded(hash:bytes32)
 
-def const getLockDuration():
-    return(max(min(self.totalDeposits / 10**18 / 2, 10000000), EPOCH_LENGTH * 2))
+# 1 part-per-billion per block = ~1.05% annual interest assuming 3s blocks
+# 1 ppb per second = 3.20% annual interest
+BLOCK_MAKING_PPB = 10
+NO_END_EPOCH = 2**99
 
-def setGenesisTimestamp(t:uint256):
-    if not self.genesisTimestamp:
-        self.genesisTimestamp = t
+def const getBlockReward():
+    return(max(self.totalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
+
+def const getLockDuration():
+    return(max(min(self.totalDeposits / 10**18 / 2, 10000000), self.epochLength * 2))
+
+def const getEpochLength():
+    return(self.epochLength)
+
+def initialize(timestamp:uint256, epoch_length:uint256):
+    require(not self.initialized)
+    self.initialized = 1
+    self.genesisTimestamp = timestamp
+    self.epochLength = epoch_length
+    self.currentEpoch = -1
 
 def const getValidationCode(i, j):
     storage_index = ref(self.validators[i][j].validation_code)
@@ -47,7 +64,6 @@ def deposit(validation_code:str, randao):
             i += 1
     if not success:
         ~invalid()
-    epoch = block.number / EPOCH_LENGTH
     if self.validatorSlotQueueLength[i]:
         j = self.validatorSlotQueue[i][self.validatorSlotQueueLength[i] - 1]
         self.validatorSlotQueueLength[i] -= 1
@@ -56,27 +72,36 @@ def deposit(validation_code:str, randao):
         self.validatorCounts[i] += 1
     ~sstorebytes(ref(self.validators[i][j].validation_code), validation_code, len(validation_code))
     self.validators[i][j].deposit = msg.value
-    self.validators[i][j].start_epoch = if(block.number, (block.number / EPOCH_LENGTH) + 1, 0)
-    self.validators[i][j].end_epoch = 2**99
+    self.validators[i][j].start_epoch = self.currentEpoch + 1
+    self.validators[i][j].end_epoch = NO_END_EPOCH
     self.validators[i][j].address = msg.sender
     self.validators[i][j].randao = randao
     self.validators[i][j].lock_duration = self.getLockDuration()
-    self.totalDeposits += msg.value
-    # Update historical validator counts if needed
-    if block.number % EPOCH_LENGTH == 0:
-        q = 0
-        while q < len(validatorSizes):
-            self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
-            q += 1
-        self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
+    self.totalDepositDeltas[self.validators[i][j].start_epoch] += msg.value
     log(type=NewValidator, i, j)
     return([i, j]:arr)
+
+# Housekeeping to be done at the start of any epoch
+def newEpoch():
+    currentEpoch = block.number / self.epochLength
+    if self.currentEpoch != currentEpoch - 1:
+        stop
+    q = 0
+    while q < len(validatorSizes):
+        self.historicalValidatorCounts[currentEpoch][q] = self.validatorCounts[q]
+        q += 1
+    self.totalDeposits += self.totalDepositDeltas[currentEpoch]
+    self.historicalTotalDeposits[currentEpoch] = self.totalDeposits
+    self.currentEpoch = currentEpoch
 
 def const getTotalDeposits():
     return(self.totalDeposits)
 
+def const getEpoch():
+    return(self.currentEpoch)
+
 def const getValidator(skips):
-    epoch = max(0, block.number / EPOCH_LENGTH - 1)
+    epoch = max(0, self.currentEpoch - 1)
     validatorGroupIndexSource = mod(sha3(self.randao + skips), self.historicalTotalDeposits[epoch])
     while 1:
         # return([validatorGroupIndexSource]:arr)
@@ -162,15 +187,11 @@ def any():
         require(verified)
         ~sstore(randaoIndex, sigdata[0])
         self.randao += sigdata[0]
-        self.validators[i][j].deposit += BLOCK_REWARD
+        self.validators[i][j].deposit += self.getBlockReward()
         self.totalSkips += skips
-        # Update historical validator counts if needed
-        if block.number % EPOCH_LENGTH == 0:
-            i = 0
-            while i < len(validatorSizes):
-                self.historicalValidatorCounts[block.number / EPOCH_LENGTH][i] = self.validatorCounts[i]
-                i += 1
-            self.historicalTotalDeposits[block.number / EPOCH_LENGTH] = self.totalDeposits
+        # Housekeeping if this block starts a new epoch
+        if (block.number % self.epochLength == 0):
+            self.newEpoch()
         # Block header signature valid!
         return(1:bool)
 
@@ -211,7 +232,7 @@ def includeDunkle(rawheader:str):
     # Mark the dunkle included
     self.dunkles[header_hash] = block.timestamp
     # Penalize the dunkle creator
-    self.validators[i][j].deposit -= (BLOCK_REWARD - 1)
+    self.validators[i][j].deposit -= (self.getBlockReward() - 1)
     self.totalDunklesIncluded += 1
     log(type=DunkleAdded, header_hash)
     return(1:bool)
@@ -231,22 +252,25 @@ def const isDunkleIncluded(hash):
 def const getTotalDunklesIncluded():
     return(self.totalDunklesIncluded)
         
-def startWithdrawal(sig:str):
-        # Check correctness of signature using validation code
-        x = sha3("withdrawwithdrawwithdrawwithdraw")
-        sigsize = len(sig)
-        sig[-1] = x
-        validatorData = self.getValidator(blocknumber, outitems=2)
-        vcIndex = ref(self.validators[validatorData[0]][validatorData[1]].validation_code)
-        randaoIndex = ref(self.validators[validatorData[0]][validatorData[1]].randao)
-        validation_code = string(~ssize(vcIndex))
-        ~callblackbox(500000, validation_code, len(validation_code), sig - 32, sigsize + 32, ref(x), 32)
-        if x:
-            self.validators[validatorData[0]][validatorData[1]].end_epoch = block.number / EPOCH_LENGTH + 1
+# Start the process of withdrawing
+def startWithdrawal(i, j, sig:str):
+    # Check correctness of signature using validation code
+    x = sha3("withdrawwithdrawwithdrawwithdraw")
+    sigsize = len(sig)
+    sig[-1] = x
+    vcIndex = ref(self.validators[i][j].validation_code)
+    validation_code = string(~ssize(vcIndex))
+    ~callblackbox(500000, validation_code, len(validation_code), sig - 32, sigsize + 32, ref(verified), 32)
+    require(verified)
+    if self.validators[i][j].end_epoch == NO_END_EPOCH:
+        self.validators[i][j].end_epoch = self.currentEpoch + 2
+        self.totalDepositDeltas[self.validators[i][j].end_epoch] -= validatorSizes[i]
 
 
+# Finalize withdrawing and take one's money out
 def withdraw(i, j):
-    if self.validators[i][j].end_epoch * EPOCH_LENGTH + self.validators[i][j].lock_duration < block.timestamp:
+    if self.validators[i][j].end_epoch * self.epochLength + self.validators[i][j].lock_duration < block.timestamp:
         send(self.validators[i][j].address, self.validators[i][j].deposit)
         self.validators[i][j].deposit = 0
-    
+        self.validatorSlotQueue[i][self.validatorSlotQueueLength[i]] = j
+        self.validatorSlotQueueLength[i] += 1

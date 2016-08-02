@@ -3,6 +3,7 @@ from ethereum.state import State
 from ethereum.transactions import Transaction
 from ethereum.config import Env, default_config
 from ethereum.state_transition import apply_transaction, apply_const_message
+from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import vm
 from ethereum import abi
 import copy
@@ -11,6 +12,7 @@ mydir = os.path.split(__file__)[0]
 casper_path = os.path.join(mydir, 'casper_contract.py')
 rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
 hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
+validator_sizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 
 # The casper Code
 def get_casper_code():
@@ -153,3 +155,61 @@ def sign_block(block, key, randao_parent, indices, skips):
 def make_block(chain, key, randao, indices, skips):
     h = chain.make_head_candidate(timestamp=get_timestamp(chain, skips))
     return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), indices, skips)
+
+# Create a casper genesis from given parameters
+# Validators: (addr, deposit_size, randao_commitment)
+# Alloc: state declaration
+def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
+    state = mk_basic_state({}, None, env=Env(config=casper_config))
+    state.gas_limit = 10**8 * (len(validators) + 1)
+    state.prev_headers[0].timestamp = timestamp
+    state.prev_headers[0].difficulty = 1
+    state.timestamp = timestamp
+    state.block_difficulty = 1
+    state.set_code(casper_config['CASPER_ADDR'], get_casper_code())
+    state.set_code(casper_config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
+    state.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
+    ct = get_casper_ct()
+    # Set genesis time, and initialize epoch number
+    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length]))
+    apply_transaction(state, t)
+    # Add validators
+    for addr, deposit_size, randao_commitment in validators:
+        state.set_balance(addr, deposit_size)
+        t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
+                        ct.encode('deposit', [generate_validation_code(addr), randao_commitment]))
+        t._sender = utils.normalize_address(addr)
+        success, gas, logs = apply_transaction(state, t)
+        assert success, (success, gas, logs)
+    for addr, data in alloc.items():
+        addr = utils.normalize_address(addr)
+        assert len(addr) == 20
+        if 'wei' in data:
+            state.set_balance(addr, utils.parse_as_int(data['wei']))
+        if 'balance' in data:
+            state.set_balance(addr, utils.parse_as_int(data['balance']))
+        if 'code' in data:
+            state.set_code(addr, utils.parse_as_bin(data['code']))
+        if 'nonce' in data:
+            state.set_nonce(addr, utils.parse_as_int(data['nonce']))
+        if 'storage' in data:
+            for k, v in data['storage'].items():
+                state.set_storage_data(addr, utils.parse_as_bin(k), utils.parse_as_bin(v))
+    # Start the first epoch
+    t = Transaction(1, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', []))
+    apply_transaction(state, t)
+    assert call_casper(state, 'getEpoch', []) == 0
+    assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r in validators])
+    state.commit()
+    return state
+
+
+def find_indices(state, vcode):
+    for i in range(len(validator_sizes)):
+        epoch = state.block_number // call_casper(state, 'getEpochLength', [])
+        valcount = call_casper(state, 'getHistoricalValidatorCount', [epoch, i])
+        for j in range(valcount):
+            valcode = call_casper(state, 'getValidationCode', [i, j])
+            if valcode == vcode:
+                return [i, j]
+    return None
