@@ -157,7 +157,7 @@ def make_block(chain, key, randao, indices, skips):
     return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), indices, skips)
 
 # Create a casper genesis from given parameters
-# Validators: (addr, deposit_size, randao_commitment)
+# Validators: (vcode, deposit_size, randao_commitment)
 # Alloc: state declaration
 def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state = mk_basic_state({}, None, env=Env(config=casper_config))
@@ -174,11 +174,11 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length]))
     apply_transaction(state, t)
     # Add validators
-    for addr, deposit_size, randao_commitment in validators:
-        state.set_balance(addr, deposit_size)
-        t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
-                        ct.encode('deposit', [generate_validation_code(addr), randao_commitment]))
-        t._sender = utils.normalize_address(addr)
+    for i, (vcode, deposit_size, randao_commitment) in enumerate(validators):
+        state.set_balance(utils.int_to_addr(1), deposit_size)
+        t = Transaction(i, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
+                        ct.encode('deposit', [vcode, randao_commitment]))
+        t._sender = utils.int_to_addr(1)
         success, gas, logs = apply_transaction(state, t)
         assert success, (success, gas, logs)
     for addr, data in alloc.items():

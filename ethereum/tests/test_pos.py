@@ -33,7 +33,8 @@ deposit_sizes = [256] * (NUM_PARTICIPANTS // 4) + [128] * (NUM_PARTICIPANTS - (N
 ct = get_casper_ct()
 assert ct
 print 'Constructing genesis'
-s = make_casper_genesis(validators=[(a, ds * 10**18, r.get(9999)) for a, ds, r in zip(addrs, deposit_sizes, randaos)],
+s = make_casper_genesis(validators=[(generate_validation_code(a), ds * 10**18, r.get(9999))
+                                    for a, ds, r in zip(addrs, deposit_sizes, randaos)],
                         alloc={a: {'balance': 10**18} for a in addrs},
                         timestamp=int(time.time() - 10),
                         epoch_length=100)
@@ -75,12 +76,12 @@ assert skip_count == 1
 b3 = make_block(chains[1], privkeys[next_validator_id],
                 randaos[next_validator_id], indices[next_validator_id], skip_count)
 print 'Dunkle produced'
-t = Transaction(1, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+t = Transaction(0, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
 apply_transaction(chains[0].state, t)
 assert call_casper(chains[0].state, 'isDunkleIncluded', [utils.sha3(rlp.encode(b3.header))])
 print 'Dunkle added successfully'
 x = chains[0].state.gas_used
-t = Transaction(2, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+t = Transaction(1, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
 apply_transaction(chains[0].state, t)
 x2 = chains[0].state.gas_used
 assert x2 - x == t.startgas, (x2 - x, t.startgas)
