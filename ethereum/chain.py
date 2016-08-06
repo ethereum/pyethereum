@@ -329,14 +329,17 @@ class Chain(object):
         if force:
             self.transaction_queue.insert(0, tx)
             log.info('Forcibly added transaction to queue')
+            return True
         elif tx.gasprice >= self.min_gasprice:
             i = 0
             while i < len(self.transaction_queue) and tx.gasprice < self.transaction_queue[i]:
                 i += 1
             self.transaction_queue.insert(i, tx)
             log.info('Added transaction to queue')
+            return True
         else:
             log.info('Gasprice too low!')
+            return False
 
     # Get a transaction to include into a candidate block
     def get_candidate_transaction(self, gaslimit, excluded={}):

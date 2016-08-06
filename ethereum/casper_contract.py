@@ -260,12 +260,18 @@ def startWithdrawal(i, j, sig:str):
     sig[-1] = x
     vcIndex = ref(self.validators[i][j].validation_code)
     validation_code = string(~ssize(vcIndex))
+    ~sloadbytes(vcIndex, validation_code, len(validation_code))
     ~callblackbox(500000, validation_code, len(validation_code), sig - 32, sigsize + 32, ref(verified), 32)
     require(verified)
     if self.validators[i][j].end_epoch == NO_END_EPOCH:
         self.validators[i][j].end_epoch = self.currentEpoch + 2
         self.totalDepositDeltas[self.validators[i][j].end_epoch] -= validatorSizes[i]
 
+def const getStartEpoch(i, j):
+    return(self.validators[i][j].start_epoch)
+
+def const getEndEpoch(i, j):
+    return(self.validators[i][j].end_epoch)
 
 # Finalize withdrawing and take one's money out
 def withdraw(i, j):

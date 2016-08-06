@@ -629,7 +629,7 @@ def vm_execute(ext, msg, code):
                 compustate.gas += gas
                 if not mem_extend(mem, compustate, op, outstart, min(outsz, len(data))):
                     return vm_exception('OOG EXTENDING MEMORY')
-                for i in range(min(len(data), memoutsz)):
+                for i in range(min(len(data), outsz)):
                     mem[outstart + i] = data[i]
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()

@@ -331,6 +331,9 @@ def encode_int(v):
 def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
 
+def encode_int32(v):
+    return zpad(int_to_big_endian(v), 32)
+
 
 def scan_bin(v):
     if v[:2] in ('0x', b'0x'):
