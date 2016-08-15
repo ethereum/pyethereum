@@ -1,7 +1,7 @@
 import pytest
 
 from ethereum import utils, db, chain
-from ethereum.exceptions import VerificationFailed, InvalidTransaction
+from ethereum.exceptions import VerificationFailed, InvalidTransaction, InvalidNonce
 from ethereum.block import Block
 from ethereum.config import Env
 import rlp
@@ -71,7 +71,8 @@ def run_block_test(params, config_overrides = {}):
                 rlpdata = decode_hex(blk["rlp"][2:])
                 success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, KeyError):
+                    DecodingError, DeserializationError, InvalidTransaction, 
+                    InvalidNonce, KeyError), e:
                 success = False
             assert not success
         else:

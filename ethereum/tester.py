@@ -8,7 +8,7 @@ import warnings
 import rlp
 from rlp.utils import ascii_chr
 
-from ethereum import blocks, db, opcodes, processblock, transactions
+from ethereum import db, opcodes, processblock, transactions
 from ethereum.abi import ContractTranslator
 from ethereum.config import Env
 from ethereum.slogging import LogRecorder

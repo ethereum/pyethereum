@@ -84,10 +84,12 @@ def deposit(validation_code:str, randao):
 # Housekeeping to be done at the start of any epoch
 def newEpoch():
     currentEpoch = block.number / self.epochLength
+    log2(3, 3, 3, currentEpoch)
     if self.currentEpoch != currentEpoch - 1:
         stop
     q = 0
     while q < len(validatorSizes):
+        log3(4, 4, 4, q, self.validatorCounts[q])
         self.historicalValidatorCounts[currentEpoch][q] = self.validatorCounts[q]
         q += 1
     self.totalDeposits += self.totalDepositDeltas[currentEpoch]
@@ -272,6 +274,9 @@ def const getStartEpoch(i, j):
 
 def const getEndEpoch(i, j):
     return(self.validators[i][j].end_epoch)
+
+def const getCurrentEpoch():
+    return(self.currentEpoch)
 
 # Finalize withdrawing and take one's money out
 def withdraw(i, j):

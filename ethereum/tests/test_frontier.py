@@ -33,7 +33,8 @@ BENCHMARK = 0
 if '--benchmark' in sys.argv:
     BENCHMARK = int(sys.argv[sys.argv.index('--benchmark') + 1])
 
-if STATE_LOAD_FN in os.listdir(os.getcwd()):
+_path, _file = os.path.split(STATE_LOAD_FN)
+if _file in os.listdir(os.path.join(os.getcwd(), _path)):
     print 'loading state from %s ...' % STATE_LOAD_FN
     c = chain.Chain(json.load(open(STATE_LOAD_FN)), Env())
     print 'loaded.'
@@ -49,7 +50,8 @@ else:
         'd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3'
     print 'state generated from genesis'
 print 'Attempting to open %s' % RLP_BLOCKS_FILE
-if RLP_BLOCKS_FILE not in os.listdir(os.getcwd()):
+_path, _file = os.path.split(RLP_BLOCKS_FILE)
+if _file not in os.listdir(_path):
     print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp' + \
           'and put it in this directory to continue the test'
     sys.exit()

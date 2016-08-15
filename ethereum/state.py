@@ -281,11 +281,15 @@ class State():
     # Returns a value x, where State.revert(x) at any later point will return
     # you to the point at which the snapshot was made (unless journal_reset was called).
     def snapshot(self):
-        return len(self.journal)
+        return (self.trie.root_hash, len(self.journal))
 
     # Reverts to the provided snapshot
     def revert(self, snapshot):
-        while len(self.journal) > snapshot:
+        root, journal_length = snapshot
+        if root != self.trie.root_hash and journal_length != 0:
+            raise Exception("Cannot return to this snapshot")
+        self.trie.root_hash = root
+        while len(self.journal) > journal_length:
             addr, key, preval, premod = self.journal.pop()
             if addr == '~root':  # FIXME IS THIS USED?
                 self.trie.root_hash = preval

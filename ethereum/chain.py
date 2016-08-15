@@ -3,9 +3,9 @@ from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
 from ethereum.state_transition import apply_block, initialize, \
-    finalize, apply_transaction, mk_receipt_sha, mk_transaction_sha, \
-    calc_difficulty, calc_gaslimit, Receipt, mk_receipt, update_block_env_variables, \
-    validate_uncles
+    pre_seal_finalize, post_seal_finalize, apply_transaction, mk_receipt_sha, \
+    mk_transaction_sha, calc_difficulty, calc_gaslimit, Receipt, mk_receipt, \
+    update_block_env_variables, validate_uncles, validate_block_header
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -53,6 +53,7 @@ class Chain(object):
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
         self.head_hash = self.state.prev_headers[0].hash
+        self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
         self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
         assert self.state.block_number == self.state.prev_headers[0].number
@@ -80,8 +81,8 @@ class Chain(object):
         if self.db.get(blockhash) == 'GENESIS':
             return State.from_snapshot(json.loads(self.db.get('GENESIS_STATE')), self.env)
         state = State(env=self.env)
+        state.trie.root_hash = self.db.get('state:'+blockhash)
         block = rlp.decode(self.db.get(blockhash), Block)
-        state.trie.root_hash = block.header.state_root
         update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
         state.txindex = len(block.transactions)
@@ -219,19 +220,21 @@ class Chain(object):
                 log.info('Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash)))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
+            self.db.put('state:' + block.header.hash, self.state.trie.root_hash)
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
             log.info('Receiving block not on head (%d blocks behind), adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
-            pre_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+            temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
-                apply_block(pre_state, block)
+                apply_block(temp_state, block)
             # except Exception, e:  # FIXME catchall exception makes it unable to debug,
             except KeyError, e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash)))
                 return False
+            self.db.put('state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)
             # Replace the head
             if block_score > self.get_score(self.head):
@@ -266,7 +269,7 @@ class Chain(object):
                     if i not in new_chain and not orig_at_height:
                         break
                 self.head_hash = block.header.hash
-                self.state = pre_state
+                self.state = temp_state
         else:
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
@@ -405,7 +408,7 @@ class Chain(object):
                     InvalidNonce, UnsignedTransaction), e:
                 pass
             excluded[tx.hash] = True
-        finalize(temp_state, blk)
+        pre_seal_finalize(temp_state, blk)
         blk.header.receipts_root = mk_receipt_sha(receipts)
         blk.header.tx_list_root = mk_transaction_sha(blk.transactions)
         temp_state.commit()

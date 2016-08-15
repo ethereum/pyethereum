@@ -18,7 +18,7 @@ from ethereum.specials import specials as default_specials
 from config import default_config
 from db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance
+    BlockGasLimitReached, InsufficientBalance, VerificationFailed
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -50,11 +50,9 @@ def update_block_env_variables(state, block):
     state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
     state.block_coinbase = block.header.coinbase
     state.block_difficulty = block.header.difficulty
-    
 
 
 def initialize(state, block):
-    pre_root = state.trie.root_hash or ('\x00' * 32)
     state.txindex = 0
     state.gas_used = 0
     state.bloom = 0
@@ -64,21 +62,12 @@ def initialize(state, block):
             state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
         self.set_code(utils.normalize_address(
             state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
-    if state.is_METROPOLIS():
-        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
-                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                               pre_root)
-        print 'setting %d stateroot to %s' % (state.block_number, pre_root.encode('hex'))
-        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
-                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                               state.prev_headers[0].hash if state.prev_headers else '\x00' * 32)
-        print 'setting %d blockhash to %s' % (state.block_number, (state.prev_headers[0].hash if state.prev_headers else '\x00' * 32).encode('hex'))
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
             state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
 
 
-def finalize(state, block):
+def pre_seal_finalize(state, block):
     """Apply rewards and commit."""
     delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
     state.delta_balance(state.block_coinbase, delta)
@@ -94,8 +83,19 @@ def finalize(state, block):
         del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
     state.commit()
     state.reset_journal()
-    state.add_block_header(block.header)
 
+
+def post_seal_finalize(state, block):
+    if state.is_METROPOLIS():
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               state.trie.root_hash)
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               block.header.hash)
+    state.commit()
+    state.add_block_header(block.header)
+    state.reset_journal()
 
 
 def mk_receipt(state, logs):
@@ -104,9 +104,12 @@ def mk_receipt(state, logs):
     return Receipt(state.trie.root_hash, state.gas_used, logs)
 
 
-def apply_block(state, block, creating=False):
+def apply_block(state, block):
     # Pre-processing and verification
+    state.commit()
+    state.reset_journal()
     snapshot = state.snapshot()
+    assert snapshot[1] == 0
     assert validate_uncles(state, block)
     initialize(state, block)
     assert validate_block_header(state, block.header)
@@ -119,35 +122,32 @@ def apply_block(state, block, creating=False):
         state.bloom |= r.bloom  # int
         state.txindex += 1
     # Finalize (incl paying block rewards)
-    finalize(state, block)
+    pre_seal_finalize(state, block)
     # Verify state root, tx list root, receipt root
-    if creating:
-        block.header.receipts_root = mk_receipt_sha(receipts)
-        block.header.tx_list_root = mk_transaction_sha(block.transactions)
-        block.header.state_root = state.trie.root_hash
-    else:
-        if not SKIP_RECEIPT_ROOT_VALIDATION:
-            if block.header.receipts_root != mk_receipt_sha(receipts):
-                state.revert(snapshot)
-                raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
-                                 (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts)), len(receipts)))
-        if block.header.tx_list_root != mk_transaction_sha(block.transactions):
+    if not SKIP_RECEIPT_ROOT_VALIDATION:
+        if block.header.receipts_root != mk_receipt_sha(receipts):
             state.revert(snapshot)
-            raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %
-                             (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
-                              len(block.transactions)))
-        if block.header.state_root != state.trie.root_hash:
-            state.revert(snapshot)
-            raise ValueError("State root mismatch: header %s computed %s" %
-                             (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
-        if block.header.bloom != state.bloom:
-            state.revert(snapshot)
-            raise ValueError("Bloom mismatch: header %d computed %d" %
-                             (block.header.bloom, state.bloom))
-        if block.header.gas_used != state.gas_used:
-            state.revert(snapshot)
-            raise ValueError("Gas used mismatch: header %d computed %d" %
-                             (block.header.gas_used, state.gas_used))
+            raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
+                             (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts)), len(receipts)))
+    if block.header.tx_list_root != mk_transaction_sha(block.transactions):
+        state.revert(snapshot)
+        raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %
+                         (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
+                          len(block.transactions)))
+    if block.header.state_root != state.trie.root_hash:
+        state.revert(snapshot)
+        raise ValueError("State root mismatch: header %s computed %s" %
+                         (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
+    if block.header.bloom != state.bloom:
+        state.revert(snapshot)
+        raise ValueError("Bloom mismatch: header %d computed %d" %
+                         (block.header.bloom, state.bloom))
+    if block.header.gas_used != state.gas_used:
+        state.revert(snapshot)
+        raise ValueError("Gas used mismatch: header %d computed %d" %
+                         (block.header.gas_used, state.gas_used))
+    # Post-sealing finalization steps
+    post_seal_finalize(state, block)
     return state, receipts
 
 
@@ -193,9 +193,10 @@ def validate_transaction(state, tx):
 
 
 def apply_const_message(state, msg):
-    state1 = state.ephemeral_clone()
-    assert state1.config == state.config
-    ext = VMExt(state1, transactions.Transaction(0, 0, 21000, '', 0, ''))
+    return apply_message(state.ephemeral_clone(), msg)
+
+def apply_message(state, msg):
+    ext = VMExt(state, transactions.Transaction(0, 0, 21000, '', 0, ''))
     result, gas_remained, data = apply_msg(ext, msg)
     return data if result else None
 
@@ -205,8 +206,6 @@ def apply_transaction(state, tx):
     state.suicides = []
     state.refunds = 0
     validate_transaction(state, tx)
-
-    # print(block.get_nonce(tx.sender), '@@@')
 
     def rp(what, actual, target):
         return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
@@ -286,7 +285,6 @@ def mk_receipt_sha(receipts):
     t = trie.Trie(EphemDB())
     for i, receipt in enumerate(receipts):
         t.update(rlp.encode(i), rlp.encode(receipt))
-        # print i, rlp.decode(rlp.encode(receipt))
     return t.root_hash
 
 mk_transaction_sha = mk_receipt_sha
@@ -294,8 +292,8 @@ mk_transaction_sha = mk_receipt_sha
 
 def validate_block_header(state, header):
     o = VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
-    assert o
-    # print 'Consensus verification result:', repr(o)
+    if not o:
+        raise VerificationFailed("Consensus verification failed (%s)" % state.config['CONSENSUS_ALGO'])
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
@@ -376,18 +374,18 @@ def validate_uncles(state, block):
     """Validate the uncles of this block."""
     # Make sure hash matches up
     if utils.sha3(rlp.encode(block.uncles)) != block.header.uncles_hash:
-        assert False
+        raise VerificationFailed("Invalid transaction")
     # Enforce maximum number of uncles
     if len(block.uncles) > state.config['MAX_UNCLES']:
-        assert False
+        raise VerificationFailed("Too many uncles")
     # Uncle must have lower block number than blockj
     for uncle in block.uncles:
-        assert uncle.number < block.header.number
+        if uncle.number >= block.header.number:
+            raise VerificationFailed("Uncle number too high")
 
     # Check uncle validity
     MAX_UNCLE_DEPTH = state.config['MAX_UNCLE_DEPTH']
     ancestor_chain = [block.header] + [a for a in state.prev_headers[:MAX_UNCLE_DEPTH + 1] if a]
-    assert len(ancestor_chain) == min(block.header.number + 1, MAX_UNCLE_DEPTH + 2)
     # Uncles of this block cannot be direct ancestors and cannot also
     # be uncles included 1-6 blocks ago
     ineligible = [b.hash for b in ancestor_chain]
@@ -397,27 +395,18 @@ def validate_uncles(state, block):
     eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
     for uncle in block.uncles:
         if uncle.prevhash not in eligible_ancestor_hashes:
-            log.error("Uncle does not have a valid ancestor", block=self,
-                      eligible=[encode_hex(x) for x in eligible_ancestor_hashes],
-                      uncle_prevhash=encode_hex(uncle.prevhash))
-            assert False
+            raise VerificationFailed("Uncle does not have a valid ancestor")
         parent = [x for x in ancestor_chain if x.hash == uncle.prevhash][0]
         if uncle.difficulty != calc_difficulty(parent, uncle.timestamp, config=state.config):
-            log.error('difficulty mismatch')
-            assert False
+            raise VerificationFailed("Difficulty mismatch")
         if uncle.number != parent.number + 1:
-            log.error('number mismatch')
-            assert False
+            raise VerificationFailed("Number mismatch")
         if uncle.timestamp < parent.timestamp:
-            log.error('timestamp mismatch')
-            assert False
+            raise VerificationFailed("Timestamp mismatch")
         if VERIFIERS[state.config['CONSENSUS_ALGO']] == 'ethash' and not uncle.check_pow():
-            log.error('pow mismatch')
-            assert False
+            raise VerificationFailed('pow mismatch')
         if uncle.hash in ineligible:
-            log.error("Duplicate uncle", block=block,
-                      uncle=encode_hex(utils.sha3(rlp.encode(uncle))))
-            assert False
+            raise VerificationFailed("Duplicate uncle")
         ineligible.append(uncle.hash)
     return True
 

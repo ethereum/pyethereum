@@ -73,16 +73,19 @@ else:
 def ecrecover_to_pub(rawhash, v, r, s):
     if secp256k1:
         pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
-        pk.public_key = pk.ecdsa_recover(
-            rawhash,
-            pk.ecdsa_recoverable_deserialize(
-                zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) +
-                zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32),
-                v - 27
-            ),
-            raw=True
-        )
-        pub = pk.serialize(compressed=False)[1:]
+        try:
+            pk.public_key = pk.ecdsa_recover(
+                rawhash,
+                pk.ecdsa_recoverable_deserialize(
+                    zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) +
+                    zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32),
+                    v - 27
+                ),
+                raw=True
+            )
+            pub = pk.serialize(compressed=False)[1:]
+        except:
+            pub = b"\x00" * 64
     else:
         recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
         pub = encode_pubkey(recovered_addr, 'bin_electrum')
