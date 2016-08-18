@@ -218,21 +218,7 @@ def solidity_unresolved_symbols(hex_code):
     Args:
         hex_code (str): The bytecode encoded as hexadecimal.
     """
-    iterator = iter(hex_code)
-    symbol_names = []
-
-    for char in iterator:
-        if char == '_':
-            symbol = char
-            count = 1
-
-            while count < 40:
-                symbol += next(iterator)
-                count += 1
-
-            symbol_names.append(symbol)
-
-    return set(symbol_names)
+    return set(re.findall(r"_.{39}", hex_code))
 
 
 def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True):
