@@ -101,7 +101,6 @@ def mk_receipt(state, logs):
 
 def apply_block(state, block):
     # Pre-processing and verification
-    assert len(state.journal) == 0, state.journal
     snapshot = state.snapshot()
     try:
         # Start a new block context
@@ -300,8 +299,11 @@ def validate_block_header(state, header):
                          0, #value
                          1000000, #gas
                          vm.CallData(map(ord, rlp.encode(header))), #data
-                         code_address=int_to_addr(state.config['SERENITY_HEADER_VERIFIER']))
-        output == ''.join(map(chr, apply_const_message(state, msg)))
+                         code_address=state.config['SERENITY_HEADER_VERIFIER'])
+        c = apply_const_message(state, msg)
+        if c is None:
+            raise ValueError("Validation call failed with exception")
+        output = ''.join(map(chr, c))
         if output:
             raise ValueError(output)
     return True

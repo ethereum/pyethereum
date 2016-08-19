@@ -145,9 +145,18 @@ macro extractRLPint($blockdata, $ind, $saveTo, $errMsg):
         return(text($errMsg):str)
     mcopy($saveTo + 32 - ($blockdata[$ind+1] - $blockdata[$ind]), $blockdata + $blockdata[$ind], $blockdata[$ind+1] - $blockdata[$ind])
 
+macro extractRLPint($blockdata, $ind, $saveTo):
+    if $blockdata[$ind + 1] - blockdata[$ind] > 32:
+        ~invalid()
+    mcopy($saveTo + 32 - ($blockdata[$ind+1] - $blockdata[$ind]), $blockdata + $blockdata[$ind], $blockdata[$ind+1] - $blockdata[$ind])
+
 macro validateRLPint($blockdata, $ind, $errMsg):
     if $blockdata[$ind + 1] - $blockdata[$ind] > 32:
         return(text($errMsg):str)
+
+macro validateRLPint($blockdata, $ind):
+    if $blockdata[$ind + 1] - $blockdata[$ind] > 32:
+        ~invalid()
 
 macro RLPlength($blockdata):
     $blockdata[0] / 32
@@ -156,7 +165,7 @@ macro RLPItemLength($blockdata, $i):
     $blockdata[$i + 1] - $blockdata[$i]
 
 macro Exception($text):
-    return(text($text):str)
+    ~return($text, len($text))
 
 def any():
     # Block header entry point; expects the block header as input
@@ -185,7 +194,7 @@ def any():
             Exception("Uncles hash must be 32 bytes")
         if RLPItemLength(blockdata, 2) != 20 and RLPItemLength(blockdata, 2) != 0:
             Exception("Coinbase must be 0 or 20 bytes")
-        if RLPItemLength(blockdata, 3) != 32 and RLPItemLength(blockdata, 3) != 0
+        if RLPItemLength(blockdata, 3) != 32 and RLPItemLength(blockdata, 3) != 0:
             Exception("State root must be 0 or 32 bytes")
         if RLPItemLength(blockdata, 4) != 32 and RLPItemLength(blockdata, 4) != 0:
             Exception("Tx list root must be 0 or 32 bytes")
@@ -198,15 +207,15 @@ def any():
         # Extract and check block number
         extractRLPint(blockdata, 8, ref(number), "Failed to extract block number")
         if number != self.blockNumber + 1:
-            return(text("Block number mismatch"):str)
+            Exception("Block number mismatch")
         # Extract and check gas limit
         extractRLPint(blockdata, 9, ref(gas_limit), "Failed to extract gas limit")
         if gas_limit >= 2**63:
-            return(text("Gas limit too high"):str)
+            Exception("Gas limit too high")
         # Extract and check gas used
         extractRLPint(blockdata, 10, ref(gas_used), "Failed to extract gas used")
         if gas_limit > gas_limit:
-            return(text("Gas used exceeds gas limit"):str)
+            Exception("Gas used exceeds gas limit")
         # Extract timestamp
         extractRLPint(blockdata, 11, ref(timestamp), "Failed to extract timestamp")
         # Extract extra data (format: randao hash, skip count, i, j, signature)
@@ -220,7 +229,7 @@ def any():
         ~call(50000, 252, 0, rawheader, ~calldatasize(), ref(signing_hash), 32)
         # Check number of skips; with 0 skips, minimum lag is 3 seconds
         if timestamp < self.getMinTimestamp(skips):
-            return(text("Timestamp too early"):str)
+            Exception("Timestamp too early")
         # Get the validator that should be creating this block
         validatorData = self.getValidator(skips, outitems=2)
         require(validatorData[0] == i)
@@ -239,11 +248,11 @@ def any():
         # Check correctness of signature using validation code
         ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
         require(verified)
-        ~sstore(randaoIndex, randao)
-        self.randao += randao
-        self.totalSkips += skips
+        # ~sstore(randaoIndex, randao)
+        # self.randao += randao
+        # self.totalSkips += skips
         # Block header signature valid!
-        return(1:bool)
+        ~return(0, 0)
 
 
 def finalize(rawheader:str):

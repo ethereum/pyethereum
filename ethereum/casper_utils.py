@@ -43,7 +43,7 @@ casper_config = copy.deepcopy(default_config)
 casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
-casper_config['CONSENSUS_ALGO'] = 'contract'
+casper_config['HEADER_VALIDATION'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
 casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
 casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
@@ -169,6 +169,8 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state.set_code(casper_config['CASPER_ADDR'], get_casper_code())
     state.set_code(casper_config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
     state.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
+    state.set_code(casper_config['METROPOLIS_STATEROOT_STORE'], casper_config['SERENITY_GETTER_CODE'])
+    state.set_code(casper_config['METROPOLIS_BLOCKHASH_STORE'], casper_config['SERENITY_GETTER_CODE'])
     ct = get_casper_ct()
     # Set genesis time, and initialize epoch number
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length]))
@@ -179,8 +181,8 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
         t = Transaction(i, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
                         ct.encode('deposit', [vcode, randao_commitment]))
         t._sender = utils.int_to_addr(1)
-        success, gas, logs = apply_transaction(state, t)
-        assert success, (success, gas, logs)
+        success = apply_transaction(state, t)
+        assert success
     for addr, data in alloc.items():
         addr = utils.normalize_address(addr)
         assert len(addr) == 20

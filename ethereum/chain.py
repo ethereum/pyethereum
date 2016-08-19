@@ -217,7 +217,7 @@ class Chain(object):
             try:
                 apply_block(self.state, block)
             except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
-                log.info('Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash)))
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.db.put('state:' + block.header.hash, self.state.trie.root_hash)
@@ -231,7 +231,7 @@ class Chain(object):
             try:
                 apply_block(temp_state, block)
             except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
-                log.info('Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash)))
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put('state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)

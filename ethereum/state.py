@@ -411,7 +411,6 @@ class State():
         return snapshot
 
     def ephemeral_clone(self):
-        assert len(self.journal) == len(self.cache) == len(self.modified) == 0
         snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
         env2 = Env(OverlayDB(self.env.db), self.env.config)
         s = State.from_snapshot(snapshot, env2)
@@ -419,6 +418,9 @@ class State():
             setattr(s, param, getattr(self, param))
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
+        s.journal = copy.deepcopy(self.journal)
+        s.cache = copy.deepcopy(self.cache)
+        s.modified = copy.deepcopy(self.modified)
         return s
 
     # forks
