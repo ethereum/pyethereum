@@ -20,6 +20,7 @@ default_config = dict(
     GENESIS_INITIAL_ALLOC={},
     # Minimum gas limit
     MIN_GAS_LIMIT=5000,
+    MAX_GAS_LIMIT=2 ** 63 - 1,
     # Gas limit adjustment algo:
     # block.gas_limit=block.parent.gas_limit * 1023/1024 +
     #                   (block.gas_used * 6 / 5) / 1024

@@ -294,7 +294,7 @@ def run_state_test(params, mode):
         difficulty=parse_int_or_hex(env['currentDifficulty']),
         timestamp=parse_int_or_hex(env['currentTimestamp']),
         # work around https://github.com/ethereum/pyethereum/issues/390 [1]:
-        gas_limit=min(2 ** 63 - 1, parse_int_or_hex(env['currentGasLimit'])))
+        gas_limit=min(db_env.config['MAX_GAS_LIMIT'], parse_int_or_hex(env['currentGasLimit'])))
     blk = blocks.Block(header, env=db_env)
 
     # work around https://github.com/ethereum/pyethereum/issues/390 [2]:
