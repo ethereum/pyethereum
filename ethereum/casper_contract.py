@@ -1,5 +1,9 @@
 validatorSizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 BLOCK_REWARD = 10**17
+SYSTEM = 2**160 - 2
+FINALIZER = 254
+STATEROOT_STORE = 10
+BLOCKHASH_STORE = 20
 # validator[sizegroup][index]
 data validators[2**40][2**40](validation_code, address, start_epoch, end_epoch, deposit, randao, lock_duration, active)
 data historicalValidatorCounts[2**40][2**40]
@@ -17,6 +21,7 @@ data totalSkips
 data totalDunklesIncluded
 data currentEpoch
 data initialized
+data blockNumber
 event NewValidator(i, j)
 data epochLength
 event DunkleAdded(hash:bytes32)
@@ -35,12 +40,13 @@ def const getLockDuration():
 def const getEpochLength():
     return(self.epochLength)
 
-def initialize(timestamp:uint256, epoch_length:uint256):
+def initialize(timestamp:uint256, epoch_length:uint256, number:uint256):
     require(not self.initialized)
     self.initialized = 1
     self.genesisTimestamp = timestamp
     self.epochLength = epoch_length
     self.currentEpoch = -1
+    self.blockNumber = number
 
 def const getValidationCode(i, j):
     storage_index = ref(self.validators[i][j].validation_code)
@@ -134,29 +140,75 @@ macro require($x):
     if not($x):
         ~invalid()
 
-macro extractRLPint($blockdata, $ind, $saveTo):
-    require($blockdata[$ind + 1] - blockdata[$ind] <= 32)
+macro extractRLPint($blockdata, $ind, $saveTo, $errMsg):
+    if $blockdata[$ind + 1] - blockdata[$ind] > 32:
+        return(text($errMsg):str)
     mcopy($saveTo + 32 - ($blockdata[$ind+1] - $blockdata[$ind]), $blockdata + $blockdata[$ind], $blockdata[$ind+1] - $blockdata[$ind])
 
-macro validateRLPint($blockdata, $ind):
-    require($blockdata[$ind + 1] - $blockdata[$ind] <= 32)
+macro validateRLPint($blockdata, $ind, $errMsg):
+    if $blockdata[$ind + 1] - $blockdata[$ind] > 32:
+        return(text($errMsg):str)
+
+macro RLPlength($blockdata):
+    $blockdata[0] / 32
+
+macro RLPItemLength($blockdata, $i):
+    $blockdata[$i + 1] - $blockdata[$i]
+
+macro Exception($text):
+    return(text($text):str)
 
 def any():
     # Block header entry point; expects the block header as input
-    if msg.sender == 254:
+    if msg.sender == SYSTEM:
         # Get the block data (max 2048 bytes)
-        require(~calldatasize() <= 2048)
+        if ~calldatasize() > 2048:
+            Exception("Block header too large (max 2048 bytes)")
         rawheader = string(~calldatasize())
         ~calldatacopy(rawheader, 0, ~calldatasize())
         # RLP decode it
         blockdata = string(3096)
         ~call(50000, 253, 0, rawheader, ~calldatasize(), blockdata, 3096)
+        # Check length of RLP data
+        if RLPlength(blockdata) != 15:
+            Exception("Block data has wrong length")
+        # Check prevhash
+        if RLPItemLength(blockdata, 0) != 32:
+            Exception("Prevhash has wrong length")
+        extractRLPint(blockdata, 0, ref(prevhash), "")
+        bn = self.blockNumber
+        ~call(50000, BLOCKHASH_STORE, 0, bn, 32, shouldbe_prevhash, 32)
+        if prevhash != shouldbe_prevhash:
+            Exception("Prevhash mismatch")
+        # Check formatting of miscellaneous params
+        if RLPItemLength(blockdata, 1) != 32:
+            Exception("Uncles hash must be 32 bytes")
+        if RLPItemLength(blockdata, 2) != 20 and RLPItemLength(blockdata, 2) != 0:
+            Exception("Coinbase must be 0 or 20 bytes")
+        if RLPItemLength(blockdata, 3) != 32 and RLPItemLength(blockdata, 3) != 0
+            Exception("State root must be 0 or 32 bytes")
+        if RLPItemLength(blockdata, 4) != 32 and RLPItemLength(blockdata, 4) != 0:
+            Exception("Tx list root must be 0 or 32 bytes")
+        if RLPItemLength(blockdata, 5) != 32 and RLPItemLength(blockdata, 5) != 0:
+            Exception("Receipt root must be 0 or 32 bytes")
+        if RLPItemLength(blockdata, 6) != 256:
+            Exception("Bloom must be 32 bytes")
         # Extract difficulty
-        extractRLPint(blockdata, 7, ref(difficulty))
+        extractRLPint(blockdata, 7, ref(difficulty), "Failed to extract difficulty")
+        # Extract and check block number
+        extractRLPint(blockdata, 8, ref(number), "Failed to extract block number")
+        if number != self.blockNumber + 1:
+            return(text("Block number mismatch"):str)
+        # Extract and check gas limit
+        extractRLPint(blockdata, 9, ref(gas_limit), "Failed to extract gas limit")
+        if gas_limit >= 2**63:
+            return(text("Gas limit too high"):str)
+        # Extract and check gas used
+        extractRLPint(blockdata, 10, ref(gas_used), "Failed to extract gas used")
+        if gas_limit > gas_limit:
+            return(text("Gas used exceeds gas limit"):str)
         # Extract timestamp
-        extractRLPint(blockdata, 11, ref(timestamp))
-        # Block number validity check
-        validateRLPint(blockdata, 8)
+        extractRLPint(blockdata, 11, ref(timestamp), "Failed to extract timestamp")
         # Extract extra data (format: randao hash, skip count, i, j, signature)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
@@ -167,8 +219,8 @@ def any():
         # Get the signing hash
         ~call(50000, 252, 0, rawheader, ~calldatasize(), ref(signing_hash), 32)
         # Check number of skips; with 0 skips, minimum lag is 3 seconds
-        require(timestamp >= self.getMinTimestamp(skips))
-        require(difficulty == 1)
+        if timestamp < self.getMinTimestamp(skips):
+            return(text("Timestamp too early"):str)
         # Get the validator that should be creating this block
         validatorData = self.getValidator(skips, outitems=2)
         require(validatorData[0] == i)
@@ -187,15 +239,32 @@ def any():
         # Check correctness of signature using validation code
         ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
         require(verified)
-        ~sstore(randaoIndex, sigdata[0])
-        self.randao += sigdata[0]
-        self.validators[i][j].deposit += self.getBlockReward()
+        ~sstore(randaoIndex, randao)
+        self.randao += randao
         self.totalSkips += skips
+        # Block header signature valid!
+        return(1:bool)
+
+
+def finalize(rawheader:str):
+    if msg.sender == FINALIZER:
+        # RLP decode the header
+        blockdata = string(3096)
+        ~call(50000, 253, 0, rawheader, len(rawheader), blockdata, 3096)
+        # Extract extra data (format: randao hash, skip count, i, j, signature)
+        extra_data = string(blockdata[13] - blockdata[12])
+        mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
+        randao = extra_data[0]
+        skips = extra_data[1]
+        i = extra_data[2]
+        j = extra_data[3]
+        self.randao += randao
+        self.validators[i][j].randao = randao
+        self.validators[i][j].deposit += self.getBlockReward()
         # Housekeeping if this block starts a new epoch
         if (block.number % self.epochLength == 0):
             self.newEpoch()
-        # Block header signature valid!
-        return(1:bool)
+    
 
 # Like uncle inclusion, but this time the reward is negative
 def includeDunkle(rawheader:str):

@@ -38,11 +38,6 @@ CREATE_CONTRACT_ADDRESS = b''
 SKIP_RECEIPT_ROOT_VALIDATION = False
 SKIP_MEDSTATES = False
 
-VERIFIERS = {
-    'ethash': lambda state, header: header.check_pow(),
-    'contract': lambda state, header: ''.join(map(chr, apply_const_message(state, vm.Message(int_to_addr(254), int_to_addr(255), 0, 1000000, vm.CallData([ord(x) for x in rlp.encode(header)]), code_address=int_to_addr(255)))))
-}
-
 def update_block_env_variables(state, block):
     state.timestamp = block.header.timestamp
     state.gas_limit = block.header.gas_limit
@@ -56,6 +51,7 @@ def initialize(state, block):
     state.txindex = 0
     state.gas_used = 0
     state.bloom = 0
+    state.receipts = []
     update_block_env_variables(state, block)
     if state.is_METROPOLIS(at_fork_height=True):
         self.set_code(utils.normalize_address(
@@ -82,7 +78,6 @@ def pre_seal_finalize(state, block):
     if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
         del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
     state.commit()
-    state.reset_journal()
 
 
 def post_seal_finalize(state, block):
@@ -95,7 +90,7 @@ def post_seal_finalize(state, block):
                                block.header.hash)
     state.commit()
     state.add_block_header(block.header)
-    state.reset_journal()
+    assert len(state.journal) == 0, state.journal
 
 
 def mk_receipt(state, logs):
@@ -106,50 +101,53 @@ def mk_receipt(state, logs):
 
 def apply_block(state, block):
     # Pre-processing and verification
-    state.commit()
-    state.reset_journal()
+    assert len(state.journal) == 0, state.journal
     snapshot = state.snapshot()
-    assert snapshot[1] == 0
-    assert validate_uncles(state, block)
-    initialize(state, block)
-    assert validate_block_header(state, block.header)
-    receipts = []
-    # Process transactions
-    for tx in block.transactions:
-        success, output, logs = apply_transaction(state, tx)
-        r = mk_receipt(state, logs)
-        receipts.append(r)
-        state.bloom |= r.bloom  # int
-        state.txindex += 1
-    # Finalize (incl paying block rewards)
-    pre_seal_finalize(state, block)
-    # Verify state root, tx list root, receipt root
-    if not SKIP_RECEIPT_ROOT_VALIDATION:
-        if block.header.receipts_root != mk_receipt_sha(receipts):
-            state.revert(snapshot)
-            raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
-                             (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(receipts)), len(receipts)))
-    if block.header.tx_list_root != mk_transaction_sha(block.transactions):
+    try:
+        # Start a new block context
+        initialize(state, block)
+        # Basic validation
+        assert validate_block_header(state, block.header)
+        assert validate_uncles(state, block)
+        assert validate_transactions(state, block)
+        # Process transactions
+        for tx in block.transactions:
+            apply_transaction(state, tx)
+        # Finalize (incl paying block rewards)
+        pre_seal_finalize(state, block)
+        # Verify state root, tx list root, receipt root
+        assert verify_execution_results(state, block)
+        # Post-sealing finalization steps
+        post_seal_finalize(state, block)
+    except Exception, e:
         state.revert(snapshot)
+        raise ValueError(str(e))
+    return state
+
+
+def validate_transactions(state, block):
+    if block.header.tx_list_root != mk_transaction_sha(block.transactions):
         raise ValueError("Transaction root mismatch: header %s computed %s, %d transactions" %
                          (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
                           len(block.transactions)))
+    return True
+
+
+def verify_execution_results(state, block):
+    if not SKIP_RECEIPT_ROOT_VALIDATION:
+        if block.header.receipts_root != mk_receipt_sha(state.receipts):
+            raise ValueError("Receipt root mismatch: header %s computed %s, %d receipts" %
+                             (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)), len(state.receipts)))
     if block.header.state_root != state.trie.root_hash:
-        state.revert(snapshot)
         raise ValueError("State root mismatch: header %s computed %s" %
                          (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
     if block.header.bloom != state.bloom:
-        state.revert(snapshot)
         raise ValueError("Bloom mismatch: header %d computed %d" %
                          (block.header.bloom, state.bloom))
     if block.header.gas_used != state.gas_used:
-        state.revert(snapshot)
         raise ValueError("Gas used mismatch: header %d computed %d" %
                          (block.header.gas_used, state.gas_used))
-    # Post-sealing finalization steps
-    post_seal_finalize(state, block)
-    return state, receipts
-
+    return True
 
 def validate_transaction(state, tx):
 
@@ -274,11 +272,14 @@ def apply_transaction(state, tx):
     for s in suicides:
         state.set_balance(s, 0)
         state.del_account(s)
-    logs = state.logs
-    state.logs = []
     if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
-    return success, output, logs
+    r = mk_receipt(state, state.logs)
+    state.logs = []
+    state.add_to_list('receipts', r)
+    state.set_param('bloom', state.bloom | r.bloom)
+    state.set_param('txindex', state.txindex + 1)
+    return success
 
 
 def mk_receipt_sha(receipts):
@@ -291,9 +292,23 @@ mk_transaction_sha = mk_receipt_sha
 
 
 def validate_block_header(state, header):
-    o = VERIFIERS[state.config['CONSENSUS_ALGO']](state, header)
-    if not o:
-        raise VerificationFailed("Consensus verification failed (%s)" % state.config['CONSENSUS_ALGO'])
+    if state.config['HEADER_VALIDATION'] == 'ethereum1':
+        ethereum1_validate_header(state, header)
+    elif state.config['HEADER_VALIDATION'] == 'contract':
+        msg = vm.Message(state.config['SYSTEM_ENTRY_POINT'], #from
+                         state.config['SERENITY_HEADER_VERIFIER'], #to
+                         0, #value
+                         1000000, #gas
+                         vm.CallData(map(ord, rlp.encode(header))), #data
+                         code_address=int_to_addr(state.config['SERENITY_HEADER_VERIFIER']))
+        output == ''.join(map(chr, apply_const_message(state, msg)))
+        if output:
+            raise ValueError(output)
+    return True
+
+
+def ethereum1_validate_header(state, header):
+    assert header.check_pow()
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
@@ -403,7 +418,7 @@ def validate_uncles(state, block):
             raise VerificationFailed("Number mismatch")
         if uncle.timestamp < parent.timestamp:
             raise VerificationFailed("Timestamp mismatch")
-        if VERIFIERS[state.config['CONSENSUS_ALGO']] == 'ethash' and not uncle.check_pow():
+        if state.config['HEADER_VALIDATION'] == 'ethash' and not uncle.check_pow():
             raise VerificationFailed('pow mismatch')
         if uncle.hash in ineligible:
             raise VerificationFailed("Duplicate uncle")
@@ -430,7 +445,7 @@ class VMExt():
         self.get_storage_bytes = state.get_storage_bytes
         self.set_storage_bytes = state.set_storage_bytes
         self.log_storage = lambda x: 'storage logging stub'
-        self.add_suicide = lambda x: state.add_suicide(x)
+        self.add_suicide = lambda x: state.add_to_list('suicides', x)
         self.add_refund = lambda x: \
             state.set_param('refunds', state.refunds + x)
         self.block_hash = lambda x: state.get_block_hash(state.block_number - x - 1) \

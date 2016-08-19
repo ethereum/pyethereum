@@ -180,7 +180,7 @@ def test_transaction(db):
     blk = mine_next_block(chain)
     tx = get_transaction()
     assert tx not in blk.transactions
-    success, res, logs = state_transition.apply_transaction(chain.state, tx)
+    state_transition.apply_transaction(chain.state, tx)
     assert chain.state.get_balance(v) == utils.denoms.finney * 990
     assert chain.state.get_balance(v2) == utils.denoms.finney * 10
 

@@ -63,7 +63,7 @@ class BlockHeader(rlp.Serializable):
         ('timestamp', big_endian_int),
         ('extra_data', binary),
         ('mixhash', binary),
-        ('nonce', Binary(8, allow_empty=True))
+        ('nonce', binary)
     ]
 
     def __init__(self,

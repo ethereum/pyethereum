@@ -61,13 +61,17 @@ default_config = dict(
     DAO_FORK_BLKNUM = 1920000,
     CHILD_DAO_LIST = map(utils.normalize_address, child_dao_list),
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
-    # Consensus algorithm (for verification): ethash, contract
-    CONSENSUS_ALGO = 'ethash',
+    # Header validation: ethereum 1.0, contract
+    HEADER_VALIDATION = 'ethereum1',
     # Default consensus strategy: ethash, poa, casper, pbft
-    CONSENSUS_STRATEGY = 'ethash',
+    CONSENSUS_STRATEGY = 'ethereum1',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,
     PREV_HEADER_DEPTH = 256,
+    SYSTEM_ENTRY_POINT = utils.int_to_addr(2**160 - 2),
+    SERENITY_HEADER_VERIFIER = utils.int_to_addr(255),
+    SERENITY_HEADER_POST_FINALIZER = utils.int_to_addr(254),
+    SERENITY_GETTER_CODE = decode_hex('600260a060020a03331415601857602035600035556025565b6000355460205260206020f3'),
     # Custom specials
     CUSTOM_SPECIALS = {}
 )

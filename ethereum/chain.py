@@ -110,6 +110,7 @@ class Chain(object):
                         state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
             else:
                 raise Exception("Dangling prevhash")
+        assert len(state.journal) == 0, state.journal
         return state
 
     def get_parent(self, block):
@@ -215,8 +216,7 @@ class Chain(object):
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
-            # except Exception, e:  # FIXME catchall exception makes it unable to debug,
-            except KeyError, e:  # FIXME add relevant exceptions here
+            except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash)))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
@@ -230,8 +230,7 @@ class Chain(object):
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
-            # except Exception, e:  # FIXME catchall exception makes it unable to debug,
-            except KeyError, e:  # FIXME add relevant exceptions here
+            except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid' % (encode_hex(block.hash), encode_hex(block.prevhash)))
                 return False
             self.db.put('state:' + block.header.hash, temp_state.trie.root_hash)
@@ -399,17 +398,14 @@ class Chain(object):
             if tx is None:
                 break
             try:
-                success, gas, logs = apply_transaction(temp_state, tx)
-                r = mk_receipt(temp_state, logs)
+                apply_transaction(temp_state, tx)
                 blk.transactions.append(tx)
-                receipts.append(r)
-                temp_state.bloom |= r.bloom  # int
             except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
                     InvalidNonce, UnsignedTransaction), e:
                 pass
             excluded[tx.hash] = True
         pre_seal_finalize(temp_state, blk)
-        blk.header.receipts_root = mk_receipt_sha(receipts)
+        blk.header.receipts_root = mk_receipt_sha(temp_state.receipts)
         blk.header.tx_list_root = mk_transaction_sha(blk.transactions)
         temp_state.commit()
         blk.header.state_root = temp_state.trie.root_hash

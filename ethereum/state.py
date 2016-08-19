@@ -47,6 +47,8 @@ STATE_DEFAULTS = {
     "block_difficulty": 1,
     "timestamp": 0,
     "logs": [],
+    "receipts": [],
+    "bloom": 0,
     "suicides": [],
     "recent_uncles": {},
     "prev_headers": [],
@@ -89,7 +91,6 @@ class State():
             return o
 
     def add_block_header(self, block_header):
-        self.journal.append(('~prev_headers', None, len(self.prev_headers), None))
         self.prev_headers = [block_header] + self.prev_headers
 
     def typecheck_storage(self, k, v):
@@ -124,6 +125,11 @@ class State():
     def set_param(self, k, v):
         self.journal.append((k, None, getattr(self, k), None))
         setattr(self, k, v)
+
+    def add_to_list(self, k, v):
+        l = getattr(self, k)
+        self.journal.append((k, None, len(l), None))
+        l.append(v)
 
     # It's unsafe because it passes through the cache
     def _get_account_unsafe(self, addr):
@@ -245,9 +251,9 @@ class State():
                     self.trie.update(addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)
-        self.journal.append(('~root', (self.cache, self.modified), rt, None))  # FIXME USED?
         self.cache = {}
         self.modified = {}
+        self.reset_journal()
 
     def reset_journal(self):
         "resets the journal. should be called after State.commit unless there is a better strategy"
@@ -271,12 +277,7 @@ class State():
     def add_log(self, log):
         for listener in self.log_listeners:
             listener(log)
-        self.journal.append(('~logs', None, len(self.logs), None))
-        self.logs.append(log)
-
-    def add_suicide(self, suicide):
-        self.journal.append(('~suicides', None, len(self.suicides), None))
-        self.suicides.append(suicide)
+        self.add_to_list('logs', log)
 
     # Returns a value x, where State.revert(x) at any later point will return
     # you to the point at which the snapshot was made (unless journal_reset was called).
@@ -288,21 +289,18 @@ class State():
         root, journal_length = snapshot
         if root != self.trie.root_hash and journal_length != 0:
             raise Exception("Cannot return to this snapshot")
-        self.trie.root_hash = root
+        if root != self.trie.root_hash:
+            self.trie.root_hash = root
+            self.cache = {}
+            self.modified = {}
         while len(self.journal) > journal_length:
             addr, key, preval, premod = self.journal.pop()
-            if addr == '~root':  # FIXME IS THIS USED?
-                self.trie.root_hash = preval
-                self.cache, self.modified = key
-            elif addr == '~logs':
-                self.logs = self.logs[:preval]
-            elif addr == '~suicides':
-                self.suicides = self.suicides[:preval]
-            elif addr == '~prev_headers':
-                self.prev_headers = self.prev_headers[-preval:]
-            elif addr in STATE_DEFAULTS:
-                setattr(self, addr, preval)
-            else:
+            if addr in STATE_DEFAULTS:
+                if isinstance(STATE_DEFAULTS[addr], list):
+                    setattr(self, addr, getattr(self, addr)[:preval])
+                else:
+                    setattr(self, addr, preval)
+            elif root == self.trie.root_hash:
                 self.cache[addr][key] = preval
                 if not premod:
                     del self.modified[addr]
@@ -413,12 +411,10 @@ class State():
         return snapshot
 
     def ephemeral_clone(self):
+        assert len(self.journal) == len(self.cache) == len(self.modified) == 0
         snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
         env2 = Env(OverlayDB(self.env.db), self.env.config)
         s = State.from_snapshot(snapshot, env2)
-        s.cache = copy.deepcopy(self.cache)
-        s.modified = copy.deepcopy(self.modified)
-        s.journal = copy.deepcopy(self.journal)
         for param in STATE_DEFAULTS:
             setattr(s, param, getattr(self, param))
         s.recent_uncles = self.recent_uncles
