@@ -165,11 +165,12 @@ macro RLPItemLength($blockdata, $i):
     $blockdata[$i + 1] - $blockdata[$i]
 
 macro Exception($text):
-    ~return($text, len($text))
+    ~return(text($text), len(text($text)))
 
 def any():
     # Block header entry point; expects the block header as input
     if msg.sender == SYSTEM:
+        ~log1(1, 1, 1)
         # Get the block data (max 2048 bytes)
         if ~calldatasize() > 2048:
             Exception("Block header too large (max 2048 bytes)")
@@ -187,6 +188,7 @@ def any():
         extractRLPint(blockdata, 0, ref(prevhash), "")
         bn = self.blockNumber
         ~call(50000, BLOCKHASH_STORE, 0, bn, 32, shouldbe_prevhash, 32)
+        ~log1(2, 2, 2)
         if prevhash != shouldbe_prevhash:
             Exception("Prevhash mismatch")
         # Check formatting of miscellaneous params
@@ -202,23 +204,29 @@ def any():
             Exception("Receipt root must be 0 or 32 bytes")
         if RLPItemLength(blockdata, 6) != 256:
             Exception("Bloom must be 32 bytes")
+        ~log1(3, 3, 3)
         # Extract difficulty
         extractRLPint(blockdata, 7, ref(difficulty), "Failed to extract difficulty")
         # Extract and check block number
         extractRLPint(blockdata, 8, ref(number), "Failed to extract block number")
+        ~log3(4, 4, 4, number, self.blockNumber)
         if number != self.blockNumber + 1:
             Exception("Block number mismatch")
+        ~log1(5, 5, 5)
         # Extract and check gas limit
         extractRLPint(blockdata, 9, ref(gas_limit), "Failed to extract gas limit")
         if gas_limit >= 2**63:
             Exception("Gas limit too high")
+        ~log1(6, 6, 6)
         # Extract and check gas used
         extractRLPint(blockdata, 10, ref(gas_used), "Failed to extract gas used")
-        if gas_limit > gas_limit:
+        if gas_used > gas_limit:
             Exception("Gas used exceeds gas limit")
+        ~log1(5, 5, 5)
         # Extract timestamp
         extractRLPint(blockdata, 11, ref(timestamp), "Failed to extract timestamp")
         # Extract extra data (format: randao hash, skip count, i, j, signature)
+        ~log1(6, 6, 6)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
         randao = extra_data[0]
@@ -257,6 +265,7 @@ def any():
 
 def finalize(rawheader:str):
     if msg.sender == FINALIZER:
+        ~log1(9, 9, 9)
         # RLP decode the header
         blockdata = string(3096)
         ~call(50000, 253, 0, rawheader, len(rawheader), blockdata, 3096)
@@ -268,11 +277,20 @@ def finalize(rawheader:str):
         i = extra_data[2]
         j = extra_data[3]
         self.randao += randao
+        ~log1(10, 10, 10)
         self.validators[i][j].randao = randao
         self.validators[i][j].deposit += self.getBlockReward()
+        # Extract state root and block hash
+        extractRLPint(blockdata, 3, ref(stateroot))
+        blockhash = sha3(rawheader:str)
         # Housekeeping if this block starts a new epoch
+        ~log1(11, 11, 11)
+        self.blockNumber += 1
         if (block.number % self.epochLength == 0):
             self.newEpoch()
+        ~call(40000, STATEROOT_STORE, 0, [block.number, stateroot], 64, 0, 0)
+        ~call(40000, BLOCKHASH_STORE, 0, [block.number, blockhash], 64, 0, 0)
+        ~log3(12, 12, 12, self.blockNumber, block.number)
     
 
 # Like uncle inclusion, but this time the reward is negative

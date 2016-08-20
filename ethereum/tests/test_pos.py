@@ -50,7 +50,7 @@ print 'Index in set:', next_validator_id
 chains = [Chain(s.to_snapshot(), env=s.env) for i in range(NUM_PARTICIPANTS)]
 skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_id], indices[next_validator_id])
 assert skip_count == 0
-b = make_block(chains[next_validator_id], privkeys[next_validator_id],
+b = make_block(chains[0], privkeys[next_validator_id],
                randaos[next_validator_id], indices[next_validator_id], skip_count)
 print 'Block timestamp:', b.header.timestamp, s.timestamp, timestamp
 initialize(s, b)
@@ -62,7 +62,7 @@ print 'Block added to chain'
 # Make another block
 next_validator = call_casper(chains[0].state, 'getValidator', [0])
 next_validator_id = indices.index(next_validator)
-skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_id], indices[next_validator_id])
+skip_count, timestamp = get_skips_and_block_making_time(chains[0], next_validator)
 assert skip_count == 0
 b2 = make_block(chains[0], privkeys[next_validator_id],
                 randaos[next_validator_id], indices[next_validator_id], skip_count)
@@ -71,7 +71,7 @@ print 'Second block added to chain'
 # Make a dunkle and include it in a transaction
 next_validator = call_casper(chains[1].state, 'getValidator', [1])
 next_validator_id = indices.index(next_validator)
-skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_id], indices[next_validator_id])
+skip_count, timestamp = get_skips_and_block_making_time(chains[next_validator_id], next_validator)
 assert skip_count == 1
 b3 = make_block(chains[1], privkeys[next_validator_id],
                 randaos[next_validator_id], indices[next_validator_id], skip_count)

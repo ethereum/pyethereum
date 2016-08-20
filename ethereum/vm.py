@@ -55,16 +55,16 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0,
+    def __init__(self, sender, to, value=0, gas=1000000, data='', depth=0,
             code_address=None, is_create=False, transfers_value=True):
         self.sender = sender
         self.to = to
         self.value = value
         self.gas = gas
-        self.data = data
+        self.data = CallData(map(ord, data)) if isinstance(data, (str, bytes)) else data
         self.depth = depth
         self.logs = []
-        self.code_address = code_address
+        self.code_address = to if code_address is None else code_address
         self.is_create = is_create
         self.transfers_value = transfers_value
 

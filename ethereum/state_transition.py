@@ -64,32 +64,39 @@ def initialize(state, block):
 
 
 def pre_seal_finalize(state, block):
-    """Apply rewards and commit."""
-    delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
-    state.delta_balance(state.block_coinbase, delta)
-
-    br = state.config['BLOCK_REWARD']
-    udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
-
-    for uncle in block.uncles:
-        r = int(br * (udpf + uncle.number - state.block_number) // udpf)
-
-        state.delta_balance(uncle.coinbase, r)
-    if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
-        del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
+    if state.config['FINALIZATION'] == 'ethereum1':
+        """Apply rewards and commit."""
+        delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
+        state.delta_balance(state.block_coinbase, delta)
+    
+        br = state.config['BLOCK_REWARD']
+        udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
+    
+        for uncle in block.uncles:
+            r = int(br * (udpf + uncle.number - state.block_number) // udpf)
+    
+            state.delta_balance(uncle.coinbase, r)
+        if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
+            del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
     state.commit()
 
 
 def post_seal_finalize(state, block):
-    if state.is_METROPOLIS():
-        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
-                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                               state.trie.root_hash)
-        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
-                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                               block.header.hash)
+    if state.config['FINALIZATION'] == 'ethereum1':
+        if state.is_METROPOLIS():
+            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                                   state.trie.root_hash)
+            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                                   block.header.hash)
+        state.add_block_header(block.header)
+    elif state.config['FINALIZATION'] == 'contract':
+        apply_message(state,
+                      sender=state.config['SYSTEM_ENTRY_POINT'],
+                      to=state.config['SERENITY_HEADER_POST_FINALIZER'],
+                      data=rlp.encode(block.header))
     state.commit()
-    state.add_block_header(block.header)
     assert len(state.journal) == 0, state.journal
 
 
@@ -100,6 +107,7 @@ def mk_receipt(state, logs):
 
 
 def apply_block(state, block):
+    print 's', repr(state.trie.root_hash)
     # Pre-processing and verification
     snapshot = state.snapshot()
     try:
@@ -118,6 +126,7 @@ def apply_block(state, block):
         assert verify_execution_results(state, block)
         # Post-sealing finalization steps
         post_seal_finalize(state, block)
+        print 'f', repr(state.trie.root_hash)
     except Exception, e:
         state.revert(snapshot)
         raise ValueError(str(e))
@@ -189,13 +198,17 @@ def validate_transaction(state, tx):
     return True
 
 
-def apply_const_message(state, msg):
-    return apply_message(state.ephemeral_clone(), msg)
+def apply_const_message(state, msg=None, **kwargs):
+    return apply_message(state.ephemeral_clone(), msg, **kwargs)
 
-def apply_message(state, msg):
+def apply_message(state, msg=None, **kwargs):
+    if msg is None:
+        msg = vm.Message(**kwargs)
+    else:
+        assert not kwargs
     ext = VMExt(state, transactions.Transaction(0, 0, 21000, '', 0, ''))
     result, gas_remained, data = apply_msg(ext, msg)
-    return data if result else None
+    return ''.join(map(chr, data)) if result else None
 
 
 def apply_transaction(state, tx):
@@ -294,17 +307,13 @@ def validate_block_header(state, header):
     if state.config['HEADER_VALIDATION'] == 'ethereum1':
         ethereum1_validate_header(state, header)
     elif state.config['HEADER_VALIDATION'] == 'contract':
-        msg = vm.Message(state.config['SYSTEM_ENTRY_POINT'], #from
-                         state.config['SERENITY_HEADER_VERIFIER'], #to
-                         0, #value
-                         1000000, #gas
-                         vm.CallData(map(ord, rlp.encode(header))), #data
-                         code_address=state.config['SERENITY_HEADER_VERIFIER'])
-        c = apply_const_message(state, msg)
-        if c is None:
+        output = apply_const_message(state,
+                                     sender=state.config['SYSTEM_ENTRY_POINT'],
+                                     to=state.config['SERENITY_HEADER_VERIFIER'],
+                                     data=rlp.encode(header))
+        if output is None:
             raise ValueError("Validation call failed with exception")
-        output = ''.join(map(chr, c))
-        if output:
+        elif output:
             raise ValueError(output)
     return True
 

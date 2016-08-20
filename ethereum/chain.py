@@ -212,8 +212,10 @@ class Chain(object):
             self.time_queue.insert(i, block)
             log.info('Block received too early. Delaying for %d seconds' % (block.header.timestamp - now))
             return False
+        print 'prevhash', repr(block.header.prevhash)
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
+            print 'ch head', repr(self.state.trie.root_hash)
             try:
                 apply_block(self.state, block)
             except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
@@ -222,12 +224,14 @@ class Chain(object):
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.db.put('state:' + block.header.hash, self.state.trie.root_hash)
             self.head_hash = block.header.hash
+            print 'nh', repr(block.header.hash)
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
             log.info('Receiving block not on head (%d blocks behind), adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+            print 'ch side', repr(temp_state.trie.root_hash)
             try:
                 apply_block(temp_state, block)
             except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
@@ -361,12 +365,16 @@ class Chain(object):
         blk = Block(BlockHeader())
         now = timestamp or self.time()
         blk.header.number = temp_state.block_number + 1
-        blk.header.difficulty = calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
-        blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
+        if self.config['HEADER_VALIDATION'] == 'ethereum1':
+            blk.header.difficulty = calc_difficulty(temp_state.prev_headers[0], now, self.env.config)
+            blk.header.gas_limit = calc_gaslimit(temp_state.prev_headers[0], self.env.config)
+            blk.header.timestamp = max(now, temp_state.prev_headers[0].timestamp + 1)
+            blk.header.prevhash = temp_state.prev_headers[0].hash
+        elif self.config['HEADER_VALIDATION'] == 'contract':
+            blk.header.difficulty = 1
+            blk.header.gas_limit = calc_gaslimit
         blk.header.coinbase = coinbase or self.coinbase
-        blk.header.timestamp = max(now, temp_state.prev_headers[0].timestamp + 1)
         blk.header.extra_data = self.extra_data
-        blk.header.prevhash = temp_state.prev_headers[0].hash
         blk.header.bloom = 0
         blk.transactions = []
         blk.uncles = []

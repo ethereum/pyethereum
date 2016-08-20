@@ -12,22 +12,24 @@ mydir = os.path.split(__file__)[0]
 casper_path = os.path.join(mydir, 'casper_contract.py')
 rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
 hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
+finalizer_path = os.path.join(mydir, 'finalizer_contract.py')
 validator_sizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 
-# The casper Code
 def get_casper_code():
     import serpent
     return get_contract_code(serpent.compile(open(casper_path).read()))
 
-# RLP decoder code
 def get_rlp_decoder_code():
     import serpent
     return get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
 
-# RLP decoder code
 def get_hash_without_ed_code():
     import serpent
     return get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
+
+def get_finalizer_code():
+    import serpent
+    return get_contract_code(serpent.compile(open(finalizer_path).read()))
 
 _casper_ct = None
 
@@ -44,6 +46,7 @@ casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
 casper_config['HEADER_VALIDATION'] = 'contract'
+casper_config['FINALIZATION'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
 casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
 casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
@@ -110,10 +113,11 @@ def call_casper(state, fun, args, gas=1000000, value=0):
     ct = get_casper_ct()
     abidata = vm.CallData([utils.safe_ord(x) for x in ct.encode(fun, args)])
     msg = vm.Message(casper_config['METROPOLIS_ENTRY_POINT'], casper_config['CASPER_ADDR'],
-                     value, gas, abidata, code_address=casper_config['CASPER_ADDR'])
+                     value, gas, abidata)
     o = apply_const_message(state, msg)
     if o:
-        return ct.decode(fun, ''.join(map(chr, o)))[0]
+        # print 'cc', fun, args, ct.decode(fun, o)[0]
+        return ct.decode(fun, o)[0]
     else:
         return None
 
@@ -169,6 +173,7 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state.set_code(casper_config['CASPER_ADDR'], get_casper_code())
     state.set_code(casper_config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
     state.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
+    state.set_code(casper_config['SERENITY_HEADER_POST_FINALIZER'], get_finalizer_code())
     state.set_code(casper_config['METROPOLIS_STATEROOT_STORE'], casper_config['SERENITY_GETTER_CODE'])
     state.set_code(casper_config['METROPOLIS_BLOCKHASH_STORE'], casper_config['SERENITY_GETTER_CODE'])
     ct = get_casper_ct()
