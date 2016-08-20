@@ -2,8 +2,8 @@ validatorSizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536
 BLOCK_REWARD = 10**17
 SYSTEM = 2**160 - 2
 FINALIZER = 254
-STATEROOT_STORE = 10
-BLOCKHASH_STORE = 20
+STATEROOT_STORE = 0x10
+BLOCKHASH_STORE = 0x20
 # validator[sizegroup][index]
 data validators[2**40][2**40](validation_code, address, start_epoch, end_epoch, deposit, randao, lock_duration, active)
 data historicalValidatorCounts[2**40][2**40]
@@ -22,6 +22,7 @@ data totalDunklesIncluded
 data currentEpoch
 data initialized
 data blockNumber
+data gasLimit
 event NewValidator(i, j)
 data epochLength
 event DunkleAdded(hash:bytes32)
@@ -30,6 +31,10 @@ event DunkleAdded(hash:bytes32)
 # 1 ppb per second = 3.20% annual interest
 BLOCK_MAKING_PPB = 10
 NO_END_EPOCH = 2**99
+
+macro abs($x):
+    with $w = $x:
+        $w * (1 - 2 * ($w < 0))
 
 def const getBlockReward():
     return(max(self.totalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
@@ -40,13 +45,14 @@ def const getLockDuration():
 def const getEpochLength():
     return(self.epochLength)
 
-def initialize(timestamp:uint256, epoch_length:uint256, number:uint256):
+def initialize(timestamp:uint256, epoch_length:uint256, number:uint256, gas_limit:uint256):
     require(not self.initialized)
     self.initialized = 1
     self.genesisTimestamp = timestamp
     self.epochLength = epoch_length
     self.currentEpoch = -1
     self.blockNumber = number
+    self.gasLimit = gas_limit
 
 def const getValidationCode(i, j):
     storage_index = ref(self.validators[i][j].validation_code)
@@ -90,12 +96,10 @@ def deposit(validation_code:str, randao):
 # Housekeeping to be done at the start of any epoch
 def newEpoch():
     currentEpoch = block.number / self.epochLength
-    log2(3, 3, 3, currentEpoch)
     if self.currentEpoch != currentEpoch - 1:
         stop
     q = 0
     while q < len(validatorSizes):
-        log3(4, 4, 4, q, self.validatorCounts[q])
         self.historicalValidatorCounts[currentEpoch][q] = self.validatorCounts[q]
         q += 1
     self.totalDeposits += self.totalDepositDeltas[currentEpoch]
@@ -104,6 +108,12 @@ def newEpoch():
 
 def const getTotalDeposits():
     return(self.totalDeposits)
+
+def const getBlockNumber():
+    return(self.blockNumber)
+
+def const getGasLimit():
+    return(self.gasLimit)
 
 def const getEpoch():
     return(self.currentEpoch)
@@ -170,7 +180,6 @@ macro Exception($text):
 def any():
     # Block header entry point; expects the block header as input
     if msg.sender == SYSTEM:
-        ~log1(1, 1, 1)
         # Get the block data (max 2048 bytes)
         if ~calldatasize() > 2048:
             Exception("Block header too large (max 2048 bytes)")
@@ -187,8 +196,7 @@ def any():
             Exception("Prevhash has wrong length")
         extractRLPint(blockdata, 0, ref(prevhash), "")
         bn = self.blockNumber
-        ~call(50000, BLOCKHASH_STORE, 0, bn, 32, shouldbe_prevhash, 32)
-        ~log1(2, 2, 2)
+        ~call(50000, BLOCKHASH_STORE, 0, ref(bn), 32, ref(shouldbe_prevhash), 32)
         if prevhash != shouldbe_prevhash:
             Exception("Prevhash mismatch")
         # Check formatting of miscellaneous params
@@ -204,29 +212,27 @@ def any():
             Exception("Receipt root must be 0 or 32 bytes")
         if RLPItemLength(blockdata, 6) != 256:
             Exception("Bloom must be 32 bytes")
-        ~log1(3, 3, 3)
         # Extract difficulty
         extractRLPint(blockdata, 7, ref(difficulty), "Failed to extract difficulty")
+        if difficulty != 1:
+            Exception("Difficulty must equal 1")
         # Extract and check block number
         extractRLPint(blockdata, 8, ref(number), "Failed to extract block number")
-        ~log3(4, 4, 4, number, self.blockNumber)
         if number != self.blockNumber + 1:
             Exception("Block number mismatch")
-        ~log1(5, 5, 5)
         # Extract and check gas limit
         extractRLPint(blockdata, 9, ref(gas_limit), "Failed to extract gas limit")
+        if (abs(gas_limit - self.gasLimit) * 1024 > self.gasLimit):
+            Exception("Gas limit out of bounds")
         if gas_limit >= 2**63:
-            Exception("Gas limit too high")
-        ~log1(6, 6, 6)
+            Exception("Gas limit exceeds 2**63 bound")
         # Extract and check gas used
         extractRLPint(blockdata, 10, ref(gas_used), "Failed to extract gas used")
         if gas_used > gas_limit:
             Exception("Gas used exceeds gas limit")
-        ~log1(5, 5, 5)
         # Extract timestamp
         extractRLPint(blockdata, 11, ref(timestamp), "Failed to extract timestamp")
         # Extract extra data (format: randao hash, skip count, i, j, signature)
-        ~log1(6, 6, 6)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
         randao = extra_data[0]
@@ -265,7 +271,6 @@ def any():
 
 def finalize(rawheader:str):
     if msg.sender == FINALIZER:
-        ~log1(9, 9, 9)
         # RLP decode the header
         blockdata = string(3096)
         ~call(50000, 253, 0, rawheader, len(rawheader), blockdata, 3096)
@@ -277,20 +282,20 @@ def finalize(rawheader:str):
         i = extra_data[2]
         j = extra_data[3]
         self.randao += randao
-        ~log1(10, 10, 10)
         self.validators[i][j].randao = randao
         self.validators[i][j].deposit += self.getBlockReward()
+        # Extract gas limit
+        extractRLPint(blockdata, 9, ref(gas_limit))
+        self.gasLimit = gas_limit
         # Extract state root and block hash
         extractRLPint(blockdata, 3, ref(stateroot))
         blockhash = sha3(rawheader:str)
         # Housekeeping if this block starts a new epoch
-        ~log1(11, 11, 11)
         self.blockNumber += 1
         if (block.number % self.epochLength == 0):
             self.newEpoch()
-        ~call(40000, STATEROOT_STORE, 0, [block.number, stateroot], 64, 0, 0)
-        ~call(40000, BLOCKHASH_STORE, 0, [block.number, blockhash], 64, 0, 0)
-        ~log3(12, 12, 12, self.blockNumber, block.number)
+        ~call(70000, STATEROOT_STORE, 0, [block.number, stateroot], 64, 0, 0)
+        ~call(70000, BLOCKHASH_STORE, 0, [block.number, blockhash], 64, 0, 0)
     
 
 # Like uncle inclusion, but this time the reward is negative

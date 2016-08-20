@@ -67,15 +67,16 @@ default_config = dict(
     FINALIZATION = 'ethereum1',
     # Default consensus strategy: ethash, poa, casper, pbft
     CONSENSUS_STRATEGY = 'ethereum1',
+    HEADER_STRATEGY = 'ethereum1',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,
     PREV_HEADER_DEPTH = 256,
     SYSTEM_ENTRY_POINT = utils.int_to_addr(2**160 - 2),
     SERENITY_HEADER_VERIFIER = utils.int_to_addr(255),
     SERENITY_HEADER_POST_FINALIZER = utils.int_to_addr(254),
-    SERENITY_GETTER_CODE = decode_hex('600260a060020a03331415601857602035600035556025565b6000355460205260206020f3'),
+    SERENITY_GETTER_CODE = decode_hex('60ff331436604014161560155760203560003555005b6000355460205260206020f3'),
     # Custom specials
-    CUSTOM_SPECIALS = {}
+    CUSTOM_SPECIALS = {},
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32

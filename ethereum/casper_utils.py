@@ -2,12 +2,16 @@ from ethereum import utils
 from ethereum.state import State
 from ethereum.transactions import Transaction
 from ethereum.config import Env, default_config
-from ethereum.state_transition import apply_transaction, apply_const_message
+from ethereum.state_transition import apply_transaction, apply_const_message, \
+    initialize
+from ethereum.block import Block, BlockHeader
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import vm
 from ethereum import abi
 import copy
 import os
+from ethereum.slogging import get_logger
+log_bc = get_logger('eth.block_creation')
 mydir = os.path.split(__file__)[0]
 casper_path = os.path.join(mydir, 'casper_contract.py')
 rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
@@ -46,6 +50,7 @@ casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
 casper_config['HEADER_VALIDATION'] = 'contract'
+casper_config['HEADER_STRATEGY'] = 'casper'
 casper_config['FINALIZATION'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
 casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
@@ -109,7 +114,7 @@ return(1)
 
 # Call the casper contract statically, 
 # eg. x = call_casper(state, 'getValidationCode', [2, 5])
-def call_casper(state, fun, args, gas=1000000, value=0):
+def call_casper(state, fun, args=[], gas=1000000, value=0):
     ct = get_casper_ct()
     abidata = vm.CallData([utils.safe_ord(x) for x in ct.encode(fun, args)])
     msg = vm.Message(casper_config['METROPOLIS_ENTRY_POINT'], casper_config['CASPER_ADDR'],
@@ -155,11 +160,6 @@ def sign_block(block, key, randao_parent, indices, skips):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
     return block
 
-# Create and sign a block
-def make_block(chain, key, randao, indices, skips):
-    h = chain.make_head_candidate(timestamp=get_timestamp(chain, skips))
-    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), indices, skips)
-
 # Create a casper genesis from given parameters
 # Validators: (vcode, deposit_size, randao_commitment)
 # Alloc: state declaration
@@ -178,7 +178,7 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state.set_code(casper_config['METROPOLIS_BLOCKHASH_STORE'], casper_config['SERENITY_GETTER_CODE'])
     ct = get_casper_ct()
     # Set genesis time, and initialize epoch number
-    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length]))
+    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, 0, 4712388]))
     apply_transaction(state, t)
     # Add validators
     for i, (vcode, deposit_size, randao_commitment) in enumerate(validators):
@@ -220,3 +220,43 @@ def find_indices(state, vcode):
             if valcode == vcode:
                 return [i, j]
     return None
+
+
+def get_dunkle_candidates(chain, state, scan_limit=10):
+    blknumber = call_casper(state, 'getBlockNumber')
+    anc = chain.get_block(chain.get_blockhash_by_number(blknumber - scan_limit))
+    if anc:
+        descendants = chain.get_descendants(anc)
+    else:
+        descendants = chain.get_descendants(chain.db.get('GENESIS_HASH'))
+    potential_uncles = [x for x in descendants if x not in chain and isinstance(x, Block)]
+    uncles = [x.header for x in potential_uncles if not call_casper(chain.state, 'isDunkleIncluded', [x.header.hash])]
+    dunkle_txs = []
+    for i, u in enumerate(uncles[:4]):
+        start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
+        txdata = casper_ct.encode('includeDunkle', [rlp.encode(u)])
+        dunkle_txs.append(Transaction(start_nonce + i, 0, 650000, chain.config['CASPER_ADDR'], 0, txdata))
+    return dunkle_txs
+
+
+def casper_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20, extra_data='moo ha ha says the laughing cow.'):
+    state = state or chain.state
+    blk = Block(BlockHeader())
+    now = timestamp or chain.time()
+    prev_blknumber = call_casper(state, 'getBlockNumber')
+    blk.header.number = prev_blknumber + 1
+    blk.header.difficulty = 1
+    blk.header.gas_limit = call_casper(state, 'getGasLimit')
+    blk.header.timestamp = max(now, state.prev_headers[0].timestamp + 1)
+    blk.header.prevhash = apply_const_message(state,
+                                              sender=casper_config['METROPOLIS_ENTRY_POINT'],
+                                              to=casper_config['METROPOLIS_BLOCKHASH_STORE'],
+                                              data=utils.encode_int32(prev_blknumber))
+    blk.header.coinbase = coinbase
+    blk.header.extra_data = extra_data
+    blk.header.bloom = 0
+    blk.uncles = []
+    initialize(state, blk)
+    blk.transactions = get_dunkle_candidates(chain, state)
+    log_bc.info('Block set up with number %d and prevhash %s' % (blk.header.number, utils.encode_hex(blk.header.prevhash)))
+    return blk

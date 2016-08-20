@@ -7,9 +7,12 @@ from ethereum.chain import Chain
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import abi
 from ethereum.casper_utils import RandaoManager, generate_validation_code, call_casper, \
-    get_skips_and_block_making_time, sign_block, make_block, get_contract_code, \
+    get_skips_and_block_making_time, sign_block, get_contract_code, \
     casper_config, get_casper_ct, get_casper_code, get_rlp_decoder_code, \
-    get_hash_without_ed_code, make_casper_genesis, validator_sizes, find_indices
+    get_hash_without_ed_code, make_casper_genesis, validator_sizes, find_indices, \
+    get_timestamp
+from ethereum.block_creation import make_head_candidate
+from ethereum.transaction_queue import TransactionQueue
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 import serpent
 from ethereum.config import default_config, Env
@@ -39,6 +42,11 @@ s = make_casper_genesis(validators=[(generate_validation_code(a), ds * 10**18, r
                         timestamp=int(time.time() - 10),
                         epoch_length=100)
 print 'Genesis constructed successfully'
+
+# Create and sign a block
+def make_block(chain, key, randao, indices, skips):
+    h = make_head_candidate(chain, TransactionQueue(), timestamp=get_timestamp(chain, skips))
+    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [indices[0], indices[1]])), indices, skips)
 
 next_validator = call_casper(s, 'getValidator', [0])
 print 'Next validator:', next_validator
@@ -86,3 +94,4 @@ apply_transaction(chains[0].state, t)
 x2 = chains[0].state.gas_used
 assert x2 - x == t.startgas, (x2 - x, t.startgas)
 print 'Dunkle addition failed, as expected, since dunkle is a duplicate'
+print 'PoS test fully passed'

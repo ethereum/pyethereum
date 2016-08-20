@@ -1,5 +1,6 @@
 import heapq
 heapq.heaptop = lambda x: x[0]
+PRIO_INFINITY = -2**100
 
 class TransactionQueue():
 
@@ -9,19 +10,23 @@ class TransactionQueue():
         self.last_max_gas = 2**100
 
     def add_transaction(self, tx, force=False):
-        prio = -2**100 if force else -tx.gasprice
+        prio = PRIO_INFINITY if force else -tx.gasprice
         heapq.heappush(self.txs, (prio, tx))
 
-    def pop_transaction(self, max_gas=9999999999, max_seek_depth=16):
+    def pop_transaction(self, max_gas=9999999999, max_seek_depth=16, min_gasprice=0):
         while len(self.aside) and max_gas >= heapq.heaptop(self.aside)[0]:
             tx = heapq.heappop(self.aside)[1]
             heapq.heappush(self.txs, (-tx.gasprice, tx))
         for i in range(min(len(self.txs), max_seek_depth)):
-            tx = heapq.heappop(self.txs)[1]
+            prio, tx = heapq.heaptop(self.txs)
             if tx.startgas > max_gas:
+                heapq.heappop(self.txs)
                 heapq.heappush(self.aside, (tx.startgas, tx))
-            else:
+            elif tx.gasprice >= min_gasprice or prio == PRIO_INFINITY:
+                heapq.heappop(self.txs)
                 return tx
+            else:
+                return None
         return None
 
 

@@ -3,6 +3,7 @@ import ethereum.processblock as processblock
 import ethereum.transactions as transactions
 import ethereum.state_transition as state_transition
 import ethereum.parse_genesis_declaration
+from ethereum.transaction_queue import TransactionQueue
 import rlp
 from rlp.utils import decode_hex, encode_hex
 import ethereum.ethpow as ethpow
@@ -12,6 +13,7 @@ from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
 from ethereum.state import State
 from ethereum.block import Block
+from ethereum.block_creation import make_head_candidate
 
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -45,10 +47,12 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
     :param transactions: a list of transactions to include in the new block
     :param coinbase: optional coinbase to replace ``chain.coinbase``
     """
+    txqueue = TransactionQueue()
     for t in transactions:
-        chain.add_transactions(t)
+        txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
-    hc = chain.make_head_candidate(parent=parent, coinbase=coinbase, timestamp=timestamp or parent_timestamp + 1)
+    hc = make_head_candidate(chain, txqueue, parent,
+                             timestamp or parent_timestamp + 1, coinbase or '\x00'*20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
     rounds = 100
@@ -64,9 +68,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
 
 
 def mine_next_block(chain, coinbase=None, transactions=[]):
-    for tx in transactions:
-        chain.add_transaction(tx)
-    block = mine_on_chain(chain, coinbase=coinbase)
+    block = mine_on_chain(chain, coinbase=coinbase, transactions=transactions)
     return block
 
 

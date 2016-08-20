@@ -91,7 +91,7 @@ def post_seal_finalize(state, block):
                                    state.block_number % state.config["METROPOLIS_WRAPAROUND"],
                                    block.header.hash)
         state.add_block_header(block.header)
-    elif state.config['FINALIZATION'] == 'contract':
+    elif state.config['FINALIZATION'].startswith('contract'):
         apply_message(state,
                       sender=state.config['SYSTEM_ENTRY_POINT'],
                       to=state.config['SERENITY_HEADER_POST_FINALIZER'],
@@ -107,7 +107,6 @@ def mk_receipt(state, logs):
 
 
 def apply_block(state, block):
-    print 's', repr(state.trie.root_hash)
     # Pre-processing and verification
     snapshot = state.snapshot()
     try:
@@ -126,7 +125,6 @@ def apply_block(state, block):
         assert verify_execution_results(state, block)
         # Post-sealing finalization steps
         post_seal_finalize(state, block)
-        print 'f', repr(state.trie.root_hash)
     except Exception, e:
         state.revert(snapshot)
         raise ValueError(str(e))
@@ -306,7 +304,7 @@ mk_transaction_sha = mk_receipt_sha
 def validate_block_header(state, header):
     if state.config['HEADER_VALIDATION'] == 'ethereum1':
         ethereum1_validate_header(state, header)
-    elif state.config['HEADER_VALIDATION'] == 'contract':
+    elif state.config['HEADER_VALIDATION'].startswith('contract'):
         output = apply_const_message(state,
                                      sender=state.config['SYSTEM_ENTRY_POINT'],
                                      to=state.config['SERENITY_HEADER_VERIFIER'],
@@ -315,6 +313,8 @@ def validate_block_header(state, header):
             raise ValueError("Validation call failed with exception")
         elif output:
             raise ValueError(output)
+    else:
+        raise ValueError("should not get here.")
     return True
 
 
@@ -349,19 +349,6 @@ def ethereum1_validate_header(state, header):
 
 def validate_block(state, block):
     state_prime, receipts = apply_block(state, block)
-
-
-# Gas limit adjustment algo
-def calc_gaslimit(parent, config=default_config):
-    decay = parent.gas_limit // config['GASLIMIT_EMA_FACTOR']
-    new_contribution = ((parent.gas_used * config['BLKLIM_FACTOR_NOM']) //
-                        config['BLKLIM_FACTOR_DEN'] // config['GASLIMIT_EMA_FACTOR'])
-    gl = max(parent.gas_limit - decay + new_contribution, config['MIN_GAS_LIMIT'])
-    if gl < config['GENESIS_GAS_LIMIT']:
-        gl2 = parent.gas_limit + decay
-        gl = min(config['GENESIS_GAS_LIMIT'], gl2)
-    assert check_gaslimit(parent, gl, config=config)
-    return gl
 
 
 def check_gaslimit(parent, gas_limit, config=default_config):
@@ -400,7 +387,7 @@ def validate_uncles(state, block):
     """Validate the uncles of this block."""
     # Make sure hash matches up
     if utils.sha3(rlp.encode(block.uncles)) != block.header.uncles_hash:
-        raise VerificationFailed("Invalid transaction")
+        raise VerificationFailed("Uncle hash mismatch")
     # Enforce maximum number of uncles
     if len(block.uncles) > state.config['MAX_UNCLES']:
         raise VerificationFailed("Too many uncles")

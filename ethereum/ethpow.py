@@ -5,6 +5,7 @@ import sha3
 import warnings
 from collections import OrderedDict
 from ethereum.slogging import get_logger
+import rlp
 
 log = get_logger('eth.pow')
 
@@ -121,3 +122,5 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
             assert len(o[b"mix digest"]) == 32
             return bin_nonce, o[b"mix digest"]
     return None, None
+
+
