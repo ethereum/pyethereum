@@ -462,7 +462,7 @@ def vm_execute(ext, msg, code):
             if op == 'SLOADBYTES':
                 key, mstart, msize = stk.pop(), stk.pop(), stk.pop()
                 bytez = map(ord, ext.get_storage_bytes(msg.to, key))
-                if not mem_extend(mem, compustate, op, mstart, min(msize, mstart + len(bytez))):
+                if not mem_extend(mem, compustate, op, mstart, min(msize, len(bytez))):
                     return vm_exception('OOG EXTENDING MEMORY')
                 for i in range(min(msize, len(bytez))):
                     mem[mstart + i] = bytez[i]
