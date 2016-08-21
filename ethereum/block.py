@@ -176,13 +176,13 @@ class Block(rlp.Serializable):
         ('uncles', CountableList(BlockHeader))
     ]
 
-    def __init__(self, header, transactions=[], uncles=[], db=None):
+    def __init__(self, header, transactions=None, uncles=None, db=None):
         # assert isinstance(db, BaseDB), "No database object given"
         # self.db = db
 
         self.header = header
-        self.transactions = transactions
-        self.uncles = uncles
+        self.transactions = transactions or []
+        self.uncles = uncles or []
         self.uncles = list(self.uncles)
 
     def __getattribute__(self, name):

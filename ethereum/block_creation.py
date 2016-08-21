@@ -14,7 +14,8 @@ log = get_logger('eth.block_creation')
 
 
 def add_transactions(state, block, txqueue, min_gasprice=0):
-    log.info('Adding transactions, %d in txqueue' % len(txqueue.txs))
+    pre_txs = len(block.transactions)
+    log.info('Adding transactions, %d in txqueue, %d dunkles' % (len(txqueue.txs), pre_txs))
     while 1:
         tx = txqueue.pop_transaction(max_gas=state.gas_limit - state.gas_used,
                                      min_gasprice=min_gasprice)
@@ -26,7 +27,7 @@ def add_transactions(state, block, txqueue, min_gasprice=0):
         except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
                 InvalidNonce, UnsignedTransaction), e:
             pass
-    log.info('Added %d transactions' % len(block.transactions))
+    log.info('Added %d transactions' % (len(block.transactions) - pre_txs))
 
 
 def pre_seal(state, block):
@@ -51,7 +52,6 @@ def make_head_candidate(chain, txqueue,
         temp_state = State.from_snapshot(chain.state.to_snapshot(root_only=True), chain.env)
     else:
         temp_state = chain.mk_poststate_of_blockhash(parent.hash)
-    print temp_state, temp_state.block_number, parent
     if chain.config['HEADER_STRATEGY'] == 'ethereum1':
         block = ethpow_utils.ethereum1_setup_block(chain, temp_state, timestamp, coinbase, extra_data)
     elif chain.config['HEADER_STRATEGY'] == 'casper':

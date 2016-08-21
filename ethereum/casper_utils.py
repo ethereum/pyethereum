@@ -10,6 +10,7 @@ from ethereum import vm
 from ethereum import abi
 import copy
 import os
+import rlp
 from ethereum.slogging import get_logger
 log_bc = get_logger('eth.block_creation')
 mydir = os.path.split(__file__)[0]
@@ -103,9 +104,7 @@ def generate_validation_code(addr):
     code = """
 # First 32 bytes of input = hash, remaining 96 = signature
 mustbe = %s
-~log1(0, 0, mustbe)
 a = ecrecover(~calldataload(0), ~calldataload(32), ~calldataload(64), ~calldataload(96))
-~log1(1, 1, a)
 if a != mustbe:
     ~invalid()
 return(1)
@@ -155,7 +154,6 @@ def sign_block(block, key, randao_parent, indices, skips):
         utils.zpad(utils.encode_int(skips), 32) + \
         utils.zpad(utils.encode_int(indices[0]), 32) + \
         utils.zpad(utils.encode_int(indices[1]), 32)
-    print 'key', repr(key), utils.privtoaddr(key).encode('hex')
     for val in utils.ecsign(block.header.signing_hash, key):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
     return block
@@ -218,8 +216,13 @@ def find_indices(state, vcode):
         for j in range(valcount):
             valcode = call_casper(state, 'getValidationCode', [i, j])
             if valcode == vcode:
-                return [i, j]
-    return None
+                start = call_casper(state, 'getStartEpoch', [i, j])
+                end = call_casper(state, 'getEndEpoch', [i, j])
+                if start <= epoch < end:
+                    return [i, j, True]
+                else:
+                    return [i, j, False]
+    return [None, None, False]
 
 
 def get_dunkle_candidates(chain, state, scan_limit=10):
@@ -232,9 +235,10 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
     potential_uncles = [x for x in descendants if x not in chain and isinstance(x, Block)]
     uncles = [x.header for x in potential_uncles if not call_casper(chain.state, 'isDunkleIncluded', [x.header.hash])]
     dunkle_txs = []
+    ct = get_casper_ct()
     for i, u in enumerate(uncles[:4]):
         start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
-        txdata = casper_ct.encode('includeDunkle', [rlp.encode(u)])
+        txdata = ct.encode('includeDunkle', [rlp.encode(u)])
         dunkle_txs.append(Transaction(start_nonce + i, 0, 650000, chain.config['CASPER_ADDR'], 0, txdata))
     return dunkle_txs
 
@@ -257,6 +261,9 @@ def casper_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20, ex
     blk.header.bloom = 0
     blk.uncles = []
     initialize(state, blk)
-    blk.transactions = get_dunkle_candidates(chain, state)
-    log_bc.info('Block set up with number %d and prevhash %s' % (blk.header.number, utils.encode_hex(blk.header.prevhash)))
+    for tx in get_dunkle_candidates(chain, state):
+        assert apply_transaction(state, tx)
+        blk.transactions.append(tx)
+    log_bc.info('Block set up with number %d and prevhash %s, %d dunkles' %
+                (blk.header.number, utils.encode_hex(blk.header.prevhash), len(blk.transactions)))
     return blk
