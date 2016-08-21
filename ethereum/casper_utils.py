@@ -1,4 +1,5 @@
 from ethereum import utils
+from ethereum.utils import sha3, ecsign, encode_int32
 from ethereum.state import State
 from ethereum.transactions import Transaction
 from ethereum.config import Env, default_config
@@ -158,6 +159,12 @@ def sign_block(block, key, randao_parent, indices, skips):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
     return block
 
+# Sign a withdrawal request
+def make_withdrawal_signature(key):
+    h = sha3(b'withdrawwithdrawwithdrawwithdraw')
+    v, r, s = ecsign(h, key)
+    return encode_int32(v) + encode_int32(r) + encode_int32(s)
+
 # Create a casper genesis from given parameters
 # Validators: (vcode, deposit_size, randao_commitment)
 # Alloc: state declaration
@@ -201,7 +208,8 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, utils.parse_as_bin(k), utils.parse_as_bin(v))
     # Start the first epoch
-    t = Transaction(1, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', []))
+    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', [0]))
+    t._sender = casper_config['CASPER_ADDR']
     apply_transaction(state, t)
     assert call_casper(state, 'getEpoch', []) == 0
     assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r in validators])
@@ -212,7 +220,7 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
 def find_indices(state, vcode):
     for i in range(len(validator_sizes)):
         epoch = state.block_number // call_casper(state, 'getEpochLength', [])
-        valcount = call_casper(state, 'getHistoricalValidatorCount', [epoch, i])
+        valcount = call_casper(state, 'getValidatorCount', [i])
         for j in range(valcount):
             valcode = call_casper(state, 'getValidationCode', [i, j])
             if valcode == vcode:

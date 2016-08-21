@@ -50,7 +50,7 @@ def initialize(timestamp:uint256, epoch_length:uint256, number:uint256, gas_limi
     self.initialized = 1
     self.genesisTimestamp = timestamp
     self.epochLength = epoch_length
-    self.currentEpoch = -1
+    self.currentEpoch = -2
     self.blockNumber = number
     self.gasLimit = gas_limit
 
@@ -62,6 +62,9 @@ def const getValidationCode(i, j):
 
 def const getHistoricalValidatorCount(epoch, i):
     return(self.historicalValidatorCounts[epoch][i])
+
+def const getValidatorCount(i):
+    return(self.validatorCounts[i])
 
 def const getHistoricalTotalDeposits(epoch):
     return(self.historicalTotalDeposits[epoch])
@@ -84,7 +87,7 @@ def deposit(validation_code:str, randao):
         self.validatorCounts[i] += 1
     ~sstorebytes(ref(self.validators[i][j].validation_code), validation_code, len(validation_code))
     self.validators[i][j].deposit = msg.value
-    self.validators[i][j].start_epoch = self.currentEpoch + 1
+    self.validators[i][j].start_epoch = self.currentEpoch + 2
     self.validators[i][j].end_epoch = NO_END_EPOCH
     self.validators[i][j].address = msg.sender
     self.validators[i][j].randao = randao
@@ -94,17 +97,16 @@ def deposit(validation_code:str, randao):
     return([i, j]:arr)
 
 # Housekeeping to be done at the start of any epoch
-def newEpoch():
-    currentEpoch = block.number / self.epochLength
-    if self.currentEpoch != currentEpoch - 1:
+def newEpoch(epoch):
+    if msg.sender != self:
         stop
     q = 0
     while q < len(validatorSizes):
-        self.historicalValidatorCounts[currentEpoch][q] = self.validatorCounts[q]
+        self.historicalValidatorCounts[epoch][q] = self.validatorCounts[q]
         q += 1
-    self.totalDeposits += self.totalDepositDeltas[currentEpoch]
-    self.historicalTotalDeposits[currentEpoch] = self.totalDeposits
-    self.currentEpoch = currentEpoch
+    self.totalDeposits += self.totalDepositDeltas[epoch]
+    self.historicalTotalDeposits[epoch] = self.totalDeposits
+    self.currentEpoch = epoch
 
 def const getTotalDeposits():
     return(self.totalDeposits)
@@ -119,23 +121,26 @@ def const getEpoch():
     return(self.currentEpoch)
 
 def const getValidator(skips):
-    epoch = max(0, self.currentEpoch - 1)
-    validatorGroupIndexSource = mod(sha3(self.randao + skips), self.historicalTotalDeposits[epoch])
+    prevEpoch = max(0, self.currentEpoch - 1)
+    validatorGroupIndexSource = mod(sha3(self.randao + skips), self.historicalTotalDeposits[prevEpoch])
     while 1:
         # return([validatorGroupIndexSource]:arr)
         validatorGroupIndex = 0
         validatorIndex = 0
         done = 0
         while done == 0:
-            numValidators = self.historicalValidatorCounts[epoch][validatorGroupIndex]
+            numValidators = self.historicalValidatorCounts[prevEpoch][validatorGroupIndex]
             if validatorGroupIndexSource < numValidators * validatorSizes[validatorGroupIndex] * 10**18:
                 validatorIndex = validatorGroupIndexSource / validatorSizes[validatorGroupIndex] / 10**18
                 done = 1
             else:
                 validatorGroupIndexSource -= numValidators * validatorSizes[validatorGroupIndex] * 10**18
                 validatorGroupIndex += 1
-        if self.validators[validatorGroupIndex][validatorIndex].start_epoch <= epoch:
-            if epoch < self.validators[validatorGroupIndex][validatorIndex].end_epoch:
+        if not done:
+            ~log1(9, 9, 9)
+            ~invalid()
+        if self.validators[validatorGroupIndex][validatorIndex].start_epoch <= self.currentEpoch:
+            if self.currentEpoch < self.validators[validatorGroupIndex][validatorIndex].end_epoch:
                 return([validatorGroupIndex, validatorIndex]:arr)
 
 
@@ -292,8 +297,8 @@ def finalize(rawheader:str):
         blockhash = sha3(rawheader:str)
         # Housekeeping if this block starts a new epoch
         self.blockNumber += 1
-        if (block.number % self.epochLength == 0):
-            self.newEpoch()
+        if (block.number % self.epochLength == self.epochLength - 1):
+            self.newEpoch((block.number + 1) / self.epochLength)
         ~call(70000, STATEROOT_STORE, 0, [block.number, stateroot], 64, 0, 0)
         ~call(70000, BLOCKHASH_STORE, 0, [block.number, blockhash], 64, 0, 0)
     
