@@ -67,7 +67,7 @@ RANDAO_SAVE_INTERVAL = 100
 class RandaoManager():
 
     def __init__(self, seed, rounds=10**4+1):
-        self.medstate = []        
+        self.medstate = []
         for i in range(rounds):
             if not i % RANDAO_SAVE_INTERVAL:
                 self.medstate.append(seed)

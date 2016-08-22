@@ -63,7 +63,7 @@ default_config = dict(
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Header validation: ethereum 1.0, contract
     HEADER_VALIDATION = 'ethereum1',
-    # Post-seal finalization: ethereum 1.0, contract
+    # Pre-seal finalization: ethereum 1.0, contract
     FINALIZATION = 'ethereum1',
     # Default consensus strategy: ethash, poa, casper, pbft
     CONSENSUS_STRATEGY = 'ethereum1',
