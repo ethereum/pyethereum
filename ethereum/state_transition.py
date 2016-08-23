@@ -54,9 +54,9 @@ def initialize(state, block):
     state.receipts = []
     update_block_env_variables(state, block)
     if state.is_METROPOLIS(at_fork_height=True):
-        self.set_code(utils.normalize_address(
+        state.set_code(utils.normalize_address(
             state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
-        self.set_code(utils.normalize_address(
+        state.set_code(utils.normalize_address(
             state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
