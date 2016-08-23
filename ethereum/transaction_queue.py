@@ -9,6 +9,9 @@ class TransactionQueue():
         self.aside = []
         self.last_max_gas = 2**100
 
+    def __len__(self):
+        return len(self.txs)
+
     def add_transaction(self, tx, force=False):
         prio = PRIO_INFINITY if force else -tx.gasprice
         heapq.heappush(self.txs, (prio, tx))

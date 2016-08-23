@@ -53,6 +53,7 @@ class Chain(object):
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
         self.head_hash = self.state.prev_headers[0].hash
+        self.genesis = Block(self.state.prev_headers[0], [], [])
         self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
         self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
@@ -69,8 +70,13 @@ class Chain(object):
     @property
     def head(self):
         try:
-            return rlp.decode(self.db.get(self.head_hash), Block)
-        except:
+            block_rlp = self.db.get(self.head_hash)
+            if block_rlp == 'GENESIS':
+                return self.genesis
+            else:
+                return rlp.decode(block_rlp, Block)
+        except Exception as e:
+            log.error(e)
             return None
 
     def mk_poststate_of_blockhash(self, blockhash):
