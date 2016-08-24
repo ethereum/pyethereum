@@ -19,7 +19,6 @@ casper_path = os.path.join(mydir, 'casper_contract.py')
 rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
 hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
 finalizer_path = os.path.join(mydir, 'finalizer_contract.py')
-validator_sizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 
 def get_casper_code():
     import serpent
@@ -87,7 +86,7 @@ class RandaoManager():
                 assert utils.sha3(o) == origval
                 return o
             val = utils.sha3(val)
-        raise Exception("parent not found")
+        raise Exception("Randao parent not found")
 
 # Get the final saved code of a contract from the init code
 def get_contract_code(init_code):
@@ -128,19 +127,19 @@ def call_casper(state, fun, args=[], gas=1000000, value=0):
 
 # Get the number of skips needed to make a block on the current
 # parent
-def get_skips_and_block_making_time(chain, my_indices, max_lookup=100):
+def get_skips_and_block_making_time(state, vchash, max_lookup=100):
     skips = 0
     while skips < max_lookup:
-        indices = call_casper(chain.state, 'getValidator', [skips])
-        if indices and (my_indices[0], my_indices[1]) == (indices[0], indices[1]):
-            return skips, call_casper(chain.state, 'getMinTimestamp', [skips]) + 3
+        vchash2 = call_casper(state, 'getValidator', [skips])
+        if vchash2 and vchash2 == vchash:
+            return skips, call_casper(state, 'getMinTimestamp', [skips]) + 3
         skips += 1
     return None, None
 
 # Check a particular count of skips
-def check_skips(chain, my_indices, skips):
-    indices = call_casper(chain.state, 'getValidator', [skips])
-    return indices and (my_indices[0], my_indices[1]) == (indices[0], indices[1])
+def check_skips(chain, vchash, skips):
+    vchash2 = call_casper(chain.state, 'getValidator', [skips])
+    return vchash2 and vchash2 == vchash
 
 # Get timestamp given a particular number of skips
 def get_timestamp(chain, skips):
@@ -149,12 +148,11 @@ def get_timestamp(chain, skips):
     return call_casper(chain.state, 'getMinTimestamp', [skips]) + 3 
 
 # Add a signature to a block
-def sign_block(block, key, randao_parent, indices, skips):
+def sign_block(block, key, randao_parent, vchash, skips):
     block.header.extra_data = \
         randao_parent + \
         utils.zpad(utils.encode_int(skips), 32) + \
-        utils.zpad(utils.encode_int(indices[0]), 32) + \
-        utils.zpad(utils.encode_int(indices[1]), 32)
+        vchash
     for val in utils.ecsign(block.header.signing_hash, key):
         block.header.extra_data += utils.zpad(utils.encode_int(val), 32)
     return block
@@ -215,22 +213,6 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r in validators])
     state.commit()
     return state
-
-
-def find_indices(state, vcode):
-    for i in range(len(validator_sizes)):
-        epoch = state.block_number // call_casper(state, 'getEpochLength', [])
-        valcount = call_casper(state, 'getValidatorCount', [i])
-        for j in range(valcount):
-            valcode = call_casper(state, 'getValidationCode', [i, j])
-            if valcode == vcode:
-                start = call_casper(state, 'getStartEpoch', [i, j])
-                end = call_casper(state, 'getEndEpoch', [i, j])
-                if start <= epoch < end:
-                    return [i, j, True]
-                else:
-                    return [i, j, False]
-    return [None, None, False]
 
 
 def get_dunkle_candidates(chain, state, scan_limit=10):
