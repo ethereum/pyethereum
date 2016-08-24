@@ -1,41 +1,21 @@
 from ethereum import utils
 from ethereum.utils import sha3, ecsign, encode_int32
-from ethereum.state import State
 from ethereum.transactions import Transaction
-from ethereum.config import Env, default_config
+from ethereum.config import Env
 from ethereum.state_transition import apply_transaction, apply_const_message, \
-    initialize
+    initialize, casper_path, casper_config, get_contract_code
 from ethereum.block import Block, BlockHeader
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import vm
 from ethereum import abi
-import copy
 import os
 import rlp
 from ethereum.slogging import get_logger
+
+
 log_bc = get_logger('eth.block_creation')
-mydir = os.path.split(__file__)[0]
-casper_path = os.path.join(mydir, 'casper_contract.py')
-rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
-hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
-finalizer_path = os.path.join(mydir, 'finalizer_contract.py')
 validator_sizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
 
-def get_casper_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(casper_path).read()))
-
-def get_rlp_decoder_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
-
-def get_hash_without_ed_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
-
-def get_finalizer_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(finalizer_path).read()))
 
 _casper_ct = None
 
@@ -45,20 +25,6 @@ def get_casper_ct():
     if not _casper_ct:
         _casper_ct = abi.ContractTranslator(serpent.mk_full_signature(open(casper_path).read()))
     return _casper_ct
-
-# The Casper-specific config declaration
-casper_config = copy.deepcopy(default_config)
-casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
-casper_config['METROPOLIS_FORK_BLKNUM'] = 0
-casper_config['SERENITY_FORK_BLKNUM'] = 0
-casper_config['HEADER_VALIDATION'] = 'contract'
-casper_config['HEADER_STRATEGY'] = 'casper'
-casper_config['FINALIZATION'] = 'contract'
-casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
-casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
-casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
-casper_config['MAX_UNCLE_DEPTH'] = 0
-casper_config['PREV_HEADER_DEPTH'] = 1
 
 # RandaoManager object to be used by validators to provide randaos
 # when signing their block
@@ -88,16 +54,6 @@ class RandaoManager():
                 return o
             val = utils.sha3(val)
         raise Exception("parent not found")
-
-# Get the final saved code of a contract from the init code
-def get_contract_code(init_code):
-    s = State(env=Env(config=casper_config))
-    s.gas_limit = 10**9
-    apply_transaction(s, Transaction(0, 0, 10**8, '', 0, init_code))
-    addr = utils.mk_metropolis_contract_address(casper_config['METROPOLIS_ENTRY_POINT'], init_code)
-    o = s.get_code(addr)
-    assert o
-    return o
 
 # Create the validation code for a given address
 def generate_validation_code(addr):
@@ -175,12 +131,9 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state.prev_headers[0].difficulty = 1
     state.timestamp = timestamp
     state.block_difficulty = 1
-    state.set_code(casper_config['CASPER_ADDR'], get_casper_code())
-    state.set_code(casper_config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
-    state.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
-    state.set_code(casper_config['SERENITY_HEADER_POST_FINALIZER'], get_finalizer_code())
-    state.set_code(casper_config['METROPOLIS_STATEROOT_STORE'], casper_config['SERENITY_GETTER_CODE'])
-    state.set_code(casper_config['METROPOLIS_BLOCKHASH_STORE'], casper_config['SERENITY_GETTER_CODE'])
+
+    initialize(state)
+
     ct = get_casper_ct()
     # Set genesis time, and initialize epoch number
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, 0, 4712388]))

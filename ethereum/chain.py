@@ -52,6 +52,9 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+
+        initialize(self.state)
+
         self.head_hash = self.state.prev_headers[0].hash
         self.genesis = Block(self.state.prev_headers[0], [], [])
         self.db.put('state:'+self.head_hash, self.state.trie.root_hash)

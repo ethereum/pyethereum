@@ -1,16 +1,14 @@
 from ethereum import utils
 from ethereum.state import State
 from ethereum import vm
-from ethereum.state_transition import apply_transaction, apply_const_message, validate_block_header, initialize
+from ethereum.state_transition import apply_transaction, apply_const_message, validate_block_header, initialize, casper_config
 from ethereum.transactions import Transaction
 from ethereum.chain import Chain
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import abi
 from ethereum.casper_utils import RandaoManager, generate_validation_code, call_casper, \
-    get_skips_and_block_making_time, sign_block, get_contract_code, \
-    casper_config, get_casper_ct, get_casper_code, get_rlp_decoder_code, \
-    get_hash_without_ed_code, make_casper_genesis, validator_sizes, find_indices, \
-    get_timestamp, make_withdrawal_signature
+    get_skips_and_block_making_time, sign_block, get_casper_ct, make_casper_genesis, \
+    validator_sizes, find_indices, get_timestamp, make_withdrawal_signature
 from ethereum.block_creation import make_head_candidate
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.slogging import LogRecorder, configure_logging, set_level
