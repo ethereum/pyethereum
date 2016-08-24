@@ -121,45 +121,43 @@ def make_withdrawal_signature(key):
     v, r, s = ecsign(h, key)
     return encode_int32(v) + encode_int32(r) + encode_int32(s)
 
+def casper_contract_bootstrap(state, timestamp=0, epoch_length=100, number=0, gas_limit=4712388, nonce=0, ct=None):
+    if not ct:
+        ct = get_casper_ct()
+    # Set genesis time, and initialize epoch number
+    t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, number, gas_limit]))
+    success = apply_transaction(state, t)
+    assert success
+
+def validator_inject(state, vcode, deposit_size, randao_commitment, nonce=0, ct=None):
+    if not ct:
+        ct = get_casper_ct()
+    state.set_balance(utils.int_to_addr(1), deposit_size)
+    t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
+                    ct.encode('deposit', [vcode, randao_commitment]))
+    t._sender = utils.int_to_addr(1)
+    success = apply_transaction(state, t)
+    assert success
+
 # Create a casper genesis from given parameters
 # Validators: (vcode, deposit_size, randao_commitment)
 # Alloc: state declaration
 def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
-    state = mk_basic_state({}, None, env=Env(config=casper_config))
+    state = mk_basic_state(alloc, None, env=Env(config=casper_config))
     state.gas_limit = 10**8 * (len(validators) + 1)
     state.prev_headers[0].timestamp = timestamp
     state.prev_headers[0].difficulty = 1
     state.timestamp = timestamp
     state.block_difficulty = 1
 
-    initialize(state)
-
     ct = get_casper_ct()
-    # Set genesis time, and initialize epoch number
-    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, 0, 4712388]))
-    apply_transaction(state, t)
+    initialize(state)
+    casper_contract_bootstrap(state, ct=ct)
+
     # Add validators
     for i, (vcode, deposit_size, randao_commitment) in enumerate(validators):
-        state.set_balance(utils.int_to_addr(1), deposit_size)
-        t = Transaction(i, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
-                        ct.encode('deposit', [vcode, randao_commitment]))
-        t._sender = utils.int_to_addr(1)
-        success = apply_transaction(state, t)
-        assert success
-    for addr, data in alloc.items():
-        addr = utils.normalize_address(addr)
-        assert len(addr) == 20
-        if 'wei' in data:
-            state.set_balance(addr, utils.parse_as_int(data['wei']))
-        if 'balance' in data:
-            state.set_balance(addr, utils.parse_as_int(data['balance']))
-        if 'code' in data:
-            state.set_code(addr, utils.parse_as_bin(data['code']))
-        if 'nonce' in data:
-            state.set_nonce(addr, utils.parse_as_int(data['nonce']))
-        if 'storage' in data:
-            for k, v in data['storage'].items():
-                state.set_storage_data(addr, utils.parse_as_bin(k), utils.parse_as_bin(v))
+        validator_inject(state, vcode, deposit_size, randao_commitment, i, ct)
+
     # Start the first epoch
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', [0]))
     t._sender = casper_config['CASPER_ADDR']
