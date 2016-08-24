@@ -21,7 +21,8 @@ log = get_logger('eth.chain')
 
 class Chain(object):
 
-    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, **kwargs):
+    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
+                 post_state_initialize=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:
@@ -54,6 +55,8 @@ class Chain(object):
             }, self.env)
 
         initialize(self.state)
+        if post_state_initialize:
+            post_state_initialize(self.state)
 
         self.head_hash = self.state.prev_headers[0].hash
         self.genesis = Block(self.state.prev_headers[0], [], [])
