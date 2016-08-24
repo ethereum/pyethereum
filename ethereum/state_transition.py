@@ -78,6 +78,11 @@ def pre_seal_finalize(state, block):
             state.delta_balance(uncle.coinbase, r)
         if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
             del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
+    elif state.config['FINALIZATION'] == 'contract':
+        pass
+    else:
+        raise Exception("Pre-seal finalization strategy %s not supported " % state.config['FINALIZATION'])
+
     state.commit()
 
 
