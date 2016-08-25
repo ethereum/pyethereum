@@ -4,8 +4,6 @@ validatorSizes = [128, 512, 2048, 8192, 32768, 131072]
 minValidatorSize = 32
 # Largest allowed validator size
 maxValidatorSize = 131072
-# Base block reward
-BLOCK_REWARD = 10**17
 # An epoch number that represents a validator "intending to stay forever"
 NO_END_EPOCH = 2**99
 # Address of "system" entry point
@@ -26,8 +24,10 @@ data validatorCounts[2**40]
 data validatorSlotQueue[2**40][2**40]
 # Length of the queue
 data validatorSlotQueueLength[2**40]
+# Total amount of ETH deposited by active validators
+data totalActiveDeposits
 # Total amount of ETH deposited
-data totalDeposits
+data currentTotalDeposits
 # Total amount of ETH deposited during previous epochs
 data historicalTotalDeposits[2**40]
 # Keep track of future changes to total deposits
@@ -68,10 +68,10 @@ macro abs($x):
         $w * (1 - 2 * ($w < 0))
 
 def const getBlockReward():
-    return(max(self.totalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
+    return(max(self.currentTotalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
 
-def const getLockDuration():
-    return(max(min(self.totalDeposits / 10**18 / 2, 10000000), self.epochLength * 2))
+def const getCurrentLockDuration():
+    return(max(min(self.currentTotalDeposits / 10**18 / 2, 10000000), self.epochLength * 2))
 
 def const getEpochLength():
     return(self.epochLength)
@@ -94,7 +94,7 @@ def const getValidatorCount(i):
 def const getHistoricalTotalDeposits(epoch):
     return(self.historicalTotalDeposits[epoch])
 
-def deposit(validation_code:str, randao):
+def deposit(validation_code:str, randao, address):
     # Deposit too small
     if msg.value < minValidatorSize * 10**18:
         ~invalid()
@@ -129,9 +129,10 @@ def deposit(validation_code:str, randao):
     self.validators[i][j].origDeposit = msg.value
     self.validators[i][j].start_epoch = self.currentEpoch + 2
     self.validators[i][j].end_epoch = NO_END_EPOCH
-    self.validators[i][j].address = msg.sender
+    self.validators[i][j].address = address
     self.validators[i][j].randao = randao
-    self.validators[i][j].lock_duration = self.getLockDuration()
+    self.currentTotalDeposits += msg.value
+    self.validators[i][j].lock_duration = self.getCurrentLockDuration()
     self.totalDepositDeltas[self.validators[i][j].start_epoch] += msg.value
     ~sstorebytes(ref(self.vchashToIndices[validation_code_hash]), [i, j], 64)
     log(type=NewValidator)
@@ -145,12 +146,12 @@ def newEpoch(epoch):
     while q < len(validatorSizes):
         self.historicalValidatorCounts[epoch][q] = self.validatorCounts[q]
         q += 1
-    self.totalDeposits += self.totalDepositDeltas[epoch]
-    self.historicalTotalDeposits[epoch] = self.totalDeposits
+    self.totalActiveDeposits += self.totalDepositDeltas[epoch]
+    self.historicalTotalDeposits[epoch] = self.totalActiveDeposits
     self.currentEpoch = epoch
 
 def const getTotalDeposits():
-    return(self.totalDeposits)
+    return(self.currentTotalDeposits)
 
 def const getBlockNumber():
     return(self.blockNumber)
@@ -448,13 +449,18 @@ def const getEndEpoch(vchash:bytes32):
     extractIndices(ref(i), ref(j), vchash)
     return(self.validators[i][j].end_epoch)
 
+def const getLockDuration(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
+    return(self.validators[i][j].lock_duration)
+
 def const getCurrentEpoch():
     return(self.currentEpoch)
 
 # Finalize withdrawing and take one's money out
 def withdraw(vchash:bytes32):
     extractIndices(ref(i), ref(j), vchash)
-    if self.validators[i][j].end_epoch * self.epochLength + self.validators[i][j].lock_duration < block.timestamp:
+    if self.validators[i][j].end_epoch * self.epochLength + self.validators[i][j].lock_duration <= block.number:
+        self.currentTotalDeposits -= self.validators[i][j].origDeposit
         send(self.validators[i][j].address, self.validators[i][j].deposit)
         self.validators[i][j].deposit = 0
         self.validatorSlotQueue[i][self.validatorSlotQueueLength[i]] = j

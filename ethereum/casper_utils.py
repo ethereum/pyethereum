@@ -184,10 +184,10 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, 0, 4712388]))
     apply_transaction(state, t)
     # Add validators
-    for i, (vcode, deposit_size, randao_commitment) in enumerate(validators):
+    for i, (vcode, deposit_size, randao_commitment, address) in enumerate(validators):
         state.set_balance(utils.int_to_addr(1), deposit_size)
         t = Transaction(i, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
-                        ct.encode('deposit', [vcode, randao_commitment]))
+                        ct.encode('deposit', [vcode, randao_commitment, address]))
         t._sender = utils.int_to_addr(1)
         success = apply_transaction(state, t)
         assert success
@@ -210,7 +210,7 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     t._sender = casper_config['CASPER_ADDR']
     apply_transaction(state, t)
     assert call_casper(state, 'getEpoch', []) == 0
-    assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r in validators])
+    assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r,a in validators])
     state.commit()
     return state
 
