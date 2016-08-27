@@ -1,4 +1,4 @@
-from ethereum import tester, blocks
+from ethereum import tester
 import ethereum.utils as utils
 import rlp
 import ethereum.testutils as testutils
