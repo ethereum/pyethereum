@@ -290,11 +290,12 @@ def apply_transaction(state, tx):
     if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
     r = mk_receipt(state, state.logs)
+    _logs = list(state.logs)
     state.logs = []
     state.add_to_list('receipts', r)
     state.set_param('bloom', state.bloom | r.bloom)
     state.set_param('txindex', state.txindex + 1)
-    return success
+    return success, output, _logs  # FIXME, @vub how should the interface look like?
 
 
 def mk_receipt_sha(receipts):
