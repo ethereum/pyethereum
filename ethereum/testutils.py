@@ -295,7 +295,7 @@ def run_state_test(params, mode):
     assert len(env['currentCoinbase']) == 40
 
     konfig = copy.deepcopy(default_config)
-    konfig['HOMESTEAD_FORK_BLKNUM'] = 1000000
+    # konfig['HOMESTEAD_FORK_BLKNUM'] = 1000000
     
     state = State(env=Env(db, konfig),
                   prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
@@ -355,7 +355,8 @@ def run_state_test(params, mode):
         snapshot = state.snapshot()
         try:
             print('trying')
-            success, output, logs = state_transition.apply_transaction(state, tx)
+            success, output = state_transition.apply_transaction(state, tx)
+            logs = state.receipts[-1].logs
             assert success
             state.commit()
             print('success')

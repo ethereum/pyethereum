@@ -295,7 +295,7 @@ def apply_transaction(state, tx):
     state.add_to_list('receipts', r)
     state.set_param('bloom', state.bloom | r.bloom)
     state.set_param('txindex', state.txindex + 1)
-    return success, output, _logs  # FIXME, @vub how should the interface look like?
+    return success, output
 
 
 def mk_receipt_sha(receipts):

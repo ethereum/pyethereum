@@ -25,6 +25,7 @@ int_to_big_endian = lambda x: big_endian_int.serialize(x)
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
+SECP256K1P = 2**256 - 4294968273
 
 if sys.version_info.major == 2:
     is_numeric = lambda x: isinstance(x, (int, long))
@@ -72,7 +73,10 @@ else:
 
 def ecrecover_to_pub(rawhash, v, r, s):
     if secp256k1:
+        # Legendre symbol check; the secp256k1 library does not seem to do this
         pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
+        xc = r * r * r + 7
+        assert pow(xc, (SECP256K1P - 1) / 2, SECP256K1P) == 1
         try:
             pk.public_key = pk.ecdsa_recover(
                 rawhash,
