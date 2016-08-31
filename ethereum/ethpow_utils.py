@@ -95,3 +95,27 @@ def ethereum1_validate_uncle(state, uncle):
         raise VerificationFailed('pow mismatch')
     return True
 
+def ethereum1_pre_finalize_block(state, block):
+    """Apply rewards and commit."""
+    delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
+    state.delta_balance(state.block_coinbase, delta)
+
+    br = state.config['BLOCK_REWARD']
+    udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
+
+    for uncle in block.uncles:
+        r = int(br * (udpf + uncle.number - state.block_number) // udpf)
+        state.delta_balance(uncle.coinbase, r)
+
+    if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
+        del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
+
+def ethereum1_post_finalize_block(state, block):
+    if state.is_METROPOLIS():
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               state.trie.root_hash)
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               block.header.hash)
+    state.add_block_header(block.header)

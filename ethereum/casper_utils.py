@@ -6,7 +6,7 @@ from ethereum.utils import sha3, ecsign, encode_int32
 from ethereum.transactions import Transaction
 from ethereum.config import Env, default_config
 from ethereum.state_transition import apply_transaction, apply_const_message, \
-    initialize
+    apply_message, initialize
 from ethereum.block import Block, BlockHeader
 from ethereum.state import State
 from ethereum.parse_genesis_declaration import mk_basic_state
@@ -56,7 +56,6 @@ casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
 casper_config['HEADER_STRATEGY'] = 'casper'
-casper_config['FINALIZATION'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
 casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
 casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
@@ -297,3 +296,10 @@ def casper_validate_header(state, header):
         raise ValueError("Validation call failed with exception")
     elif output:
         raise ValueError(output)
+
+def casper_post_finalize_block(state, block):
+    apply_message(state,
+                  sender=state.config['SYSTEM_ENTRY_POINT'],
+                  to=state.config['SERENITY_HEADER_POST_FINALIZER'],
+                  data=rlp.encode(block.header))
+

@@ -80,45 +80,18 @@ def initialize(state, block=None):
 
 
 def pre_seal_finalize(state, block):
-    if state.config['FINALIZATION'] == 'ethereum1':
-        """Apply rewards and commit."""
-        delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
-        state.delta_balance(state.block_coinbase, delta)
-    
-        br = state.config['BLOCK_REWARD']
-        udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
-    
-        for uncle in block.uncles:
-            r = int(br * (udpf + uncle.number - state.block_number) // udpf)
-    
-            state.delta_balance(uncle.coinbase, r)
-        if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
-            del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
-    elif state.config['FINALIZATION'] == 'contract':
-        pass
-    else:
-        raise Exception("Pre-seal finalization strategy %s not supported " % state.config['FINALIZATION'])
-
-    state.commit()
+    cs = get_consensus_strategy(state.config)
+    if cs.block_pre_finalize:
+        cs.block_pre_finalize(state, block)
+        state.commit()
 
 
 def post_seal_finalize(state, block):
-    if state.config['FINALIZATION'] == 'ethereum1':
-        if state.is_METROPOLIS():
-            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
-                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                                   state.trie.root_hash)
-            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
-                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                                   block.header.hash)
-        state.add_block_header(block.header)
-    elif state.config['FINALIZATION'].startswith('contract'):
-        apply_message(state,
-                      sender=state.config['SYSTEM_ENTRY_POINT'],
-                      to=state.config['SERENITY_HEADER_POST_FINALIZER'],
-                      data=rlp.encode(block.header))
-    state.commit()
-    assert len(state.journal) == 0, state.journal
+    cs = get_consensus_strategy(state.config)
+    if cs.block_post_finalize:
+        cs.block_post_finalize(state, block)
+        state.commit()
+        assert len(state.journal) == 0, state.journal
 
 
 def mk_receipt(state, logs):
