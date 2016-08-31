@@ -7,7 +7,7 @@ from ethereum.config import Env
 from ethereum.db import OverlayDB
 import rlp
 
-def state_from_genesis_declaration(genesis_data, env):
+def block_from_genesis_declaration(genesis_data, env):
     h = BlockHeader(nonce=parse_as_bin(genesis_data["nonce"]),
                     difficulty=parse_as_int(genesis_data["difficulty"]),
                     mixhash=parse_as_bin(genesis_data.get("mixhash", genesis_data.get("mixHash", "0"*64))),
@@ -18,7 +18,14 @@ def state_from_genesis_declaration(genesis_data, env):
                     extra_data=parse_as_bin(genesis_data["extraData"]),
                     gas_used=parse_as_int(genesis_data.get("gasUsed", "0")),
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
-    blk = Block(h, [], [])
+    return Block(h, [], [])
+
+def state_from_genesis_declaration(genesis_data, env, block=None):
+    if block:
+        assert isinstance(block, Block)
+    else:
+        block = block_from_genesis_declaration(genesis_data, env)
+
     state = State(env=env)
     for addr, data in genesis_data["alloc"].items():
         addr = normalize_address(addr)
@@ -34,11 +41,48 @@ def state_from_genesis_declaration(genesis_data, env):
         if 'storage' in data:
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
-    initialize(state, blk)
+    initialize(state, block)
     state.commit()
-    blk.header.state_root = state.trie.root_hash
-    state.prev_headers=[h]
+    block.header.state_root = state.trie.root_hash
+    state.prev_headers=[block.header]
     return state
+
+
+def mk_genesis_data(env, **kwargs):
+    assert isinstance(env, Env)
+
+    allowed_args = set([
+        'start_alloc',
+        'prevhash',
+        'coinbase',
+        'difficulty',
+        'gas_limit',
+        'timestamp',
+        'extra_data',
+        'mixhash',
+        'nonce',
+    ])
+    assert set(kwargs.keys()).issubset(allowed_args)
+
+    genesis_data = {
+        "prevhash": kwargs.get('prevhash', encode_hex(env.config['GENESIS_PREVHASH'])),
+        "coinbase": kwargs.get('coinbase', encode_hex(env.config['GENESIS_COINBASE'])),
+        "difficulty": kwargs.get('difficulty', encode_hex(env.config['GENESIS_DIFFICULTY'])),
+        "gas_limit": kwargs.get('gas_limit', encode_hex(env.config['GENESIS_GAS_LIMIT'])),
+        "timestamp": kwargs.get('timestamp', 0),
+        "extra_data": kwargs.get('extra_data', encode_hex(env.config['GENESIS_EXTRA_DATA'])),
+        "mixhash": kwargs.get('mixhash', encode_hex(env.config['GENESIS_MIXHASH'])),
+        "nonce": kwargs.get('nonce', encode_hex(env.config['GENESIS_NONCE'])),
+        "alloc": kwargs.get('start_alloc', env.config['GENESIS_INITIAL_ALLOC'])
+    }
+    return genesis_data
+
+
+def mk_genesis_block(env, **kwargs):
+    genesis_data = mk_genesis_data(env, **kwargs)
+    block = block_from_genesis_declaration(genesis_data, env)
+    state = state_from_genesis_declaration(genesis_data, env, block=block)
+    return block
 
 
 def mk_basic_state(alloc, header, env):
