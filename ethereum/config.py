@@ -63,7 +63,6 @@ default_config = dict(
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Default consensus strategy: ethash, poa, casper, pbft
     CONSENSUS_STRATEGY = 'casper',
-    HEADER_STRATEGY = 'ethereum1',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,
     PREV_HEADER_DEPTH = 256,
