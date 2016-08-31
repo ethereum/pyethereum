@@ -61,8 +61,6 @@ default_config = dict(
     DAO_FORK_BLKNUM = 1920000,
     CHILD_DAO_LIST = map(utils.normalize_address, child_dao_list),
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
-    # Header validation: ethereum 1.0, contract
-    HEADER_VALIDATION = 'ethereum1',
     # Pre-seal finalization: ethereum 1.0, contract
     FINALIZATION = 'ethereum1',
     # Default consensus strategy: ethash, poa, casper, pbft

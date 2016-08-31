@@ -75,8 +75,8 @@ def initialize(state, block=None):
             config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
 
     cs = get_consensus_strategy(config)
-    if cs.state_initializer:
-        cs.state_initializer(state)
+    if cs.state_initialize:
+        cs.state_initialize(state)
 
 
 def pre_seal_finalize(state, block):
@@ -323,48 +323,8 @@ mk_transaction_sha = mk_receipt_sha
 
 
 def validate_block_header(state, header):
-    if state.config['HEADER_VALIDATION'] == 'ethereum1':
-        ethereum1_validate_header(state, header)
-    elif state.config['HEADER_VALIDATION'].startswith('contract'):
-        output = apply_const_message(state,
-                                     sender=state.config['SYSTEM_ENTRY_POINT'],
-                                     to=state.config['SERENITY_HEADER_VERIFIER'],
-                                     data=rlp.encode(header))
-        if output is None:
-            raise ValueError("Validation call failed with exception")
-        elif output:
-            raise ValueError(output)
-    else:
-        raise ValueError("should not get here.")
-    return True
-
-
-def ethereum1_validate_header(state, header):
-    assert header.check_pow()
-    parent = state.prev_headers[0]
-    if parent:
-        if header.prevhash != parent.hash:
-            raise ValueError("Block's prevhash and parent's hash do not match: block prevhash %s parent hash %s" %
-                             (encode_hex(header.prevhash), encode_hex(parent.hash)))
-        if header.number != parent.number + 1:
-            raise ValueError("Block's number is not the successor of its parent number")
-        if not check_gaslimit(parent, header.gas_limit, config=state.config):
-            raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
-        if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
-            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
-                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
-        if header.gas_used > header.gas_limit:
-            raise ValueError("Gas used exceeds gas limit")
-        if len(header.extra_data) > 32 and not state.is_SERENITY():
-            raise ValueError("Extra data too long")
-        if len(header.extra_data) > 1024:
-            raise ValueError("Extra data too long")
-        if header.timestamp <= parent.timestamp:
-            raise ValueError("Timestamp equal to or before parent")
-        if header.timestamp >= 2**256:
-            raise ValueError("Timestamp waaaaaaaaaaayy too large")
-    if header.gas_limit >= 2**63:
-        raise ValueError("Header gas limit too high")
+    cs = get_consensus_strategy(state.config)
+    cs.header_validate(state, header)
     return True
 
 
@@ -423,6 +383,7 @@ def validate_uncles(state, block):
     # Uncles of this block cannot be direct ancestors and cannot also
     # be uncles included 1-6 blocks ago
     ineligible = [b.hash for b in ancestor_chain]
+    cs = get_consensus_strategy(state.config)
     for blknum, uncles in state.recent_uncles.items():
         if state.block_number > blknum >= state.block_number - MAX_UNCLE_DEPTH:
             ineligible.extend([u for u in uncles])
@@ -437,10 +398,10 @@ def validate_uncles(state, block):
             raise VerificationFailed("Number mismatch")
         if uncle.timestamp < parent.timestamp:
             raise VerificationFailed("Timestamp mismatch")
-        if state.config['HEADER_VALIDATION'] == 'ethash' and not uncle.check_pow():
-            raise VerificationFailed('pow mismatch')
         if uncle.hash in ineligible:
             raise VerificationFailed("Duplicate uncle")
+        if cs.uncle_validate:
+            cs.uncle_validate(state, uncle)
         ineligible.append(uncle.hash)
     return True
 

@@ -55,7 +55,6 @@ casper_config = copy.deepcopy(default_config)
 casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
-casper_config['HEADER_VALIDATION'] = 'contract'
 casper_config['HEADER_STRATEGY'] = 'casper'
 casper_config['FINALIZATION'] = 'contract'
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
@@ -288,3 +287,13 @@ def casper_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20, ex
     log_bc.info('Block set up with number %d and prevhash %s, %d dunkles' %
                 (blk.header.number, utils.encode_hex(blk.header.prevhash), len(blk.transactions)))
     return blk
+
+def casper_validate_header(state, header):
+    output = apply_const_message(state,
+                                 sender=state.config['SYSTEM_ENTRY_POINT'],
+                                 to=state.config['SERENITY_HEADER_VERIFIER'],
+                                 data=rlp.encode(header))
+    if output is None:
+        raise ValueError("Validation call failed with exception")
+    elif output:
+        raise ValueError(output)
