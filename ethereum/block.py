@@ -191,6 +191,11 @@ class Block(rlp.Serializable):
         except AttributeError:
             return getattr(self.header, name)
 
+    # TODO: remove chain_difficulty mock
+    def chain_difficulty(self):
+        return self.header.number + 1
+
+
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 
 

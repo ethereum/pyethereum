@@ -32,6 +32,11 @@ class TransactionQueue():
                 return None
         return None
 
+    def peek(self, num=None):
+        if num:
+            return self.txs[0:num]
+        else:
+            return self.txs
 
 def test():
     from ethereum.transactions import Transaction
