@@ -66,7 +66,7 @@ default_config = dict(
     # Pre-seal finalization: ethereum 1.0, contract
     FINALIZATION = 'ethereum1',
     # Default consensus strategy: ethash, poa, casper, pbft
-    CONSENSUS_STRATEGY = 'ethereum1',
+    CONSENSUS_STRATEGY = 'casper',
     HEADER_STRATEGY = 'ethereum1',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,

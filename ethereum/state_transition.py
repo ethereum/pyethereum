@@ -1,5 +1,4 @@
 import os
-import copy
 import rlp
 import serpent
 
@@ -18,6 +17,7 @@ from ethereum import opcodes
 from ethereum.state import State, get_block
 from ethereum.transactions import Transaction
 from ethereum.processblock import apply_msg, create_contract, _apply_msg, Log
+from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum import vm
 from ethereum.specials import specials as default_specials
 from config import Env, default_config
@@ -42,52 +42,6 @@ CREATE_CONTRACT_ADDRESS = b''
 # DEV OPTIONS
 SKIP_RECEIPT_ROOT_VALIDATION = False
 SKIP_MEDSTATES = False
-
-# The Casper-specific config declaration
-casper_config = copy.deepcopy(default_config)
-casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
-casper_config['METROPOLIS_FORK_BLKNUM'] = 0
-casper_config['SERENITY_FORK_BLKNUM'] = 0
-casper_config['HEADER_VALIDATION'] = 'contract'
-casper_config['HEADER_STRATEGY'] = 'casper'
-casper_config['FINALIZATION'] = 'contract'
-casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
-casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
-casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
-casper_config['MAX_UNCLE_DEPTH'] = 0
-casper_config['PREV_HEADER_DEPTH'] = 1
-
-mydir = os.path.split(__file__)[0]
-casper_path = os.path.join(mydir, 'casper_contract.py')
-rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
-hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
-finalizer_path = os.path.join(mydir, 'finalizer_contract.py')
-
-# Get the final saved code of a contract from the init code
-def get_contract_code(init_code):
-    s = State(env=Env(config=casper_config))
-    s.gas_limit = 10**9
-    apply_transaction(s, Transaction(0, 0, 10**8, '', 0, init_code))
-    addr = utils.mk_metropolis_contract_address(casper_config['METROPOLIS_ENTRY_POINT'], init_code)
-    o = s.get_code(addr)
-    assert o
-    return o
-
-def get_casper_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(casper_path).read()))
-
-def get_rlp_decoder_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
-
-def get_hash_without_ed_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
-
-def get_finalizer_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(finalizer_path).read()))
 
 
 def update_block_env_variables(state, block):
@@ -120,15 +74,9 @@ def initialize(state, block=None):
         state.set_code(utils.normalize_address(
             config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
 
-    # preparation for casper
-    # TODO: maybe serveral blocks before serenity hf?
-    if state.is_SERENITY(at_fork_height=True):
-        state.set_code(config['CASPER_ADDR'], get_casper_code())
-        state.set_code(config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
-        state.set_code(config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
-        state.set_code(config['SERENITY_HEADER_POST_FINALIZER'], get_finalizer_code())
-        state.set_code(config['METROPOLIS_STATEROOT_STORE'], config['SERENITY_GETTER_CODE'])
-        state.set_code(config['METROPOLIS_BLOCKHASH_STORE'], config['SERENITY_GETTER_CODE'])
+    cs = get_consensus_strategy(config)
+    if cs.state_initializer:
+        cs.state_initializer(state)
 
 
 def pre_seal_finalize(state, block):
