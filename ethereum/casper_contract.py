@@ -27,6 +27,9 @@ event NewValidator(i, j)
 data epochLength
 event DunkleAdded(hash:bytes32)
 
+BLOCK_TIME = 3
+SKIP_TIME = 6
+
 # 1 part-per-billion per block = ~1.05% annual interest assuming 3s blocks
 # 1 ppb per second = 3.20% annual interest
 BLOCK_MAKING_PPB = 10
@@ -145,7 +148,7 @@ def const getValidator(skips):
 
 
 def const getMinTimestamp(skips):
-    return(self.genesisTimestamp + block.number * 3 + (self.totalSkips + skips) * 6)
+    return(self.genesisTimestamp + block.number * BLOCK_TIME + (self.totalSkips + skips) * SKIP_TIME)
 
 
 def const getRandao(i, j):
