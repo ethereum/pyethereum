@@ -55,7 +55,7 @@ def make_head_candidate(chain, txqueue,
         temp_state = chain.mk_poststate_of_blockhash(parent.hash)
 
     cs = get_consensus_strategy(chain.env.config)
-    cs.block_setup(chain, temp_state, timestamp, coinbase, extra_data)
+    block = cs.block_setup(chain, temp_state, timestamp, coinbase, extra_data)
     add_transactions(temp_state, block, txqueue, min_gasprice)
     pre_seal(temp_state, block)
     assert validate_uncles(temp_state, block)
