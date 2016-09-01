@@ -218,14 +218,19 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
         validator_inject(state, vcode, deposit_size, randao_commitment, i, ct)
 
     # Start the first epoch
-    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', [0]))
-    t._sender = casper_config['CASPER_ADDR']
-    apply_transaction(state, t)
+    casper_start_epoch(state)
+
     assert call_casper(state, 'getEpoch', []) == 0
     assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r in validators])
     state.commit()
     return state
 
+
+def casper_start_epoch(state):
+    ct = get_casper_ct()
+    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', [0]))
+    t._sender = casper_config['CASPER_ADDR']
+    apply_transaction(state, t)
 
 def find_indices(state, vcode):
     for i in range(len(validator_sizes)):
