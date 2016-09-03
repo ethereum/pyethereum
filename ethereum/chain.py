@@ -131,7 +131,11 @@ class Chain(object):
 
     def get_block(self, blockhash):
         try:
-            return rlp.decode(self.db.get(blockhash), Block)
+            block_rlp = self.db.get(blockhash)
+            if block_rlp == 'GENESIS':
+                return self.genesis
+            else:
+                return rlp.decode(block_rlp, Block)
         except:
             return None
 
@@ -311,6 +315,9 @@ class Chain(object):
 
     def has_block(self, block):
         return block in self
+
+    def has_blockhash(self, blockhash):
+        return blockhash in self.db
 
     def get_chain(self, frm=None, to=2**63 - 1):
         if frm is None:

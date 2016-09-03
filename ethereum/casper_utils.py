@@ -55,6 +55,7 @@ casper_config = copy.deepcopy(default_config)
 casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
 casper_config['METROPOLIS_FORK_BLKNUM'] = 0
 casper_config['SERENITY_FORK_BLKNUM'] = 0
+# config['CASPER_ADDR'] == config['SERENITY_HEADER_VERIFIER']
 casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
 casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
 casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
