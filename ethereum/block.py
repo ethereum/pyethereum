@@ -195,6 +195,10 @@ class Block(rlp.Serializable):
     def chain_difficulty(self):
         return self.header.number + 1
 
+    @property
+    def transaction_count(self):
+        return len(self.transactions)
+
 
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 
