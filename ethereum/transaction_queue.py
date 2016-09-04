@@ -38,6 +38,14 @@ class TransactionQueue():
         else:
             return self.txs
 
+    def diff(self, txs):
+        remove_hashes = [tx.hash for tx in txs]
+        keep = [tx for tx in self.txs if tx.hash not in remove_hashes]
+        q = TransactionQueue()
+        for tx in keep:
+            q.add_transaction(tx)
+        return q
+
 def test():
     from ethereum.transactions import Transaction
     def tx(s, g):
