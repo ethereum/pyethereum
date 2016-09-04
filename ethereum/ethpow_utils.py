@@ -1,14 +1,15 @@
-from ethereum import ethash, ethash_utils, utils
-from ethereum.block import Block, BlockHeader
 import time
 import sys
-from ethereum.utils import sha3
 import warnings
-from collections import OrderedDict
-from ethereum.slogging import get_logger
 import rlp
-from ethereum.state_transition import calc_difficulty, check_gaslimit, \
-    initialize
+from collections import OrderedDict
+from ethereum import ethash, ethash_utils, utils
+from ethereum.block import Block, BlockHeader
+from ethereum.utils import sha3
+from ethereum.slogging import get_logger
+from ethereum.ethpow import check_pow
+from ethereum.state_transition import calc_difficulty, check_gaslimit, initialize, \
+                                      check_block_header
 from ethereum.config import default_config
 from ethereum.exceptions import VerificationFailed
 
@@ -62,8 +63,20 @@ def ethereum1_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20,
     return blk
 
 
+def ethereum1_check_header(header, nonce=None):
+    """Check if the proof-of-work of the block is valid.
+
+    :param nonce: if given the proof of work function will be evaluated
+                  with this nonce instead of the one already present in
+                  the header
+    :returns: `True` or `False`
+    """
+    # log.debug('checking pow', block=encode_hex(self.hash())[:8])
+    return check_pow(header.number, header.mining_hash, header.mixhash,
+                     nonce or header.nonce, header.difficulty)
+
 def ethereum1_validate_header(state, header):
-    assert header.check_pow()
+    assert check_block_header(state, header)
     parent = state.prev_headers[0]
     if parent:
         if header.prevhash != parent.hash:
@@ -91,7 +104,7 @@ def ethereum1_validate_header(state, header):
     return True
 
 def ethereum1_validate_uncle(state, uncle):
-    if not uncle.check_pow():
+    if not check_block_header(state, uncle):
         raise VerificationFailed('pow mismatch')
     return True
 

@@ -295,9 +295,19 @@ def mk_receipt_sha(receipts):
 mk_transaction_sha = mk_receipt_sha
 
 
-def validate_block_header(state, header):
+def check_block_header(state, header, **kwargs):
+    """ Check header's internal validity """
     cs = get_consensus_strategy(state.config)
-    cs.header_validate(state, header)
+    if cs.header_check:
+        return cs.header_check(header, **kwargs)
+    return True
+
+
+def validate_block_header(state, header):
+    """ Check header's validity in block context """
+    cs = get_consensus_strategy(state.config)
+    if cs.header_validate:
+        cs.header_validate(state, header)
     return True
 
 
