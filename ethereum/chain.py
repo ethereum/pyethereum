@@ -22,7 +22,7 @@ log = get_logger('eth.chain')
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 post_state_initialize=None, **kwargs):
+                 new_head_cb=None, post_state_initialize=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:
@@ -55,6 +55,7 @@ class Chain(object):
             }, self.env)
 
         initialize(self.state)
+        self.new_head_cb = new_head_cb
         if post_state_initialize:
             post_state_initialize(self.state)
 
@@ -299,6 +300,8 @@ class Chain(object):
         log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used))
+        if self.new_head_cb and block.header.number != 0:
+            self.new_head_cb(block)
         return True
 
     def __contains__(self, blk):
