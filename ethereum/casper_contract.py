@@ -1,30 +1,62 @@
-validatorSizes = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
-BLOCK_REWARD = 10**17
+# Validator size groups
+validatorSizes = [128, 512, 2048, 8192, 32768, 131072]
+# Smallest allowed validator size
+minValidatorSize = 32
+# Largest allowed validator size
+maxValidatorSize = 131072
+# An epoch number that represents a validator "intending to stay forever"
+NO_END_EPOCH = 2**99
+# Address of "system" entry point
 SYSTEM = 2**160 - 2
+# Address of block finalization entry point
 FINALIZER = 254
+# Store of state roots
 STATEROOT_STORE = 0x10
+# Store of block hashes
 BLOCKHASH_STORE = 0x20
 # validator[sizegroup][index]
-data validators[2**40][2**40](validation_code, address, start_epoch, end_epoch, deposit, randao, lock_duration, active)
+data validators[2**40][2**40](vchash, validation_code, address, start_epoch, end_epoch, deposit, origDeposit, randao, lock_duration, active)
+# Historical sizes of validator groups `(epoch, sizegroup) -> size`
 data historicalValidatorCounts[2**40][2**40]
-# validator_group_sizes[epoch][sizegroup]
+# Current sizes of validator groups
 data validatorCounts[2**40]
+# A queue for validator slots that have been emptied and can be re-filled
 data validatorSlotQueue[2**40][2**40]
+# Length of the queue
 data validatorSlotQueueLength[2**40]
-data totalDeposits
+# Total amount of ETH deposited by active validators
+data totalActiveDeposits
+# Total amount of ETH deposited
+data currentTotalDeposits
+# Total amount of ETH deposited during previous epochs
 data historicalTotalDeposits[2**40]
+# Keep track of future changes to total deposits
 data totalDepositDeltas[2**40]
+# Map of validation code hash to (i, j) indices
+data vchashToIndices[]
+# The "global randao" used as the seed for consensus
 data randao
+# Dunkles that have already been included and are thus no longer eligible for inclusion
 data dunkles[]
+# Timestamp of the genesis block
 data genesisTimestamp
+# Total number of skips that have taken place
 data totalSkips
+# Total number of dunkles that has been included
 data totalDunklesIncluded
+# The current epoch
 data currentEpoch
+# Has Casper already been initialized?
 data initialized
+# Current block number
 data blockNumber
+# Current gas limit
 data gasLimit
-event NewValidator(i, j)
+# Length of an epoch (set during initialization)
 data epochLength
+# Event for validator induction
+event NewValidator()
+# Event when a dunkle is added
 event DunkleAdded(hash:bytes32)
 
 BLOCK_TIME = 3
@@ -33,17 +65,16 @@ SKIP_TIME = 6
 # 1 part-per-billion per block = ~1.05% annual interest assuming 3s blocks
 # 1 ppb per second = 3.20% annual interest
 BLOCK_MAKING_PPB = 10
-NO_END_EPOCH = 2**99
 
 macro abs($x):
     with $w = $x:
         $w * (1 - 2 * ($w < 0))
 
 def const getBlockReward():
-    return(max(self.totalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
+    return(max(self.currentTotalDeposits, 1000000 * 10**18) * BLOCK_MAKING_PPB / 1000000000)
 
-def const getLockDuration():
-    return(max(min(self.totalDeposits / 10**18 / 2, 10000000), self.epochLength * 2))
+def const getCurrentLockDuration():
+    return(max(min(self.currentTotalDeposits / 10**18 / 2, 10000000), self.epochLength * 2))
 
 def const getEpochLength():
     return(self.epochLength)
@@ -57,12 +88,6 @@ def initialize(timestamp:uint256, epoch_length:uint256, number:uint256, gas_limi
     self.blockNumber = number
     self.gasLimit = gas_limit
 
-def const getValidationCode(i, j):
-    storage_index = ref(self.validators[i][j].validation_code)
-    o = string(~ssize(storage_index))
-    ~sloadbytes(storage_index, o, len(o))
-    return(o:str)
-
 def const getHistoricalValidatorCount(epoch, i):
     return(self.historicalValidatorCounts[epoch][i])
 
@@ -72,32 +97,49 @@ def const getValidatorCount(i):
 def const getHistoricalTotalDeposits(epoch):
     return(self.historicalTotalDeposits[epoch])
 
-def deposit(validation_code:str, randao):
+def deposit(validation_code:str, randao, address):
+    # Deposit too small
+    if msg.value < minValidatorSize * 10**18:
+        ~invalid()
+    # Deposit too large
+    if msg.value > maxValidatorSize * 10**18:
+        ~invalid()
+    # Validation code used yet?
+    validation_code_hash = sha3(validation_code:str)
+    if ~ssize(ref(self.vchashToIndices[validation_code_hash])):
+        ~invalid()
+    # Max length: 2kb
+    if len(validation_code) > 2048:
+        ~invalid()
+    # Find which bucket to put the validator in
     i = 0
     success = 0
     while i < len(validatorSizes) and not success:
-        if msg.value == validatorSizes[i] * 10**18:
+        if msg.value <= validatorSizes[i] * 10**18:
             success = 1
         else:
             i += 1
-    if not success:
-        ~invalid()
     if self.validatorSlotQueueLength[i]:
         j = self.validatorSlotQueue[i][self.validatorSlotQueueLength[i] - 1]
         self.validatorSlotQueueLength[i] -= 1
     else:
         j = self.validatorCounts[i]
         self.validatorCounts[i] += 1
+    # Store data about the validator
+    self.validators[i][j].vchash = sha3(validation_code:str)
     ~sstorebytes(ref(self.validators[i][j].validation_code), validation_code, len(validation_code))
     self.validators[i][j].deposit = msg.value
+    self.validators[i][j].origDeposit = msg.value
     self.validators[i][j].start_epoch = self.currentEpoch + 2
     self.validators[i][j].end_epoch = NO_END_EPOCH
-    self.validators[i][j].address = msg.sender
+    self.validators[i][j].address = address
     self.validators[i][j].randao = randao
-    self.validators[i][j].lock_duration = self.getLockDuration()
+    self.currentTotalDeposits += msg.value
+    self.validators[i][j].lock_duration = self.getCurrentLockDuration()
     self.totalDepositDeltas[self.validators[i][j].start_epoch] += msg.value
-    log(type=NewValidator, i, j)
-    return([i, j]:arr)
+    ~sstorebytes(ref(self.vchashToIndices[validation_code_hash]), [i, j], 64)
+    log(type=NewValidator)
+    return(1:bool)
 
 # Housekeeping to be done at the start of any epoch
 def newEpoch(epoch):
@@ -107,12 +149,12 @@ def newEpoch(epoch):
     while q < len(validatorSizes):
         self.historicalValidatorCounts[epoch][q] = self.validatorCounts[q]
         q += 1
-    self.totalDeposits += self.totalDepositDeltas[epoch]
-    self.historicalTotalDeposits[epoch] = self.totalDeposits
+    self.totalActiveDeposits += self.totalDepositDeltas[epoch]
+    self.historicalTotalDeposits[epoch] = self.totalActiveDeposits
     self.currentEpoch = epoch
 
 def const getTotalDeposits():
-    return(self.totalDeposits)
+    return(self.currentTotalDeposits)
 
 def const getBlockNumber():
     return(self.blockNumber)
@@ -123,11 +165,26 @@ def const getGasLimit():
 def const getEpoch():
     return(self.currentEpoch)
 
+def const getValidationCode(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
+    vcindex = ref(self.validators[i][j].validation_code)
+    s = string(~ssize(vcindex))
+    ~sloadbytes(vcindex, s, len(s))
+    return(s:str)
+
 def const getValidator(skips):
     prevEpoch = max(0, self.currentEpoch - 1)
-    validatorGroupIndexSource = mod(sha3(self.randao + skips), self.historicalTotalDeposits[prevEpoch])
+    # Get the value to mod the seed by
+    v = 0
+    i = 0
+    while i < len(validatorSizes):
+        v += validatorSizes[i] * self.historicalValidatorCounts[prevEpoch][i]
+        i += 1
+    # Get the seed
+    validatorGroupIndexSource = mod(sha3(self.randao + skips), v * 10**18)
+    # Try to find a validator based on the seed
     while 1:
-        # return([validatorGroupIndexSource]:arr)
+        # Select a validator group, then select an index in that group
         validatorGroupIndex = 0
         validatorIndex = 0
         done = 0
@@ -139,19 +196,26 @@ def const getValidator(skips):
             else:
                 validatorGroupIndexSource -= numValidators * validatorSizes[validatorGroupIndex] * 10**18
                 validatorGroupIndex += 1
+        # Should never happen
         if not done:
-            ~log1(9, 9, 9)
             ~invalid()
+        # Check if that validator is present, and if the validator's deposit is equal
+        # to the max deposit from that category then accept them; if it's less than
+        # accept them probabilistically
         if self.validators[validatorGroupIndex][validatorIndex].start_epoch <= self.currentEpoch:
             if self.currentEpoch < self.validators[validatorGroupIndex][validatorIndex].end_epoch:
-                return([validatorGroupIndex, validatorIndex]:arr)
+                origDeposit = self.validators[validatorGroupIndex][validatorIndex].origDeposit
+                if mod(sha3(validatorGroupIndexSource), validatorSizes[validatorGroupIndex] * 10**18) < origDeposit:
+                    return(self.validators[validatorGroupIndex][validatorIndex].vchash:bytes32)
+        validatorGroupIndexSource = mod(sha3(validatorGroupIndexSource), v * 10**18)
 
 
 def const getMinTimestamp(skips):
     return(self.genesisTimestamp + block.number * BLOCK_TIME + (self.totalSkips + skips) * SKIP_TIME)
 
 
-def const getRandao(i, j):
+def const getRandao(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
     return(self.validators[i][j].randao:bytes32)
 
 macro require($x):
@@ -184,6 +248,12 @@ macro RLPItemLength($blockdata, $i):
 
 macro Exception($text):
     ~return(text($text), len(text($text)))
+
+macro extractIndices($i, $j, $vchash):
+    with $indices = array(2):
+        ~sloadbytes(ref(self.vchashToIndices[$vchash]), $indices, 64)
+        ~mstore($i, $indices[0])
+        ~mstore($j, $indices[1])
 
 def any():
     # Block header entry point; expects the block header as input
@@ -240,39 +310,36 @@ def any():
             Exception("Gas used exceeds gas limit")
         # Extract timestamp
         extractRLPint(blockdata, 11, ref(timestamp), "Failed to extract timestamp")
-        # Extract extra data (format: randao hash, skip count, i, j, signature)
+        # Extract extra data (format: randao hash, skip count, signature)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
         randao = extra_data[0]
         skips = extra_data[1]
-        i = extra_data[2]
-        j = extra_data[3]
+        vchash = extra_data[2]
         # Get the signing hash
         ~call(50000, 252, 0, rawheader, ~calldatasize(), ref(signing_hash), 32)
         # Check number of skips; with 0 skips, minimum lag is 3 seconds
         if timestamp < self.getMinTimestamp(skips):
             Exception("Timestamp too early")
         # Get the validator that should be creating this block
-        validatorData = self.getValidator(skips, outitems=2)
-        require(validatorData[0] == i)
-        require(validatorData[1] == j)
-        # Get the validation code
-        vcIndex = ref(self.validators[i][j].validation_code)
-        validation_code = string(~ssize(vcIndex))
-        ~sloadbytes(vcIndex, validation_code, len(validation_code))
+        vchash2 = self.getValidator(skips)
+        if vchash2 != vchash:
+            Exception("Validation code mismatch")
+        # Get the validator's indices
+        extractIndices(ref(i), ref(j), vchash)
+        validation_code = self.getValidationCode(vchash, outchars=3072)
+        # Get the randao
         randaoIndex = ref(self.validators[i][j].randao)
         # Check correctness of randao
         require(sha3(randao) == ~sload(randaoIndex))
         # Create a `sigdata` object that stores the hash+signature for verification
         sigdata = string(len(extra_data) - 32)
         sigdata[0] = signing_hash
-        mcopy(sigdata + 32, extra_data + 128, len(extra_data) - 128)
+        mcopy(sigdata + 32, extra_data + 96, len(extra_data) - 96)
         # Check correctness of signature using validation code
         ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
-        require(verified)
-        # ~sstore(randaoIndex, randao)
-        # self.randao += randao
-        # self.totalSkips += skips
+        if not verified:
+            Exception("Invalid signature")
         # Block header signature valid!
         ~return(0, 0)
 
@@ -282,13 +349,14 @@ def finalize(rawheader:str):
         # RLP decode the header
         blockdata = string(3096)
         ~call(50000, 253, 0, rawheader, len(rawheader), blockdata, 3096)
-        # Extract extra data (format: randao hash, skip count, i, j, signature)
+        # Extract extra data (format: randao hash, skip count, validation code hash, signature)
         extra_data = string(blockdata[13] - blockdata[12])
         mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
         randao = extra_data[0]
         skips = extra_data[1]
-        i = extra_data[2]
-        j = extra_data[3]
+        vchash = extra_data[2]
+        # Get the validator's indices
+        extractIndices(ref(i), ref(j), vchash)
         self.randao += randao
         self.validators[i][j].randao = randao
         self.validators[i][j].deposit += self.getBlockReward()
@@ -318,16 +386,13 @@ def includeDunkle(rawheader:str):
     extra_data = string(blockdata[13] - blockdata[12])
     mcopy(extra_data, blockdata + blockdata[12], blockdata[13] - blockdata[12])
     skips = extra_data[1]
-    i = extra_data[2]
-    j = extra_data[3]
+    vchash = extra_data[2]
     # Get the validation code
-    vcIndex = ref(self.validators[i][j].validation_code)
-    validation_code = string(~ssize(vcIndex))
-    ~sloadbytes(vcIndex, validation_code, len(validation_code))
+    validation_code = self.getValidationCode(vchash, outchars=3072)
     # Create a `sigdata` object that stores the hash+signature for verification
     sigdata = string(len(extra_data) - 32)
     sigdata[0] = signing_hash
-    mcopy(sigdata + 32, extra_data + 128, len(extra_data) - 128)
+    mcopy(sigdata + 32, extra_data + 96, len(extra_data) - 96)
     # Check correctness of signature using validation code
     ~callblackbox(500000, validation_code, len(validation_code), sigdata, len(sigdata), ref(verified), 32)
     require(verified)
@@ -364,11 +429,12 @@ def const getTotalDunklesIncluded():
     return(self.totalDunklesIncluded)
         
 # Start the process of withdrawing
-def startWithdrawal(i, j, sig:str):
+def startWithdrawal(vchash:bytes32, sig:str):
     # Check correctness of signature using validation code
     x = sha3("withdrawwithdrawwithdrawwithdraw")
     sigsize = len(sig)
     sig[-1] = x
+    extractIndices(ref(i), ref(j), vchash)
     vcIndex = ref(self.validators[i][j].validation_code)
     validation_code = string(~ssize(vcIndex))
     ~sloadbytes(vcIndex, validation_code, len(validation_code))
@@ -378,18 +444,26 @@ def startWithdrawal(i, j, sig:str):
         self.validators[i][j].end_epoch = self.currentEpoch + 2
         self.totalDepositDeltas[self.validators[i][j].end_epoch] -= validatorSizes[i]
 
-def const getStartEpoch(i, j):
+def const getStartEpoch(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
     return(self.validators[i][j].start_epoch)
 
-def const getEndEpoch(i, j):
+def const getEndEpoch(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
     return(self.validators[i][j].end_epoch)
+
+def const getLockDuration(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
+    return(self.validators[i][j].lock_duration)
 
 def const getCurrentEpoch():
     return(self.currentEpoch)
 
 # Finalize withdrawing and take one's money out
-def withdraw(i, j):
-    if self.validators[i][j].end_epoch * self.epochLength + self.validators[i][j].lock_duration < block.timestamp:
+def withdraw(vchash:bytes32):
+    extractIndices(ref(i), ref(j), vchash)
+    if self.validators[i][j].end_epoch * self.epochLength + self.validators[i][j].lock_duration <= block.number:
+        self.currentTotalDeposits -= self.validators[i][j].origDeposit
         send(self.validators[i][j].address, self.validators[i][j].deposit)
         self.validators[i][j].deposit = 0
         self.validatorSlotQueue[i][self.validatorSlotQueueLength[i]] = j

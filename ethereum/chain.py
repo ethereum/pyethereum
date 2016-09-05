@@ -225,7 +225,8 @@ class Chain(object):
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
                 i += 1
             self.time_queue.insert(i, block)
-            log.info('Block received too early. Delaying for %d seconds' % (block.header.timestamp - now))
+            log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
+                     (now, block.header.timestamp, block.header.timestamp - now))
             return False
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))

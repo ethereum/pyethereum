@@ -51,7 +51,7 @@ else:
     print 'state generated from genesis'
 print 'Attempting to open %s' % RLP_BLOCKS_FILE
 _path, _file = os.path.split(RLP_BLOCKS_FILE)
-if _file not in os.listdir(_path):
+if not _path or _file not in os.listdir(_path):
     print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp' + \
           'and put it in this directory to continue the test'
     sys.exit()
@@ -74,6 +74,7 @@ while len(block_rlps) > 0:
         break
 print "skipped %d processed blocks" % skip
 
+
 def report(st, num_blks, num_txs, gas_used):
     now = time.time()
     elapsed = now - st
@@ -81,6 +82,7 @@ def report(st, num_blks, num_txs, gas_used):
     bps = num_blks / elapsed
     gps = gas_used / elapsed
     print '%.2f >>> elapsed:%d blocks:%d txs:%d gas:%d bps:%d tps:%d gps:%d' % (now, elapsed, num_blks, num_txs, gas_used, bps, tps, gps)
+
 
 def check_snapshot_consistency(snapshot, env=None):
     if env:
@@ -93,6 +95,7 @@ def check_snapshot_consistency(snapshot, env=None):
             fn = '/tmp/{}_{}'.format(STATE_STORE_FN, i)
             open(fn, 'w').write(json.dumps(snapshot))
         raise Exception("snapshot difference, see {}*".format(fn[:-1]))
+
 
 def snapshot(c, num_blocks):
     print 'creating snapshot'

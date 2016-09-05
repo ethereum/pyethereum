@@ -26,7 +26,7 @@ def test_transaction(filename, testname, testdata):
         tx = rlp.decode(rlpdata, transactions.Transaction)
         blknum = int(testdata["blocknumber"])
         if blknum >= 1000000:  # config.default_config["HOMESTEAD_FORK_BLKNUM"]:
-            tx.check_low_s()
+            tx.check_low_s_homestead()
         o["sender"] = tx.sender
         o["transaction"] = {
             "data": b'0x' * (len(tx.data) > 0) + encode_hex(tx.data),
