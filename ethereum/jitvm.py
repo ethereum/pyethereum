@@ -1,5 +1,5 @@
 from evmjit import EVMJIT
-from ethereum.utils import sha3_256
+from ethereum.utils import sha3_256, decode_int
 from ethereum.vm import CallData, Message
 
 from pprint import pprint
@@ -75,8 +75,16 @@ class JitEnv(object):
             self.ext.set_balance(addr, self.ext.get_balance(addr) + xfer)
             self.ext.set_balance(self.msg.to, 0)
             self.ext.add_suicide(self.msg.to)
+        elif key == EVMJIT.LOG:
+            print("LOG {}".format(map(hexlify, arg2)))
+            # Make a copy of data because pyethereum expects bytes type
+            # not buffer protocol.
+            data = bytes(arg1)
+            # Convert topics to ints.
+            topics = [decode_int(t) for t in arg2]
+            self.ext.log(self.msg.to, topics, data)
         else:
-            assert False, "Implement ME!"
+            assert False, "Unknown EVM-C update key"
 
     def call(self, kind, gas, address, value, input):
         if self.msg.depth >= 1024:
@@ -130,11 +138,12 @@ class JitEnv(object):
 
 
 def vm_execute(ext, msg, code):
+    # FIXME: This pprint is needed for ext.get_code() to work. WTF??????????
+    pprint(ext.__dict__)
+    # pprint(msg.__dict__)
     # EVMJIT requires secure hash of the code to be used as the code
     # identifier.
     # TODO: Can we avoid recalculating it?
-    pprint(ext.__dict__)
-    pprint(msg.__dict__)
     code_hash = sha3_256(code)
     mode = (EVMJIT.HOMESTEAD if ext.post_homestead_hardfork()
             else EVMJIT.FRONTIER)
