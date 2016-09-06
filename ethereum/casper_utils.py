@@ -243,8 +243,8 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
     uncles = [x.header for x in potential_uncles if not call_casper(chain.state, 'isDunkleIncluded', [x.header.hash])]
     dunkle_txs = []
     ct = get_casper_ct()
+    start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
     for i, u in enumerate(uncles[:4]):
-        start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
         txdata = ct.encode('includeDunkle', [rlp.encode(u)])
         dunkle_txs.append(Transaction(start_nonce + i, 0, 650000, chain.config['CASPER_ADDR'], 0, txdata))
     return dunkle_txs
