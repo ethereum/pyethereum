@@ -83,7 +83,7 @@ def pre_seal_finalize(state, block):
     cs = get_consensus_strategy(state.config)
     if cs.block_pre_finalize:
         cs.block_pre_finalize(state, block)
-        state.commit()
+    state.commit()
 
 
 def post_seal_finalize(state, block):
