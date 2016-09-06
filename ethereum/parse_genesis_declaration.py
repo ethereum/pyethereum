@@ -43,7 +43,8 @@ def state_from_genesis_declaration(genesis_data, env, block=None):
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
     initialize(state, block)
     state.commit()
-    block.header.state_root = state.trie.root_hash
+    # genesis block's state_root should be blank node hash
+    # Don't do this: block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
     return state
 
@@ -90,16 +91,16 @@ def mk_basic_state(alloc, header, env):
     if not header:
         header = {
             "number": 0, "gas_limit": 4712388, "gas_used": 0,
-            "timestamp": 1467446877, "difficulty": 2**25, "hash": '00' * 32,
+            "timestamp": 1467446877, "difficulty": 2**25,
             "uncles_hash": '0x'+encode_hex(BLANK_UNCLES_HASH)
         }
-    state.prev_headers = [FakeHeader(hash=parse_as_bin(header['hash']),
-                                     number=parse_as_int(header['number']),
-                                     timestamp=parse_as_int(header['timestamp']),
-                                     difficulty=parse_as_int(header['difficulty']),
-                                     gas_limit=parse_as_int(header['gas_limit']),
-                                     uncles_hash=parse_as_bin(header['uncles_hash']))]
-    
+    h = BlockHeader(number=parse_as_int(header['number']),
+                    timestamp=parse_as_int(header['timestamp']),
+                    difficulty=parse_as_int(header['difficulty']),
+                    gas_limit=parse_as_int(header['gas_limit']),
+                    uncles_hash=parse_as_bin(header['uncles_hash']))
+    state.prev_headers = [h]
+
     for addr, data in alloc.items():
         addr = normalize_address(addr)
         assert len(addr) == 20

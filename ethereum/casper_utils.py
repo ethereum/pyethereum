@@ -166,9 +166,8 @@ def make_withdrawal_signature(key):
     v, r, s = ecsign(h, key)
     return encode_int32(v) + encode_int32(r) + encode_int32(s)
 
-def casper_contract_bootstrap(state, timestamp=0, epoch_length=100, number=0, gas_limit=4712388, nonce=0, ct=None):
-    if not ct:
-        ct = get_casper_ct()
+def casper_contract_bootstrap(state, timestamp=0, epoch_length=100, number=0, gas_limit=4712388, nonce=0):
+    ct = get_casper_ct()
     # Set genesis time, and initialize epoch number
     t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, number, gas_limit]))
     success = apply_transaction(state, t)
@@ -203,14 +202,16 @@ def casper_state_initialize(state):
 def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
     state = mk_basic_state(alloc, None, env=Env(config=casper_config))
     state.gas_limit = 10**8 * (len(validators) + 1)
-    state.prev_headers[0].timestamp = timestamp
-    state.prev_headers[0].difficulty = 1
     state.timestamp = timestamp
     state.block_difficulty = 1
 
+    header = state.prev_headers[0]
+    header.timestamp = timestamp
+    header.difficulty = 1
+
     ct = get_casper_ct()
     initialize(state)
-    casper_contract_bootstrap(state, ct=ct)
+    casper_contract_bootstrap(state, timestamp=header.timestamp, gas_limit=header.gas_limit)
 
     # Add validators
     for i, (vcode, deposit_size, randao_commitment, address) in enumerate(validators):
@@ -221,7 +222,11 @@ def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
 
     assert call_casper(state, 'getEpoch', []) == 0
     assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r,a in validators])
+    state.set_storage_data(utils.normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
+                           state.block_number % state.config['METROPOLIS_WRAPAROUND'],
+                           header.hash)
     state.commit()
+
     return state
 
 
