@@ -136,12 +136,28 @@ def add_checksum(x):
         return x
     return x + sha3(x)[:4]
 
+def add_cool_checksum(addr):
+    addr = normalize_address(addr)
+    addr_hex = encode_hex(addr)
+
+    o = ''
+    h = encode_hex(sha3(addr_hex))
+    for i, c in enumerate(addr_hex):
+        if c in '0123456789':
+            o += c
+        else:
+            o += c.lower() if h[i] in '01234567' else c.upper()
+    return '0x'+o
 
 def check_and_strip_checksum(x):
     if len(x) in (40, 48):
         x = decode_hex(x)
     assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
     return x[:20]
+
+def check_and_strip_cool_checksum(addr):
+    assert add_cool_checksum(addr.lower()) == addr
+    return normalize_address(addr)
 
 
 def normalize_address(x, allow_blank=False):
