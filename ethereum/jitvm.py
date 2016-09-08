@@ -22,7 +22,9 @@ class JitEnv(object):
     def query(self, key, arg):
         print("query(key: {}, arg: {})".format(key, arg))
         if key == EVMJIT.SLOAD:
-            return self.ext.get_storage_data(self.msg.to, arg)
+            v = self.ext.get_storage_data(self.msg.to, arg)
+            print("SLOAD({}): {}".format(arg, v))
+            return v
         if key == EVMJIT.ADDRESS:
             return self.msg.to
         if key == EVMJIT.CALLER:
@@ -87,6 +89,7 @@ class JitEnv(object):
             assert False, "Unknown EVM-C update key"
 
     def call(self, kind, gas, address, value, input):
+        print("call")
         if self.msg.depth >= 1024:
             return EVMJIT.FAILURE, b'', 0
 
@@ -135,6 +138,7 @@ class JitEnv(object):
 
         if value and self.ext.get_balance(self.msg.to) < value:
             cost -= msg.gas
+            print("{}: no gas".format(name))
             return EVMJIT.FAILURE, b'', cost
 
         print("{}({}, gas: {}, value: {})".format(name, hexlify(address), gas, value))
@@ -142,12 +146,13 @@ class JitEnv(object):
         cost -= gas_left
         assert cost >= 0
         res_code = EVMJIT.SUCCESS if result else EVMJIT.FAILURE
+        out = bytes(out)  # The output must be bytes, not list of ints. WTF?
         return res_code, out, cost
 
 
 def vm_execute(ext, msg, code):
     # FIXME: This is needed for ext.get_code() to work. WTF??????????
-    ext._block.commit_state()
+    # ext._block.commit_state()
     # pprint(msg.__dict__)
     # EVMJIT requires secure hash of the code to be used as the code
     # identifier.
