@@ -138,8 +138,8 @@ class JitEnv(object):
 
 
 def vm_execute(ext, msg, code):
-    # FIXME: This pprint is needed for ext.get_code() to work. WTF??????????
-    pprint(ext.__dict__)
+    # FIXME: This is needed for ext.get_code() to work. WTF??????????
+    ext._block.commit_state()
     # pprint(msg.__dict__)
     # EVMJIT requires secure hash of the code to be used as the code
     # identifier.
