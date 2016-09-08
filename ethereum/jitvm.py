@@ -1,4 +1,5 @@
 from evmjit import EVMJIT
+from ethereum import opcodes
 from ethereum.utils import sha3_256, decode_int
 from ethereum.vm import CallData, Message
 
@@ -55,18 +56,24 @@ class JitEnv(object):
             print("BLOCKHASH({}): {}".format(arg, hexlify(block_hash)))
             return block_hash
         if key == EVMJIT.CODE_BY_ADDRESS:
-            code = self.ext.get_code(arg)
+            addr = arg[:]
+            code = self.ext.get_code(addr)
             print("EXTCODE({}): {}".format(hexlify(arg), hexlify(code)))
             return code
         if key == EVMJIT.BALANCE:
-            b = self.ext.get_balance(arg)
-            print("BALANCE({}): {}".format(hexlify(arg), b))
+            addr = arg[:]  # Copy
+            b = self.ext.get_balance(addr)
+            print("BALANCE({}): {}".format(hexlify(addr), b))
             return b
         assert False, "Implement ME!"
 
     def update(self, key, arg1, arg2):
         if key == EVMJIT.SSTORE:
             print("SSTORE({}, {})".format(arg1, arg2))
+            if arg2 == 0 and self.ext.get_storage_data(self.msg.to, arg1):
+                print("refund")
+                self.ext.add_refund(opcodes.GSTORAGEREFUND)
+
             self.ext.set_storage_data(self.msg.to, arg1, arg2)
         elif key == EVMJIT.SELFDESTRUCT:
             print("SELFDESTRUCT({})".format(hexlify(arg1)))
@@ -141,12 +148,19 @@ class JitEnv(object):
             print("{}: no gas".format(name))
             return EVMJIT.FAILURE, b'', cost
 
-        print("{}({}, gas: {}, value: {})".format(name, hexlify(address), gas, value))
+        print("{}({}, value: {}, gas: {})".format(
+            name, hexlify(address), value, gas))
         result, gas_left, out = self.ext.msg(msg)
+        print(out)
         cost -= gas_left
         assert cost >= 0
         res_code = EVMJIT.SUCCESS if result else EVMJIT.FAILURE
-        out = bytes(out)  # The output must be bytes, not list of ints. WTF?
+        # The output must be bytes, not list of ints. WTF?
+        out = b''.join(map(chr, out))
+        print(out)
+
+        print(" -> {}({}, cost: {}): {}".format(
+            name, hexlify(address), cost, hexlify(out)))
         return res_code, out, cost
 
 
