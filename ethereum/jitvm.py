@@ -81,7 +81,7 @@ class JitEnv(object):
             # not buffer protocol.
             data = bytes(arg1)
             # Convert topics to ints.
-            topics = [decode_int(t) for t in arg2]
+            topics = [decode_int(bytes(t).lstrip('\0')) for t in arg2]
             self.ext.log(self.msg.to, topics, data)
         else:
             assert False, "Unknown EVM-C update key"
@@ -99,8 +99,10 @@ class JitEnv(object):
                       self.msg.depth + 1, code_address=address)
         if kind == EVMJIT.CREATE:
             if value and self.ext.get_balance(self.msg.to) < value:
+                print("CREATE: no balance")
                 return EVMJIT.FAILURE, b'', 0
             # TODO: msg.address is invalid
+            print("CREATEing...")
             o, gas_left, addr = self.ext.create(msg)
             res_code = EVMJIT.SUCCESS if addr else EVMJIT.FAILURE
             print("CREATE(gas: {}, value: {}, code: {}): {}".format(
@@ -109,19 +111,25 @@ class JitEnv(object):
             return EVMJIT.SUCCESS, addr, gas - gas_left
 
         if kind == EVMJIT.DELEGATECALL:
-            assert value == 0
+            assert value == 0  # Guaranteed by the pyevmjit.
 
         cost = msg.gas
         if value and kind != EVMJIT.DELEGATECALL:
             cost += 9000
             msg.gas += 2300
 
+        name = 'CALL'
         if kind == EVMJIT.CALL and not self.ext.account_exists(address):
             cost += 25000
         elif kind == EVMJIT.CALLCODE:
+            name = 'CALLCODE'
             msg.to = self.msg.to
             msg.code_address = address
         elif kind == EVMJIT.DELEGATECALL:
+            name = 'DELEGATECALL'
+            msg.sender = self.msg.sender
+            msg.to = self.msg.to
+            msg.code_address = address
             msg.value = self.msg.value
             msg.transfers_value = False
 
@@ -129,7 +137,7 @@ class JitEnv(object):
             cost -= msg.gas
             return EVMJIT.FAILURE, b'', cost
 
-        print("call(kind: {}, to: {}, gas: {}, value: {})".format(kind, type(address), gas, value))
+        print("{}({}, gas: {}, value: {})".format(name, hexlify(address), gas, value))
         result, gas_left, out = self.ext.msg(msg)
         cost -= gas_left
         assert cost >= 0
@@ -150,4 +158,6 @@ def vm_execute(ext, msg, code):
     data = msg.data.extract_all()
     env = JitEnv(ext, msg)
     result = jit.execute(env, mode, code_hash, code, msg.gas, data, msg.value)
-    return result.code == EVMJIT.SUCCESS, result.gas_left, b''
+    # Convert to list of ints
+    output = map(ord, result.output)
+    return result.code == EVMJIT.SUCCESS, result.gas_left, output
