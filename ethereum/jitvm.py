@@ -78,7 +78,8 @@ class JitEnv(object):
         elif key == EVMJIT.SELFDESTRUCT:
             print("SELFDESTRUCT({})".format(hexlify(arg1)))
             # Copy the argument to bytes because some API freaks out otherwise.
-            addr = bytes(arg1)
+            addr = arg1[:]
+            assert len(addr) == 20
             # TODO: This logic should go to VMExt
             xfer = self.ext.get_balance(self.msg.to)
             self.ext.set_balance(addr, self.ext.get_balance(addr) + xfer)
@@ -114,7 +115,11 @@ class JitEnv(object):
             # TODO: msg.address is invalid
             print("CREATEing...")
             o, gas_left, addr = self.ext.create(msg)
-            res_code = EVMJIT.SUCCESS if addr else EVMJIT.FAILURE
+            if addr:
+                res_code = EVMJIT.SUCCESS
+            else:
+                res_code = EVMJIT.FAILURE
+                addr = b'\0' * 20  # EVMJIT expects 0 address
             print("CREATE(gas: {}, value: {}, code: {}): {}".format(
                   gas, value, hexlify(input), hexlify(addr)))
             # FIXME: Change out args order to match ext.create()
@@ -176,6 +181,7 @@ def vm_execute(ext, msg, code):
             else EVMJIT.FRONTIER)
     data = msg.data.extract_all()
     env = JitEnv(ext, msg)
+    print("Execute{}: {}".format(mode, hexlify(code)))
     result = jit.execute(env, mode, code_hash, code, msg.gas, data, msg.value)
     # Convert to list of ints
     output = map(ord, result.output)
