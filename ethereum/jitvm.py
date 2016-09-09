@@ -3,7 +3,6 @@ from ethereum import opcodes
 from ethereum.utils import sha3_256, decode_int
 from ethereum.vm import CallData, Message
 
-from pprint import pprint
 from binascii import hexlify
 
 jit = EVMJIT()
@@ -97,10 +96,6 @@ class JitEnv(object):
             assert False, "Unknown EVM-C update key"
 
     def call(self, kind, gas, address, value, input):
-        print("call")
-        if self.msg.depth >= 1024:
-            return EVMJIT.FAILURE, b'', 0
-
         # First convert bytes to a list of int to allow CallData to pack it
         # again to bytes. WTF????????
         call_data = CallData(map(ord, input))
@@ -109,6 +104,8 @@ class JitEnv(object):
         msg = Message(self.msg.to, address, value, gas, call_data,
                       self.msg.depth + 1, code_address=address)
         if kind == EVMJIT.CREATE:
+            if self.msg.depth >= 1024:
+                return EVMJIT.FAILURE, b'', 0
             if value and self.ext.get_balance(self.msg.to) < value:
                 print("CREATE: no balance")
                 return EVMJIT.FAILURE, b'', 0
@@ -148,7 +145,8 @@ class JitEnv(object):
             msg.value = self.msg.value
             msg.transfers_value = False
 
-        if value and self.ext.get_balance(self.msg.to) < value:
+        if self.msg.depth >= 1024 or \
+                (value and self.ext.get_balance(self.msg.to) < value):
             cost -= msg.gas
             print("{}: no gas".format(name))
             return EVMJIT.FAILURE, b'', cost
