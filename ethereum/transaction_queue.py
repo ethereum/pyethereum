@@ -9,6 +9,9 @@ class TransactionQueue():
         self.aside = []
         self.last_max_gas = 2**100
 
+    def __len__(self):
+        return len(self.txs)
+
     def add_transaction(self, tx, force=False):
         prio = PRIO_INFINITY if force else -tx.gasprice
         heapq.heappush(self.txs, (prio, tx))
@@ -29,6 +32,19 @@ class TransactionQueue():
                 return None
         return None
 
+    def peek(self, num=None):
+        if num:
+            return self.txs[0:num]
+        else:
+            return self.txs
+
+    def diff(self, txs):
+        remove_hashes = [tx.hash for tx in txs]
+        keep = [tx for tx in self.txs if tx.hash not in remove_hashes]
+        q = TransactionQueue()
+        for tx in keep:
+            q.add_transaction(tx)
+        return q
 
 def test():
     from ethereum.transactions import Transaction

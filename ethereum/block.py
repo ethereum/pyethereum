@@ -7,7 +7,6 @@ from ethereum import trie
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from config import default_config
-from ethereum.ethpow import check_pow
 from ethereum.transactions import Transaction
 from db import BaseDB
 import sys
@@ -107,18 +106,6 @@ class BlockHeader(rlp.Serializable):
     def signing_hash(self):
         return utils.sha3(rlp.encode(self, BlockHeader.exclude(['extra_data'])))
 
-    def check_pow(self, nonce=None):
-        """Check if the proof-of-work of the block is valid.
-
-        :param nonce: if given the proof of work function will be evaluated
-                      with this nonce instead of the one already present in
-                      the header
-        :returns: `True` or `False`
-        """
-        # log.debug('checking pow', block=encode_hex(self.hash())[:8])
-        return check_pow(self.number, self.mining_hash, self.mixhash, nonce or self.nonce,
-                         self.difficulty)
-
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
         d = {}
@@ -190,6 +177,15 @@ class Block(rlp.Serializable):
             return rlp.Serializable.__getattribute__(self, name)
         except AttributeError:
             return getattr(self.header, name)
+
+    # TODO: remove chain_difficulty mock
+    def chain_difficulty(self):
+        return self.header.number + 1
+
+    @property
+    def transaction_count(self):
+        return len(self.transactions)
+
 
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 

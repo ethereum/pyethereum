@@ -1,24 +1,36 @@
+import os
+import copy
+import rlp
 from ethereum import utils
 from ethereum.utils import sha3, ecsign, encode_int32
-from ethereum.state import State
 from ethereum.transactions import Transaction
 from ethereum.config import Env, default_config
 from ethereum.state_transition import apply_transaction, apply_const_message, \
-    initialize
+    apply_message, initialize
 from ethereum.block import Block, BlockHeader
+from ethereum.state import State
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import vm
 from ethereum import abi
-import copy
-import os
-import rlp
 from ethereum.slogging import get_logger
+
 log_bc = get_logger('eth.block_creation')
 mydir = os.path.split(__file__)[0]
 casper_path = os.path.join(mydir, 'casper_contract.py')
 rlp_decoder_path = os.path.join(mydir, 'rlp_decoder_contract.py')
 hash_without_ed_path = os.path.join(mydir, 'hash_without_ed_contract.py')
 finalizer_path = os.path.join(mydir, 'finalizer_contract.py')
+
+
+# Get the final saved code of a contract from the init code
+def get_contract_code(init_code):
+    s = State(env=Env(config=casper_config))
+    s.gas_limit = 10**9
+    apply_transaction(s, Transaction(0, 0, 10**8, '', 0, init_code))
+    addr = utils.mk_metropolis_contract_address(casper_config['METROPOLIS_ENTRY_POINT'], init_code)
+    o = s.get_code(addr)
+    assert o
+    return o
 
 def get_casper_code():
     import serpent
@@ -36,6 +48,20 @@ def get_finalizer_code():
     import serpent
     return get_contract_code(serpent.compile(open(finalizer_path).read()))
 
+
+# The Casper-specific config declaration
+casper_config = copy.deepcopy(default_config)
+casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
+casper_config['METROPOLIS_FORK_BLKNUM'] = 0
+casper_config['SERENITY_FORK_BLKNUM'] = 0
+# config['CASPER_ADDR'] == config['SERENITY_HEADER_VERIFIER']
+casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
+casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
+casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
+casper_config['MAX_UNCLE_DEPTH'] = 0
+casper_config['PREV_HEADER_DEPTH'] = 1
+
+
 _casper_ct = None
 
 def get_casper_ct():
@@ -45,19 +71,6 @@ def get_casper_ct():
         _casper_ct = abi.ContractTranslator(serpent.mk_full_signature(open(casper_path).read()))
     return _casper_ct
 
-# The Casper-specific config declaration
-casper_config = copy.deepcopy(default_config)
-casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
-casper_config['METROPOLIS_FORK_BLKNUM'] = 0
-casper_config['SERENITY_FORK_BLKNUM'] = 0
-casper_config['HEADER_VALIDATION'] = 'contract'
-casper_config['HEADER_STRATEGY'] = 'casper'
-casper_config['FINALIZATION'] = 'contract'
-casper_config['CASPER_ADDR'] = utils.int_to_addr(255)
-casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
-casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
-casper_config['MAX_UNCLE_DEPTH'] = 0
-casper_config['PREV_HEADER_DEPTH'] = 1
 
 # RandaoManager object to be used by validators to provide randaos
 # when signing their block
@@ -87,16 +100,6 @@ class RandaoManager():
                 return o
             val = utils.sha3(val)
         raise Exception("Randao parent not found")
-
-# Get the final saved code of a contract from the init code
-def get_contract_code(init_code):
-    s = State(env=Env(config=casper_config))
-    s.gas_limit = 10**9
-    apply_transaction(s, Transaction(0, 0, 10**8, '', 0, init_code))
-    addr = utils.mk_metropolis_contract_address(casper_config['METROPOLIS_ENTRY_POINT'], init_code)
-    o = s.get_code(addr)
-    assert o
-    return o
 
 # Create the validation code for a given address
 def generate_validation_code(addr):
@@ -163,56 +166,75 @@ def make_withdrawal_signature(key):
     v, r, s = ecsign(h, key)
     return encode_int32(v) + encode_int32(r) + encode_int32(s)
 
+def casper_contract_bootstrap(state, timestamp=0, epoch_length=100, number=0, gas_limit=4712388, nonce=0):
+    ct = get_casper_ct()
+    # Set genesis time, and initialize epoch number
+    t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, number, gas_limit]))
+    success = apply_transaction(state, t)
+    assert success
+
+def validator_inject(state, vcode, deposit_size, randao_commitment, address, nonce=0, ct=None):
+    if not ct:
+        ct = get_casper_ct()
+    state.set_balance(utils.int_to_addr(1), deposit_size)
+    t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
+                    ct.encode('deposit', [vcode, randao_commitment, address]))
+    t._sender = utils.int_to_addr(1)
+    success = apply_transaction(state, t)
+    assert success
+
+def casper_state_initialize(state):
+    config = state.config
+
+    # preparation for casper
+    # TODO: maybe serveral blocks before serenity hf?
+    if state.is_SERENITY(at_fork_height=True):
+        state.set_code(config['CASPER_ADDR'], get_casper_code())
+        state.set_code(config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
+        state.set_code(config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
+        state.set_code(config['SERENITY_HEADER_POST_FINALIZER'], get_finalizer_code())
+        state.set_code(config['METROPOLIS_STATEROOT_STORE'], config['SERENITY_GETTER_CODE'])
+        state.set_code(config['METROPOLIS_BLOCKHASH_STORE'], config['SERENITY_GETTER_CODE'])
+
 # Create a casper genesis from given parameters
 # Validators: (vcode, deposit_size, randao_commitment)
 # Alloc: state declaration
 def make_casper_genesis(validators, alloc, timestamp=0, epoch_length=100):
-    state = mk_basic_state({}, None, env=Env(config=casper_config))
+    state = mk_basic_state(alloc, None, env=Env(config=casper_config))
     state.gas_limit = 10**8 * (len(validators) + 1)
-    state.prev_headers[0].timestamp = timestamp
-    state.prev_headers[0].difficulty = 1
     state.timestamp = timestamp
     state.block_difficulty = 1
-    state.set_code(casper_config['CASPER_ADDR'], get_casper_code())
-    state.set_code(casper_config['RLP_DECODER_ADDR'], get_rlp_decoder_code())
-    state.set_code(casper_config['HASH_WITHOUT_BLOOM_ADDR'], get_hash_without_ed_code())
-    state.set_code(casper_config['SERENITY_HEADER_POST_FINALIZER'], get_finalizer_code())
-    state.set_code(casper_config['METROPOLIS_STATEROOT_STORE'], casper_config['SERENITY_GETTER_CODE'])
-    state.set_code(casper_config['METROPOLIS_BLOCKHASH_STORE'], casper_config['SERENITY_GETTER_CODE'])
+
+    header = state.prev_headers[0]
+    header.timestamp = timestamp
+    header.difficulty = 1
+
     ct = get_casper_ct()
-    # Set genesis time, and initialize epoch number
-    t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, 0, 4712388]))
-    apply_transaction(state, t)
+    initialize(state)
+    casper_contract_bootstrap(state, timestamp=header.timestamp, gas_limit=header.gas_limit)
+
     # Add validators
     for i, (vcode, deposit_size, randao_commitment, address) in enumerate(validators):
-        state.set_balance(utils.int_to_addr(1), deposit_size)
-        t = Transaction(i, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
-                        ct.encode('deposit', [vcode, randao_commitment, address]))
-        t._sender = utils.int_to_addr(1)
-        success = apply_transaction(state, t)
-        assert success
-    for addr, data in alloc.items():
-        addr = utils.normalize_address(addr)
-        assert len(addr) == 20
-        if 'wei' in data:
-            state.set_balance(addr, utils.parse_as_int(data['wei']))
-        if 'balance' in data:
-            state.set_balance(addr, utils.parse_as_int(data['balance']))
-        if 'code' in data:
-            state.set_code(addr, utils.parse_as_bin(data['code']))
-        if 'nonce' in data:
-            state.set_nonce(addr, utils.parse_as_int(data['nonce']))
-        if 'storage' in data:
-            for k, v in data['storage'].items():
-                state.set_storage_data(addr, utils.parse_as_bin(k), utils.parse_as_bin(v))
+        validator_inject(state, vcode, deposit_size, randao_commitment, address, i, ct)
+
     # Start the first epoch
+    casper_start_epoch(state)
+
+    assert call_casper(state, 'getEpoch', []) == 0
+    assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r,a in validators])
+    state.set_storage_data(utils.normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
+                           state.block_number % state.config['METROPOLIS_WRAPAROUND'],
+                           header.hash)
+    state.commit()
+
+    return state
+
+
+def casper_start_epoch(state):
+    ct = get_casper_ct()
     t = Transaction(0, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('newEpoch', [0]))
     t._sender = casper_config['CASPER_ADDR']
     apply_transaction(state, t)
-    assert call_casper(state, 'getEpoch', []) == 0
-    assert call_casper(state, 'getTotalDeposits', []) == sum([d for a,d,r,a in validators])
-    state.commit()
-    return state
 
 
 def get_dunkle_candidates(chain, state, scan_limit=10):
@@ -226,8 +248,8 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
     uncles = [x.header for x in potential_uncles if not call_casper(chain.state, 'isDunkleIncluded', [x.header.hash])]
     dunkle_txs = []
     ct = get_casper_ct()
+    start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
     for i, u in enumerate(uncles[:4]):
-        start_nonce = state.get_nonce(state.config['METROPOLIS_ENTRY_POINT'])
         txdata = ct.encode('includeDunkle', [rlp.encode(u)])
         dunkle_txs.append(Transaction(start_nonce + i, 0, 650000, chain.config['CASPER_ADDR'], 0, txdata))
     return dunkle_txs
@@ -257,3 +279,20 @@ def casper_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20, ex
     log_bc.info('Block set up with number %d and prevhash %s, %d dunkles' %
                 (blk.header.number, utils.encode_hex(blk.header.prevhash), len(blk.transactions)))
     return blk
+
+def casper_validate_header(state, header):
+    output = apply_const_message(state,
+                                 sender=state.config['SYSTEM_ENTRY_POINT'],
+                                 to=state.config['SERENITY_HEADER_VERIFIER'],
+                                 data=rlp.encode(header))
+    if output is None:
+        raise ValueError("Validation call failed with exception")
+    elif output:
+        raise ValueError(output)
+
+def casper_post_finalize_block(state, block):
+    apply_message(state,
+                  sender=state.config['SYSTEM_ENTRY_POINT'],
+                  to=state.config['SERENITY_HEADER_POST_FINALIZER'],
+                  data=rlp.encode(block.header))
+

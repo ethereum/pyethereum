@@ -21,7 +21,8 @@ log = get_logger('eth.chain')
 
 class Chain(object):
 
-    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, **kwargs):
+    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
+                 new_head_cb=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:
@@ -52,7 +53,12 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+
+        initialize(self.state)
+        self.new_head_cb = new_head_cb
+
         self.head_hash = self.state.prev_headers[0].hash
+        self.genesis = Block(self.state.prev_headers[0], [], [])
         self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
         self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
@@ -69,8 +75,13 @@ class Chain(object):
     @property
     def head(self):
         try:
-            return rlp.decode(self.db.get(self.head_hash), Block)
-        except:
+            block_rlp = self.db.get(self.head_hash)
+            if block_rlp == 'GENESIS':
+                return self.genesis
+            else:
+                return rlp.decode(block_rlp, Block)
+        except Exception as e:
+            log.error(e)
             return None
 
     def mk_poststate_of_blockhash(self, blockhash):
@@ -119,7 +130,11 @@ class Chain(object):
 
     def get_block(self, blockhash):
         try:
-            return rlp.decode(self.db.get(blockhash), Block)
+            block_rlp = self.db.get(blockhash)
+            if block_rlp == 'GENESIS':
+                return self.genesis
+            else:
+                return rlp.decode(block_rlp, Block)
         except:
             return None
 
@@ -283,6 +298,8 @@ class Chain(object):
         log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used))
+        if self.new_head_cb and block.header.number != 0:
+            self.new_head_cb(block)
         return True
 
     def __contains__(self, blk):
@@ -300,6 +317,9 @@ class Chain(object):
 
     def has_block(self, block):
         return block in self
+
+    def has_blockhash(self, blockhash):
+        return blockhash in self.db
 
     def get_chain(self, frm=None, to=2**63 - 1):
         if frm is None:

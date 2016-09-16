@@ -4,6 +4,7 @@ from ethereum.config import default_config
 from ethereum.state_transition import check_gaslimit, initialize, \
     validate_uncles, pre_seal_finalize, mk_receipt_sha, mk_transaction_sha, \
     apply_transaction
+from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.exceptions import InsufficientBalance, BlockGasLimitReached, \
     InsufficientStartGas, InvalidNonce, UnsignedTransaction
 from ethereum.utils import sha3
@@ -52,12 +53,9 @@ def make_head_candidate(chain, txqueue,
         temp_state = State.from_snapshot(chain.state.to_snapshot(root_only=True), chain.env)
     else:
         temp_state = chain.mk_poststate_of_blockhash(parent.hash)
-    if chain.config['HEADER_STRATEGY'] == 'ethereum1':
-        block = ethpow_utils.ethereum1_setup_block(chain, temp_state, timestamp, coinbase, extra_data)
-    elif chain.config['HEADER_STRATEGY'] == 'casper':
-        block = casper_utils.casper_setup_block(chain, temp_state, timestamp, coinbase, extra_data)
-    else:
-        raise Exception("Header building strategy %s not supported" % chain.config['HEADER_STRATEGY'])
+
+    cs = get_consensus_strategy(chain.env.config)
+    block = cs.block_setup(chain, temp_state, timestamp, coinbase, extra_data)
     add_transactions(temp_state, block, txqueue, min_gasprice)
     pre_seal(temp_state, block)
     assert validate_uncles(temp_state, block)

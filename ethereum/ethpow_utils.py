@@ -1,15 +1,17 @@
-from ethereum import ethash, ethash_utils, utils
-from ethereum.block import Block, BlockHeader
 import time
 import sys
-from ethereum.utils import sha3
 import warnings
-from collections import OrderedDict
-from ethereum.slogging import get_logger
 import rlp
-from ethereum.state_transition import calc_difficulty, check_gaslimit, \
-    initialize
+from collections import OrderedDict
+from ethereum import ethash, ethash_utils, utils
+from ethereum.block import Block, BlockHeader
+from ethereum.utils import sha3
+from ethereum.slogging import get_logger
+from ethereum.ethpow import check_pow
+from ethereum.state_transition import calc_difficulty, check_gaslimit, initialize, \
+                                      check_block_header
 from ethereum.config import default_config
+from ethereum.exceptions import VerificationFailed
 
 # Gas limit adjustment algo
 def calc_gaslimit(parent, config=default_config):
@@ -59,3 +61,74 @@ def ethereum1_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20,
     blk.header.uncles_hash = sha3(rlp.encode(blk.uncles))
     initialize(state, blk)
     return blk
+
+
+def ethereum1_check_header(header, nonce=None):
+    """Check if the proof-of-work of the block is valid.
+
+    :param nonce: if given the proof of work function will be evaluated
+                  with this nonce instead of the one already present in
+                  the header
+    :returns: `True` or `False`
+    """
+    # log.debug('checking pow', block=encode_hex(self.hash())[:8])
+    return check_pow(header.number, header.mining_hash, header.mixhash,
+                     nonce or header.nonce, header.difficulty)
+
+def ethereum1_validate_header(state, header):
+    assert check_block_header(state, header)
+    parent = state.prev_headers[0]
+    if parent:
+        if header.prevhash != parent.hash:
+            raise ValueError("Block's prevhash and parent's hash do not match: block prevhash %s parent hash %s" %
+                             (encode_hex(header.prevhash), encode_hex(parent.hash)))
+        if header.number != parent.number + 1:
+            raise ValueError("Block's number is not the successor of its parent number")
+        if not check_gaslimit(parent, header.gas_limit, config=state.config):
+            raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
+        if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
+            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
+                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
+        if header.gas_used > header.gas_limit:
+            raise ValueError("Gas used exceeds gas limit")
+        if len(header.extra_data) > 32 and not state.is_SERENITY():
+            raise ValueError("Extra data too long")
+        if len(header.extra_data) > 1024:
+            raise ValueError("Extra data too long")
+        if header.timestamp <= parent.timestamp:
+            raise ValueError("Timestamp equal to or before parent")
+        if header.timestamp >= 2**256:
+            raise ValueError("Timestamp waaaaaaaaaaayy too large")
+    if header.gas_limit >= 2**63:
+        raise ValueError("Header gas limit too high")
+    return True
+
+def ethereum1_validate_uncle(state, uncle):
+    if not check_block_header(state, uncle):
+        raise VerificationFailed('pow mismatch')
+    return True
+
+def ethereum1_pre_finalize_block(state, block):
+    """Apply rewards and commit."""
+    delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
+    state.delta_balance(state.block_coinbase, delta)
+
+    br = state.config['BLOCK_REWARD']
+    udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
+
+    for uncle in block.uncles:
+        r = int(br * (udpf + uncle.number - state.block_number) // udpf)
+        state.delta_balance(uncle.coinbase, r)
+
+    if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
+        del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
+
+def ethereum1_post_finalize_block(state, block):
+    if state.is_METROPOLIS():
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               state.trie.root_hash)
+        state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
+                               state.block_number % state.config["METROPOLIS_WRAPAROUND"],
+                               block.header.hash)
+    state.add_block_header(block.header)

@@ -1,4 +1,7 @@
+import os
 import rlp
+import serpent
+
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
     safe_ord, int_to_addr, sha3, big_endian_to_int
@@ -11,11 +14,13 @@ from ethereum import transactions
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import opcodes
-from ethereum.state import get_block
+from ethereum.state import State, get_block
+from ethereum.transactions import Transaction
 from ethereum.processblock import apply_msg, create_contract, _apply_msg, Log
+from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum import vm
 from ethereum.specials import specials as default_specials
-from config import default_config
+from config import Env, default_config
 from db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
     BlockGasLimitReached, InsufficientBalance, VerificationFailed
@@ -38,6 +43,7 @@ CREATE_CONTRACT_ADDRESS = b''
 SKIP_RECEIPT_ROOT_VALIDATION = False
 SKIP_MEDSTATES = False
 
+
 def update_block_env_variables(state, block):
     state.timestamp = block.header.timestamp
     state.gas_limit = block.header.gas_limit
@@ -47,62 +53,45 @@ def update_block_env_variables(state, block):
     state.block_difficulty = block.header.difficulty
 
 
-def initialize(state, block):
+def initialize(state, block=None):
+    config = state.config
+
     state.txindex = 0
     state.gas_used = 0
     state.bloom = 0
     state.receipts = []
-    update_block_env_variables(state, block)
-    if state.is_METROPOLIS(at_fork_height=True):
-        self.set_code(utils.normalize_address(
-            state.config["METROPOLIS_STATEROOT_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
-        self.set_code(utils.normalize_address(
-            state.config["METROPOLIS_BLOCKHASH_STORE"]), state.config["METROPOLIS_GETTER_CODE"])
+
+    if block != None:
+        update_block_env_variables(state, block)
+
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
             state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
 
+    if state.is_METROPOLIS(at_fork_height=True):
+        state.set_code(utils.normalize_address(
+            config["METROPOLIS_STATEROOT_STORE"]), config["METROPOLIS_GETTER_CODE"])
+        state.set_code(utils.normalize_address(
+            config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
+
+    cs = get_consensus_strategy(config)
+    if cs.state_initialize:
+        cs.state_initialize(state)
+
 
 def pre_seal_finalize(state, block):
-    if state.config['FINALIZATION'] == 'ethereum1':
-        """Apply rewards and commit."""
-        delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
-        state.delta_balance(state.block_coinbase, delta)
-    
-        br = state.config['BLOCK_REWARD']
-        udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
-    
-        for uncle in block.uncles:
-            r = int(br * (udpf + uncle.number - state.block_number) // udpf)
-    
-            state.delta_balance(uncle.coinbase, r)
-        if state.block_number - state.config['MAX_UNCLE_DEPTH'] in state.recent_uncles:
-            del state.recent_uncles[state.block_number - state.config['MAX_UNCLE_DEPTH']]
-    elif state.config['FINALIZATION'] == 'contract':
-        pass
-    else:
-        raise Exception("Pre-seal finalization strategy %s not supported " % state.config['FINALIZATION'])
-
+    cs = get_consensus_strategy(state.config)
+    if cs.block_pre_finalize:
+        cs.block_pre_finalize(state, block)
     state.commit()
 
 
 def post_seal_finalize(state, block):
-    if state.config['FINALIZATION'] == 'ethereum1':
-        if state.is_METROPOLIS():
-            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_STATEROOT_STORE"]),
-                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                                   state.trie.root_hash)
-            state.set_storage_data(utils.normalize_address(state.config["METROPOLIS_BLOCKHASH_STORE"]),
-                                   state.block_number % state.config["METROPOLIS_WRAPAROUND"],
-                                   block.header.hash)
-        state.add_block_header(block.header)
-    elif state.config['FINALIZATION'].startswith('contract'):
-        apply_message(state,
-                      sender=state.config['SYSTEM_ENTRY_POINT'],
-                      to=state.config['SERENITY_HEADER_POST_FINALIZER'],
-                      data=rlp.encode(block.header))
-    state.commit()
-    assert len(state.journal) == 0, state.journal
+    cs = get_consensus_strategy(state.config)
+    if cs.block_post_finalize:
+        cs.block_post_finalize(state, block)
+        state.commit()
+        assert len(state.journal) == 0, state.journal
 
 
 def mk_receipt(state, logs):
@@ -307,49 +296,19 @@ def mk_receipt_sha(receipts):
 mk_transaction_sha = mk_receipt_sha
 
 
-def validate_block_header(state, header):
-    if state.config['HEADER_VALIDATION'] == 'ethereum1':
-        ethereum1_validate_header(state, header)
-    elif state.config['HEADER_VALIDATION'].startswith('contract'):
-        output = apply_const_message(state,
-                                     sender=state.config['SYSTEM_ENTRY_POINT'],
-                                     to=state.config['SERENITY_HEADER_VERIFIER'],
-                                     data=rlp.encode(header))
-        if output is None:
-            raise ValueError("Validation call failed with exception")
-        elif output:
-            raise ValueError(output)
-    else:
-        raise ValueError("should not get here.")
+def check_block_header(state, header, **kwargs):
+    """ Check header's internal validity """
+    cs = get_consensus_strategy(state.config)
+    if cs.header_check:
+        return cs.header_check(header, **kwargs)
     return True
 
 
-def ethereum1_validate_header(state, header):
-    assert header.check_pow()
-    parent = state.prev_headers[0]
-    if parent:
-        if header.prevhash != parent.hash:
-            raise ValueError("Block's prevhash and parent's hash do not match: block prevhash %s parent hash %s" %
-                             (encode_hex(header.prevhash), encode_hex(parent.hash)))
-        if header.number != parent.number + 1:
-            raise ValueError("Block's number is not the successor of its parent number")
-        if not check_gaslimit(parent, header.gas_limit, config=state.config):
-            raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
-        if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
-            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
-                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
-        if header.gas_used > header.gas_limit:
-            raise ValueError("Gas used exceeds gas limit")
-        if len(header.extra_data) > 32 and not state.is_SERENITY():
-            raise ValueError("Extra data too long")
-        if len(header.extra_data) > 1024:
-            raise ValueError("Extra data too long")
-        if header.timestamp <= parent.timestamp:
-            raise ValueError("Timestamp equal to or before parent")
-        if header.timestamp >= 2**256:
-            raise ValueError("Timestamp waaaaaaaaaaayy too large")
-    if header.gas_limit >= 2**63:
-        raise ValueError("Header gas limit too high")
+def validate_block_header(state, header):
+    """ Check header's validity in block context """
+    cs = get_consensus_strategy(state.config)
+    if cs.header_validate:
+        cs.header_validate(state, header)
     return True
 
 
@@ -408,6 +367,7 @@ def validate_uncles(state, block):
     # Uncles of this block cannot be direct ancestors and cannot also
     # be uncles included 1-6 blocks ago
     ineligible = [b.hash for b in ancestor_chain]
+    cs = get_consensus_strategy(state.config)
     for blknum, uncles in state.recent_uncles.items():
         if state.block_number > blknum >= state.block_number - MAX_UNCLE_DEPTH:
             ineligible.extend([u for u in uncles])
@@ -422,10 +382,10 @@ def validate_uncles(state, block):
             raise VerificationFailed("Number mismatch")
         if uncle.timestamp < parent.timestamp:
             raise VerificationFailed("Timestamp mismatch")
-        if state.config['HEADER_VALIDATION'] == 'ethash' and not uncle.check_pow():
-            raise VerificationFailed('pow mismatch')
         if uncle.hash in ineligible:
             raise VerificationFailed("Duplicate uncle")
+        if cs.uncle_validate:
+            cs.uncle_validate(state, uncle)
         ineligible.append(uncle.hash)
     return True
 
