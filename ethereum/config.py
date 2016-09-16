@@ -62,7 +62,7 @@ default_config = dict(
     CHILD_DAO_LIST = map(utils.normalize_address, child_dao_list),
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Default consensus strategy: ethash, poa, casper, pbft
-    CONSENSUS_STRATEGY = 'casper',
+    CONSENSUS_STRATEGY = 'ethash',
     # Serenity fork
     SERENITY_FORK_BLKNUM = 2**99,
     PREV_HEADER_DEPTH = 256,

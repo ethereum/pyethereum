@@ -7,6 +7,7 @@ from ethereum.transaction_queue import TransactionQueue
 import rlp
 from rlp.utils import decode_hex, encode_hex
 import ethereum.ethpow as ethpow
+import ethereum.ethpow_utils as ethpow_utils
 import ethereum.utils as utils
 from ethereum.chain import Chain
 from ethereum.db import EphemDB
@@ -19,6 +20,10 @@ from ethereum.slogging import get_logger
 logger = get_logger()
 
 _db = new_db()
+
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+# configure_logging(config_string=config_string)
 
 
 @pytest.fixture(scope='function')
@@ -62,7 +67,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         if b:
             break
         nonce += rounds
-    assert b.header.check_pow()
+    assert ethpow_utils.ethereum1_check_header(b.header)
     assert chain.add_block(b)
     return b
 
@@ -209,7 +214,8 @@ def test_prevhash(db):
     chain = Chain({}, difficulty=1, min_gasprice=0)
     L1 = mine_on_chain(chain)
     assert chain.state.get_block_hash(0) != '\x00'*32
-    assert chain.state.get_block_hash(1) == '\x00'*32
+    assert chain.state.get_block_hash(1) != '\x00'*32
+    assert chain.state.get_block_hash(2) == '\x00'*32
 
 
 def test_genesis_chain(db):

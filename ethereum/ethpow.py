@@ -104,7 +104,7 @@ class Miner():
         if bin_nonce:
             blk.header.mixhash = mixhash
             blk.header.nonce = bin_nonce
-            assert blk.check_pow()
+            # assert blk.check_pow()
             return blk
 
 

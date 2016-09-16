@@ -52,7 +52,7 @@ else:
 print 'Attempting to open %s' % RLP_BLOCKS_FILE
 _path, _file = os.path.split(RLP_BLOCKS_FILE)
 if not _path or _file not in os.listdir(_path):
-    print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp' + \
+    print 'Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp ' + \
           'and put it in this directory to continue the test'
     sys.exit()
 

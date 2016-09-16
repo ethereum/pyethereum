@@ -32,22 +32,38 @@ def get_contract_code(init_code):
     assert o
     return o
 
+_casper_code = None
+_rlp_decoder_code = None
+_hash_without_ed_code = None
+_finalizer_code = None
+
 def get_casper_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(casper_path).read()))
+    global _casper_code
+    if not _casper_code:
+        import serpent
+        _casper_code = get_contract_code(serpent.compile(open(casper_path).read()))
+    return _casper_code
 
 def get_rlp_decoder_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
+    global _rlp_decoder_code
+    if not _rlp_decoder_code:
+        import serpent
+        _rlp_decoder_code = get_contract_code(serpent.compile(open(rlp_decoder_path).read()))
+    return _rlp_decoder_code
 
 def get_hash_without_ed_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
+    global _hash_without_ed_code
+    if not _hash_without_ed_code:
+        import serpent
+        _hash_without_ed_code = get_contract_code(serpent.compile(open(hash_without_ed_path).read()))
+    return _hash_without_ed_code
 
 def get_finalizer_code():
-    import serpent
-    return get_contract_code(serpent.compile(open(finalizer_path).read()))
-
+    global _finalizer_code
+    if not _finalizer_code:
+        import serpent
+        _finalizer_code = get_contract_code(serpent.compile(open(finalizer_path).read()))
+    return _finalizer_code
 
 # The Casper-specific config declaration
 casper_config = copy.deepcopy(default_config)
@@ -60,6 +76,7 @@ casper_config['RLP_DECODER_ADDR'] = utils.int_to_addr(253)
 casper_config['HASH_WITHOUT_BLOOM_ADDR'] = utils.int_to_addr(252)
 casper_config['MAX_UNCLE_DEPTH'] = 0
 casper_config['PREV_HEADER_DEPTH'] = 1
+casper_config['CONSENSUS_STRATEGY'] = 'casper'
 
 
 _casper_ct = None

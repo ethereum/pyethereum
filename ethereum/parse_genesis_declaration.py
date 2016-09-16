@@ -43,8 +43,7 @@ def state_from_genesis_declaration(genesis_data, env, block=None):
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
     initialize(state, block)
     state.commit()
-    # genesis block's state_root should be blank node hash
-    # Don't do this: block.header.state_root = state.trie.root_hash
+    block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
     return state
 

@@ -257,7 +257,8 @@ class state(object):
         if gas is not None:
             transaction.startgas = gas
 
-        (success, output, logs) = state_transition.apply_transaction(self.state, transaction)
+        success, output = state_transition.apply_transaction(self.state, transaction)
+        logs = self.state.receipts[-1].logs
         for listener in self.log_listeners:
             for log in logs:
                 listener(log)
@@ -299,7 +300,8 @@ class state(object):
             )
 
         try:
-            (success, output, logs) = state_transition.apply_transaction(self.state, transaction)
+            success, output = state_transition.apply_transaction(self.state, transaction)
+            logs = self.state.receipts[-1].logs
             for listener in self.log_listeners:
                 for log in logs:
                     listener(log)
