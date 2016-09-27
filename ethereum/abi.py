@@ -397,23 +397,29 @@ class ContractTranslator(object):
         if is_string(contract_interface):
             contract_interface = json_decode(contract_interface)
 
+        self.fallback_data = None
         self.constructor_data = None
         self.function_data = {}
         self.event_data = {}
 
         for description in contract_interface:
-            encode_types = [
-                element['type']
-                for element in description['inputs']
-            ]
+            entry_type = description.get('type', 'function')
+            encode_types = []
+            signature = []
 
-            signature = [
-                (element['type'], element['name'])
-                for element in description['inputs']
-            ]
+            # If it's a function/constructor/event
+            if entry_type != 'fallback' and 'inputs' in description:
+                    encode_types = [
+                        element['type']
+                        for element in description.get('inputs')
+                    ]
 
-            # type can be omitted, defaulting to function
-            if description.get('type', 'function') == 'function':
+                    signature = [
+                        (element['type'], element['name'])
+                        for element in description.get('inputs')
+                    ]
+
+            if entry_type == 'function':
                 normalized_name = normalize_name(description['name'])
 
                 decode_types = [
@@ -427,9 +433,10 @@ class ContractTranslator(object):
                     'decode_types': decode_types,
                     'is_constant': description.get('constant', False),
                     'signature': signature,
+                    'payable': description.get('payable', False),
                 }
 
-            elif description['type'] == 'event':
+            elif entry_type == 'event':
                 normalized_name = normalize_name(description['name'])
 
                 indexed = [
@@ -449,7 +456,7 @@ class ContractTranslator(object):
                     'anonymous': description.get('anonymous', False),
                 }
 
-            elif description['type'] == 'constructor':
+            elif entry_type == 'constructor':
                 if self.constructor_data is not None:
                     raise ValueError('Only one constructor is supported.')
 
@@ -457,6 +464,11 @@ class ContractTranslator(object):
                     'encode_types': encode_types,
                     'signature': signature,
                 }
+
+            elif entry_type == 'fallback':
+                if self.fallback_data is not None:
+                    raise ValueError('Only one fallback function is supported.')
+                self.fallback_data = {'payable': description['payable']}
 
             else:
                 raise ValueError('Unknown type {}'.format(description['type']))
@@ -530,7 +542,7 @@ class ContractTranslator(object):
         # topics[0]: keccak(EVENT_NAME+"("+EVENT_ARGS.map(canonical_type_of).join(",")+")")
         # If the event is declared as anonymous the topics[0] is not generated;
         if not len(log_topics) or log_topics[0] not in self.event_data:
-            raise ValueError('Unknow log type')
+            raise ValueError('Unknown log type')
 
         event_id_ = log_topics[0]
 
