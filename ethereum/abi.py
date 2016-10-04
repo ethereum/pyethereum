@@ -409,15 +409,15 @@ class ContractTranslator(object):
 
             # If it's a function/constructor/event
             if entry_type != 'fallback' and 'inputs' in description:
-                    encode_types = [
-                        element['type']
-                        for element in description.get('inputs')
-                    ]
+                encode_types = [
+                    element['type']
+                    for element in description.get('inputs')
+                ]
 
-                    signature = [
-                        (element['type'], element['name'])
-                        for element in description.get('inputs')
-                    ]
+                signature = [
+                    (element['type'], element['name'])
+                    for element in description.get('inputs')
+                ]
 
             if entry_type == 'function':
                 normalized_name = normalize_name(description['name'])
