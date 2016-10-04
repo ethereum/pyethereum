@@ -142,6 +142,11 @@ def add_cool_checksum(addr):
 
     o = ''
     h = encode_hex(sha3(addr_hex))
+    if not isinstance(addr_hex, str):
+        # py3 bytes sequence
+        addr_hex = list(chr(c) for c in addr_hex)
+        h = list(chr(c) for c in h)
+
     for i, c in enumerate(addr_hex):
         if c in '0123456789':
             o += c
