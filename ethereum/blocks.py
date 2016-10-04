@@ -40,17 +40,36 @@ class lazy_encode(object):
         self.data = data
 
     def encode_entry(self, entry):
-        assert isinstance(entry, Iterable)
+        def safe_encode(value):
+            # handle binary data (assuming all str are binary)
+            if isinstance(value, (str, unicode)):
+                return encode_hex(value)
+
+            # handle non binary data, eg.: floats, ints ...
+            return repr(value)
+
+        if not isinstance(entry, Iterable):
+            raise ValueError('entry must be iterable')
+
+        entry = list(entry)  # consume the iterable
+
         if len(entry) == 3:
             name, addr, v = entry
             if name == 'code':
-                return [name, encode_hex(addr), encode_hex(v)]
+                return [name, safe_encode(addr), safe_encode(v)]
             else:
-                return [name, encode_hex(addr), v]
-        elif len(entry) == 4:
+                return [name, safe_encode(addr), v]
+
+        if len(entry) == 4:
             name, addr, k, v = entry
-            return [name, encode_hex(addr), encode_hex(k), encode_hex(v)]
-        assert False, ("unexpected entry format", entry)
+            return [
+                name,
+                safe_encode(addr),
+                safe_encode(k),
+                safe_encode(v),
+            ]
+
+        raise ValueError('Unexpected entry format {}'.format(entry))
 
     def __repr__(self):
         return repr([self.encode_entry(entry) for entry in self.data])
