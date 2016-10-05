@@ -99,57 +99,19 @@ def compiler_version():
         return match.group(1)
 
 
-def solidity_names(code):  # pylint: disable=too-many-branches
+def remove_comments(string):
+        string = re.sub(re.compile("/\*.*?\*/",re.DOTALL ) ,"" ,string) # remove all occurance streamed comments (/*COMMENT */) from string
+        string = re.sub(re.compile("//.*?\n" ) ,"" ,string) # remove all occurance singleline comments (//COMMENT\n ) from string
+        return string
+
+
+def solidity_names(code):
     """ Return the library and contract names in order of appearence. """
     names = []
-    in_string = None
-    backslash = False
-    comment = None
+    cleancode = remove_comments(code)
 
-    # "parse" the code by hand to handle the corner cases:
-    #  - the contract or library can be inside a comment or string
-    #  - multiline comments
-    #  - the contract and library keywords could not be at the start of the line
-    for pos, char in enumerate(code):
-        if in_string:
-            if not backslash and in_string == char:
-                in_string = None
-                backslash = False
-
-            if char == '\\':  # pylint: disable=simplifiable-if-statement
-                backslash = True
-            else:
-                backslash = False
-
-        elif comment == '//':
-            if char in ('\n', '\r'):
-                comment = None
-
-        elif comment == '/*':
-            if char == '*' and code[pos + 1] == '/':
-                comment = None
-
-        else:
-            if char == '"' or char == "'":
-                in_string = char
-
-            if char == '/':
-                if code[pos + 1] == '/':
-                    comment = '//'
-                if code[pos + 1] == '*':
-                    comment = '/*'
-
-            if char == 'c' and code[pos: pos + 8] == 'contract':
-                result = re.match('^contract[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
-
-                if result:
-                    names.append(('contract', result.groups()[0]))
-
-            if char == 'l' and code[pos: pos + 7] == 'library':
-                result = re.match('^library[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
-
-                if result:
-                    names.append(('library', result.groups()[0]))
+    for m in re.findall(r'^\s*?(contract|library)\s+?(\S*?)\s+?', cleancode, re.MULTILINE):
+        names.append((m[0], m[1]))
 
     return names
 

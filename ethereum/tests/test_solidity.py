@@ -14,6 +14,56 @@ SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
 
+def test_solidity_names():
+    # test simple extracting names
+    code = '''
+contract test1 {}
+contract test2 {}
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'test1'), ('contract', 'test2')]
+
+    # test with odd comment
+    code = '''
+contract test1
+// odd comment here
+/* more odd comments */
+{}
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'test1')]
+
+    # test with contract in comment
+    code = '''
+contract test1 {}
+//contract test2 {}
+/*contract test3 {}*/
+/*
+contract test4 {}
+*/
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'test1')]
+
+    # test with a var named 'subcontract'
+    code = '''
+contract test1 {
+    _subcontract = new subcontract();
+}
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'test1')]
+
+    # test with a contract named subcontract
+    code = '''
+contract subcontract {}
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'subcontract')]
+
+    # test with a library
+    code = '''
+contract test1 {}
+library test2 {}
+'''
+    assert _solidity.solidity_names(code) == [('contract', 'test1'), ('library', 'test2')]
+
+
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_library_from_file():
     state = tester.state()
