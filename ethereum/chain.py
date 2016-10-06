@@ -417,3 +417,21 @@ class Chain(object):
         block_numbers = list(range(block.number + 1, min(self.head.number + 1,
                                                          block.number + count + 1)))
         return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
+
+    def get_blockhashes_from_hash(self, hash, max):
+        try:
+            header = blocks.get_block_header(self.db, hash)
+        except KeyError:
+            return []
+
+        hashes = []
+        for i in xrange(max):
+            hash = header.prevhash
+            try:
+                header = blocks.get_block_header(self.db, hash)
+            except KeyError:
+                break
+            hashes.append(hash)
+            if header.number == 0:
+                break
+        return hashes
