@@ -442,6 +442,9 @@ class State():
     def is_SERENITY(self, at_fork_height=False):
         return self._is_X_fork('SERENITY', at_fork_height)
 
+    def is_ANTI_DOS(self, at_fork_height=False):
+        return self._is_X_fork('ANTI_DOS', at_fork_height)
+
     def is_DAO(self, at_fork_height=False):
         return self._is_X_fork('DAO', at_fork_height)
 

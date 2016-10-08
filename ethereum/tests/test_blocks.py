@@ -45,6 +45,12 @@ def valueconv(k, v):
     return v
 
 
+def safe_decode(x):
+    if x[:2] == '0x':
+        x = x[2:]
+    return decode_hex(x)
+
+
 def run_block_test(params, config_overrides = {}):
     env = Env(db.EphemDB())
     genesis_decl = {}
@@ -54,9 +60,9 @@ def run_block_test(params, config_overrides = {}):
         genesis_decl[param] = params["genesisBlockHeader"][param]
     genesis_decl["alloc"] = params["pre"]
     c = chain.Chain(genesis=genesis_decl, env=env)
-    assert c.state.prev_headers[0].state_root == decode_hex(params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.trie.root_hash == decode_hex(params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.prev_headers[0].hash == decode_hex(params["genesisBlockHeader"]["hash"])
+    assert c.state.prev_headers[0].state_root == safe_decode(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.trie.root_hash == safe_decode(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.prev_headers[0].hash == safe_decode(params["genesisBlockHeader"]["hash"])
 
 
     old_config = copy.deepcopy(env.config)
@@ -68,7 +74,7 @@ def run_block_test(params, config_overrides = {}):
         if 'blockHeader' not in blk:
             success = True
             try:
-                rlpdata = decode_hex(blk["rlp"][2:])
+                rlpdata = safe_decode(blk["rlp"][2:])
                 success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction, 
@@ -76,7 +82,7 @@ def run_block_test(params, config_overrides = {}):
                 success = False
             assert not success
         else:
-            rlpdata = decode_hex(blk["rlp"][2:])
+            rlpdata = safe_decode(blk["rlp"][2:])
             assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 

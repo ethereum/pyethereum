@@ -394,7 +394,13 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
-            if _shouldbe != _reallyis:
+            passed = False
+            if isinstance(_shouldbe, (str, bytes, unicode)) and _shouldbe[0] == '#':
+                if int(_shouldbe[1:]) == len(decode_hex(remove_0x_head(_reallyis))):
+                    passed = True
+            if _shouldbe == _reallyis:
+                passed = True
+            if not passed:
                 print 's', shouldbe
                 print 'r', reallyis
                 print state.trie.to_dict()
