@@ -14,7 +14,10 @@ SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+skip_if_no_solidity_compiler = pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+
+
+@skip_if_no_solidity_compiler
 def test_library_from_file():
     state = tester.state()
     state.env.config['HOMESTEAD_FORK_BLKNUM'] = 0  # enable CALLCODE opcode
@@ -40,7 +43,7 @@ def test_library_from_file():
     assert contract.test() == 7
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@skip_if_no_solidity_compiler
 def test_library_from_code():
     with open(path.join(CONTRACTS_DIR, 'seven_library.sol')) as handler:
         library_code = handler.read()
@@ -120,7 +123,7 @@ def test_symbols():
     ) == 'beef1111111111111111111111111111111111111111cafe'
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@skip_if_no_solidity_compiler
 def test_interop():
     serpent_contract = """\
 extern solidity: [sub2:[]:i]
@@ -163,7 +166,7 @@ def sub1():
     assert solidity_abi.main(serpent_abi.address) == 10
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@skip_if_no_solidity_compiler
 def test_constructor():
     constructor_contract = '''
     contract testme {
@@ -189,7 +192,7 @@ def test_constructor():
 
 
 @pytest.mark.xfail(reason='bytecode in test seems to be wrong')
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@skip_if_no_solidity_compiler
 def test_solidity_compile_rich():
     compile_rich_contract = """
     contract contract_add {
@@ -239,7 +242,7 @@ def test_solidity_compile_rich():
     } == {'subtract7', 'subtract42'}
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@skip_if_no_solidity_compiler
 def test_abi_contract():
     one_contract = """
     contract foo {
