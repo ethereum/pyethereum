@@ -104,7 +104,7 @@ def solc_parse_output(compiler_output):
 def compiler_version():
     """ Return the version of the installed solc. """
     version_info = subprocess.check_output(['solc', '--version'])
-    match = re.search('^Version: ([0-9a-z.-]+)/', version_info, re.MULTILINE)
+    match = re.search(b'^Version: ([0-9a-z.-]+)/', version_info, re.MULTILINE)
 
     if match:
         return match.group(1)
