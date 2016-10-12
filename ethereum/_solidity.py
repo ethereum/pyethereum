@@ -186,7 +186,7 @@ def solidity_resolve_address(hex_code, library_symbol, library_address):
         raise ValueError('Address should not contain the 0x prefix')
 
     try:
-        _ = decode_hex(library_address)
+        decode_hex(library_address)
     except TypeError:
         raise ValueError('library_address contains invalid characters, it must be hex encoded.')
 
