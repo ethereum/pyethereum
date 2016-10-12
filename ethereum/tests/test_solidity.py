@@ -241,18 +241,6 @@ def test_abi_contract():
     }
     """
 
-    two_contracts = one_contract + """
-    contract baz {
-        function echo(address a) returns (address b) {
-            b = a;
-            return b;
-        }
-        function eight() returns (int256 y) {
-            y = 8;
-        }
-    }
-    """
-
     state = tester.state()
     contract = state.abi_contract(one_contract, language='solidity')
 
