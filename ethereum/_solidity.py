@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import warnings
+import shlex
 
 import yaml
 
@@ -40,16 +41,21 @@ def get_solidity():
     return solc_wrapper
 
 
-def solc_arguments(libraries=None, combined='bin,abi', optimize=True, extra_args=''):
+def solc_arguments(libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     """ Build the arguments to call the solc binary. """
     args = [
         '--combined-json', combined,
-        '--add-std',
-        extra_args
+        '--add-std'
     ]
 
     if optimize:
         args.append('--optimize')
+
+    if extra_args:
+        try:
+            args.extend(shlex.split(extra_args))
+        except:  # if not a parseable string then treat it as a list
+            args.extend(extra_args)
 
     if libraries is not None and len(libraries):
         addresses = [
@@ -66,6 +72,10 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True, extra_args
 
 def solc_parse_output(compiler_output):
     """ Parses the compiler output. """
+    # At the moment some solc output like --hashes or -- gas will not output
+    # json at all so if used with those arguments the logic here will break.
+    # Perhaps solidity will slowly switch to a json only output and this comment
+    # can eventually go away and we will not need to add more logic here at all.
     result = yaml.safe_load(compiler_output)['contracts']
 
     if 'bin' in tuple(result.values())[0]:
@@ -222,7 +232,7 @@ def solidity_unresolved_symbols(hex_code):
     return set(re.findall(r"_.{39}", hex_code))
 
 
-def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=''):
+def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     """ Return the compile contract code.
 
     Args:
@@ -246,7 +256,7 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, ex
     return solc_parse_output(output)
 
 
-def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True, extra_args=''):
+def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     all_contracts = compile_file(
         filepath,
         libraries=libraries,
@@ -258,7 +268,7 @@ def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi'
     return all_contracts[contract_name]
 
 
-def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=''):
+def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     with open(filepath) as handler:
         all_names = solidity_names(handler.read())
 
@@ -279,7 +289,7 @@ def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize
     )
 
 
-def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True, extra_args=''):
+def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize, extra_args=extra_args)
     args.insert(0, get_compiler_path())
 
@@ -323,37 +333,40 @@ class Solc(object):
         return result[last_contract]
 
     @classmethod
-    def compile(cls, code, path=None, libraries=None, contract_name='', extra_args=''):
+    def compile(cls, code, path=None, libraries=None, contract_name='', extra_args=None):
         """ Return the binary of last contract in code. """
         result = cls._code_or_path(code, path, contract_name, libraries, 'bin', extra_args)
         return result['bin']
 
     @classmethod
-    def mk_full_signature(cls, code, path=None, libraries=None, contract_name='', extra_args=''):
+    def mk_full_signature(cls, code, path=None, libraries=None, contract_name='', extra_args=None):
         "returns signature of last contract in code"
 
         result = cls._code_or_path(code, path, contract_name, libraries, 'abi', extra_args)
         return result['abi']
 
     @classmethod
-    def combined(cls, code, path=None):
+    def combined(cls, code, path=None, extra_args=None):
         """ Compile combined-json with abi,bin,devdoc,userdoc.
 
         @param code: literal solidity code as a string.
-        @param path: absolute path to solidity-file. Note: code & path are exclusive!
+        @param path: absolute path to solidity-file. Note: code & path are
+                     mutually exclusive!
+        @param extra_args: Either a space separated string or a list of extra
+                           arguments to be passed to the solidity compiler.
         """
 
         if code and path:
             raise ValueError('sourcecode and path are mutually exclusive.')
 
         if path:
-            contracts = compile_file(path)
+            contracts = compile_file(path, extra_args=extra_args)
 
             with open(path) as handler:
                 code = handler.read()
 
         elif code:
-            contracts = compile_code(code)
+            contracts = compile_code(code, extra_args=extra_args)
 
         else:
             raise ValueError('either code or path needs to be supplied.')
@@ -364,7 +377,7 @@ class Solc(object):
         return sorted_contracts
 
     @classmethod
-    def compile_rich(cls, code, path=None):
+    def compile_rich(cls, code, path=None, extra_args=None):
         """full format as returned by jsonrpc"""
 
         return {
@@ -381,7 +394,7 @@ class Solc(object):
                 },
             }
             for contract_name, contract
-            in cls.combined(code, path=path)
+            in cls.combined(code, path=path, extra_args=extra_args)
         }
 
 
