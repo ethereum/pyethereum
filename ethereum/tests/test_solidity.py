@@ -271,3 +271,25 @@ def test_abi_contract():
     assert contract.seven() == 7
     assert contract.mul2(2) == 4
     assert contract.mul2(-2) == -4
+
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+def test_extra_args():
+    src = """
+    contract foo {
+        function add7(uint a) returns(uint d) { return a + 7; }
+        function add42(uint a) returns(uint d) { return a + 42; }
+    }
+    """
+
+    contract_info = get_solidity().compile_rich(
+        src,
+        extra_args="--optimize-runs 100"
+    )
+    expected_code = '0x6060604052605c8060106000396000f3606060405260e060020a6000350463651ae23981146026578063cb02919f146039575b6002565b34600257604a600435600781015b919050565b34600257604a600435602a81016034565b60408051918252519081900360200190f3'
+    assert expected_code == contract_info['foo']['code']
+
+    contract_info = get_solidity().compile_rich(
+        src,
+        extra_args=["--optimize-runs", "100"]
+    )
+    assert expected_code == contract_info['foo']['code']
