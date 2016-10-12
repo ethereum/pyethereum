@@ -22,6 +22,11 @@ def get_compiler_path():
     This funtion will search for the solc binary in the $PATH and return the
     path of the first executable occurence.
     """
+    # If the user provides a specific solc binary let's use that
+    given_binary = os.environ.get('SOLC_BINARY')
+    if given_binary:
+        return given_binary
+
     for path in os.getenv('PATH', '').split(os.pathsep):
         path = path.strip('"')
         executable_path = os.path.join(path, BINARY)
