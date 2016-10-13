@@ -15,6 +15,10 @@ import copy
 from ethereum.slogging import get_logger
 logger = get_logger()
 
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+# configure_logging(config_string=config_string)
+
 
 def translate_keys(olddict, keymap, valueconv, deletes):
     o = {}
@@ -86,12 +90,23 @@ def run_block_test(params, config_overrides = {}):
             assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 
+def get_config_overrides(filename):
+    o = {}
+    if 'Homestead' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 0
+    if 'TestNetwork' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 5
+    if 'bcTheDaoTest' in filename:
+        o['DAO_FORK_BLKNUM'] = 8
+    if 'EIP150' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 5
+        o['DAO_FORK_BLKNUM'] = 8
+        o['ANTI_DOS_FORK_BLKNUM'] = 10
+    return o
+
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {
-        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-    })
+    run_block_test(testdata, get_config_overrides(filename))
 
 
 excludes = {
@@ -117,19 +132,13 @@ def main():
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-                    })
+                    run_block_test(testdata, get_config_overrides(filename))
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-                    })
+                    run_block_test(testdata, get_config_overrides(filename))
 
 
 if __name__ == '__main__':
