@@ -85,7 +85,6 @@ class Chain(object):
             return None
 
     def mk_poststate_of_blockhash(self, blockhash):
-        print 'Making poststate from blockhash'
         if blockhash not in self.db:
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
         if self.db.get(blockhash) == 'GENESIS':

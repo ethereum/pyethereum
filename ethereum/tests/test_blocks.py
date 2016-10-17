@@ -96,12 +96,15 @@ def get_config_overrides(filename):
         o['HOMESTEAD_FORK_BLKNUM'] = 0
     if 'TestNetwork' in filename:
         o['HOMESTEAD_FORK_BLKNUM'] = 5
+        if 'EIP150' in filename:
+            o['DAO_FORK_BLKNUM'] = 8
+            o['ANTI_DOS_FORK_BLKNUM'] = 10
+    elif 'EIP150' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 0
+        o['DAO_FORK_BLKNUM'] = 2**99
+        o['ANTI_DOS_FORK_BLKNUM'] = 0
     if 'bcTheDaoTest' in filename:
         o['DAO_FORK_BLKNUM'] = 8
-    if 'EIP150' in filename:
-        o['HOMESTEAD_FORK_BLKNUM'] = 5
-        o['DAO_FORK_BLKNUM'] = 8
-        o['ANTI_DOS_FORK_BLKNUM'] = 10
     return o
 
 

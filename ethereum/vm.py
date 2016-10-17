@@ -25,6 +25,8 @@ TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
+MAX_DEPTH = 1024
+
 
 class CallData(object):
 
@@ -137,7 +139,8 @@ def data_copy(compustate, size):
 
 def eat_gas(compustate, amount):
     if compustate.gas < amount:
-        return vm_exception("OUT OF GAS")
+        compustate.gas = 0
+        return False
     else:
         compustate.gas -= amount
         return True
@@ -551,7 +554,7 @@ def vm_execute(ext, msg, code):
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+            if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
                 cd = CallData(mem, mstart, msz)
                 ingas = compustate.gas
                 if ext.post_anti_dos_hardfork():
@@ -586,7 +589,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+            if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
                 compustate.gas -= (gas + extra_gas)
                 assert compustate.gas >= 0
                 cd = CallData(mem, meminstart, meminsz)
@@ -624,7 +627,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if ext.get_balance(msg.to) >= value and msg.depth < 1024:
+            if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
                 compustate.gas -= (gas + extra_gas)
                 assert compustate.gas >= 0
                 to = utils.encode_int(to)

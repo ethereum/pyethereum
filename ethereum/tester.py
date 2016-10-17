@@ -276,7 +276,7 @@ class state(object):
         )
 
     def _send(self, sender, to, value, evmdata='', funid=None, abi=None,  # pylint: disable=too-many-arguments
-              profiling=0):
+              profiling=0, gas=None):
         # pylint: disable=too-many-locals
 
         if funid is not None or abi is not None:
@@ -286,9 +286,10 @@ class state(object):
 
         start_time = time.time()
         gas_used = self.state.gas_used
+        _gas_limit = gas_limit if gas is None else gas
 
         sendnonce = self.state.get_nonce(privtoaddr(sender))
-        transaction = transactions.Transaction(sendnonce, gas_price, gas_limit, to, value, evmdata)
+        transaction = transactions.Transaction(sendnonce, gas_price, _gas_limit, to, value, evmdata)
         self.last_tx = transaction
         transaction.sign(sender)
         recorder = None

@@ -34,9 +34,9 @@ env = {
     "previousHash": b"5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
 }
 
-from ethereum.slogging import LogRecorder, configure_logging, set_level
-config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
-configure_logging(config_string=config_string)
+# from ethereum.slogging import LogRecorder, configure_logging, set_level
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+# configure_logging(config_string=config_string)
 
 FILL = 1
 VERIFY = 2
