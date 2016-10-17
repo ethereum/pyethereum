@@ -67,6 +67,9 @@ default_config = dict(
     ANTI_DOS_FORK_BLKNUM=2457000,
     CLEARING_FORK_BLKNUM=2 ** 98,
 )
+
+LATEST_APPLIED_FORK_BLKNUM = default_config.get('ANTI_DOS_FORK_BLKNUM')
+
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
 
