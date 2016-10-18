@@ -21,6 +21,7 @@ else:
 
 ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
 ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
+BLANK_HASH = utils.sha3(b'')
 
 @lru_cache(1024)
 def get_block(db, blockhash):
@@ -197,6 +198,8 @@ class State():
         self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) and k not in ACCOUNT_SPECIAL_PARAMS else v)
 
     def account_exists(self, addr):
+        if self.is_CLEARING():
+            return self.get_nonce(addr) or self.get_balance(addr) or self.get_code(addr)
         if addr not in self.modified:
             o = self.trie.get(addr) != trie.BLANK_NODE
         elif self.cache[addr].get('deleted', False):
@@ -248,7 +251,10 @@ class State():
             if addr in self.modified or True:
                 if not acct.deleted:
                     acct._cached_rlp = None
-                    self.trie.update(addr, rlp.encode(acct))
+                    if self.is_CLEARING() and acct.is_blank():
+                        self.trie.delete(addr)
+                    else:
+                        self.trie.update(addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)
         self.cache = {}
@@ -272,6 +278,9 @@ class State():
         for param in ACCOUNT_OUTPUTTABLE_PARAMS:
             self.set_storage(address, param, getattr(blank_acct, param))
         self.reset_storage(address)
+        self.set_balance(address, 0)
+        self.set_nonce(address, 0)
+        self.set_code(address, '')
         self.set_storage(address, 'deleted', True)
 
     def add_log(self, log):
@@ -445,6 +454,9 @@ class State():
     def is_ANTI_DOS(self, at_fork_height=False):
         return self._is_X_fork('ANTI_DOS', at_fork_height)
 
+    def is_CLEARING(self, at_fork_height=False):
+        return self._is_X_fork('CLEARING', at_fork_height)
+
     def is_DAO(self, at_fork_height=False):
         return self._is_X_fork('DAO', at_fork_height)
 
@@ -529,3 +541,6 @@ class Account(rlp.Serializable):
         o = cls(initial_nonce, 0, trie.BLANK_ROOT, code_hash, db)
         o._mutable = True
         return o
+
+    def is_blank(self):
+        return self.nonce == 0 and self.balance == 0 and self.storage == trie.BLANK_ROOT and self.code_hash == BLANK_HASH

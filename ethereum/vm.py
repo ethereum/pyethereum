@@ -289,6 +289,8 @@ def vm_execute(ext, msg, code):
                 # calc n bytes to represent exponent
                 nbytes = len(utils.encode_int(exponent))
                 expfee = nbytes * opcodes.GEXPONENTBYTE
+                if ext.post_clearing_hardfork():
+                    expfee += opcodes.EXP_SUPPLEMENTAL_GAS * (1 + nbytes)
                 if compustate.gas < expfee:
                     compustate.gas = 0
                     return vm_exception('OOG EXPONENT')
@@ -577,7 +579,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.encode_int(to)
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
-            extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
+            extra_gas = (not ext.account_exists(to)) * (value > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER + \
                 ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
@@ -687,12 +689,12 @@ def vm_execute(ext, msg, code):
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
+            xfer = ext.get_balance(msg.to)
             if ext.post_anti_dos_hardfork():
                 extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS + \
-                    (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT
+                    (not ext.account_exists(to)) * (xfer > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT
                 if not eat_gas(compustate, extra_gas):
                     return vm_exception("OUT OF GAS")
-            xfer = ext.get_balance(msg.to)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
