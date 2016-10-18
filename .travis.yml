@@ -14,7 +14,7 @@ env:
   global:
     - COVERAGE_APPEND="--append"
     - secure: cKbIgpTJ1yjKLBxpCEiT6IH7NShDWZUE+BvnrAfc+ujCsR6LyLJcKxFQmKnWryJCqg7fp82Ep2bF2oDKzanAROar2xDY1SFGbai42seYMaFCw53YPGJ6u3VNCcfT0rN9BWgE7el/m4fjcD6CRsZYKArNNJbMX8csRt3uXXCFLso=
-    - secure: "Gj9H2vW9ifusxbKLt8mT2G47ExewU9XFcRHDvULfn2hHhJH5cz0kOnW4I5W0EPAits0BRPZJClZV0PgDuo+zDjtEMrhDQYEmvb4KE5euLIm1xmQSkXYhErKxxSdIXSujiJbz4TT/V3FTtpmJWDaSzfwPy2PTK5bjbS+U3h3AlG4="
+    - secure: "QyFPrxQHd2LlNQ6zNeTFYhgPmZaOHoWuywcgn8qaSOh6PklyFxHbexkwg0bl23JvtgNEZ1mCD8j0x1/ydSdtxgCFwK9SEL0h7aYuAq+OAIa/G18OPeTJMf7ASsb2QZdfkt9reFpUnjbadzHkuv+rqqb4bFnTJBKwB2LWzHPLhWg="
 install:
   - travis_retry pip install setuptools --upgrade
   - travis_retry pip install tox
