@@ -16,6 +16,9 @@ import os
 import time
 from ethereum import ethash
 from ethereum import ethash_utils
+from ethereum import jitvm
+
+vm_execute = jitvm.vm_execute
 
 db = EphemDB()
 db_env = Env(db)
@@ -219,7 +222,7 @@ def run_vm_test(params, mode, profiler=None):
     time_pre = time.time()
     if profiler:
         profiler.enable()
-    success, gas_remained, output = vm.vm_execute(ext, msg, code)
+    success, gas_remained, output = vm_execute(ext, msg, code)
     if profiler:
         profiler.disable()
     pb.apply_msg = orig_apply_msg
@@ -396,6 +399,8 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
+            if k == 'out' and _shouldbe.startswith(u'#'):
+                _reallyis = u'#{}'.format(len(output))
             if _shouldbe != _reallyis:
                 print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
                        'post: {shouldbe_post} != {reallyis_post}').format(

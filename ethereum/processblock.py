@@ -12,9 +12,12 @@ from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTran
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
     mk_metropolis_contract_address, big_endian_to_int
 from ethereum import transactions
+from ethereum import jitvm
 import ethereum.config as config
 
 sys.setrecursionlimit(100000)
+
+vm_execute = jitvm.vm_execute
 
 from ethereum.slogging import get_logger
 log_tx = get_logger('eth.pb.tx')
@@ -280,7 +283,7 @@ def _apply_msg(ext, msg, code):
     if msg.code_address in specials.specials:
         res, gas, dat = specials.specials[msg.code_address](ext, msg)
     else:
-        res, gas, dat = vm.vm_execute(ext, msg, code)
+        res, gas, dat = vm_execute(ext, msg, code)
     # gas = int(gas)
     # assert utils.is_numeric(gas)
     if trace_msg:
