@@ -1,8 +1,13 @@
-from ethereum import blocks, utils, db
-from ethereum.exceptions import VerificationFailed, InvalidTransaction
+import pytest
+
+from ethereum import utils, db, chain
+from ethereum.exceptions import VerificationFailed, InvalidTransaction, InvalidNonce
+from ethereum.block import Block
+from ethereum.config import Env
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
+import os
 import sys
 import ethereum.testutils as testutils
 import copy
@@ -18,7 +23,6 @@ def translate_keys(olddict, keymap, valueconv, deletes):
             o[keymap.get(k, k)] = valueconv(k, olddict[k])
     return o
 
-env = blocks.Env(db._EphemDB())
 
 translator_list = {
     "extra_data": "extraData",
@@ -41,75 +45,64 @@ def valueconv(k, v):
     return v
 
 
-def run_block_test(params, config_overrides={}):
-    b = blocks.genesis(env, start_alloc=params["pre"])
-    gbh = params["genesisBlockHeader"]
-    b.bloom = utils.scanners['int256b'](gbh["bloom"])
-    b.timestamp = utils.scanners['int'](gbh["timestamp"])
-    b.nonce = utils.scanners['bin'](gbh["nonce"])
-    b.extra_data = utils.scanners['bin'](gbh["extraData"])
-    b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
-    b.gas_used = utils.scanners['int'](gbh["gasUsed"])
-    b.coinbase = utils.scanners['addr'](decode_hex(gbh["coinbase"]))
-    b.difficulty = utils.parse_int_or_hex(gbh["difficulty"])
-    b.prevhash = utils.scanners['bin'](gbh["parentHash"])
-    b.mixhash = utils.scanners['bin'](gbh["mixHash"])
-    assert b.receipts.root_hash == \
-        utils.scanners['bin'](gbh["receiptTrie"])
-    assert b.transactions.root_hash == \
-        utils.scanners['bin'](gbh["transactionsTrie"])
-    assert utils.sha3rlp(b.uncles) == \
-        utils.scanners['bin'](gbh["uncleHash"])
-    h = encode_hex(b.state.root_hash)
-    if h != str_to_bytes(gbh["stateRoot"]):
-        raise Exception("state root mismatch")
-    if b.hash != utils.scanners['bin'](gbh["hash"]):
-        raise Exception("header hash mismatch")
-    # assert b.header.check_pow()
-    blockmap = {b.hash: b}
-    env.db.put(b.hash, rlp.encode(b))
+def safe_decode(x):
+    if x[:2] == '0x':
+        x = x[2:]
+    return decode_hex(x)
+
+
+def run_block_test(params, config_overrides = {}):
+    env = Env(db.EphemDB())
+    genesis_decl = {}
+    for param in ("bloom", "timestamp", "nonce", "extraData",
+                  "gasLimit", "coinbase", "difficulty",
+                  "parentHash", "mixHash", "gasUsed"):
+        genesis_decl[param] = params["genesisBlockHeader"][param]
+    genesis_decl["alloc"] = params["pre"]
+    c = chain.Chain(genesis=genesis_decl, env=env)
+    assert c.state.prev_headers[0].state_root == safe_decode(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.trie.root_hash == safe_decode(params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.prev_headers[0].hash == safe_decode(params["genesisBlockHeader"]["hash"])
+
+
     old_config = copy.deepcopy(env.config)
     for k, v in config_overrides.items():
         env.config[k] = v
-    b2 = None
+
+
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
+            success = True
             try:
-                rlpdata = decode_hex(blk["rlp"][2:])
-                blkparent = rlp.decode(
-                    rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-                b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-                success = b2.validate_uncles()
+                rlpdata = safe_decode(blk["rlp"][2:])
+                success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, KeyError):
+                    DecodingError, DeserializationError, InvalidTransaction, 
+                    InvalidNonce, KeyError), e:
                 success = False
             assert not success
         else:
-            rlpdata = decode_hex(blk["rlp"][2:])
-            blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-            b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-            assert b2.validate_uncles()
-            blockmap[b2.hash] = b2
-            env.db.put(b2.hash, rlp.encode(b2))
-        if b2:
-            print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
-        # blkdict = b.to_dict(False, True, False, True)
-        # assert blk["blockHeader"] == \
-        #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
-        # assert blk["transactions"] == \
-        #     [translate_keys(t, translator_list, valueconv, ['hash'])
-        #      for t in blkdict["transactions"]]
-        # assert blk["uncleHeader"] == \
-        #     [translate_keys(u, translator_list, lambda x: x, [])
-        #      for u in blkdict["uncles"]]
+            rlpdata = safe_decode(blk["rlp"][2:])
+            assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
+
+def get_config_overrides(filename):
+    o = {}
+    if 'Homestead' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 0
+    if 'TestNetwork' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 5
+    if 'bcTheDaoTest' in filename:
+        o['DAO_FORK_BLKNUM'] = 8
+    if 'EIP150' in filename:
+        o['HOMESTEAD_FORK_BLKNUM'] = 5
+        o['DAO_FORK_BLKNUM'] = 8
+        o['ANTI_DOS_FORK_BLKNUM'] = 10
+    return o
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {
-        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-    })
+    run_block_test(testdata, get_config_overrides(filename))
 
 
 excludes = {
@@ -135,18 +128,13 @@ def main():
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
-                        else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    run_block_test(testdata, get_config_overrides(filename))
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    run_block_test(testdata, get_config_overrides(filename))
 
 
 if __name__ == '__main__':

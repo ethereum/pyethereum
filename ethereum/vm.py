@@ -12,7 +12,7 @@ from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string
+from ethereum.utils import to_string, encode_int, zpad
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -140,6 +140,11 @@ def eat_gas(compustate, amount):
         return vm_exception("OUT OF GAS")
     else:
         compustate.gas -= amount
+        return True
+
+
+def all_but_1n(x, n):
+    return x - x / n
 
 
 def vm_exception(error, **kargs):
@@ -546,15 +551,15 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, mstart, msz)
                 ingas = compustate.gas
                 if ext.post_anti_dos_hardfork():
-                    ingas = ingas * opcodes.CALL_CHILD_LIMIT_NUM / CALL_CHILD_LIMIT_DENOM
+                    ingas = all_but_1n(ingas, opcodes.CALL_CHILD_LIMIT_DENOM)
                 create_msg = Message(msg.to, b'', value, ingas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
-                    compustate.gas = gas
+                    compustate.gas = compustate.gas - ingas + gas
                 else:
                     stk.append(0)
-                    compustate.gas = 0
+                    compustate.gas -= ingas
             else:
                 stk.append(0)
         elif op == 'CALL':
@@ -572,8 +577,7 @@ def vm_execute(ext, msg, code):
             if ext.post_anti_dos_hardfork():
                 if compustate.gas < extra_gas:
                     return vm_exception('OUT OF GAS', needed=extra_gas)
-                elif gas > (compustate.gas - extra_gas) * opcodes.CALL_CHILD_LIMIT_NUM / opcodes.CALL_CHILD_LIMIT_DENOM:
-                    gas = (compustate.gas - extra_gas) * opcodes.CALL_CHILD_LIMIT_NUM / opcodes.CALL_CHILD_LIMIT_DENOM
+                gas = min(gas, all_but_1n(compustate.gas - extra_gas, opcodes.CALL_CHILD_LIMIT_DENOM))
             else:
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas+extra_gas)
@@ -608,15 +612,14 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER + \
                 ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
-            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if ext.post_anti_dos_hardfork():
                 if compustate.gas < extra_gas:
                     return vm_exception('OUT OF GAS', needed=extra_gas)
-                elif gas > (compustate.gas - extra_gas) * opcodes.CALL_CHILD_LIMIT_NUM / opcodes.CALL_CHILD_LIMIT_DENOM:
-                    gas = (compustate.gas - extra_gas) * opcodes.CALL_CHILD_LIMIT_NUM / opcodes.CALL_CHILD_LIMIT_DENOM
+                gas = min(gas, all_but_1n(compustate.gas - extra_gas, opcodes.CALL_CHILD_LIMIT_DENOM))
             else:
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas+extra_gas)
+            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 assert compustate.gas >= 0
@@ -648,13 +651,13 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
-            if ext.post_anti_dos_hardfork():
-                if gas < opcodes.SUICIDE_SUPPLEMENTAL_GAS:
-                    return vm_exception("OUT OF GAS")
-                else:
-                    gas -= opcodes.SUICIDE_SUPPLEMENTAL_GAS
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
+            if ext.post_anti_dos_hardfork():
+                extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS + \
+                    (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT
+                if not eat_gas(compustate, extra_gas):
+                    return vm_exception("OUT OF GAS")
             xfer = ext.get_balance(msg.to)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
