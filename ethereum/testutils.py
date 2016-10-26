@@ -58,7 +58,7 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    return s if len(s) > 2 else b'0x00'
+    return bytes(s) if len(s) > 2 else b'0x00'
 
 
 def acct_standard_form(a):
