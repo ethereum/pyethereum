@@ -58,7 +58,7 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    return s if len(s) > 2 else b'0x00'
+    return bytes(s) if len(s) > 2 else b'0x00'
 
 
 def acct_standard_form(a):
@@ -396,6 +396,8 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
+            if k == 'out' and _shouldbe[0] == '#':
+                _reallyis = '#%s' % ((len(_reallyis) - 2) / 2)
             if _shouldbe != _reallyis:
                 print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
                        'post: {shouldbe_post} != {reallyis_post}').format(
