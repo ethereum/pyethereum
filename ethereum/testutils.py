@@ -396,6 +396,8 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
+            if str_to_bytes(k) == b'out' and _shouldbe[:1] in ('#', b'#'):
+                _reallyis = str_to_bytes('#%s' % ((len(_reallyis) - 2) // 2))
             if _shouldbe != _reallyis:
                 print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
                        'post: {shouldbe_post} != {reallyis_post}').format(
