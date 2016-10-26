@@ -1,8 +1,6 @@
-import pytest
-
 from ethereum import utils, db, chain
 from ethereum.exceptions import VerificationFailed, InvalidTransaction, InvalidNonce
-from ethereum.blocks import Block
+from ethereum.blocks import genesis, Block
 from ethereum.config import Env
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
@@ -50,40 +48,57 @@ def safe_decode(x):
     return decode_hex(x)
 
 
-def run_block_test(params, config_overrides = {}):
+def run_block_test(params, config_overrides={}):
     env = Env(db.EphemDB())
-    genesis_decl = {}
-    for param in ("bloom", "timestamp", "nonce", "extraData",
-                  "gasLimit", "coinbase", "difficulty",
-                  "parentHash", "mixHash", "gasUsed"):
-        genesis_decl[param] = params["genesisBlockHeader"][param]
-    genesis_decl["alloc"] = params["pre"]
-    c = chain.Chain(genesis=genesis_decl, env=env)
-    assert c.state.prev_headers[0].state_root == safe_decode(params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.trie.root_hash == safe_decode(params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.prev_headers[0].hash == safe_decode(params["genesisBlockHeader"]["hash"])
+    b = genesis(env, start_alloc=params["pre"])
+    gbh = params["genesisBlockHeader"]
+    b.bloom = utils.scanners['int256b'](gbh["bloom"])
+    b.timestamp = utils.scanners['int'](gbh["timestamp"])
+    b.nonce = utils.scanners['bin'](gbh["nonce"])
+    b.extra_data = utils.scanners['bin'](gbh["extraData"])
+    b.gas_limit = utils.scanners['int'](gbh["gasLimit"])
+    b.gas_used = utils.scanners['int'](gbh["gasUsed"])
+    b.coinbase = utils.scanners['addr'](decode_hex(gbh["coinbase"]))
+    b.difficulty = utils.parse_int_or_hex(gbh["difficulty"])
+    b.prevhash = utils.scanners['bin'](gbh["parentHash"])
+    b.mixhash = utils.scanners['bin'](gbh["mixHash"])
+    assert b.receipts.root_hash == \
+        utils.scanners['bin'](gbh["receiptTrie"])
+    assert b.transactions.root_hash == \
+        utils.scanners['bin'](gbh["transactionsTrie"])
+    assert utils.sha3rlp(b.uncles) == \
+        utils.scanners['bin'](gbh["uncleHash"])
+    h = encode_hex(b.state.root_hash)
+    if h != str_to_bytes(gbh["stateRoot"]):
+        raise Exception("state root mismatch")
+    if b.hash != utils.scanners['bin'](gbh["hash"]):
+        raise Exception("header hash mismatch")
+    env.db.put(b.hash, rlp.encode(b))
 
+    c = chain.Chain(env)
 
     old_config = copy.deepcopy(env.config)
     for k, v in config_overrides.items():
         env.config[k] = v
 
-
+    c._initialize_blockchain(genesis=b)
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
             success = True
             try:
                 rlpdata = safe_decode(blk["rlp"][2:])
-                success = c.add_block(rlp.decode(rlpdata, Block))
+                success = c.add_block(rlp.decode(rlpdata, Block, env=env))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction,
-                    InvalidNonce, KeyError), e:
+                    InvalidNonce, KeyError):
                 success = False
             assert not success
         else:
             rlpdata = safe_decode(blk["rlp"][2:])
-            assert c.add_block(rlp.decode(rlpdata, Block))
+            block = rlp.decode(rlpdata, Block, env=env)
+            assert c.add_block(block)
     env.config = old_config
+
 
 def get_config_overrides(filename):
     o = {}
@@ -96,7 +111,7 @@ def get_config_overrides(filename):
             o['ANTI_DOS_FORK_BLKNUM'] = 10
     elif 'EIP150' in filename:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
-        o['DAO_FORK_BLKNUM'] = 2**99
+        o['DAO_FORK_BLKNUM'] = 2 ** 99
         o['ANTI_DOS_FORK_BLKNUM'] = 0
     if 'bcTheDaoTest' in filename:
         o['DAO_FORK_BLKNUM'] = 8
