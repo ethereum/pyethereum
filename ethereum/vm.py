@@ -140,6 +140,16 @@ def eat_gas(compustate, amount):
         return True
 
 
+def all_but_1_nth(gas, n):
+    return gas - (gas // n)
+
+
+def max_call_gas(gas):
+    """Since EIP150 CALLs will send only all but 1/64th of the available gas.
+    """
+    return all_but_1_nth(gas, n=opcodes.CALL_CHILD_LIMIT_DENOM)
+
+
 def vm_exception(error, **kargs):
     log_vm_exit.trace('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
@@ -513,14 +523,20 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
-                create_msg = Message(msg.to, b'', value, compustate.gas, cd, msg.depth + 1)
+                ingas = compustate.gas
+                # EIP150(1b) CREATE only provides all but one 64th of the
+                # parent gas to the child call
+                if ext.post_anti_dos_hardfork():
+                    ingas = max_call_gas(ingas)
+
+                create_msg = Message(msg.to, b'', value, ingas, cd, msg.depth + 1)
                 o, gas, addr = ext.create(create_msg)
                 if o:
                     stk.append(utils.coerce_to_int(addr))
-                    compustate.gas = gas
+                    compustate.gas -= (ingas - gas)
                 else:
                     stk.append(0)
-                    compustate.gas = 0
+                    compustate.gas -= ingas
             else:
                 stk.append(0)
         elif op == 'CALL':
@@ -535,9 +551,19 @@ def vm_execute(ext, msg, code):
                     (value > 0) * opcodes.GCALLVALUETRANSFER + \
                     ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
                     # ^ EIP150 Increase the gas cost of CALL to 700
+
+            if ext.post_anti_dos_hardfork():
+                # EIP150(1b) if a call asks for more gas than all but one 64th of
+                # the maximum allowed amount, call with all but one 64th of the
+                # maximum allowed amount of gas
+                if compustate.gas < extra_gas:
+                    return vm_exception('OUT OF GAS', needed=extra_gas)
+                gas = min(gas, max_call_gas(compustate.gas - extra_gas))
+            else:
+                if compustate.gas < gas + extra_gas:
+                    return vm_exception('OUT OF GAS', needed=gas + extra_gas)
+
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if compustate.gas < gas + extra_gas:
-                return vm_exception('OUT OF GAS', needed=gas + extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 cd = CallData(mem, meminstart, meminsz)
@@ -568,9 +594,19 @@ def vm_execute(ext, msg, code):
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER + \
                     ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
                     # ^ EIP150 Increase the gas cost of CALLCODE, DELEGATECALL to 700
+
+            if ext.post_anti_dos_hardfork():
+                # EIP150(1b) if a call asks for more gas than all but one 64th of
+                # the maximum allowed amount, call with all but one 64th of the
+                # maximum allowed amount of gas
+                if compustate.gas < extra_gas:
+                    return vm_exception('OUT OF GAS', needed=extra_gas)
+                gas = min(gas, max_call_gas(compustate.gas - extra_gas))
+            else:
+                if compustate.gas < gas + extra_gas:
+                    return vm_exception('OUT OF GAS', needed=gas + extra_gas)
+
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if compustate.gas < gas + extra_gas:
-                return vm_exception('OUT OF GAS', needed=gas + extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
