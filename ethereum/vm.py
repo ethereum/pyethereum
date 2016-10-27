@@ -642,7 +642,10 @@ def vm_execute(ext, msg, code):
 
             if ext.post_anti_dos_hardfork():
                 # EIP150 Increase the gas cost of SUICIDE to 5000
-                extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS
+                extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS + \
+                        (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT
+                # ^ EIP150(1c) If SUICIDE hits a newly created account, it
+                # triggers an additional gas cost of 25000 (similar to CALLs)
                 if not eat_gas(compustate, extra_gas):
                     return vm_exception("OUT OF GAS")
 
