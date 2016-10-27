@@ -3,13 +3,9 @@
 verify_stack_after_op = False
 
 #  ######################################
-import sys
-
-from ethereum import utils
-from ethereum.abi import is_numeric
 import copy
+from ethereum import utils
 from ethereum import opcodes
-import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
 from ethereum.utils import to_string
@@ -108,12 +104,12 @@ def mem_extend(mem, compustate, op, start, sz):
     if sz:
         oldsize = len(mem) // 32
         old_totalfee = oldsize * opcodes.GMEMORY + \
-            oldsize**2 // opcodes.GQUADRATICMEMDENOM
+            oldsize ** 2 // opcodes.GQUADRATICMEMDENOM
         newsize = utils.ceil32(start + sz) // 32
         # if newsize > 524288:
         #     raise Exception("Memory above 16 MB per call not supported by this VM")
         new_totalfee = newsize * opcodes.GMEMORY + \
-            newsize**2 // opcodes.GQUADRATICMEMDENOM
+            newsize ** 2 // opcodes.GQUADRATICMEMDENOM
         if old_totalfee < new_totalfee:
             memfee = new_totalfee - old_totalfee
             if compustate.gas < memfee:
@@ -173,14 +169,11 @@ def vm_execute(ext, msg, code):
 
     codelen = len(processed_code)
 
-    s = time.time()
     op = None
     steps = 0
     _prevop = None  # for trace only
 
     while 1:
-        # print('op: ', op, time.time() - s)
-        # s = time.time()
         # stack size limit error
         if compustate.pc >= codelen:
             return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
