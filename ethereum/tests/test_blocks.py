@@ -5,6 +5,7 @@ from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
 import sys
 import ethereum.testutils as testutils
+from ethereum.testutils import get_config_overrides
 import copy
 
 from ethereum.slogging import get_logger
@@ -106,10 +107,8 @@ def run_block_test(params, config_overrides={}):
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {
-        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-    })
+    config_overrides = get_config_overrides(filename)
+    run_block_test(testdata, config_overrides=config_overrides)
 
 
 excludes = {
@@ -135,18 +134,15 @@ def main():
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
-                        else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    config_overrides = get_config_overrides(filename)
+                    run_block_test(testdata, config_overrides=config_overrides)
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    config_overrides = get_config_overrides(filename)
+                    run_block_test(testdata, config_overrides=config_overrides)
 
 
 if __name__ == '__main__':

@@ -577,6 +577,24 @@ def fixture_to_bytes(value):
         return value
 
 
+def get_config_overrides(filename):
+    override = {}
+    parts = filename.split(os.sep)
+    if 'Homestead' in parts:
+        override['HOMESTEAD_FORK_BLKNUM'] = 0
+    if 'TestNetwork' in parts:
+        override['HOMESTEAD_FORK_BLKNUM'] = 5
+        override['DAO_FORK_BLKNUM'] = 8
+        override['ANTI_DOS_FORK_BLKNUM'] = 10
+    elif 'EIP150' in parts:
+        override['HOMESTEAD_FORK_BLKNUM'] = 0
+        override['ANTI_DOS_FORK_BLKNUM'] = 0
+        override['DAO_FORK_BLKNUM'] = 2 ** 99  # not applicable
+    if 'bcTheDaoTest' in filename:
+        override['DAO_FORK_BLKNUM'] = 8
+    return override
+
+
 def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
     if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
         return
