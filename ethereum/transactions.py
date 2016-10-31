@@ -2,7 +2,7 @@
 import rlp
 from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import encode_hex, str_to_bytes, ascii_chr
+from rlp.utils import encode_hex, str_to_bytes, ascii_chr, int_to_big_endian
 from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
 
 from ethereum.exceptions import InvalidTransaction
@@ -108,15 +108,6 @@ class Transaction(rlp.Serializable):
                 self._sender = 0
         return self._sender
 
-    @property
-    def normalized_v(self):
-        """EIP155
-        """
-        if self.v in (27, 28):
-            return self.v - 27
-        else:
-            return self.v - (self.__class__._chain_id * 2 + 1)
-
     @sender.setter
     def sender(self, value):
         self._sender = value
@@ -131,7 +122,19 @@ class Transaction(rlp.Serializable):
         """
         if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
-        rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        if backwards_compatible:
+            rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        else:
+            rawhash = utils.sha3(rlp.encode(Transaction(
+                self.nonce,
+                self.gasprice,
+                self.startgas,
+                self.to,
+                self.value,
+                self.data,
+                18,
+                0,
+                0), Transaction))
 
         if len(key) == 64:
             # we need a binary key
@@ -155,6 +158,15 @@ class Transaction(rlp.Serializable):
     @property
     def hash(self):
         return utils.sha3(rlp.encode(self))
+
+    @property
+    def normalized_v(self):
+        """EIP155
+        """
+        if self.v in (27, 28):
+            return self.v - 27
+        else:
+            return self.v - (self.__class__._chain_id * 2 + 1)
 
     def log_bloom(self):
         "returns int"
@@ -225,7 +237,7 @@ class EIP155Transaction(Transaction):
         super(EIP155Transaction, self).__init__(*args, **kwargs)
 
     def sign(self, key, backwards_compatible=False):
-        return super(self).sign(key, backwards_compatible)
+        return super(self.__class__, self).sign(key, backwards_compatible)
 
 
 UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
