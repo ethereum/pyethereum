@@ -65,7 +65,8 @@ default_config = dict(
     DAO_WITHDRAWER=utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Anti-DoS fork
     ANTI_DOS_FORK_BLKNUM=2457000,
-    CLEARING_FORK_BLKNUM=2 ** 98,
+    # "Spurious Dragon" fork (EIPs 158/161, 160, 155)
+    SPURIOUS_DRAGON_FORK_BLKNUM=2 ** 98,
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
