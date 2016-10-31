@@ -250,6 +250,8 @@ class VMExt():
         self.account_exists = block.account_exists
         self.post_homestead_hardfork = block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
         self.post_anti_dos_hardfork = block.number >= block.config['ANTI_DOS_FORK_BLKNUM']
+        self.post_spurious_dragon_hardfork = \
+                block.number >= block.config['SPURIOUS_DRAGON_FORK_BLKNUM']
 
 
 def apply_msg(ext, msg):
