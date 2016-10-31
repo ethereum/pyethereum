@@ -17,6 +17,61 @@ logger = get_logger()
 encode_hex('')
 
 
+def test_eip155_transaction():
+    """Replicate the example from https://github.com/ethereum/eips/issues/155
+    and ensure old style tx fails and new style transaction validates.
+    """
+    nonce = 9
+    gasprice = 20 * 10 ** 9
+    startgas = 21000
+    to = "3535353535353535353535353535353535353535"
+    value = 10 ** 18
+    data = ''
+    private_key = "4646464646464646464646464646464646464646464646464646464646464646"
+    old_style = transactions.Transaction(nonce, gasprice, startgas, to, value, data)
+    new_style = transactions.EIP155Transaction(nonce, gasprice, startgas, to, value, data)
+
+    new_signing_data = "ec098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a764000080128080"
+
+    new_signing_data_sedes = transactions.Transaction(
+            new_style.nonce,
+            new_style.gasprice,
+            new_style.startgas,
+            new_style.to,
+            new_style.value,
+            new_style.data,
+            18,
+            0,
+            0
+            )
+
+    assert rlp.encode(new_signing_data_sedes, transactions.Transaction) == decode_hex(new_signing_data)
+
+    new_signing_hash = "ac9813f00ec955e65a50cc778243f6c22dcfe9d64253462b16187f1c99e0a8fa"
+
+    assert encode_hex(utils.sha3(rlp.encode(new_signing_data_sedes, transactions.Transaction))) == new_signing_hash
+
+    new_v, new_r, new_s = (
+            38,
+            11616088462479929722209511590713166362238170772128436772837473395614974864269L,
+            19832642777361886450959973766490059191918327598807281226090984148355472235004L
+            )
+
+    new_style_signed = "f86e098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a7640000801ca1a019ae791bb8378a38bb83f5b930fe78a0320cec27d86e5e258c69f0fa9541eb8da1a02bd8e0c5bde4c0800238ce5a59d2f3ce723f1e84a62cab53d961fe3b019d19fc"
+
+    old_style.sign(private_key)
+
+    new_style.sign(private_key)
+
+    assert new_style.v == new_v
+    assert new_style.r == new_r
+    assert new_style.s == new_s
+
+    assert encode_hex(rlp.encode(new_style)) == new_style_signed
+
+    # TODO: test deserialize new style rlp fails with old_style Transaction class
+
+
 def test_transaction(filename, testname, testdata):
     testdata = fixture_to_bytes(testdata)
 
