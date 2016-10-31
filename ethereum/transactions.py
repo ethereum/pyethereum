@@ -52,6 +52,7 @@ class Transaction(rlp.Serializable):
     ]
 
     _sender = None
+    _chain_id = 13  # pre EIP155 default
 
     def __init__(self, nonce, gasprice, startgas, to, value, data, v=0, r=0, s=0):
         self.data = None
@@ -75,8 +76,10 @@ class Transaction(rlp.Serializable):
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= N or self.v < 27 or self.v > 28 \
-                or self.r == 0 or self.s == 0:
+                valid_r = self.r < N and self.r != 0
+                valid_s = self.s < N and self.s != 0
+                valid_v = self.normalized_v in (0, 1)
+                if not all([valid_r, valid_s, valid_v]):
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
                 rlpdata = rlp.encode(self, UnsignedTransaction)
@@ -88,7 +91,7 @@ class Transaction(rlp.Serializable):
                         rawhash,
                         pk.ecdsa_recoverable_deserialize(
                             zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
-                            self.v - 27
+                            self.normalized_v
                         ),
                         raw=True
                     )
@@ -105,14 +108,26 @@ class Transaction(rlp.Serializable):
                 self._sender = 0
         return self._sender
 
+    @property
+    def normalized_v(self):
+        """EIP155
+        """
+        if self.v in (27, 28):
+            return self.v - 27
+        else:
+            return self.v - (self.__class__._chain_id * 2 + 1)
+
     @sender.setter
     def sender(self, value):
         self._sender = value
 
-    def sign(self, key):
+    def sign(self, key, backwards_compatible=True):
         """Sign this transaction with a private key.
 
         A potentially already existing signature would be overridden.
+
+        Args:
+            backwards_compatible: if True, don't use EIP155 replay protection
         """
         if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
@@ -127,7 +142,10 @@ class Transaction(rlp.Serializable):
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
         )
         signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
-        self.v = utils.safe_ord(signature[64]) + 27
+        if backwards_compatible:
+            self.v = utils.safe_ord(signature[64]) + 27
+        else:
+            self.v = utils.safe_ord(signature[64]) + (self.__class__._chain_id * 2 + 1)
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])
 
@@ -197,6 +215,17 @@ class Transaction(rlp.Serializable):
     def check_low_s(self):
         if self.s > N // 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
+
+
+class EIP155Transaction(Transaction):
+    # TODO: ensure EIP155Transaction is used after SPURIOUS_DRAGON_FORK_NUMBER
+    _chain_id = 18
+
+    def __init__(self, *args, **kwargs):
+        super(EIP155Transaction, self).__init__(*args, **kwargs)
+
+    def sign(self, key, backwards_compatible=False):
+        return super(self).sign(key, backwards_compatible)
 
 
 UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
