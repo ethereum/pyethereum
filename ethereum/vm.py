@@ -140,14 +140,10 @@ def eat_gas(compustate, amount):
         return True
 
 
-def all_but_1_nth(gas, n):
-    return gas - (gas // n)
-
-
 def max_call_gas(gas):
     """Since EIP150 CALLs will send only all but 1/64th of the available gas.
     """
-    return all_but_1_nth(gas, n=opcodes.CALL_CHILD_LIMIT_DENOM)
+    return gas - (gas // opcodes.CALL_CHILD_LIMIT_DENOM)
 
 
 def vm_exception(error, **kargs):
