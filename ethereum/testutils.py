@@ -579,14 +579,13 @@ def fixture_to_bytes(value):
 
 def get_config_overrides(filename):
     override = {}
-    parts = filename.split(os.sep)
-    if 'Homestead' in parts:
+    if os.path.join('BlockchainTests', 'Homestead') in filename:
         override['HOMESTEAD_FORK_BLKNUM'] = 0
-    if 'TestNetwork' in parts:
+    elif os.path.join('BlockchainTests', 'TestNetwork') in filename:
         override['HOMESTEAD_FORK_BLKNUM'] = 5
         override['DAO_FORK_BLKNUM'] = 8
         override['ANTI_DOS_FORK_BLKNUM'] = 10
-    elif 'EIP150' in parts:
+    elif os.path.join('BlockchainTests', 'EIP150') in filename:
         override['HOMESTEAD_FORK_BLKNUM'] = 0
         override['ANTI_DOS_FORK_BLKNUM'] = 0
         override['DAO_FORK_BLKNUM'] = 2 ** 99  # not applicable
