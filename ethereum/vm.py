@@ -344,7 +344,7 @@ def vm_execute(ext, msg, code):
                 stk.append(utils.coerce_to_int(msg.to))
             elif op == 'BALANCE':
                 # EIP150: Increase the gas cost of BALANCE to 400
-                if ext.post_anti_dos_hardfork():
+                if ext.post_anti_dos_hardfork:
                     if not eat_gas(compustate, opcodes.BALANCE_SUPPLEMENTAL_GAS):
                         return vm_exception("OUT OF GAS")
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
@@ -383,14 +383,14 @@ def vm_execute(ext, msg, code):
                 stk.append(ext.tx_gasprice)
             elif op == 'EXTCODESIZE':
                 # EIP150: Increase the gas cost of EXTCODESIZE to 700
-                if ext.post_anti_dos_hardfork():
+                if ext.post_anti_dos_hardfork:
                     if not eat_gas(compustate, opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS):
                         return vm_exception("OUT OF GAS")
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
                 stk.append(len(ext.get_code(addr) or b''))
             elif op == 'EXTCODECOPY':
                 # EIP150: Increase the base gas cost of EXTCODECOPY to 700
-                if ext.post_anti_dos_hardfork():
+                if ext.post_anti_dos_hardfork:
                     if not eat_gas(compustate, opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS):
                         return vm_exception("OUT OF GAS")
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
@@ -443,7 +443,7 @@ def vm_execute(ext, msg, code):
                 mem[s0] = s1 % 256
             elif op == 'SLOAD':
                 # EIP150: Increase the gas cost of SLOAD to 200
-                if ext.post_anti_dos_hardfork():
+                if ext.post_anti_dos_hardfork:
                     if not eat_gas(compustate, opcodes.SLOAD_SUPPLEMENTAL_GAS):
                         return vm_exception("OUT OF GAS")
                 stk.append(ext.get_storage_data(msg.to, stk.pop()))
@@ -526,7 +526,7 @@ def vm_execute(ext, msg, code):
                 ingas = compustate.gas
                 # EIP150(1b) CREATE only provides all but one 64th of the
                 # parent gas to the child call
-                if ext.post_anti_dos_hardfork():
+                if ext.post_anti_dos_hardfork:
                     ingas = max_call_gas(ingas)
 
                 create_msg = Message(msg.to, b'', value, ingas, cd, msg.depth + 1)
@@ -549,10 +549,10 @@ def vm_execute(ext, msg, code):
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                     (value > 0) * opcodes.GCALLVALUETRANSFER + \
-                    ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
+                    ext.post_anti_dos_hardfork * opcodes.CALL_SUPPLEMENTAL_GAS
                     # ^ EIP150 Increase the gas cost of CALL to 700
 
-            if ext.post_anti_dos_hardfork():
+            if ext.post_anti_dos_hardfork:
                 # EIP150(1b) if a call asks for more gas than all but one 64th of
                 # the maximum allowed amount, call with all but one 64th of the
                 # maximum allowed amount of gas
@@ -592,10 +592,10 @@ def vm_execute(ext, msg, code):
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER + \
-                    ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
+                    ext.post_anti_dos_hardfork * opcodes.CALL_SUPPLEMENTAL_GAS
                     # ^ EIP150 Increase the gas cost of CALLCODE, DELEGATECALL to 700
 
-            if ext.post_anti_dos_hardfork():
+            if ext.post_anti_dos_hardfork:
                 # EIP150(1b) if a call asks for more gas than all but one 64th of
                 # the maximum allowed amount, call with all but one 64th of the
                 # maximum allowed amount of gas
@@ -612,7 +612,7 @@ def vm_execute(ext, msg, code):
                 to = utils.encode_int(to)
                 to = ((b'\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
-                if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
+                if ext.post_homestead_hardfork and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, transfers_value=False)
                 elif op == 'DELEGATECALL':
@@ -640,7 +640,7 @@ def vm_execute(ext, msg, code):
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
 
-            if ext.post_anti_dos_hardfork():
+            if ext.post_anti_dos_hardfork:
                 # EIP150 Increase the gas cost of SUICIDE to 5000
                 extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS + \
                         (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT

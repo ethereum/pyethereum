@@ -248,8 +248,8 @@ class VMExt():
         self.create = lambda msg: create_contract(self, msg)
         self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
         self.account_exists = block.account_exists
-        self.post_homestead_hardfork = lambda: block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
-        self.post_anti_dos_hardfork = lambda: block.number >= block.config['ANTI_DOS_FORK_BLKNUM']
+        self.post_homestead_hardfork = block.number >= block.config['HOMESTEAD_FORK_BLKNUM']
+        self.post_anti_dos_hardfork = block.number >= block.config['ANTI_DOS_FORK_BLKNUM']
 
 
 def apply_msg(ext, msg):
