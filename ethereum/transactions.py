@@ -70,6 +70,26 @@ class Transaction(rlp.Serializable):
 
         log.debug('deserialized tx', tx=encode_hex(self.hash)[:8])
 
+    def rawhash(self, backwards_compatible=True):
+        """The raw transaction hash for signing/sender recovery.
+        """
+        rawhash = None
+        if backwards_compatible or self.v in (27, 28):
+            rlpdata = rlp.encode(self, UnsignedTransaction)
+            rawhash = utils.sha3(rlpdata)
+        else:
+            rawhash = utils.sha3(rlp.encode(Transaction(
+                self.nonce,
+                self.gasprice,
+                self.startgas,
+                self.to,
+                self.value,
+                self.data,
+                self.__class__.chain_id(),
+                0,
+                0), Transaction))
+        return rawhash
+
     @property
     def sender(self):
 
@@ -82,13 +102,11 @@ class Transaction(rlp.Serializable):
                 if not all([valid_r, valid_s, valid_v]):
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('recovering sender')
-                rlpdata = rlp.encode(self, UnsignedTransaction)
-                rawhash = utils.sha3(rlpdata)
 
                 pk = PublicKey(flags=ALL_FLAGS)
                 try:
                     pk.public_key = pk.ecdsa_recover(
-                        rawhash,
+                        self.rawhash(),
                         pk.ecdsa_recoverable_deserialize(
                             zpad(utils.bytearray_to_bytestr(
                                 int_to_32bytearray(self.r)), 32) +
@@ -127,19 +145,7 @@ class Transaction(rlp.Serializable):
         """
         if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
-        if backwards_compatible:
-            rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
-        else:
-            rawhash = utils.sha3(rlp.encode(Transaction(
-                self.nonce,
-                self.gasprice,
-                self.startgas,
-                self.to,
-                self.value,
-                self.data,
-                self.__class__.chain_id(),
-                0,
-                0), Transaction))
+        rawhash = self.rawhash(backwards_compatible=backwards_compatible)
 
         if len(key) == 64:
             # we need a binary key
@@ -248,6 +254,11 @@ class EIP155Transaction(Transaction):
     def sign(self, key, backwards_compatible=False):
         return super(self.__class__, self).sign(
                 key,
+                backwards_compatible=backwards_compatible,
+                )
+
+    def rawhash(self, backwards_compatible=False):
+        return super(self.__class__, self).rawhash(
                 backwards_compatible=backwards_compatible,
                 )
 

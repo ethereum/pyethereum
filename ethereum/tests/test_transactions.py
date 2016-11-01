@@ -27,7 +27,8 @@ def test_eip155_transaction():
     value = 10 ** 18
     data = ''
     private_key = "4646464646464646464646464646464646464646464646464646464646464646"
-    sender = utils.privtoaddr(private_key)
+    sender = utils.privtoaddr(decode_hex(private_key))
+
     old_style = transactions.Transaction(nonce, gasprice, startgas, to, value, data)
     new_style = transactions.EIP155Transaction(nonce, gasprice, startgas, to, value, data)
 
@@ -61,7 +62,10 @@ def test_eip155_transaction():
     new_deserialized = rlp.decode(decode_hex(new_style_signed), transactions.EIP155Transaction)
 
     old_style = old_style.sign(private_key)
+    assert old_style.sender == sender
+
     new_style = new_style.sign(private_key)
+    assert new_style.sender == sender
 
     assert not encode_hex(rlp.encode(old_style, transactions.Transaction)) == new_style_signed
 
@@ -75,6 +79,8 @@ def test_eip155_transaction():
     for field, _ in transactions.EIP155Transaction.fields:
         getter = attrgetter(field)
         assert getter(new_style) == getter(roundtrip), field
+
+    assert new_style.sender == roundtrip.sender == sender
 
     # Check object values
     assert new_style.v == new_v
