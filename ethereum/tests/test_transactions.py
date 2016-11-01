@@ -1,3 +1,4 @@
+from operator import attrgetter
 import ethereum.transactions as transactions
 import ethereum.utils as utils
 import rlp
@@ -14,8 +15,6 @@ logger = get_logger()
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 # configure_logging(':trace')
 
-encode_hex('')
-
 
 def test_eip155_transaction():
     """Replicate the example from https://github.com/ethereum/eips/issues/155
@@ -28,6 +27,7 @@ def test_eip155_transaction():
     value = 10 ** 18
     data = ''
     private_key = "4646464646464646464646464646464646464646464646464646464646464646"
+    sender = utils.privtoaddr(private_key)
     old_style = transactions.Transaction(nonce, gasprice, startgas, to, value, data)
     new_style = transactions.EIP155Transaction(nonce, gasprice, startgas, to, value, data)
 
@@ -45,7 +45,7 @@ def test_eip155_transaction():
             0
             )
 
-    assert rlp.encode(new_signing_data_sedes, transactions.Transaction) == decode_hex(new_signing_data)
+    assert rlp.encode(new_signing_data_sedes, transactions.EIP155Transaction) == decode_hex(new_signing_data)
 
     new_signing_hash = "ac9813f00ec955e65a50cc778243f6c22dcfe9d64253462b16187f1c99e0a8fa"
 
@@ -58,16 +58,53 @@ def test_eip155_transaction():
             )
 
     new_style_signed = "f86e098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a7640000801ca1a019ae791bb8378a38bb83f5b930fe78a0320cec27d86e5e258c69f0fa9541eb8da1a02bd8e0c5bde4c0800238ce5a59d2f3ce723f1e84a62cab53d961fe3b019d19fc"
+    new_deserialized = rlp.decode(decode_hex(new_style_signed), transactions.EIP155Transaction)
 
-    old_style.sign(private_key)
+    old_style = old_style.sign(private_key)
+    new_style = new_style.sign(private_key)
 
-    new_style.sign(private_key)
+    assert not encode_hex(rlp.encode(old_style, transactions.Transaction)) == new_style_signed
 
+    # Check roundtrip serialization
+    roundtrip = rlp.decode(
+            decode_hex(
+                encode_hex(
+                    rlp.encode(new_style, transactions.EIP155Transaction)
+                    )
+                ), transactions.EIP155Transaction)
+    for field, _ in transactions.EIP155Transaction.fields:
+        getter = attrgetter(field)
+        assert getter(new_style) == getter(roundtrip), field
+
+    # Check object values
     assert new_style.v == new_v
     assert new_style.r == new_r
     assert new_style.s == new_s
 
-    assert encode_hex(rlp.encode(new_style)) == new_style_signed
+    # Check hex rlp against provided hex
+    assert encode_hex(rlp.encode(new_style, transactions.EIP155Transaction)) == new_style_signed
+
+    # Check against deserialized values
+    assert new_deserialized.v == new_style.v
+    assert new_deserialized.r == new_style.r
+    assert new_deserialized.s == new_style.s
+
+    # Test sender recovery
+    assert old_style.sender == sender
+    assert new_style.sender == sender
+    assert new_deserialized.sender == sender
+
+    # Check rlp against deserialized
+    new_rlp = rlp.decode(rlp.encode(new_style, transactions.EIP155Transaction))
+    deserialized_rlp = rlp.decode(decode_hex(new_style_signed))
+    assert len(new_rlp) == len(deserialized_rlp)
+
+    for num, assert_ in enumerate(
+            [new_rlp[i] == deserialized_rlp[i] for i in range(len(new_rlp))]):
+        assert assert_, (new_rlp[num], deserialized_rlp[num], num)
+
+    # Check hex rlp against provided hex
+    assert encode_hex(rlp.encode(new_style, transactions.EIP155Transaction)) == new_style_signed
 
     # TODO: test deserialize new style rlp fails with old_style Transaction class
 

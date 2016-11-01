@@ -2,7 +2,7 @@
 import rlp
 from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import encode_hex, str_to_bytes, ascii_chr, int_to_big_endian
+from rlp.utils import encode_hex, str_to_bytes, ascii_chr
 from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
 
 from ethereum.exceptions import InvalidTransaction
@@ -90,7 +90,10 @@ class Transaction(rlp.Serializable):
                     pk.public_key = pk.ecdsa_recover(
                         rawhash,
                         pk.ecdsa_recoverable_deserialize(
-                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
+                            zpad(utils.bytearray_to_bytestr(
+                                int_to_32bytearray(self.r)), 32) +
+                            zpad(utils.bytearray_to_bytestr(
+                                int_to_32bytearray(self.s)), 32),
                             self.normalized_v
                         ),
                         raw=True
@@ -112,7 +115,9 @@ class Transaction(rlp.Serializable):
     def sender(self, value):
         self._sender = value
 
-    def sign(self, key, backwards_compatible=True):
+    def sign(self, key,
+            backwards_compatible=True,
+            ):
         """Sign this transaction with a private key.
 
         A potentially already existing signature would be overridden.
@@ -132,7 +137,7 @@ class Transaction(rlp.Serializable):
                 self.to,
                 self.value,
                 self.data,
-                18,
+                self.__class__.chain_id(),
                 0,
                 0), Transaction))
 
@@ -148,7 +153,7 @@ class Transaction(rlp.Serializable):
         if backwards_compatible:
             self.v = utils.safe_ord(signature[64]) + 27
         else:
-            self.v = utils.safe_ord(signature[64]) + (self.__class__._chain_id * 2 + 1)
+            self.v = utils.safe_ord(signature[64]) + (self.__class__.chain_id() * 2 + 1)
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])
 
@@ -166,7 +171,7 @@ class Transaction(rlp.Serializable):
         if self.v in (27, 28):
             return self.v - 27
         else:
-            return self.v - (self.__class__._chain_id * 2 + 1)
+            return self.v - (self.__class__.chain_id() * 2 + 1)
 
     def log_bloom(self):
         "returns int"
@@ -228,6 +233,10 @@ class Transaction(rlp.Serializable):
         if self.s > N // 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
 
+    @classmethod
+    def chain_id(cls):
+        return cls._chain_id
+
 
 class EIP155Transaction(Transaction):
     # TODO: ensure EIP155Transaction is used after SPURIOUS_DRAGON_FORK_NUMBER
@@ -237,7 +246,18 @@ class EIP155Transaction(Transaction):
         super(EIP155Transaction, self).__init__(*args, **kwargs)
 
     def sign(self, key, backwards_compatible=False):
-        return super(self.__class__, self).sign(key, backwards_compatible)
+        return super(self.__class__, self).sign(
+                key,
+                backwards_compatible=backwards_compatible,
+                )
+
+    @classmethod
+    def chain_id(cls):
+        assert cls._chain_id == EIP155Transaction._chain_id
+        return cls._chain_id
+
+    def __repr__(self):
+        return '<EIP155Transaction(%s)>' % encode_hex(self.hash)[:4]
 
 
 UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
