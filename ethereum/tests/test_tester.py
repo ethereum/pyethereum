@@ -4,11 +4,20 @@ from os import path
 
 import pytest
 
-from ethereum.tester import state, ABIContract
+from ethereum.tester import (state, ABIContract, latest_state,
+                             LATEST_APPLIED_FORK_BLKNUM)
 from ethereum._solidity import get_solidity, compile_file
 
 SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
+
+
+def test_latest_state():
+    assert latest_state().block.number == LATEST_APPLIED_FORK_BLKNUM
+    assert latest_state(blknum=42).block.number == 42
+    assert latest_state(blknum=0).block.number == 0
+    with pytest.raises(ValueError):
+        latest_state(blknum=[1])
 
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')

@@ -421,7 +421,7 @@ class state(object):
 def latest_state(blknum=None, **kwargs):
     """Helper, that generates a `tester.state` instance with a block number
     above all applied forks on the main net (depends on
-    `ethereum.config.LATEST_APPLIED_FORK_BLKNUM`) + 1.
+    `ethereum.config.LATEST_APPLIED_FORK_BLKNUM`).
 
     If `blknum` is given, this number will be used as block number instead.
 
@@ -430,9 +430,11 @@ def latest_state(blknum=None, **kwargs):
     """
     blockchain_state = state(**kwargs)
 
-    if blknum is not None:
-        blockchain_state.block.number = LATEST_APPLIED_FORK_BLKNUM + 1
+    if blknum is None:
+        blockchain_state.block.number = LATEST_APPLIED_FORK_BLKNUM
     else:
+        if not isinstance(blknum, int):
+            raise ValueError("blknum must be integer")
         blockchain_state.block.number = blknum
 
     return blockchain_state
