@@ -282,7 +282,7 @@ def vm_execute(ext, msg, code):
                 # calc n bytes to represent exponent
                 nbytes = len(utils.encode_int(exponent))
                 expfee = nbytes * (opcodes.GEXPONENTBYTE +
-                    ext.post_spurious_dragon_hardforkf() * opcodes.GEXPONENTBYTE_SUPPLEMENTAL_GAS)
+                    ext.post_spurious_dragon_hardfork * opcodes.GEXPONENTBYTE_SUPPLEMENTAL_GAS)
                     # ^ EIP160: increase the gas cost of EXP from 10 + 10 per
                     # byte in the exponent to 10 + 50 per byte in the exponent.
                 if compustate.gas < expfee:
