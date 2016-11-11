@@ -74,13 +74,19 @@ class Transaction(rlp.Serializable):
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= N or self.v < 27 or self.v > 28 \
+                if self.r >= N or self.s >= N or self.v not in (27, 28, 37, 38) \
                 or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
-                log.debug('recovering sender')
-                rlpdata = rlp.encode(self, UnsignedTransaction)
-                rawhash = utils.sha3(rlpdata)
-                pub = ecrecover_to_pub(rawhash, self.v, self.r, self.s)
+                log.debug('reco< 27 or self.v > 28 \vering sender')
+                if self.v in (27, 28):
+                    rlpdata = rlp.encode(self, UnsignedTransaction)
+                    rawhash = utils.sha3(rlpdata)
+                    v = self.v
+                elif self.v in (37, 38):
+                    rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + ['\x01', '', ''])
+                    rawhash = utils.sha3(rlpdata)
+                    v = self.v - 10
+                pub = ecrecover_to_pub(rawhash, v, self.r, self.s)
                 if pub == b"\x00" * 64:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 self._sender = utils.sha3(pub)[-20:]

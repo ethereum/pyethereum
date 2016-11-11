@@ -170,7 +170,7 @@ def sha3(seed):
     # print seed
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -374,7 +374,7 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: b'0x' + encode_hex(v),
+    "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
     "int": lambda v: to_string(v),
     "trie_root": lambda v: encode_hex(v),
@@ -384,7 +384,7 @@ printers = {
 # Decoding from printable format
 scanners = {
     "bin": scan_bin,
-    "addr": lambda x: x[2:] if x[:2] == b'0x' else x,
+    "addr": lambda x: x[2:] if x[:2] in (b'0x', '0x') else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
     "int256b": lambda x: big_endian_to_int(decode_hex(x))
@@ -393,11 +393,11 @@ scanners = {
 
 def int_to_hex(x):
     o = encode_hex(encode_int(x))
-    return b'0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
+    return '0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
 
 
 def remove_0x_head(s):
-    return s[2:] if s[:2] == b'0x' else s
+    return s[2:] if s[:2] in (b'0x', '0x') else s
 
 
 def parse_as_bin(s):
@@ -405,7 +405,7 @@ def parse_as_bin(s):
 
 
 def parse_as_int(s):
-    return s if isinstance(s, (int, long)) else int('0' + s[2:], 16) if s[:2] == '0x' else int(s)
+    return s if is_numeric(s) else int('0' + s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):

@@ -20,8 +20,8 @@ from ethereum.processblock import apply_msg, create_contract, _apply_msg, Log
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum import vm
 from ethereum.specials import specials as default_specials
-from config import Env, default_config
-from db import BaseDB, EphemDB
+from ethereum.config import Env, default_config
+from ethereum.db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
     BlockGasLimitReached, InsufficientBalance, VerificationFailed
 import sys
@@ -119,7 +119,7 @@ def apply_block(state, block):
         assert verify_execution_results(state, block)
         # Post-sealing finalization steps
         post_seal_finalize(state, block)
-    except Exception, e:
+    except Exception as e:
         state.revert(snapshot)
         raise ValueError(str(e))
     return state

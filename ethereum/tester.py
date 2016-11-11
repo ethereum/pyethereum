@@ -13,7 +13,7 @@ from ethereum.abi import ContractTranslator
 from ethereum.config import Env
 from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
-from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
+from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr, encode_hex
 from ethereum import parse_genesis_declaration, state_transition
 from ethereum.state import State
 
@@ -176,16 +176,16 @@ class state(object):
 
         for i in range(num_accounts):
             account = accounts[i]
-            initial_balances[account.encode('hex')] = {'wei': str(10**24)}
+            initial_balances[encode_hex(account)] = {'wei': str(10**24)}
 
         for i in range(1, 5):
             address = int_to_addr(i)
-            initial_balances[address.encode('hex')] = {'wei': "1"}
+            initial_balances[encode_hex(address)] = {'wei': "1"}
 
         self.state = State.from_snapshot({
             "alloc": initial_balances,
             "timestamp": "1410973349",
-            "coinbase": DEFAULT_ACCOUNT.encode('hex'),
+            "coinbase": encode_hex(DEFAULT_ACCOUNT),
             "gas_limit": "1000000000"
         }, self.env)
 

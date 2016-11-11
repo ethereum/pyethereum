@@ -8,7 +8,7 @@ from ethereum.specials import specials as default_specials
 from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
-    mk_metropolis_contract_address, int_to_addr, big_endian_to_int
+    mk_metropolis_contract_address, int_to_addr, big_endian_to_int, encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
         BlockGasLimitReached, InsufficientBalance
 from ethereum import transactions
@@ -142,6 +142,7 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
+    ext.set_nonce(msg.to, 1)
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
     log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat)
@@ -159,7 +160,8 @@ def create_contract(ext, msg):
                 ext.revert(snapshot)
                 return 0, 0, b''
         ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
-        log_msg.debug('SETTING CODE', addr=msg.to.encode('hex'))
+        log_msg.debug('SETTING CODE', addr=encode_hex(msg.to))
         return 1, gas, msg.to
     else:
+        ext.revert(snapshot)
         return 0, gas, b''

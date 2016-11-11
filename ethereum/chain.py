@@ -27,23 +27,23 @@ class Chain(object):
         # Initialize the state
         if 'head_hash' in self.db:
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
-            print 'Initializing chain from saved head, #%d (%s)' % \
-                (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash))
+            print('Initializing chain from saved head, #%d (%s)' % \
+                (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
             self.state = genesis
-            print 'Initializing chain from provided state'
+            print('Initializing chain from provided state')
         elif "extraData" in genesis:
             self.state = parse_genesis_declaration.state_from_genesis_declaration(
                 genesis, self.env)
-            print 'Initializing chain from provided genesis declaration'
+            print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
-            print 'Initializing chain from provided state snapshot, %d (%s)' % \
-                (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8]))
+            print('Initializing chain from provided state snapshot, %d (%s)' % \
+                (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
-            print 'Initializing chain from new state based on alloc'
+            print('Initializing chain from new state based on alloc')
             self.state = parse_genesis_declaration.mk_basic_state(genesis, {
                 "number": kwargs.get('number', 0),
                 "gas_limit": kwargs.get('gas_limit', 4712388),
@@ -230,7 +230,7 @@ class Chain(object):
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
-            except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
+            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)

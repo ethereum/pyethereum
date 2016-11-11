@@ -74,4 +74,4 @@ def test():
             assert (tx.startgas, tx.gasprice) == (expected_s, expected_g)
         else:
             assert expected_s is expected_g is None
-    print 'Test successful'
+    print('Test successful')

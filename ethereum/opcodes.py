@@ -11,7 +11,7 @@ opcodes = {
     0x07: ['SMOD', 2, 1, 5],
     0x08: ['ADDMOD', 3, 1, 8],
     0x09: ['MULMOD', 3, 1, 8],
-    0x0a: ['EXP', 2, 1, 10], # soon 80
+    0x0a: ['EXP', 2, 1, 10],
     0x0b: ['SIGNEXTEND', 2, 1, 5],
     0x10: ['LT', 2, 1, 3],
     0x11: ['GT', 2, 1, 3],
@@ -132,4 +132,4 @@ BALANCE_SUPPLEMENTAL_GAS = 380
 CALL_CHILD_LIMIT_NUM = 63
 CALL_CHILD_LIMIT_DENOM = 64
 SUICIDE_SUPPLEMENTAL_GAS = 5000
-EXP_SUPPLEMENTAL_GAS = 70
+EXP_SUPPLEMENTAL_GAS = 40

@@ -82,7 +82,7 @@ def run_block_test(params, config_overrides = {}):
                 success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
                     DecodingError, DeserializationError, InvalidTransaction, 
-                    InvalidNonce, KeyError), e:
+                    InvalidNonce, KeyError) as e:
                 success = False
             assert not success
         else:

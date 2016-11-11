@@ -290,7 +290,7 @@ def vm_execute(ext, msg, code):
                 nbytes = len(utils.encode_int(exponent))
                 expfee = nbytes * opcodes.GEXPONENTBYTE
                 if ext.post_clearing_hardfork():
-                    expfee += opcodes.EXP_SUPPLEMENTAL_GAS * (1 + nbytes)
+                    expfee += opcodes.EXP_SUPPLEMENTAL_GAS * nbytes
                 if compustate.gas < expfee:
                     compustate.gas = 0
                     return vm_exception('OOG EXPONENT')

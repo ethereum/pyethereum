@@ -2,15 +2,15 @@ import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_hex, encode_int, \
     big_endian_to_int, int_to_addr, zpad, parse_as_bin, parse_as_int, \
-    decode_hex, sha3
+    decode_hex, sha3, is_string, is_numeric
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
-from config import default_config, Env
+from ethereum.config import default_config, Env
 from ethereum.block import FakeHeader
-from db import BaseDB, EphemDB, OverlayDB
+from ethereum.db import BaseDB, EphemDB, OverlayDB
 import copy
 import sys
 if sys.version_info.major == 2:
@@ -33,9 +33,9 @@ def get_block(db, blockhash):
 
 
 def snapshot_form(val):
-    if isinstance(val, (int, long)):
+    if is_numeric(val):
         return str(val)
-    elif isinstance(val, (str, bytes)):
+    elif is_string(val):
         return '0x' + encode_hex(val)
 
 
@@ -59,7 +59,7 @@ STATE_DEFAULTS = {
 
 class State():
 
-    def __init__(self, root='', env=Env(), **kwargs):
+    def __init__(self, root=b'', env=Env(), **kwargs):
         self.env = env
         self.trie = SecureTrie(Trie(self.db, root))
         for k, v in STATE_DEFAULTS.items():
@@ -96,19 +96,19 @@ class State():
 
     def typecheck_storage(self, k, v):
         if k == 'nonce' or k == 'balance':
-            assert isinstance(v, (int, long))
+            assert is_numeric(v)
         elif k == 'code':
-            assert isinstance(v, (str, bytes))
+            assert is_string(v)
         elif k == 'storage':
-            assert isinstance(v, (str, bytes)) and len(v) == 32
+            assert is_string(v) and len(v) == 32
         elif k == 'deleted':
             assert isinstance(v, bool)
         else:
-            assert isinstance(v, (str, bytes))
+            assert is_string(v)
         return True
 
     def set_storage(self, addr, k, v):
-        if isinstance(k, (int, long)):
+        if is_numeric(k):
             k = zpad(encode_int(k), 32)
         self.typecheck_storage(k, v)
         addr = normalize_address(addr)
@@ -143,7 +143,7 @@ class State():
             return Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
 
     def get_storage(self, addr, k):
-        if isinstance(k, (int, long)):
+        if is_numeric(k):
             k = zpad(encode_int(k), 32)
         addr = normalize_address(addr)
         if addr not in self.cache:
@@ -195,7 +195,7 @@ class State():
 
     # set_storage_data = lambda self, addr, k, v: self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) else v)
     def set_storage_data (self, addr, k, v):
-        self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) and k not in ACCOUNT_SPECIAL_PARAMS else v)
+        self.set_storage(addr, k, encode_int(v) if is_numeric(v) and k not in ACCOUNT_SPECIAL_PARAMS else v)
 
     def account_exists(self, addr):
         if self.is_CLEARING():
@@ -221,7 +221,7 @@ class State():
             self.set_storage(addr, k, '')
 
     # Commit the cache to the trie
-    def commit(self):
+    def commit(self, allow_empties=False):
         rt = self.trie.root_hash
         for addr, subcache in self.cache.items():
             if addr not in self.modified:
@@ -251,7 +251,8 @@ class State():
             if addr in self.modified or True:
                 if not acct.deleted:
                     acct._cached_rlp = None
-                    if self.is_CLEARING() and acct.is_blank():
+                    # print 'moose', addr.encode('hex'), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code)
+                    if self.is_CLEARING() and acct.is_blank() and not allow_empties:
                         self.trie.delete(addr)
                     else:
                         self.trie.update(addr, rlp.encode(acct))
@@ -372,9 +373,9 @@ class State():
         for k, default in STATE_DEFAULTS.items():
             default = copy.copy(default)
             v = snapshot_data[k] if k in snapshot_data else None
-            if isinstance(default, (int, long)):
+            if is_numeric(default):
                 setattr(state, k, parse_as_int(v) if k in snapshot_data else default)
-            elif isinstance(default, (str, bytes)):
+            elif is_string(default):
                 setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
             elif k == 'prev_headers':
                 if k in snapshot_data:
@@ -409,7 +410,7 @@ class State():
         for k, default in STATE_DEFAULTS.items():
             default = copy.copy(default)
             v = getattr(self, k)
-            if isinstance(default, (int, long)):
+            if is_numeric(default):
                 snapshot[k] = str(v)
             elif isinstance(default, (str, bytes)):
                 snapshot[k] = '0x'+encode_hex(v)
@@ -543,4 +544,4 @@ class Account(rlp.Serializable):
         return o
 
     def is_blank(self):
-        return self.nonce == 0 and self.balance == 0 and self.storage == trie.BLANK_ROOT and self.code_hash == BLANK_HASH
+        return self.nonce == 0 and self.balance == 0 and self.code_hash == BLANK_HASH

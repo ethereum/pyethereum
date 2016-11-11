@@ -32,7 +32,7 @@ setup(
     install_requires=install_requires,
     tests_require=tests_require,
     setup_requires=[
-        'pytest-runner==2.7'
+    #    'pytest-runner==2.7'
     ],
     version=version,
     classifiers=[

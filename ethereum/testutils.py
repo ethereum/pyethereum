@@ -78,7 +78,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items() if normalize_hex(v).rstrip(b'0') != b'0x'}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
     }
 
 
@@ -121,13 +121,13 @@ def mktest(code, language, data=None, fun=None, args=None,
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
-                "code": b'0x' + encode_hex(s.block.get_code(ca)),
-                "data": b'0x' + encode_hex(d), "gas": to_string(gas),
+                "code": '0x' + encode_hex(s.block.get_code(ca)),
+                "data": '0x' + encode_hex(d), "gas": to_string(gas),
                 "gasPrice": to_string(1), "origin": t.a0,
                 "value": to_string(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": b'0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
+        tx = {"data": '0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": to_string(1), "nonce": to_string(s.block.get_nonce(t.a0)),
               "secretKey": encode_hex(t.k0), "to": ca, "value": to_string(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -199,7 +199,7 @@ def run_vm_test(params, mode, profiler=None):
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
-                                        data=b'0x' + hexdata))
+                                        data='0x' + hexdata))
         return 1, msg.gas, b''
 
     def create_wrapper(msg):
@@ -210,7 +210,7 @@ def run_vm_test(params, mode, profiler=None):
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
-                                        destination=b'', data=b'0x' + hexdata))
+                                        destination=b'', data='0x' + hexdata))
         return 1, msg.gas, addr
 
     ext.msg = msg_wrapper
@@ -242,7 +242,7 @@ def run_vm_test(params, mode, profiler=None):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = b'0x' + encode_hex(b''.join(map(ascii_chr, output)))
+        params2['out'] = '0x' + encode_hex(b''.join(map(ascii_chr, output)))
         params2['gas'] = to_string(gas_remained)
         params2['logs'] = [log.to_dict() for log in state.logs]
         params2['post'] = state.to_dict()
@@ -339,7 +339,7 @@ def run_state_test(params, mode):
         success, output = False, b''
         time_pre = time.time()
         time_post = time_pre
-        state.commit()
+        state.commit(allow_empties=True)
     else:
         if 'secretKey' in exek:
             tx.sign(exek['secretKey'])
@@ -351,7 +351,7 @@ def run_state_test(params, mode):
             assert False
 
         time_pre = time.time()
-        state.commit()
+        state.commit(allow_empties=True)
         snapshot = state.snapshot()
         try:
             print('trying')
@@ -380,7 +380,7 @@ def run_state_test(params, mode):
         params2['logs'] = [log.to_dict() for log in logs]
 
 
-    params2['out'] = b'0x' + encode_hex(output)
+    params2['out'] = '0x' + encode_hex(output)
     params2['post'] = copy.deepcopy(state.to_dict())
     params2['postStateRoot'] = encode_hex(state.trie.root_hash)
 
@@ -401,9 +401,9 @@ def run_state_test(params, mode):
             if _shouldbe == _reallyis:
                 passed = True
             if not passed:
-                print 's', shouldbe
-                print 'r', reallyis
-                print state.trie.to_dict()
+                print('s', shouldbe)
+                print('r', reallyis)
+                print(state.trie.to_dict())
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
                                 (_shouldbe, _reallyis))
 

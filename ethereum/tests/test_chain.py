@@ -102,7 +102,6 @@ def test_transfer(db):
     b_v2 = chain.state.get_balance(v2)
     value = 42
     success = chain.state.transfer_value(v, v2, value)
-    print chain.state.to_dict(), repr(v), repr(v2)
     assert success
     assert chain.state.get_balance(v) == b_v - value
     assert chain.state.get_balance(v2) == b_v2 + value
@@ -342,7 +341,6 @@ def test_reward_uncles(db):
     assert uncle.header.hash in [u.hash for u in blk2.uncles]
     assert chain.head == blk2
     assert chain.get_chain() == [blk0, blk1, blk2]
-    print chain.state.to_dict()
     assert chain.state.get_balance(local_coinbase) == \
         2 * chain.env.config['BLOCK_REWARD'] + chain.env.config['NEPHEW_REWARD']
     assert chain.state.get_balance(uncle_coinbase) == chain.env.config['BLOCK_REWARD'] * 7 // 8

@@ -6,9 +6,9 @@ from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
-from config import default_config
+from ethereum.config import default_config
 from ethereum.transactions import Transaction
-from db import BaseDB
+from ethereum.db import BaseDB
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
