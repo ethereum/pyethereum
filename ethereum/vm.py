@@ -227,7 +227,7 @@ def vm_execute(ext, msg, code):
                            'EXTCODECOPY'):
                 if len(compustate.memory) < 1024:
                     trace_data['memory'] = \
-                        b''.join([encode_hex(ascii_chr(x)) for x
+                        ''.join([encode_hex(ascii_chr(x)) for x
                                   in compustate.memory])
                 else:
                     trace_data['sha3memory'] = \
