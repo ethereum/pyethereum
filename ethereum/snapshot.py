@@ -3,7 +3,8 @@ from ethereum import blocks
 from ethereum.blocks import Account, BlockHeader, Block, CachedBlock
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
 from ethereum.securetrie import SecureTrie
-from ethereum.trie import Trie, BLANK_NODE, BLANK_ROOT
+from ethereum.trie import BLANK_NODE, BLANK_ROOT
+from ethereum.pruning_trie import Trie
 
 
 class FakeHeader(object):
@@ -68,10 +69,10 @@ def create_base_snapshot(base):
 def create_state_snapshot(env, state_trie):
     alloc = dict()
     count = 0
-    for addr, account_rlp in state_trie.to_dict().items():
+    for addr, account_rlp in state_trie.iter_branch():
         alloc[encode_hex(addr)] = create_account_snapshot(env, account_rlp)
         count += 1
-        print "[%d] created account snapshot %s" % encode_hex(addr)
+        print "[%d] created account snapshot %s" % (count, encode_hex(addr))
     return alloc
 
 
@@ -79,7 +80,7 @@ def create_account_snapshot(env, rlpdata):
     account = get_account(env, rlpdata)
     storage_trie = SecureTrie(Trie(env.db, account.storage))
     storage = dict()
-    for k, v in storage_trie.to_dict().items():
+    for k, v in storage_trie.iter_branch():
         storage[encode_hex(k.lstrip('\x00') or '\x00')] = encode_hex(v)
     return {
         'nonce': snapshot_form(account.nonce),
@@ -132,6 +133,7 @@ def load_snapshot(chain, snapshot):
     def validate_uncles():
         return True
 
+    print "Start loading recent blocks from snapshot"
     first_block = rlp.decode(first_block_rlp, Block, env=chain.env)
     chain.index.add_block(first_block)
     chain._store_block(first_block)
@@ -157,11 +159,15 @@ def load_snapshot(chain, snapshot):
 def load_state(env, alloc):
     db = env.db
     state = SecureTrie(Trie(db, BLANK_ROOT))
-    for addr, account in alloc.items():
+    count = 0
+    print "Start loading state from snapshot"
+    for addr in alloc:
+        account = alloc[addr]
         acct = Account.blank_account(db, env.config['ACCOUNT_INITIAL_NONCE'])
         if len(account['storage']) > 0:
             t = SecureTrie(Trie(db, BLANK_ROOT))
-            for k, v in account['storage'].items():
+            for k in account['storage']:
+                v = account['storage'][k]
                 enckey = zpad(decode_hex(k), 32)
                 t.update(enckey, decode_hex(v))
             acct.storage = t.root_hash
@@ -172,6 +178,10 @@ def load_state(env, alloc):
         if account['code']:
             acct.code = decode_hex(account['code'])
         state.update(decode_hex(addr), rlp.encode(acct))
+        count += 1
+        if count % 1000 == 0:
+            db.commit()
+        print "[%d] loaded account %s" % (count, addr)
     db.commit()
     return state
 
