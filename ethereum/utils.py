@@ -122,7 +122,7 @@ def sha3(seed):
     sha3_count[0] += 1
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+assert to_string(encode_hex(sha3(b''))) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
