@@ -44,6 +44,8 @@ class FakeBlock(object):
 
 def create_snapshot(chain, recent=1024):
     env = chain.env
+    assert recent > env.config['MAX_UNCLE_DEPTH']+2
+
     head_block = chain.head
     base_block_hash = chain.index.get_block_by_number(max(head_block.number-recent, 0))
     base_block = chain.get(base_block_hash)
