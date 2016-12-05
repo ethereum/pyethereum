@@ -4,7 +4,7 @@ import ethereum.testutils as testutils
 import cProfile
 import pstats
 import time
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 from ethereum.utils import sha3, to_string
 from ethereum.slogging import get_logger
 logger = get_logger()

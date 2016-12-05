@@ -1,7 +1,8 @@
 import ethereum.transactions as transactions
 import ethereum.utils as utils
 import rlp
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from rlp.utils import decode_hex, str_to_bytes
+from ethereum.utils import encode_hex
 import ethereum.testutils as testutils
 from ethereum.testutils import fixture_to_bytes
 import ethereum.config as config

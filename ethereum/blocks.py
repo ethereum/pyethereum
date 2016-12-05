@@ -9,7 +9,8 @@ import sys
 from collections import Iterable
 import rlp
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie

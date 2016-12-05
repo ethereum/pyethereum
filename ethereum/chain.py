@@ -6,7 +6,7 @@ from ethereum.refcount_db import RefcountDB
 from ethereum.db import OverlayDB
 from ethereum.utils import to_string, is_string
 import rlp
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 from ethereum import blocks
 from ethereum import processblock
 from ethereum.exceptions import VerificationFailed, InvalidTransaction

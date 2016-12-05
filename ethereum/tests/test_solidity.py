@@ -1,9 +1,9 @@
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 from os import path
 
 import pytest
 
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 
 from ethereum import tester
 from ethereum import utils

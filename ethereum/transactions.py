@@ -1,8 +1,9 @@
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 import rlp
 from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import encode_hex, str_to_bytes, ascii_chr
+from rlp.utils import str_to_bytes, ascii_chr
+from ethereum.utils import encode_hex
 from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
 
 from ethereum.exceptions import InvalidTransaction

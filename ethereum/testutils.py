@@ -4,7 +4,8 @@ from ethereum import tester as t
 from ethereum import blocks, utils, transactions, vm, abi, opcodes
 from ethereum.exceptions import InvalidTransaction
 import rlp
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, ascii_chr, str_to_bytes
+from ethereum.utils import encode_hex
 from ethereum import processblock as pb
 import copy
 from ethereum.db import EphemDB

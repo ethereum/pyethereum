@@ -7,7 +7,8 @@ import copy
 from ethereum import utils
 from ethereum import opcodes
 from ethereum.slogging import get_logger
-from rlp.utils import encode_hex, ascii_chr
+from rlp.utils import ascii_chr
+from ethereum.utils import encode_hex
 from ethereum.utils import to_string
 
 log_log = get_logger('eth.vm.log')
