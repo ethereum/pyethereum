@@ -8,7 +8,6 @@ verify_stack_after_op = False
 import sys
 
 from ethereum import utils
-from ethereum.abi import is_numeric
 import copy
 from ethereum import opcodes
 import time
@@ -16,7 +15,11 @@ from ethereum.slogging import get_logger
 from rlp.utils import ascii_chr
 from ethereum.utils import encode_hex
 from ethereum.utils import to_string
-import numpy
+
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
 
 log_log = get_logger('eth.vm.log')
 log_vm_exit = get_logger('eth.vm.exit')
@@ -100,6 +103,7 @@ start_breakpoints = [
 
 # Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
+@lru_cache(128)
 def preprocess_code(code):
     assert isinstance(code, bytes)
     code = memoryview(code).tolist()
@@ -186,8 +190,6 @@ def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
-code_cache = {}
-
 
 def vm_execute(ext, msg, code):
     # precompute trace flag
@@ -198,11 +200,7 @@ def vm_execute(ext, msg, code):
     stk = compustate.stack
     mem = compustate.memory
 
-    if code in code_cache:
-        processed_code = code_cache[code]
-    else:
-        processed_code = preprocess_code(code)
-        code_cache[code] = processed_code
+    processed_code = preprocess_code(code)
 
     s = time.time()
     op = None
