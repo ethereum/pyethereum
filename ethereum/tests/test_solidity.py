@@ -14,6 +14,9 @@ SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
 
+def bytecode_is_generated(cinfo, cname):
+    return 'code' in cinfo[cname] and len(cinfo[cname]['code']) > 10
+
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_library_from_file():
     state = tester.state()
@@ -188,7 +191,6 @@ def test_constructor():
     assert contract.getValue() == 2
 
 
-@pytest.mark.xfail(reason='bytecode in test seems to be wrong')
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_solidity_compile_rich():
     compile_rich_contract = """
@@ -211,22 +213,9 @@ def test_solidity_compile_rich():
         'language', 'languageVersion', 'abiDefinition', 'source',
         'compilerVersion', 'developerDoc', 'userDoc'
     }
-    assert contract_info['contract_add']['code'] == (
-        '0x606060405260ad8060116000396000f30060606040526000357c0100000000000000'
-        '00000000000000000000000000000000000000000090048063651ae239146041578063'
-        'cb02919f14606657603f565b005b6050600480359060200150608b565b604051808281'
-        '5260200191505060405180910390f35b6075600480359060200150609c565b60405180'
-        '82815260200191505060405180910390f35b60006007820190506097565b919050565b'
-        '6000602a8201905060a8565b91905056'
-    )
-    assert contract_info['contract_sub']['code'] == (
-        '0x606060405260ad8060116000396000f30060606040526000357c0100000000000000'
-        '0000000000000000000000000000000000000000009004806361752024146041578063'
-        '7aaef1a014606657603f565b005b6050600480359060200150608b565b604051808281'
-        '5260200191505060405180910390f35b6075600480359060200150609c565b60405180'
-        '82815260200191505060405180910390f35b60006007820390506097565b919050565b'
-        '6000602a8203905060a8565b91905056'
-    )
+    assert bytecode_is_generated(contract_info, 'contract_add')
+    assert bytecode_is_generated(contract_info, 'contract_sub')
+
     assert {
         defn['name']
         for defn
@@ -252,18 +241,6 @@ def test_abi_contract():
     }
     """
 
-    two_contracts = one_contract + """
-    contract baz {
-        function echo(address a) returns (address b) {
-            b = a;
-            return b;
-        }
-        function eight() returns (int256 y) {
-            y = 8;
-        }
-    }
-    """
-
     state = tester.state()
     contract = state.abi_contract(one_contract, language='solidity')
 
@@ -271,3 +248,24 @@ def test_abi_contract():
     assert contract.seven() == 7
     assert contract.mul2(2) == 4
     assert contract.mul2(-2) == -4
+
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+def test_extra_args():
+    src = """
+    contract foo {
+        function add7(uint a) returns(uint d) { return a + 7; }
+        function add42(uint a) returns(uint d) { return a + 42; }
+    }
+    """
+
+    contract_info = get_solidity().compile_rich(
+        src,
+        extra_args="--optimize-runs 100"
+    )
+    assert bytecode_is_generated(contract_info, 'foo')
+
+    contract_info = get_solidity().compile_rich(
+        src,
+        extra_args=["--optimize-runs", "100"]
+    )
+    assert bytecode_is_generated(contract_info, 'foo')

@@ -396,6 +396,8 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
+            if str_to_bytes(k) == b'out' and _shouldbe[:1] in ('#', b'#'):
+                _reallyis = str_to_bytes('#%s' % ((len(_reallyis) - 2) // 2))
             if _shouldbe != _reallyis:
                 print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
                        'post: {shouldbe_post} != {reallyis_post}').format(
@@ -573,6 +575,23 @@ def fixture_to_bytes(value):
         return ret
     else:
         return value
+
+
+def get_config_overrides(filename):
+    override = {}
+    if os.path.join('BlockchainTests', 'Homestead') in filename:
+        override['HOMESTEAD_FORK_BLKNUM'] = 0
+    elif os.path.join('BlockchainTests', 'TestNetwork') in filename:
+        override['HOMESTEAD_FORK_BLKNUM'] = 5
+        override['DAO_FORK_BLKNUM'] = 8
+        override['ANTI_DOS_FORK_BLKNUM'] = 10
+    elif os.path.join('BlockchainTests', 'EIP150') in filename:
+        override['HOMESTEAD_FORK_BLKNUM'] = 0
+        override['ANTI_DOS_FORK_BLKNUM'] = 0
+        override['DAO_FORK_BLKNUM'] = 2 ** 99  # not applicable
+    if 'bcTheDaoTest' in filename:
+        override['DAO_FORK_BLKNUM'] = 8
+    return override
 
 
 def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):

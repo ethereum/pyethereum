@@ -5,6 +5,7 @@ from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
 import sys
 import ethereum.testutils as testutils
+from ethereum.testutils import get_config_overrides
 import copy
 
 from ethereum.slogging import get_logger
@@ -69,47 +70,47 @@ def run_block_test(params, config_overrides={}):
     blockmap = {b.hash: b}
     env.db.put(b.hash, rlp.encode(b))
     old_config = copy.deepcopy(env.config)
-    for k, v in config_overrides.items():
-        env.config[k] = v
-    b2 = None
-    for blk in params["blocks"]:
-        if 'blockHeader' not in blk:
-            try:
+    try:
+        for k, v in config_overrides.items():
+            env.config[k] = v
+        b2 = None
+        for blk in params["blocks"]:
+            if 'blockHeader' not in blk:
+                try:
+                    rlpdata = decode_hex(blk["rlp"][2:])
+                    blkparent = rlp.decode(
+                        rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
+                    b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
+                    success = b2.validate_uncles()
+                except (ValueError, TypeError, AttributeError, VerificationFailed,
+                        DecodingError, DeserializationError, InvalidTransaction, KeyError):
+                    success = False
+                assert not success
+            else:
                 rlpdata = decode_hex(blk["rlp"][2:])
-                blkparent = rlp.decode(
-                    rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
+                blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
                 b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-                success = b2.validate_uncles()
-            except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, KeyError):
-                success = False
-            assert not success
-        else:
-            rlpdata = decode_hex(blk["rlp"][2:])
-            blkparent = rlp.decode(rlp.encode(rlp.decode(rlpdata)[0]), blocks.BlockHeader).prevhash
-            b2 = rlp.decode(rlpdata, blocks.Block, parent=blockmap[blkparent], env=env)
-            assert b2.validate_uncles()
-            blockmap[b2.hash] = b2
-            env.db.put(b2.hash, rlp.encode(b2))
-        if b2:
-            print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
-        # blkdict = b.to_dict(False, True, False, True)
-        # assert blk["blockHeader"] == \
-        #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
-        # assert blk["transactions"] == \
-        #     [translate_keys(t, translator_list, valueconv, ['hash'])
-        #      for t in blkdict["transactions"]]
-        # assert blk["uncleHeader"] == \
-        #     [translate_keys(u, translator_list, lambda x: x, [])
-        #      for u in blkdict["uncles"]]
-    env.config = old_config
+                assert b2.validate_uncles()
+                blockmap[b2.hash] = b2
+                env.db.put(b2.hash, rlp.encode(b2))
+            if b2:
+                print('Block %d with state root %s' % (b2.number, encode_hex(b2.state.root_hash)))
+            # blkdict = b.to_dict(False, True, False, True)
+            # assert blk["blockHeader"] == \
+            #     translate_keys(blkdict["header"], translator_list, lambda y, x: x, [])
+            # assert blk["transactions"] == \
+            #     [translate_keys(t, translator_list, valueconv, ['hash'])
+            #      for t in blkdict["transactions"]]
+            # assert blk["uncleHeader"] == \
+            #     [translate_keys(u, translator_list, lambda x: x, [])
+            #      for u in blkdict["uncles"]]
+    finally:
+        env.config = old_config
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, {
-        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000
-    })
+    config_overrides = get_config_overrides(filename)
+    run_block_test(testdata, config_overrides=config_overrides)
 
 
 excludes = {
@@ -135,18 +136,15 @@ def main():
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename
-                        else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    config_overrides = get_config_overrides(filename)
+                    run_block_test(testdata, config_overrides=config_overrides)
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if (filename.split('/')[-1], testname) not in excludes:
                     print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, {
-                        'HOMESTEAD_FORK_BLKNUM': 0 if 'Homestead' in filename else 5 if 'TestNetwork' in filename else 1000000,
-                        'DAO_FORK_BLKNUM': 8 if 'bcTheDaoTest' in filename else 1920000})
+                    config_overrides = get_config_overrides(filename)
+                    run_block_test(testdata, config_overrides=config_overrides)
 
 
 if __name__ == '__main__':
