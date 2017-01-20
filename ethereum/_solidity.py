@@ -17,6 +17,10 @@ class CompileError(Exception):
     pass
 
 
+class SolcMissing(Exception):
+    pass
+
+
 def get_compiler_path():
     """ Return the path to the solc compiler.
 
@@ -296,7 +300,10 @@ def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize
 
 def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize, extra_args=extra_args)
-    args.insert(0, get_compiler_path())
+    compiler = get_compiler_path()
+    if compiler is None:
+        raise SolcMissing("solc not found")
+    args.insert(0, compiler)
 
     process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = process.communicate(input=utils.to_string(sourcecode))
