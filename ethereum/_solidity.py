@@ -261,6 +261,17 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, ex
     return solc_parse_output(output)
 
 
+def solidity_get_contract_data(all_contracts, filepath, contract_name):
+    """ A backwards compatible method of getting the contract data out
+    of a solc --combined-json output"""
+    try:
+        contract_data = all_contracts[contract_name]
+    except:
+        _, filename = os.path.split(filepath)
+        contract_data = all_contracts[filename + ":" + contract_name]
+    return contract_data
+
+
 def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
     all_contracts = compile_file(
         filepath,
@@ -269,12 +280,7 @@ def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi'
         optimize=optimize,
         extra_args=extra_args
     )
-    try:
-        contract_data = all_contracts[contract_name]
-    except:
-        _, filename = os.path.split(filepath)
-        contract_data = all_contracts[filename + ":" + contract_name]
-    return contract_data
+    return solidity_get_contract_data(all_contracts, filepath, contract_name)
 
 
 def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
