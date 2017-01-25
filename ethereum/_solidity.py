@@ -269,8 +269,12 @@ def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi'
         optimize=optimize,
         extra_args=extra_args
     )
-    _, filename = os.path.split(filepath)
-    return all_contracts[filename + ":" + contract_name]
+    try:
+        contract_data = all_contracts[contract_name]
+    except:
+        _, filename = os.path.split(filepath)
+        contract_data = all_contracts[filename + ":" + contract_name]
+    return contract_data
 
 
 def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
