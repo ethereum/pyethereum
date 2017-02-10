@@ -198,7 +198,7 @@ class State():
         self.set_storage(addr, k, encode_int(v) if is_numeric(v) and k not in ACCOUNT_SPECIAL_PARAMS else v)
 
     def account_exists(self, addr):
-        if self.is_CLEARING():
+        if self.is_SPURIOUS_DRAGON():
             return self.get_nonce(addr) or self.get_balance(addr) or self.get_code(addr)
         if addr not in self.modified:
             o = self.trie.get(addr) != trie.BLANK_NODE
@@ -251,8 +251,7 @@ class State():
             if addr in self.modified or True:
                 if not acct.deleted:
                     acct._cached_rlp = None
-                    # print 'moose', addr.encode('hex'), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code)
-                    if self.is_CLEARING() and acct.is_blank() and not allow_empties:
+                    if self.is_SPURIOUS_DRAGON() and acct.is_blank() and not allow_empties:
                         self.trie.delete(addr)
                     else:
                         self.trie.update(addr, rlp.encode(acct))
@@ -455,8 +454,8 @@ class State():
     def is_ANTI_DOS(self, at_fork_height=False):
         return self._is_X_fork('ANTI_DOS', at_fork_height)
 
-    def is_CLEARING(self, at_fork_height=False):
-        return self._is_X_fork('CLEARING', at_fork_height)
+    def is_SPURIOUS_DRAGON(self, at_fork_height=False):
+        return self._is_X_fork('SPURIOUS_DRAGON', at_fork_height)
 
     def is_DAO(self, at_fork_height=False):
         return self._is_X_fork('DAO', at_fork_height)

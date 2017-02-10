@@ -430,7 +430,7 @@ class VMExt():
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
         self.post_serenity_hardfork = lambda: state.is_SERENITY()
         self.post_anti_dos_hardfork = lambda: state.is_ANTI_DOS()
-        self.post_clearing_hardfork = lambda: state.is_CLEARING()
+        self.post_spurious_dragon_hardfork = lambda: state.is_SPURIOUS_DRAGON()
         self.blockhash_store = state.config['METROPOLIS_BLOCKHASH_STORE']
         self.snapshot = state.snapshot
         self.revert = state.revert
@@ -477,7 +477,7 @@ class BlankVMExt():
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
         self.post_serenity_hardfork = lambda: state.is_SERENITY()
         self.post_anti_dos_hardfork = lambda: state.is_ANTI_DOS()
-        self.post_clearing_hardfork = lambda: state.is_CLEARING()
+        self.post_spurious_dragon_hardfork = lambda: state.is_SPURIOUS_DRAGON()
         self.blockhash_store = state.config['METROPOLIS_BLOCKHASH_STORE']
         self.snapshot = state.snapshot
         self.revert = state.revert
