@@ -64,6 +64,7 @@ default_config = dict(
     # Anti-DoS fork
     ANTI_DOS_FORK_BLKNUM = 2463000,
     SPURIOUS_DRAGON_FORK_BLKNUM = 2675000,
+    CONTRACT_CODE_SIZE_LIMIT = 0x6000,
     # Default consensus strategy: ethash, poa, casper, pbft
     CONSENSUS_STRATEGY = 'ethash',
     # Serenity fork

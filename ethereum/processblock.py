@@ -151,7 +151,12 @@ def create_contract(ext, msg):
     if res:
         if not len(dat):
             return 1, gas, msg.to
-        gcost = len(dat) * opcodes.GCONTRACTBYTE
+
+        if ext.post_spurious_dragon_hardfork():
+            gcost = 2**256 - 1 if len(dat) > config.default_config['CONTRACT_CODE_SIZE_LIMIT'] else len(dat) * opcodes.GCONTRACTBYTE
+        else:
+            gcost = len(dat) * opcodes.GCONTRACTBYTE
+
         if gas >= gcost:
             gas -= gcost
         else:
