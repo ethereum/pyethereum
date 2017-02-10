@@ -142,7 +142,8 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
-    ext.set_nonce(msg.to, 1)
+    if ext.post_spurious_dragon_hardfork():
+        ext.set_nonce(msg.to, 1)
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
     log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat)
