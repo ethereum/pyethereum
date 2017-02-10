@@ -63,7 +63,7 @@ default_config = dict(
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Anti-DoS fork
     ANTI_DOS_FORK_BLKNUM = 2463000,
-    CLEARING_FORK_BLKNUM = 3500000,
+    SPURIOUS_DRAGON_FORK_BLKNUM = 2675000,
     # Default consensus strategy: ethash, poa, casper, pbft
     CONSENSUS_STRATEGY = 'ethash',
     # Serenity fork
