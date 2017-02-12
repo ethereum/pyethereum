@@ -110,7 +110,7 @@ class Transaction(rlp.Serializable):
             key = encode_privkey(key, 'bin')
 
         v, self.r, self.s = ecsign(rawhash, key)
-        self.v = self.encode_v(v)
+        self.v = self.encode_v(v - v_offset)
 
         self.sender = utils.privtoaddr(key)
         return self
@@ -192,7 +192,7 @@ class Transaction(rlp.Serializable):
         if v in (v_zero, v_one):
             return v - v_zero
         else:
-          raise InvalidTransaction("invalid signature")
+            raise InvalidTransaction("invalid signature")
 
     def signing_data(self, mode):
         if mode == 'verify':
