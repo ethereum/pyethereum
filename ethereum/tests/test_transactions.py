@@ -26,10 +26,12 @@ def test_transaction(filename, testname, testdata):
 
         blknum = int(testdata["blocknumber"])
         if blknum >= config.default_config["SPURIOUS_DRAGON_FORK_BLKNUM"]:
-            tx_sedes = transactions.EIP155Transaction
+            signer_class = transactions.EIP155TransactionSigner
         else:
-            tx_sedes = transactions.Transaction
-        tx = rlp.decode(rlpdata, tx_sedes)
+            signer_class = transactions.TransactionSigner
+        tx = rlp.decode(rlpdata,
+                        sedes=transactions.Transaction,
+                        signer_class=signer_class)
 
         if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
             tx.check_low_s_homestead()
