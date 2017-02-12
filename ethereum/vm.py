@@ -231,7 +231,7 @@ def vm_execute(ext, msg, code):
                                   in compustate.memory])
                 else:
                     trace_data['sha3memory'] = \
-                        encode_hex(utils.sha3(''.join([ascii_chr(x) for
+                        encode_hex(utils.sha3(b''.join([ascii_chr(x) for
                                               x in compustate.memory])))
             if _prevop in ('SSTORE', 'SLOAD') or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)

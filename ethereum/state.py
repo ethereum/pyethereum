@@ -315,6 +315,19 @@ class State():
                 if not premod:
                     del self.modified[addr]
 
+    # Prints the state for a single account
+    def account_to_dict(self, address):
+        address = normalize_address(address)
+        acct = self._get_account_unsafe(address)
+        acct_trie = SecureTrie(Trie(self.db))
+        acct_trie.root_hash = acct.storage
+        odict = acct_trie.to_dict()
+        if address in self.cache:
+            for k, v in self.cache[address].items():
+                if k not in ACCOUNT_SPECIAL_PARAMS:
+                    odict[k] = v 
+        return {'0x'+encode_hex(key): '0x'+encode_hex(val) for key, val in odict.items()}
+
     # Converts the state tree to a dictionary
     def to_dict(self):
         state_dump = {}
@@ -324,7 +337,7 @@ class State():
             acct_trie = SecureTrie(Trie(self.db))
             acct_trie.root_hash = acct.storage
             for key, v in acct_trie.to_dict().items():
-                storage_dump[encode_hex(key.lstrip('\x00') or '\x00')] = encode_hex(rlp.decode(v))
+                storage_dump['0x'+encode_hex(key.lstrip('\x00') or '\x00')] = '0x'+encode_hex(rlp.decode(v))
             acct_dump = {"storage": storage_dump}
             for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                 acct_dump[c] = snapshot_form(getattr(acct, c))
@@ -341,7 +354,7 @@ class State():
                     acct_dump[key] = snapshot_form(val)
                 else:
                     if val:
-                        acct_dump["storage"][encode_hex(key)] = encode_hex(val)
+                        acct_dump["storage"]['0x'+encode_hex(key)] = '0x'+encode_hex(val)
                     elif encode_hex(key) in acct_dump["storage"]:
                         del acct_dump["storage"][val]
         return state_dump

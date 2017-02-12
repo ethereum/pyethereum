@@ -74,7 +74,7 @@ class Transaction(rlp.Serializable):
         if not self._sender:
             # Determine sender
             if self.v:
-                if self.r >= N or self.s >= N or self.v not in (27, 28, 37, 38) \
+                if self.r >= N or self.s >= N or self.v not in (27, 28, 37, 38, 41, 42) \
                 or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 log.debug('reco< 27 or self.v > 28 \vering sender')
@@ -86,6 +86,10 @@ class Transaction(rlp.Serializable):
                     rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + ['\x01', '', ''])
                     rawhash = utils.sha3(rlpdata)
                     v = self.v - 10
+                elif self.v in (41, 42):
+                    rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + ['\x03', '', ''])
+                    rawhash = utils.sha3(rlpdata)
+                    v = self.v - 14
                 pub = ecrecover_to_pub(rawhash, v, self.r, self.s)
                 if pub == b"\x00" * 64:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
@@ -99,20 +103,27 @@ class Transaction(rlp.Serializable):
     def sender(self, value):
         self._sender = value
 
-    def sign(self, key):
+    def sign(self, key, network_id=None):
         """Sign this transaction with a private key.
 
         A potentially already existing signature would be overridden.
         """
         if key in (0, '', b'\x00' * 32, '0' * 64):
             raise InvalidTransaction("Zero privkey cannot sign")
-        rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        if network_id is None:
+            rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+        else:
+            assert 1 <= network_id < 2**63 - 18
+            rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + [big_endian_to_int(network_id), '', ''])
+            rawhash = utils.sha3(rlpdata)
 
         if len(key) == 64:
             # we need a binary key
             key = encode_privkey(key, 'bin')
 
         self.v, self.r, self.s = ecsign(rawhash, key)
+        if network_id is not None:
+            self.v += 8 + network_id * 2
 
         self.sender = utils.privtoaddr(key)
         return self

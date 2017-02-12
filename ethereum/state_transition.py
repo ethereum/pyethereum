@@ -409,7 +409,7 @@ class VMExt():
         self.get_storage_data = state.get_storage_data
         self.get_storage_bytes = state.get_storage_bytes
         self.set_storage_bytes = state.set_storage_bytes
-        self.log_storage = lambda x: 'storage logging stub'
+        self.log_storage = lambda x: state.account_to_dict(x)
         self.add_suicide = lambda x: state.add_to_list('suicides', x)
         self.add_refund = lambda x: \
             state.set_param('refunds', state.refunds + x)

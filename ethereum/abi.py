@@ -478,7 +478,7 @@ def encode_abi(types, args):
 def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
-        return encode_hex(data[12:])
+        return '0x' + encode_hex(data[12:])
     elif base == 'hash':
         return data[32-int(sub):]
     elif base == 'string' or base == 'bytes':
@@ -553,7 +553,7 @@ def dec(typ, arg):
     # Dynamic-sized strings are encoded as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
         L = big_endian_to_int(arg[:32])
-        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object"
+        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object: expected %d actual %d" % (ceil32(L), len(arg[32:]))
         return arg[32:][:L]
     # Dynamic-sized arrays
     elif sz is None:
