@@ -1,6 +1,5 @@
 import os
 import rlp
-import serpent
 
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
