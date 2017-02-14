@@ -29,10 +29,13 @@ def test_difficulty(filename, testname, testdata):
 
 
     env = config.Env()
-    if 'Homestead' in filename:
+    if 'Homestead' in filename or 'Ropsten' in filename:
         env.config['HOMESTEAD_FORK_BLKNUM'] = 0
-    elif 'difficultyMorden' in filename:
+    elif 'Morden' in filename:
         env.config['HOMESTEAD_FORK_BLKNUM'] = 494000
+    elif 'Frontier' in filename:
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 2**256
+
     # env.config['EXPDIFF_FREE_PERIODS'] = 2**98
 
     parent = Block(BlockHeader(timestamp=parent_timestamp,
