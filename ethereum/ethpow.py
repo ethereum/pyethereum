@@ -5,6 +5,7 @@ import sha3
 import warnings
 from collections import OrderedDict
 from ethereum.slogging import get_logger
+import rlp
 
 log = get_logger('eth.pow')
 
@@ -101,13 +102,14 @@ class Miner():
         bin_nonce, mixhash = mine(blk.number, blk.difficulty, blk.mining_hash,
                                   start_nonce=start_nonce, rounds=rounds)
         if bin_nonce:
-            blk.mixhash = mixhash
-            blk.nonce = bin_nonce
+            blk.header.mixhash = mixhash
+            blk.header.nonce = bin_nonce
+            # assert blk.check_pow()
             return blk
 
 
 def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
-    assert utils.isnumeric(start_nonce)
+    assert utils.is_numeric(start_nonce)
     cache = get_cache(block_number)
     nonce = start_nonce
     target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
@@ -120,3 +122,5 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
             assert len(o[b"mix digest"]) == 32
             return bin_nonce, o[b"mix digest"]
     return None, None
+
+

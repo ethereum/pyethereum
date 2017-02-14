@@ -1,7 +1,7 @@
 try:
     from Crypto.Hash import keccak
     sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
-except:
+except ImportError:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.sha3_256(x).digest()
 from bitcoin import privtopub
@@ -11,6 +11,13 @@ from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
 
+try:
+    import secp256k1
+except ImportError:
+    import warning
+    warning.ImportWarning('could not import secp256k1')
+    secp256k1 = None
+
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
 
@@ -18,6 +25,7 @@ int_to_big_endian = lambda x: big_endian_int.serialize(x)
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
+SECP256K1P = 2**256 - 4294968273
 
 if sys.version_info.major == 2:
     is_numeric = lambda x: isinstance(x, (int, long))
@@ -62,7 +70,46 @@ else:
     def bytearray_to_bytestr(value):
         return bytes(value)
 
-isnumeric = is_numeric
+
+def ecrecover_to_pub(rawhash, v, r, s):
+    if secp256k1:
+        # Legendre symbol check; the secp256k1 library does not seem to do this
+        pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
+        xc = r * r * r + 7
+        assert pow(xc, (SECP256K1P - 1) / 2, SECP256K1P) == 1
+        try:
+            pk.public_key = pk.ecdsa_recover(
+                rawhash,
+                pk.ecdsa_recoverable_deserialize(
+                    zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) +
+                    zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32),
+                    v - 27
+                ),
+                raw=True
+            )
+            pub = pk.serialize(compressed=False)[1:]
+        except:
+            pub = b"\x00" * 64
+    else:
+        recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
+        pub = encode_pubkey(recovered_addr, 'bin_electrum')
+    assert len(pub) == 64
+    return pub
+
+
+def ecsign(rawhash, key):
+    if secp256k1:
+        pk = secp256k1.PrivateKey(key, raw=True)
+        signature = pk.ecdsa_recoverable_serialize(
+            pk.ecdsa_sign_recoverable(rawhash, raw=True)
+        )
+        signature = signature[0] + bytearray_to_bytestr([signature[1]])
+        v = safe_ord(signature[64]) + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+    else:
+        v, r, s = ecdsa_raw_sign(rawhash, key)
+    return v, r, s
 
 
 def mk_contract_address(sender, nonce):
@@ -122,7 +169,7 @@ def sha3(seed):
     sha3_count[0] += 1
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3(b'')) == b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(x, extended=False):
@@ -340,6 +387,9 @@ def encode_int(v):
 def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
 
+def encode_int32(v):
+    return zpad(int_to_big_endian(v), 32)
+
 
 def scan_bin(v):
     if v[:2] in ('0x', b'0x'):
@@ -373,7 +423,7 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: b'0x' + encode_hex(v),
+    "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
     "int": lambda v: to_string(v),
     "trie_root": lambda v: encode_hex(v),
@@ -383,7 +433,7 @@ printers = {
 # Decoding from printable format
 scanners = {
     "bin": scan_bin,
-    "addr": lambda x: x[2:] if x[:2] == b'0x' else x,
+    "addr": lambda x: x[2:] if x[:2] in (b'0x', '0x') else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
     "int256b": lambda x: big_endian_to_int(decode_hex(x))
@@ -392,11 +442,19 @@ scanners = {
 
 def int_to_hex(x):
     o = encode_hex(encode_int(x))
-    return b'0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
+    return '0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
 
 
 def remove_0x_head(s):
-    return s[2:] if s[:2] == b'0x' else s
+    return s[2:] if s[:2] in (b'0x', '0x') else s
+
+
+def parse_as_bin(s):
+    return decode_hex(s[2:] if s[:2] == '0x' else s)
+
+
+def parse_as_int(s):
+    return s if is_numeric(s) else int('0' + s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
