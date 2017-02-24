@@ -3,7 +3,8 @@ import ethereum.processblock as processblock
 import ethereum.blocks as blocks
 import ethereum.transactions as transactions
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 import ethereum.ethpow as ethpow
 import ethereum.utils as utils
 from ethereum.chain import Chain

@@ -5,7 +5,8 @@ import ethereum.utils as utils
 import ethereum.testutils as testutils
 import ethereum.bloom as bloom
 import os
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from rlp.utils import decode_hex, str_to_bytes
+from ethereum.utils import encode_hex
 
 
 def check_testdata(data_keys, expected_keys):

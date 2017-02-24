@@ -1,7 +1,8 @@
 import sys
 import rlp
 from rlp.sedes import CountableList, binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from rlp.utils import decode_hex, ascii_chr
+from ethereum.utils import encode_hex
 from ethereum import opcodes
 from ethereum import utils
 from ethereum import specials

@@ -1,7 +1,8 @@
 from ethereum import blocks, utils, db
 from ethereum.exceptions import VerificationFailed, InvalidTransaction
 import rlp
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from rlp.utils import decode_hex,  str_to_bytes
+from ethereum.utils import encode_hex
 from rlp import DecodingError, DeserializationError
 import sys
 import ethereum.testutils as testutils

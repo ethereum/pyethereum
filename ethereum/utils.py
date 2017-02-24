@@ -8,7 +8,7 @@ from bitcoin import privtopub
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex as _encode_hex, ascii_chr, str_to_bytes
 import random
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
@@ -38,6 +38,8 @@ if sys.version_info.major == 2:
     def bytearray_to_bytestr(value):
         return bytes(''.join(chr(c) for c in value))
 
+    encode_hex = _encode_hex
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -61,6 +63,17 @@ else:
 
     def bytearray_to_bytestr(value):
         return bytes(value)
+
+    # returns encode_hex behaviour back to pre rlp-0.4.7 behaviour
+    # detect if this is necessary (i.e. what rlp version is running)
+    if isinstance(_encode_hex(b''), bytes):
+        encode_hex = _encode_hex
+    else:
+        # if using a newer version of rlp, wrap the encode so it
+        # returns a byte string
+        def encode_hex(b):
+            return _encode_hex(b).encode('utf-8')
+
 
 isnumeric = is_numeric
 

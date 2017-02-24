@@ -5,7 +5,8 @@ import ethereum.trie as trie
 import ethereum.db as db
 import itertools
 from ethereum.slogging import get_logger
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 from ethereum.abi import is_string
 from ethereum.testutils import fixture_to_bytes
 logger = get_logger()
