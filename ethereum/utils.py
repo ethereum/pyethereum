@@ -481,7 +481,7 @@ class Denoms():
         self.szabo = 10 ** 12
         self.finney = 10 ** 15
         self.ether = 10 ** 18
-        self.turing = 2 ** 256
+        self.turing = 2 ** 256 - 1
 
 denoms = Denoms()
 
