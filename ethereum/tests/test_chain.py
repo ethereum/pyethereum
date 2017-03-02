@@ -142,6 +142,14 @@ def test_transfer(db, balance):
     assert blk.get_balance(v2) == b_v2 + value
 
 
+def test_alloc_too_big(db):
+    k, v, k2, v2 = accounts()
+    blk = None
+    with pytest.raises(ValueError):
+        blk = blocks.genesis(env(db), start_alloc={v: {"balance": 2 ** 256}})
+    assert blk is None
+
+
 def test_failing_transfer(db):
     k, v, k2, v2 = accounts()
     blk = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
