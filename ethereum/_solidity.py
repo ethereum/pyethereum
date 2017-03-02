@@ -267,7 +267,10 @@ def solidity_get_contract_data(all_contracts, filepath, contract_name):
     try:
         contract_data = all_contracts[contract_name]
     except:
-        _, filename = os.path.split(filepath)
+        if filepath is None:
+            filename = '<stdin>'
+        else:
+            _, filename = os.path.split(filepath)
         contract_data = all_contracts[filename + ":" + contract_name]
     return contract_data
 
@@ -278,7 +281,10 @@ def solidity_get_contract_key(all_contracts, filepath, contract_name):
     if contract_name in all_contracts:
         return contract_name
     else:
-        _, filename = os.path.split(filepath)
+        if filepath is None:
+            filename = '<stdin>'
+        else:
+            _, filename = os.path.split(filepath)
         contract_key = filename + ":" + contract_name
         return contract_key if contract_key in all_contracts else None
 
