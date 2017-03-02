@@ -483,6 +483,7 @@ class Denoms():
         self.ether = 10 ** 18
         self.turing = 2 ** 256 - 1
 
+
 denoms = Denoms()
 
 
