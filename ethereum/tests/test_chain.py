@@ -6,7 +6,12 @@ import rlp
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
 import ethereum.ethpow as ethpow
-import ethereum.utils as utils
+from ethereum.utils import (
+    sha3,
+    privtoaddr,
+    denoms,
+    dump_state,
+)
 from ethereum.chain import Chain
 from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
@@ -29,10 +34,10 @@ def env(db):
 
 @pytest.fixture(scope="module")
 def accounts():
-    k = utils.sha3(b'cow')
-    v = utils.privtoaddr(k)
-    k2 = utils.sha3(b'horse')
-    v2 = utils.privtoaddr(k2)
+    k = sha3(b'cow')
+    v = privtoaddr(k)
+    k2 = sha3(b'horse')
+    v2 = privtoaddr(k2)
     return k, v, k2, v2
 
 
@@ -106,7 +111,7 @@ def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
         nonce, gasprice, startgas=100000,
-        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+        to=v2, value=denoms.finney * 10, data='').sign(k)
     return tx
 
 
@@ -115,9 +120,19 @@ def store_block(blk):
     assert blocks.get_block(env(blk.db), blk.hash) == blk
 
 
-def test_transfer(db):
+@pytest.mark.parametrize('balance', [
+    denoms.wei * 10000,
+    denoms.babbage,
+    denoms.lovelace,
+    denoms.shannon,
+    denoms.szabo,
+    denoms.finney,
+    denoms.ether,
+    denoms.turing
+])
+def test_transfer(db, balance):
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk = blocks.genesis(env(db), start_alloc={v: {"balance": balance}})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
     value = 42
@@ -127,12 +142,20 @@ def test_transfer(db):
     assert blk.get_balance(v2) == b_v2 + value
 
 
+def test_alloc_too_big(db):
+    k, v, k2, v2 = accounts()
+    blk = None
+    with pytest.raises(ValueError):
+        blk = blocks.genesis(env(db), start_alloc={v: {"balance": 2 ** 256}})
+    assert blk is None
+
+
 def test_failing_transfer(db):
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
     b_v = blk.get_balance(v)
     b_v2 = blk.get_balance(v2)
-    value = utils.denoms.ether * 2
+    value = denoms.ether * 2
     # should fail
     success = blk.transfer_value(v, v2, value)
     assert not success
@@ -149,7 +172,7 @@ def test_serialize_block(db):
 
 def test_genesis(db, alt_db):
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
     # sr = blk.state_root
     assert blk.state.db.db == db.db
     db.put(blk.hash, rlp.encode(blk))
@@ -157,11 +180,11 @@ def test_genesis(db, alt_db):
     # assert sr in db
     db.commit()
     # assert sr in db
-    blk2 = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
     blk3 = blocks.genesis(env(db))
     assert blk == blk2
     assert blk != blk3
-    blk2 = blocks.genesis(env(alt_db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(env(alt_db), start_alloc={v: {"balance": denoms.ether * 1}})
     blk3 = blocks.genesis(env(alt_db))
     assert blk == blk2
     assert blk != blk3
@@ -184,13 +207,13 @@ def test_deserialize_commit(db):
 
 def test_genesis_db(db, alt_db):
     k, v, k2, v2 = accounts()
-    blk = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
     store_block(blk)
-    blk2 = blocks.genesis(env(db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(env(db), start_alloc={v: {"balance": denoms.ether * 1}})
     blk3 = blocks.genesis(env(db))
     assert blk == blk2
     assert blk != blk3
-    blk2 = blocks.genesis(env(alt_db), start_alloc={v: {"balance": utils.denoms.ether * 1}})
+    blk2 = blocks.genesis(env(alt_db), start_alloc={v: {"balance": denoms.ether * 1}})
     blk3 = blocks.genesis(env(alt_db))
     assert blk == blk2
     assert blk != blk3
@@ -198,7 +221,7 @@ def test_genesis_db(db, alt_db):
 
 def test_mine_block(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db)
     store_block(blk)
     blk2 = mine_next_block(blk, coinbase=v)
     store_block(blk2)
@@ -220,7 +243,7 @@ def test_block_serialization_with_transaction_empty_genesis(db):
 
 def test_mine_block_with_transaction(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     store_block(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
@@ -228,13 +251,13 @@ def test_mine_block_with_transaction(db):
     assert blk.get_transaction(0) == tx
     with pytest.raises(IndexError):
         blk.get_transaction(1)
-    assert blk.get_balance(v) == utils.denoms.finney * 990
-    assert blk.get_balance(v2) == utils.denoms.finney * 10
+    assert blk.get_balance(v) == denoms.finney * 990
+    assert blk.get_balance(v2) == denoms.finney * 10
 
 
 def test_mine_block_with_transaction2(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db)
     store_block(blk)
     tx = get_transaction()
     blk2 = mine_next_block(blk, coinbase=v, transactions=[tx])
@@ -253,18 +276,18 @@ def test_mine_block_with_transaction2(db):
 
 def test_mine_block_with_transaction3(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db)
     store_block(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
     assert tx in blk.get_transactions()
-    assert blk.get_balance(v) == utils.denoms.finney * 990
-    assert blk.get_balance(v2) == utils.denoms.finney * 10
+    assert blk.get_balance(v) == denoms.finney * 990
+    assert blk.get_balance(v2) == denoms.finney * 10
 
 
 def test_block_serialization_same_db(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db)
     assert blk.hash == rlp.decode(rlp.encode(blk), blocks.Block, env=env(db)).hash
     store_block(blk)
     blk2 = mine_next_block(blk)
@@ -299,20 +322,20 @@ def test_block_serialization_with_transaction_other_db():
     k, v, k2, v2 = accounts()
     a_db, b_db = db(), db()
     # mine two blocks
-    a_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=a_db)
+    a_blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=a_db)
     store_block(a_blk)
     tx = get_transaction()
     logger.debug('a: state_root before tx %r' % hx(a_blk.state_root))
-    logger.debug('a: state:\n%s' % utils.dump_state(a_blk.state))
+    logger.debug('a: state:\n%s' % dump_state(a_blk.state))
     a_blk2 = mine_next_block(a_blk, transactions=[tx])
     logger.debug('a: state_root after tx %r' % hx(a_blk2.state_root))
-    logger.debug('a: state:\n%s' % utils.dump_state(a_blk2.state))
+    logger.debug('a: state:\n%s' % dump_state(a_blk2.state))
     assert tx in a_blk2.get_transactions()
     store_block(a_blk2)
     assert tx in a_blk2.get_transactions()
     logger.debug('preparing receiving chain ---------------------')
     # receive in other db
-    b_blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, b_db)
+    b_blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, b_db)
     store_block(b_blk)
 
     assert b_blk.number == 0
@@ -332,15 +355,15 @@ def test_block_serialization_with_transaction_other_db():
 
 def test_transaction(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     store_block(blk)
     blk = mine_next_block(blk)
     tx = get_transaction()
     assert tx not in blk.get_transactions()
     success, res = processblock.apply_transaction(blk, tx)
     assert tx in blk.get_transactions()
-    assert blk.get_balance(v) == utils.denoms.finney * 990
-    assert blk.get_balance(v2) == utils.denoms.finney * 10
+    assert blk.get_balance(v) == denoms.finney * 990
+    assert blk.get_balance(v2) == denoms.finney * 10
 
 
 def test_transaction_serialization():
@@ -353,12 +376,12 @@ def test_transaction_serialization():
 
 def test_invalid_transaction(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v2: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v2: {"balance": denoms.ether * 1}}, db=db)
     store_block(blk)
     tx = get_transaction()
     blk = mine_next_block(blk, transactions=[tx])
     assert blk.get_balance(v) == 0
-    assert blk.get_balance(v2) == utils.denoms.ether * 1
+    assert blk.get_balance(v2) == denoms.ether * 1
     assert tx not in blk.get_transactions()
 
 
@@ -371,7 +394,7 @@ def test_prevhash(db):
 
 def test_genesis_chain(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     chain = Chain(env=env(blk.db), genesis=blk)
 
     assert chain.has_block(blk.hash)
@@ -392,7 +415,7 @@ def test_genesis_chain(db):
 
 def test_simple_chain(db):
     k, v, k2, v2 = accounts()
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     store_block(blk)
     chain = Chain(env=env(blk.db), genesis=blk)
     tx = get_transaction()
@@ -437,7 +460,7 @@ def test_add_side_chain(db, alt_db):
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
-    R0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    R0 = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     store_block(R0)
     tx0 = get_transaction(nonce=0)
     R1 = mine_next_block(R0, transactions=[tx0])
@@ -445,7 +468,7 @@ def test_add_side_chain(db, alt_db):
     assert tx0.hash in [x.hash for x in R1.get_transactions()]
 
     # Local: mine two blocks
-    L0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, alt_db)
+    L0 = mkquickgenesis({v: {"balance": denoms.ether * 1}}, alt_db)
     chain = Chain(env=env(L0.db), genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])
@@ -470,7 +493,7 @@ def test_add_longer_side_chain(db, alt_db):
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
-    blk = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=db)
+    blk = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=db)
     store_block(blk)
     remote_blocks = [blk]
     for i in range(3):
@@ -479,7 +502,7 @@ def test_add_longer_side_chain(db, alt_db):
         store_block(blk)
         remote_blocks.append(blk)
     # Local: mine two blocks
-    L0 = mkquickgenesis({v: {"balance": utils.denoms.ether * 1}}, db=alt_db)
+    L0 = mkquickgenesis({v: {"balance": denoms.ether * 1}}, db=alt_db)
     chain = Chain(env=env(L0.db), genesis=L0)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(L0, transactions=[tx0])

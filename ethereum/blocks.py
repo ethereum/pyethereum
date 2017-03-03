@@ -15,7 +15,15 @@ from ethereum import pruning_trie as trie
 from ethereum.pruning_trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import utils
-from ethereum.utils import address, int256, trie_root, hash32, to_string, big_endian_to_int
+from ethereum.utils import (
+    address,
+    int256,
+    trie_root,
+    hash32,
+    to_string,
+    big_endian_to_int,
+    TT256,
+)
 from ethereum import processblock
 from ethereum.transactions import Transaction
 from ethereum import bloom
@@ -29,7 +37,6 @@ if sys.version_info.major == 2:
     from repoze.lru import lru_cache
 else:
     from functools import lru_cache
-
 
 log = get_logger('eth.block')
 log_state = get_logger('eth.msg.state')
@@ -920,7 +927,10 @@ class Block(rlp.Serializable):
 
         :param address: the address of the account (binary or hex string)
         """
-        return self._get_acct_item(address, 'balance')
+        balance = self._get_acct_item(address, 'balance')
+        if balance >= TT256:
+            raise ValueError("balance too high")
+        return balance
 
     def set_balance(self, address, value):
         """Set the balance of an account.
@@ -929,6 +939,8 @@ class Block(rlp.Serializable):
         :param value: the new balance
         :returns: `True` if successful, otherwise `False`
         """
+        if value >= TT256:
+            raise ValueError("value too high")
         self._set_acct_item(address, 'balance', value)
 
     def delta_balance(self, address, value):
@@ -950,7 +962,7 @@ class Block(rlp.Serializable):
         :param value: the (positive) value to send
         :returns: `True` if successful, otherwise `False`
         """
-        assert value >= 0
+        assert value >= 0 and value < TT256
         if self.delta_balance(from_addr, -value):
             return self.delta_balance(to_addr, value)
         return False
