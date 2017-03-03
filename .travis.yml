@@ -23,7 +23,6 @@ before_install:
   - if [ -n "$SOLC_VERSION" ]; then sudo apt-get install -y tree unzip; fi
 install:
   - if [ -n "$SOLC_VERSION" ]; then /.$TRAVIS_BUILD_DIR/.travis/install_solc.sh; fi
-install:
   - travis_retry pip install setuptools --upgrade
   - travis_retry pip install tox
   - travis_retry pip install coverage
