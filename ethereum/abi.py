@@ -799,7 +799,7 @@ def dec(typ, arg):
     # Dynamic-sized strings are encoded as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
         L = big_endian_to_int(arg[:32])
-        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object"
+        # assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object"
         return arg[32:][:L]
     # Dynamic-sized arrays
     elif sz is None:

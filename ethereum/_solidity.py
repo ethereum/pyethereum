@@ -335,7 +335,7 @@ class Solc(object):
         last_contract = all_contract_names[-1]
 
         result = compile_code(sourcecode, libraries=libraries, combined=combined, extra_args=extra_args)
-        return result[last_contract]
+        return result[contract_name] if contract_name else result[last_contract]
 
     @classmethod
     def compile(cls, code, path=None, libraries=None, contract_name='', extra_args=None):
