@@ -271,3 +271,10 @@ def test_extra_args():
         extra_args=["--optimize-runs", "100"]
     )
     assert bytecode_is_generated(contract_info, 'foo')
+
+def test_missing_solc(monkeypatch):
+    monkeypatch.setattr(_solidity, 'get_compiler_path', lambda: None)
+    assert _solidity.get_compiler_path() is None
+    sample_sol_code = "contract SampleContract {}"
+    with pytest.raises(_solidity.SolcMissing):
+        _solidity.compile_code(sample_sol_code)
