@@ -5,7 +5,11 @@ from os import path
 import pytest
 
 from ethereum.tester import state, ABIContract
-from ethereum._solidity import get_solidity, compile_file
+from ethereum._solidity import (
+        get_solidity,
+        compile_file,
+        solidity_get_contract_data,
+        )
 
 SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
@@ -17,11 +21,17 @@ def test_abicontract_interface():
     tester_state = state()
 
     contract_path = path.join(CONTRACTS_DIR, 'simple_contract.sol')
+    contract_name = 'Simple'
     simple_compiled = compile_file(contract_path)
-    simple_address = tester_state.evm(simple_compiled['Simple']['bin'])
+    simple_data = solidity_get_contract_data(
+            simple_compiled,
+            contract_path,
+            contract_name,
+            )
+    simple_address = tester_state.evm(simple_data['bin'])
 
     # ABIContract class must accept json_abi
-    abi_json = json.dumps(simple_compiled['Simple']['abi']).encode('utf-8')
+    abi_json = json.dumps(simple_data['abi']).encode('utf-8')
 
     abi = ABIContract(
         _state=tester_state,

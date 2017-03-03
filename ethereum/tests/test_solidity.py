@@ -17,6 +17,7 @@ CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 def bytecode_is_generated(cinfo, cname):
     return 'code' in cinfo[cname] and len(cinfo[cname]['code']) > 10
 
+
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_library_from_file():
     state = tester.state()
@@ -248,6 +249,7 @@ def test_abi_contract():
     assert contract.seven() == 7
     assert contract.mul2(2) == 4
     assert contract.mul2(-2) == -4
+
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_extra_args():
