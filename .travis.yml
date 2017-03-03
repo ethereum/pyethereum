@@ -2,10 +2,6 @@ language: python
 python: 3.5
 sudo: required
 dist: trusty
-before_install:
-- sudo add-apt-repository -y ppa:ethereum/ethereum
-- sudo apt-get update
-- sudo apt-get install -y solc
 env:
   matrix:
   - TOX_ENV=py27
@@ -15,7 +11,18 @@ env:
     - COVERAGE_APPEND="--append"
     - secure: cKbIgpTJ1yjKLBxpCEiT6IH7NShDWZUE+BvnrAfc+ujCsR6LyLJcKxFQmKnWryJCqg7fp82Ep2bF2oDKzanAROar2xDY1SFGbai42seYMaFCw53YPGJ6u3VNCcfT0rN9BWgE7el/m4fjcD6CRsZYKArNNJbMX8csRt3uXXCFLso=
     - secure: "QyFPrxQHd2LlNQ6zNeTFYhgPmZaOHoWuywcgn8qaSOh6PklyFxHbexkwg0bl23JvtgNEZ1mCD8j0x1/ydSdtxgCFwK9SEL0h7aYuAq+OAIa/G18OPeTJMf7ASsb2QZdfkt9reFpUnjbadzHkuv+rqqb4bFnTJBKwB2LWzHPLhWg="
+    - SOLC_VERSION=0.4.8
+cache:
+  directories:
+    - $HOME/.bin
+    - $HOME/solc-versions
+before_install:
+  - mkdir -p $HOME/.bin
+  - export PATH=$PATH:$HOME/.bin
+  - if [ -n "$SOLC_VERSION" ]; then export LD_LIBRARY_PATH="$HOME/solc-versions/solc-$SOLC_VERSION"; fi
+  - if [ -n "$SOLC_VERSION" ]; then sudo apt-get install -y tree unzip; fi
 install:
+  - if [ -n "$SOLC_VERSION" ]; then /.$TRAVIS_BUILD_DIR/.travis/install_solc.sh; fi
   - travis_retry pip install setuptools --upgrade
   - travis_retry pip install tox
   - travis_retry pip install coverage
