@@ -17,6 +17,8 @@ then
     unzip solidity-ubuntu-trusty.zip
     echo "Solidity installed at $HOME/solc-versions/solc-$SOLC_VERSION/solc"
     tree $HOME/solc-versions/solc-$SOLC_VERSION
+else
+    ./solidity/scripts/install_deps.sh
 fi
 
 if [ -f $HOME/.bin/solc ]
