@@ -8,6 +8,7 @@ from ethereum import utils
 from ethereum import specials
 from ethereum import bloom
 from ethereum import vm as vm
+from ethereum.trace import Trace
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
         BlockGasLimitReached, InsufficientBalance, VerificationFailed
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
@@ -17,10 +18,11 @@ import ethereum.config as config
 
 sys.setrecursionlimit(100000)
 
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure
 log_tx = get_logger('eth.pb.tx')
 log_msg = get_logger('eth.pb.msg')
 log_state = get_logger('eth.pb.msg.state')
+
 
 TT255 = 2 ** 255
 TT256 = 2 ** 256
@@ -163,7 +165,7 @@ def apply_transaction(block, tx):
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
     message_gas = tx.startgas - intrinsic_gas
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
-    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
+    message = vm.Message(tx.hash, tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
     # MESSAGE
     ext = VMExt(block, tx)
@@ -282,7 +284,7 @@ def _apply_msg(ext, msg, code):
     if msg.code_address in specials.specials:
         res, gas, dat = specials.specials[msg.code_address](ext, msg)
     else:
-        res, gas, dat = vm.vm_execute(ext, msg, code)
+        res, gas, dat, trc = vm.vm_execute(ext, msg, code)
     # gas = int(gas)
     # assert utils.is_numeric(gas)
     if trace_msg:
@@ -299,6 +301,9 @@ def _apply_msg(ext, msg, code):
     if res == 0:
         log_msg.debug('REVERTING')
         ext._block.revert(snapshot)
+    
+    if trc:
+        Trace.addTrace(msg.hash, trc)
 
     return res, gas, dat
 

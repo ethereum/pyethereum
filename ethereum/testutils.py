@@ -220,7 +220,7 @@ def run_vm_test(params, mode, profiler=None):
     time_pre = time.time()
     if profiler:
         profiler.enable()
-    success, gas_remained, output = vm.vm_execute(ext, msg, code)
+    success, gas_remained, output, trc = vm.vm_execute(ext, msg, code)
     if profiler:
         profiler.disable()
     pb.apply_msg = orig_apply_msg
