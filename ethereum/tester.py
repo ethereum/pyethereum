@@ -318,7 +318,7 @@ class state(object):
             (success, output) = processblock.apply_transaction(self.block, transaction)
 
             if not success:
-                raise TransactionFailed()
+                raise TransactionFailed(transaction.hash.ecnode('hex'))
 
             out = {
                 'output': output,
