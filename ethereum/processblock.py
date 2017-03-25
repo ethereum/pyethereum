@@ -18,7 +18,7 @@ import ethereum.config as config
 
 sys.setrecursionlimit(100000)
 
-from ethereum.slogging import get_logger, configure
+from ethereum.slogging import get_logger
 log_tx = get_logger('eth.pb.tx')
 log_msg = get_logger('eth.pb.msg')
 log_state = get_logger('eth.pb.msg.state')
@@ -165,15 +165,17 @@ def apply_transaction(block, tx):
     block.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
     message_gas = tx.startgas - intrinsic_gas
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
-    message = vm.Message(tx.hash, tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
+    message = vm.Message(tx.sender, tx.to, tx.value, message_gas, message_data, code_address=tx.to)
 
     # MESSAGE
     ext = VMExt(block, tx)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
-        result, gas_remained, data = apply_msg(ext, message)
+        result, gas_remained, data, trc = apply_msg(ext, message)
+        #We receive bytesarray for data
         log_tx.debug('_res_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
     else:  # CREATE
-        result, gas_remained, data = create_contract(ext, message)
+        result, gas_remained, data, trc = create_contract(ext, message)
+        #We receive address for data
         assert utils.is_numeric(gas_remained)
         log_tx.debug('_create_', result=result, gas_remained=gas_remained, data=lazy_safe_encode(data))
 
@@ -186,6 +188,7 @@ def apply_transaction(block, tx):
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
         block.gas_used += tx.startgas
+        gas_used = tx.startgas
         block.delta_balance(block.coinbase, tx.gasprice * tx.startgas)
         output = b''
         success = 0
@@ -216,6 +219,9 @@ def apply_transaction(block, tx):
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []
+    if trc:
+        tr = Trace()
+        tr.addTrace(tx.hash.encode('hex'), { "returnValue":output, "gas":gas_used, "structLogs":trc })
     return success, output
 
 
@@ -302,10 +308,7 @@ def _apply_msg(ext, msg, code):
         log_msg.debug('REVERTING')
         ext._block.revert(snapshot)
     
-    if trc:
-        Trace.addTrace(msg.hash, trc)
-
-    return res, gas, dat
+    return res, gas, dat, trc
 
 
 def create_contract(ext, msg):
@@ -337,12 +340,12 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext._block.snapshot()
-    res, gas, dat = _apply_msg(ext, msg, code)
+    res, gas, dat, trc = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
 
     if res:
         if not len(dat):
-            return 1, gas, msg.to
+            return 1, gas, msg.to, trc
         gcost = len(dat) * opcodes.GCONTRACTBYTE
         if gas >= gcost:
             gas -= gcost
@@ -351,8 +354,8 @@ def create_contract(ext, msg):
             log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext._block.number)
             if ext._block.number >= ext._block.config['HOMESTEAD_FORK_BLKNUM']:
                 ext._block.revert(snapshot)
-                return 0, 0, b''
+                return 0, 0, b'', trc
         ext._block.set_code(msg.to, b''.join(map(ascii_chr, dat)))
-        return 1, gas, msg.to
+        return 1, gas, msg.to, trc
     else:
-        return 0, gas, b''
+        return 0, gas, b'', trc

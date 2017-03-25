@@ -11,7 +11,7 @@ from ethereum import opcodes
 from ethereum.slogging import get_logger
 from rlp.utils import ascii_chr
 from ethereum.utils import to_string
-from ethereum import config
+from ethereum.trace import Trace
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -58,9 +58,8 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, hash, sender, to, value, gas, data, depth=0,
+    def __init__(self, sender, to, value, gas, data, depth=0,
             code_address=None, is_create=False, transfers_value=True):
-        self.hash = hash
         self.sender = sender
         self.to = to
         self.value = value
@@ -168,7 +167,7 @@ def peaceful_exit(cause, gas, data, **kargs):
 def vm_execute(ext, msg, code):
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
-    trace_vm = log_vm_op.is_active('trace') or config.default_config["TRACE_TRANSACTIONS"]
+    trace_vm = log_vm_op.is_active('trace') or Trace.enabled
 
     compustate = Compustate(gas=msg.gas)
     stk = compustate.stack
@@ -178,10 +177,10 @@ def vm_execute(ext, msg, code):
     codelen = len(processed_code)
 
     op = None
+    ret = []
     steps = 0
     _prevop = None  # for trace only
-    traceData = None
-
+    traceData = []
     if trace_vm:
 	from ethereum.utils import encode_int256, int_to_bytes, bytearray_to_bytestr
 	def long_to_evm(data):
@@ -193,11 +192,6 @@ def vm_execute(ext, msg, code):
             return [text[i*64:(i+1)*64] for i in range(0,len(text)//64)]
         def bytemem_to_hex(data):
             return bytearray_to_bytestr(data).encode('hex')
-        traceData = {
-             "gas":compustate.gas,
-             "returnValue":"",
-             "structLogs":[]
-        }
     err = ""
     data = None
     gas = None
@@ -212,7 +206,6 @@ def vm_execute(ext, msg, code):
 
         op, in_args, out_args, fee, opcode, pushval = \
             processed_code[compustate.pc]
-
         # out of gas error
         if fee > compustate.gas:
             err = "OUT OF GAS"
@@ -238,7 +231,6 @@ def vm_execute(ext, msg, code):
         # Apply operation
         compustate.gas -= fee
         compustate.pc += 1
-
         if trace_vm:
             """
             This diverges from normal logging, as we use the logging namespace
@@ -253,24 +245,19 @@ def vm_execute(ext, msg, code):
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = to_string(compustate.gas + fee)
             trace_data['pc'] = to_string(compustate.pc - 1)
-            if steps == 0:
-                trace_data['depth'] = msg.depth+1
-            else:
-                trace_data["depth"] = traceData["structLogs"][-1]["depth"]
+            trace_data['depth'] = msg.depth+1
             trace_data['op'] = op
             trace_data['steps'] = steps
             if op[:4] == 'PUSH':
                 trace_data['op'] = "PUSH"+str(int_byteslen(pushval))
             steps += 1
             _prevop = op
-
         # Invalid operation
         if op == 'INVALID':
             err = "INVALID OP"
             vm_exception('INVALID OP', opcode=opcode)
-            if trace_vm: traceData["structLogs"].append(trace_data)
+            if trace_vm: traceData.append(trace_data)
             break
-
         # Valid operations
         if opcode < 0x10:
             if op == 'STOP':
@@ -278,7 +265,7 @@ def vm_execute(ext, msg, code):
                 gas = compustate.gas
                 data = []
                 peaceful_exit('STOP', compustate.gas, [])
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             elif op == 'ADD':
                 stk.append((stk.pop() + stk.pop()) & TT256M1)
@@ -316,7 +303,7 @@ def vm_execute(ext, msg, code):
                     compustate.gas = 0
                     err = "OOG EXPONENT"
                     vm_exception('OOG EXPONENT')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 compustate.gas -= expfee
                 stk.append(pow(base, exponent, TT256))
@@ -366,12 +353,12 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < 0:
                     err = "OOG PAYING FOR SHA3"
                     vm_exception('OOG PAYING FOR SHA3')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 if not mem_extend(mem, compustate, op, s0, s1):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 data = b''.join(map(ascii_chr, mem[s0: s0 + s1]))
                 stk.append(utils.big_endian_to_int(utils.sha3(data)))
@@ -383,7 +370,7 @@ def vm_execute(ext, msg, code):
                     if not eat_gas(compustate, opcodes.BALANCE_SUPPLEMENTAL_GAS):
                         err = "OUT OF GAS"
                         vm_exception("OUT OF GAS")
-                        if trace_vm: traceData["structLogs"].append(trace_data)
+                        if trace_vm: traceData.append(trace_data)
                         break
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
                 stk.append(ext.get_balance(addr))
@@ -402,12 +389,12 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, mstart, size):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 if not data_copy(compustate, size):
                     err = "OOG COPY DATA"
                     vm_exception('OOG COPY DATA')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 msg.data.extract_copy(mem, mstart, dstart, size)
             elif op == 'CODESIZE':
@@ -417,12 +404,12 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, start, size):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 if not data_copy(compustate, size):
                     err = "OOG COPY DATA"
                     vm_exception('OOG COPY DATA')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 for i in range(size):
                     if s1 + i < len(processed_code):
@@ -437,7 +424,7 @@ def vm_execute(ext, msg, code):
                     if not eat_gas(compustate, opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS):
                         err = "OUT OF GAS"
                         vm_exception("OUT OF GAS")
-                        if trace_vm: traceData["structLogs"].append(trace_data)
+                        if trace_vm: traceData.append(trace_data)
                         break
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
                 stk.append(len(ext.get_code(addr) or b''))
@@ -447,7 +434,7 @@ def vm_execute(ext, msg, code):
                     if not eat_gas(compustate, opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS):
                         err = "OUT OF GAS"
                         vm_exception("OUT OF GAS")
-                        if trace_vm: traceData["structLogs"].append(trace_data)
+                        if trace_vm: traceData.append(trace_data)
                         break
                 addr = utils.coerce_addr_to_hex(stk.pop() % 2 ** 160)
                 start, s2, size = stk.pop(), stk.pop(), stk.pop()
@@ -456,11 +443,11 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, start, size):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 if not data_copy(compustate, size):
                     vm_exception('OOG COPY DATA')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 for i in range(size):
                     if s2 + i < len(extcode):
@@ -488,7 +475,7 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, s0, 32):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 data = b''.join(map(ascii_chr, mem[s0: s0 + 32]))
                 stk.append(utils.big_endian_to_int(data))
@@ -497,7 +484,7 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, s0, 32):
                     err = "OOG EXTENDING MEMORY" 
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 v = s1
                 for i in range(31, -1, -1):
@@ -508,7 +495,7 @@ def vm_execute(ext, msg, code):
                 if not mem_extend(mem, compustate, op, s0, 1):
                     err = "OOG EXTENDING MEMORY"
                     vm_exception('OOG EXTENDING MEMORY')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 mem[s0] = s1 % 256
             elif op == 'SLOAD':
@@ -517,7 +504,7 @@ def vm_execute(ext, msg, code):
                     if not eat_gas(compustate, opcodes.SLOAD_SUPPLEMENTAL_GAS):
                         err = "OUT OF GAS"
                         vm_exception("OUT OF GAS")
-                        if trace_vm: traceData["structLogs"].append(trace_data)
+                        if trace_vm: traceData.append(trace_data)
                         break
                 stk.append(ext.get_storage_data(msg.to, stk.pop()))
             elif op == 'SSTORE':
@@ -531,7 +518,7 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gascost:
                     err = "OUT OF GAS"
                     vm_exception('OUT OF GAS')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 compustate.gas -= gascost
                 ext.add_refund(refund)  # adds neg gascost as a refund if below zero
@@ -543,7 +530,7 @@ def vm_execute(ext, msg, code):
                 if opnew != 'JUMPDEST':
                     err = "JUMPDEST"
                     vm_exception('BAD JUMPDEST')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
             elif op == 'JUMPI':
                 s0, s1 = stk.pop(), stk.pop()
@@ -554,7 +541,7 @@ def vm_execute(ext, msg, code):
                     if opnew != 'JUMPDEST':
                         err = "BAD JUMPDEST"
                         vm_exception('BAD JUMPDEST')
-                        if trace_vm: traceData["structLogs"].append(trace_data)
+                        if trace_vm: traceData.append(trace_data)
                         break
             elif op == 'PC':
                 stk.append(compustate.pc - 1)
@@ -595,7 +582,7 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, mstart, msz):
                 err = "OOG EXTENDING MEMORY"
                 vm_exception('OOG EXTENDING MEMORY')
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
             ext.log(msg.to, topics, data)
@@ -607,7 +594,7 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, mstart, msz):
                 err = "OOG EXTENDING MEMORY"
                 vm_exception('OOG EXTENDING MEMORY')
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 cd = CallData(mem, mstart, msz)
@@ -627,14 +614,14 @@ def vm_execute(ext, msg, code):
                     compustate.gas -= ingas
             else:
                 stk.append(0)
-        elif op == 'CALL':
+        elif op == "CALL":
             gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                 stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 err = "OOG EXTENDING MEMORY"
                 vm_exception('OOG EXTENDING MEMORY')
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             to = utils.encode_int(to)
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
@@ -650,14 +637,14 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < extra_gas:
                     err = "OUT OF GAS"
                     vm_exception('OUT OF GAS', needed=extra_gas)
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 gas = min(gas, max_call_gas(compustate.gas - extra_gas))
             else:
                 if compustate.gas < gas + extra_gas:
                     err = "OUT OF GAS"
                     vm_exception('OUT OF GAS', needed=gas + extra_gas)
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
 
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
@@ -666,7 +653,8 @@ def vm_execute(ext, msg, code):
                 cd = CallData(mem, meminstart, meminsz)
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg)
+                result, gas, data, trace = ext.msg(call_msg)
+                if trace_vm: traceData.extend(trace)
                 if result == 0:
                     stk.append(0)
                 else:
@@ -689,7 +677,7 @@ def vm_execute(ext, msg, code):
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 err = "OOG EXTENDING MEMORY"
                 vm_exception('OOG EXTENDING MEMORY')
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER + \
                     ext.post_anti_dos_hardfork * opcodes.CALL_SUPPLEMENTAL_GAS
@@ -702,14 +690,14 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < extra_gas:
                     err = "OUT OF GAS"
                     vm_exception('OUT OF GAS', needed=extra_gas)
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break;
                 gas = min(gas, max_call_gas(compustate.gas - extra_gas))
             else:
                 if compustate.gas < gas + extra_gas:
                     err = "OUT OF GAS"
                     vm_exception('OUT OF GAS', needed=gas + extra_gas)
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
 
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
@@ -724,12 +712,13 @@ def vm_execute(ext, msg, code):
                 elif op == 'DELEGATECALL':
                     err = "OPCODE INACTIVE"
                     vm_exception('OPCODE INACTIVE')
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
                 else:
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg)
+                result, gas, data, trace = ext.msg(call_msg)
+                if trace_vm: traceData.extend(trace)
                 if result == 0:
                     stk.append(0)
                 else:
@@ -745,15 +734,13 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, s0, s1):
                 err = "OOG EXTENDING MEMORY"
                 vm_exception('OOG EXTENDING MEMORY')
-                if trace_vm: traceData["structLogs"].append(trace_data)
+                if trace_vm: traceData.append(trace_data)
                 break
             err = "RETURN"
             gas = compustate.gas
-            data = mem[s0: s0 + s1]
-            peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
-            if trace_vm:
-                traceData["returnValue"] = bytemem_to_hex(mem[s0: s0 + s1])
-                traceData["structLogs"].append(trace_data)
+            ret = mem[s0: s0 + s1]
+            peaceful_exit('RETURN', compustate.gas, ret)
+            if trace_vm: traceData.append(trace_data)
             break
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
@@ -768,7 +755,7 @@ def vm_execute(ext, msg, code):
                 if not eat_gas(compustate, extra_gas):
                     err = "OUT OF GAS"
                     vm_exception("OUT OF GAS")
-                    if trace_vm: traceData["structLogs"].append(trace_data)
+                    if trace_vm: traceData.append(trace_data)
                     break
 
             xfer = ext.get_balance(msg.to)
@@ -777,7 +764,7 @@ def vm_execute(ext, msg, code):
             ext.add_suicide(msg.to)
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             err = "SUICIDE"
-            if trace_vm: traceData["structLogs"].append(trace_data)
+            if trace_vm: traceData.append(trace_data)
             break
             #1, compustate.gas, []
 
@@ -787,24 +774,20 @@ def vm_execute(ext, msg, code):
         #     assert a >= 0 and a < 2**256, (a, op, stk)
 
         # insert sub log
-        if trace_vm: traceData["structLogs"].append(trace_data)
+        if trace_vm: traceData.append(trace_data)
 
     if trace_vm:
-        traceData["gas"] = gas
         if not err in [ "RETURN", "CODE OUT OF RANGE", "STOP", "SUICIDE" ]:
             # insert error
-            if len(traceData["structLogs"]):
-                # if we have
-                traceData["structLogs"][-1]["error"] = err
-        retData = { "data":json.dumps(traceData) }
-        log_vm_op.trace('vm', **retData)
-        
+            traceData[-1]["error"] = err
+	if log_vm_op.is_active('trace'):
+            log_vm_op.trace('vm', **traceData)
     if err in [ "RETURN", "CODE OUT OF RANGE", "STOP" ]:
-        return 1, gas, data, traceData
+        return 1, gas, ret, traceData
     elif err in [ "SUICIDE" ]:
-        return 1, compustate.gas, [], traceData
+        return 1, compustate.gas, ret, traceData
     else:
-        return 0, 0, [], traceData
+        return 0, 0, ret, traceData
 
 class VmExtBase():
 

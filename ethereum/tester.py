@@ -11,10 +11,10 @@ from rlp.utils import ascii_chr
 from ethereum import blocks, db, opcodes, transactions, processblock
 from ethereum.abi import ContractTranslator
 from ethereum.config import Env
-from ethereum.trace import Trace
 from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
 from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
+from ethereum.trace import Trace
 
 TRACE_LVL_MAP = [
     ':info',
@@ -187,7 +187,6 @@ class state(object):
         self.temp_data_dir = tempfile.mkdtemp()
         self.db = db.EphemDB()
         self.env = Env(self.db)
-	self.trace = Trace(self.db)
         self.last_tx = None
         
         initial_balances = {}
@@ -211,9 +210,6 @@ class state(object):
 
     def __del__(self):
         shutil.rmtree(self.temp_data_dir)
-
-    def getTrace(self, tx_hash):
-        return self.trace.getTrace(tx_hash);
 
     def contract(self, sourcecode, sender=DEFAULT_KEY, endowment=0,  # pylint: disable=too-many-arguments
                  language='serpent', libraries=None, path=None,
