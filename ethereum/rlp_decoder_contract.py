@@ -54,10 +54,11 @@ def any():
             ~invalid()
         if dataPos > 1024 or positionIndex > 32:
             ~invalid()
+    positions[positionIndex] = dataPos
     output = string(2048)
     i = 0
-    while i < positionIndex:
-        output[i] = positions[i] + positionIndex * 32
+    while i <= positionIndex:
+        output[i] = positions[i] + positionIndex * 32 + 32
         i += 1
-    mcopy(output + positionIndex * 32, data, dataPos)
-    ~return(output, positionIndex * 32 + dataPos)
+    mcopy(output + positionIndex * 32 + 32, data, dataPos)
+    ~return(output, positionIndex * 32 + dataPos + 32)

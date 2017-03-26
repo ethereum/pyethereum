@@ -337,7 +337,7 @@ class State():
             acct_trie = SecureTrie(Trie(self.db))
             acct_trie.root_hash = acct.storage
             for key, v in acct_trie.to_dict().items():
-                storage_dump['0x'+encode_hex(key.lstrip('\x00') or '\x00')] = '0x'+encode_hex(rlp.decode(v))
+                storage_dump['0x'+encode_hex(key.lstrip(b'\x00') or b'\x00')] = '0x'+encode_hex(rlp.decode(v))
             acct_dump = {"storage": storage_dump}
             for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                 acct_dump[c] = snapshot_form(getattr(acct, c))
