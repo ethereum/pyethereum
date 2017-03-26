@@ -1,34 +1,36 @@
+import json
+import random
 import time
-from ethereum import utils
-from ethereum.utils import parse_as_bin, big_endian_to_int
-from ethereum import parse_genesis_declaration
-from ethereum.state_transition import apply_block, initialize, \
-    pre_seal_finalize, post_seal_finalize, apply_transaction, mk_receipt_sha, \
-    mk_transaction_sha, calc_difficulty, Receipt, mk_receipt, \
-    update_block_env_variables, validate_uncles, validate_block_header
+
 import rlp
 from rlp.utils import encode_hex
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance
-from ethereum.slogging import get_logger
-from ethereum.config import Env
-from ethereum.state import State, dict_to_prev_header
+
+from ethereum import parse_genesis_declaration
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
-import random
-import json
+from ethereum.config import Env
+from ethereum.slogging import get_logger
+from ethereum.state import State, dict_to_prev_header
+from ethereum.state_transition import apply_block, initialize, \
+    update_block_env_variables
+from ethereum.utils import parse_as_bin, big_endian_to_int
+
 log = get_logger('eth.chain')
 
 
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 new_head_cb=None, **kwargs):
+                 new_head_cb=None, reset_genesis=False, **kwargs):
         self.env = env or Env()
         # Initialize the state
-        if 'head_hash' in self.db:
+        if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
             print('Initializing chain from saved head, #%d (%s)' % \
                 (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
+        elif 'HEAD' in self.db:  # deprecated head tag
+            self.state = self.mk_poststate_of_blockhash(self.db.get('HEAD'), convert=True)
+            print('Converting chain from saved head in deprecated format, #%d (%s)' % \
+                  (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
@@ -37,9 +39,11 @@ class Chain(object):
         elif "extraData" in genesis:
             self.state = parse_genesis_declaration.state_from_genesis_declaration(
                 genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
@@ -53,19 +57,23 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+            reset_genesis = True
 
         initialize(self.state)
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
-        self.genesis = Block(self.state.prev_headers[0], [], [])
-        self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
-        self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-        self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
         assert self.state.block_number == self.state.prev_headers[0].number
-        self.db.put('score:' + self.state.prev_headers[0].hash, "0")
-        self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
-        self.db.put(self.head_hash, 'GENESIS')
+        self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
+        if reset_genesis:
+            self.genesis = Block(self.state.prev_headers[0], [], [])
+            self.db.put('GENESIS_NUMBER', str(self.state.block_number))
+            self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
+            self.db.put('score:' + self.state.prev_headers[0].hash, "0")
+            self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
+            self.db.put(self.head_hash, 'GENESIS')
+        else:
+            self.genesis = self.get_block_by_number(0)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
@@ -84,14 +92,17 @@ class Chain(object):
             log.error(e)
             return None
 
-    def mk_poststate_of_blockhash(self, blockhash):
+    def mk_poststate_of_blockhash(self, blockhash, convert=False):
         if blockhash not in self.db:
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
-        if self.db.get(blockhash) == 'GENESIS':
+
+        block_rlp = self.db.get(blockhash)
+        if block_rlp == 'GENESIS':
             return State.from_snapshot(json.loads(self.db.get('GENESIS_STATE')), self.env)
+        block = rlp.decode(block_rlp, Block)
+
         state = State(env=self.env)
-        state.trie.root_hash = self.db.get('state:'+blockhash)
-        block = rlp.decode(self.db.get(blockhash), Block)
+        state.trie.root_hash = block.header.state_root if convert else self.db.get('state:'+blockhash)
         update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
         state.txindex = len(block.transactions)
@@ -141,18 +152,18 @@ class Chain(object):
     # parent hash and see that it is one of its children
     def add_child(self, child):
         try:
-            existing = self.db.get('child:' + child.header.prevhash)
+            existing = self.db.get('ci:' + child.header.prevhash)
         except:
             existing = ''
         existing_hashes = []
         for i in range(0, len(existing), 32):
             existing_hashes.append(existing[i: i+32])
         if child.header.hash not in existing_hashes:
-            self.db.put('child:' + child.header.prevhash, existing + child.header.hash)
+            self.db.put('ci:' + child.header.prevhash, existing + child.header.hash)
 
     def get_blockhash_by_number(self, number):
         try:
-            return self.db.get('block:' + str(number))
+            return self.db.get('blocknumber:' + str(number))
         except:
             return None
 
