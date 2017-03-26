@@ -87,7 +87,7 @@ assert default_config['NEPHEW_REWARD'] == \
 class Env(object):
 
     def __init__(self, db=None, config=None, global_config=None):
-        self.db = db or EphemDB()
+        self.db = EphemDB() if db is None else db
         assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
