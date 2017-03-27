@@ -169,6 +169,9 @@ def apply_transaction(block, tx):
 
     # MESSAGE
     ext = VMExt(block, tx)
+    tr = Trace()
+    if tr.enabled:
+        oldStorage = ext.get_storage(tx.to)
     if tx.to and tx.to != CREATE_CONTRACT_ADDRESS:
         result, gas_remained, data, trc = apply_msg(ext, message)
         #We receive bytesarray for data
@@ -219,9 +222,9 @@ def apply_transaction(block, tx):
         block.del_account(s)
     block.add_transaction_to_list(tx)
     block.logs = []
-    if trc:
-        tr = Trace()
+    if trc and tr.enabled:
         tr.addTrace(tx.hash.encode('hex'), { "returnValue":output, "gas":gas_used, "structLogs":trc })
+        tr.addStorage(ext.block_number, tx.hash.encode('hex'), oldStorage);
     return success, output
 
 
@@ -238,6 +241,7 @@ class VMExt():
         self.get_nonce = block.get_nonce
         self.set_nonce = block.set_nonce
         self.set_storage_data = block.set_storage_data
+        self.get_storage = block.get_storage
         self.get_storage_data = block.get_storage_data
         self.log_storage = lambda x: block.account_to_dict(x)['storage']
         self.add_suicide = lambda x: block.suicides.append(x)
