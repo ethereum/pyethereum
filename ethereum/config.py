@@ -9,7 +9,7 @@ default_config = dict(
     # Genesis block difficulty
     GENESIS_DIFFICULTY=131072,
     # Genesis block gas limit
-    GENESIS_GAS_LIMIT=3141592,
+    GENESIS_GAS_LIMIT=4712388,
     # Genesis block prevhash, coinbase, nonce
     GENESIS_PREVHASH=b'\x00' * 32,
     GENESIS_COINBASE=b'\x00' * 20,
@@ -67,7 +67,7 @@ default_config = dict(
     ANTI_DOS_FORK_BLKNUM=2457000,
     CLEARING_FORK_BLKNUM=2 ** 98,
     # Trace
-    TRACE_TRANSACTIONS=True
+    TRACE_TRANSACTIONS=False
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
