@@ -195,6 +195,7 @@ def vm_execute(ext, msg, code):
     err = ""
     data = None
     gas = None
+    trace_extend = None
     while err == "":
         # stack size limit error
         if compustate.pc >= codelen:
@@ -654,7 +655,7 @@ def vm_execute(ext, msg, code):
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
                 result, gas, data, trace = ext.msg(call_msg)
-                if trace_vm: traceData.extend(trace)
+                if trace_vm: trace_extend = trace
                 if result == 0:
                     stk.append(0)
                 else:
@@ -718,7 +719,7 @@ def vm_execute(ext, msg, code):
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
                 result, gas, data, trace = ext.msg(call_msg)
-                if trace_vm: traceData.extend(trace)
+                if trace_vm: trace_extend = trace
                 if result == 0:
                     stk.append(0)
                 else:
@@ -774,7 +775,15 @@ def vm_execute(ext, msg, code):
         #     assert a >= 0 and a < 2**256, (a, op, stk)
 
         # insert sub log
-        if trace_vm: traceData.append(trace_data)
+        if trace_vm:
+            traceData.append(trace_data)
+            if trace_extend:
+                print '-'*200
+                print traceData
+                traceData.append(trace_extend)
+                print '-'*200
+                print traceData
+                trace_exted = None
 
     if trace_vm:
         if not err in [ "RETURN", "CODE OUT OF RANGE", "STOP", "SUICIDE" ]:

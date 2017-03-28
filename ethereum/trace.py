@@ -19,7 +19,13 @@ class Trace(object):
     def addTrace(self, tx_hash, tx_trace):
         if self.enabled:
             if tx_hash.lower()[:2] != "0x": tx_hash = "0x"+tx_hash
-            self.transactions[tx_hash] = tx_trace
+            if tx_hash in self.transactions:
+                # extend!
+                self.transactions[tx_hash]["structLogs"].extend(tx_trace["structLogs"])
+                self.transactions[tx_hash]["returnValue"] = tx_trace["returnValue"]
+                self.transactions[tx_hash]["gas"] = tx_trace["gas"]
+            else:
+                self.transactions[tx_hash] = tx_trace
             return True
         return False
 

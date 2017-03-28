@@ -223,6 +223,8 @@ def apply_transaction(block, tx):
     block.add_transaction_to_list(tx)
     block.logs = []
     if trc and tr.enabled:
+        print '-'*30
+        print trc
         tr.addTrace(tx.hash.encode('hex'), { "returnValue":output, "gas":gas_used, "structLogs":trc })
         tr.addStorage(ext.block_number, tx.hash.encode('hex'), oldStorage);
     return success, output
