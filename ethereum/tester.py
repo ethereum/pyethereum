@@ -25,7 +25,7 @@ TRACE_LVL_MAP = [
     'eth.vm.storage:trace,eth.vm.memory:trace'
 ]
 
-GAS_LIMIT = 4712388
+GAS_LIMIT = 90000
 GAS_PRICE = 20000000000
 
 # pylint: disable=invalid-name
@@ -318,7 +318,7 @@ class state(object):
             (success, output) = processblock.apply_transaction(self.block, transaction)
 
             if not success:
-                raise TransactionFailed(transaction.hash.ecnode('hex'))
+                raise TransactionFailed(transaction.hash.encode('hex'))
 
             out = {
                 'output': output,

@@ -67,7 +67,7 @@ default_config = dict(
     ANTI_DOS_FORK_BLKNUM=2457000,
     CLEARING_FORK_BLKNUM=2 ** 98,
     # Trace
-    TRACE_TRANSACTIONS=False
+    TRACE_TRANSACTIONS=True
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
