@@ -44,10 +44,10 @@ class Trace(object):
             return True
         return False
 
-    def getStorage(self, block_num, tx_num, stor_start, stor_end, limit):
+    def getStorage(self, block_num, tx_num, contract_address, stor_start, stor_end, limit):
         # stor_start, stor_end, limit not yet implemented
         if self.enabled:
             if not block_num in self.storages: raise Exception('Block not found!')
-            if not tx_num in self.storages[block_num]: raise Exception('TX not found!')
+            if tx_num >= len(self.storages[block_num]): raise Exception('TX not found!')
             return { "complete": True, "storage": self.storages[block_num][tx_num] }
         raise Exception('Trace is disabled!')

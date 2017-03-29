@@ -239,16 +239,16 @@ def vm_execute(ext, msg, code):
             i.e. tracing can not be activated by activating a sub
             like 'eth.vm.op.stack'
             """
-            trace_data = { "error": None, "gasCost":fee, "memory": None, "stack":[], "storage":{} }
+            trace_data = { "error": None, "gasCost":long(fee), "memory": None, "stack":[], "storage":{} }
             trace_data['stack'] = list(map(long_to_evm, list(compustate.stack)))
             trace_data['memory'] = split_mem(compustate.memory)
             if _prevop in ('SSTORE', 'SLOAD') or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
-            trace_data['gas'] = to_string(compustate.gas + fee)
-            trace_data['pc'] = to_string(compustate.pc - 1)
+            trace_data['gas'] = compustate.gas + fee
+            trace_data['pc'] = compustate.pc - 1
             trace_data['depth'] = msg.depth+1
             trace_data['op'] = op
-            trace_data['steps'] = steps
+            #trace_data['steps'] = steps
             if op[:4] == 'PUSH':
                 trace_data['op'] = "PUSH"+str(int_byteslen(pushval))
             steps += 1
@@ -655,7 +655,10 @@ def vm_execute(ext, msg, code):
                 call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                    msg.depth + 1, code_address=to)
                 result, gas, data, trace = ext.msg(call_msg)
-                if trace_vm: trace_extend = trace
+                if trace_vm:
+                    trace_extend = trace
+                    trace_data["gasCost"] = submsg_gas - gas
+                    trace_data["gas"] -= trace_data["gasCost"]
                 if result == 0:
                     stk.append(0)
                 else:
@@ -719,7 +722,10 @@ def vm_execute(ext, msg, code):
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
                 result, gas, data, trace = ext.msg(call_msg)
-                if trace_vm: trace_extend = trace
+                if trace_vm:
+                    trace_extend = trace
+                    trace_data["gasCost"] = submsg_gas - gas
+                    trace_data["gas"] -= trace_data["gasCost"]
                 if result == 0:
                     stk.append(0)
                 else:
@@ -778,12 +784,9 @@ def vm_execute(ext, msg, code):
         if trace_vm:
             traceData.append(trace_data)
             if trace_extend:
-                print '-'*200
-                print traceData
-                traceData.append(trace_extend)
-                print '-'*200
-                print traceData
-                trace_exted = None
+                for a in trace_extend:
+                    traceData.append(a)
+                trace_extend = None
 
     if trace_vm:
         if not err in [ "RETURN", "CODE OUT OF RANGE", "STOP", "SUICIDE" ]:

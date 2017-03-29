@@ -34,6 +34,7 @@ gas_limit = GAS_LIMIT
 gas_price = GAS_PRICE
 
 accounts = [
+        u"ac7bebd558c734fe105d09167860b230fb0a218d".decode('hex'),
         u"6e5fd1741e45c966a76a077af9132627c07b0dc1".decode('hex'),
         u"ef057953c56855f16e658bf8fd0d2e300961fc1f".decode('hex'),
         u"2c284ef5a0d50dda177bd8c9fdf20610f6fdac09".decode('hex'),
@@ -44,9 +45,11 @@ accounts = [
         u"2827a89f78d70c422452528634cfe522b5c668c6".decode('hex'),
         u"f56ae85523c6f4773954fe0b25ba1f52e1183689".decode('hex'),
         u"7703aCa0f4ee937C3073ec80c7608B6f7cE2426B".decode('hex'),
-        u"153ee6aD2e7e665b8a07ff37d93271d6E5FDc6d4".decode('hex')
+        u"153ee6aD2e7e665b8a07ff37d93271d6E5FDc6d4".decode('hex'),
+        u"4fe1ead95d882580561b704938ecbd5cb9450ab6".decode('hex'),
 ]
 keys = [
+        u"43df74be7858da13bb08c1289fe488b9843c555538dd1638203725b18a19863e".decode('hex'),
         u"0af37c53fdc5b97bf1f84d30e84f09c84f733e467a3b26c1ce6c5d448f9d7cec".decode('hex'),
         u"0d5c1bd818a4086f28314415cb375a937593efab66f8f7d2903bf2a13ed35070".decode('hex'),
         u"17029bda254fdf118125741e80d2d43e8ac1ffa8cca20c51683bc0735c802e5b".decode('hex'),
@@ -57,7 +60,8 @@ keys = [
         u"e2631c2443b12abdfc5e70e3b7643f2d340eb49c6102c66835d0c7286903b009".decode('hex'),
         u"f7a590340d042a107ec3c9e82f81d2301ecc5b79f959f7a09d3c7fb7ab7f1024".decode('hex'),
         u"9e256901c752616c231904281333e5dd11fa48fdfd7ffac3515923b1fe60a28e".decode('hex'),
-        u"b10ec925fccdaf155fa0b56bd55cf6ce3cc8927b304c0a563476529d925755d5".decode('hex')
+        u"b10ec925fccdaf155fa0b56bd55cf6ce3cc8927b304c0a563476529d925755d5".decode('hex'),
+        u"71c52b034f6405fbabb6ad5e91997dd2ea1f43d48502e10dd47d5a4a8a02cbdf".decode('hex'),
 ]
 
 languages = {}
