@@ -23,6 +23,9 @@ ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
 ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
 BLANK_HASH = utils.sha3(b'')
 
+RIPEMD160_ADDR = utils.decode_hex(b'0000000000000000000000000000000000000003')
+
+
 @lru_cache(1024)
 def get_block(db, blockhash):
     """
@@ -311,7 +314,9 @@ class State():
                     setattr(self, addr, preval)
             elif root == self.trie.root_hash:
                 self.cache[addr][key] = preval
-                if not premod:
+                # Sync up with Parity's EIP161 bug: keep ripemd160 modified so account cleaning will be triggered later
+                # https://github.com/ethereum/go-ethereum/pull/3341/files#r89548312
+                if not premod and addr != RIPEMD160_ADDR:
                     del self.modified[addr]
 
     # Converts the state tree to a dictionary
