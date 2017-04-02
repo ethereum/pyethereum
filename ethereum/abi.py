@@ -309,6 +309,10 @@ def encode_single(typ, arg):
             raise ValueOutOfBounds(repr(arg))
         i = int(arg * 2**low)
         return zpad(encode_int(i % 2**(high+low)), 32)
+    # Decimals
+    elif base == 'decimal':
+        val_to_encode = int(arg * 10**int(sub))
+        return zpad(encode_int(val_to_encode % 2**256), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
         if not is_string(arg):
@@ -500,8 +504,14 @@ def decode_single(typ, data):
         o = big_endian_to_int(data)
         i = (o - 2**(high+low)) if o >= 2**(high+low-1) else o
         return (i * 1.0 // 2**low)
+    elif base == 'decimal':
+        o = big_endian_to_int(data)
+        i = (o - 2**256 if o > 2**255 else o)
+        return i / 10**int(sub)
     elif base == 'bool':
         return bool(int(encode_hex(data), 16))
+    else:
+        raise EncodingError("Unhandled type: %r %r" % (base, sub))
 
 
 # Decodes multiple arguments using the head/tail mechanism
