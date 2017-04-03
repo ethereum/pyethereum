@@ -142,7 +142,7 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
-    ext.set_nonce(msg.to, 1)
+    ext.set_nonce(msg.to, 1 if ext.post_clearing_hardfork() else 0)
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
     log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat)
@@ -151,7 +151,7 @@ def create_contract(ext, msg):
         if not len(dat):
             return 1, gas, msg.to
         gcost = len(dat) * opcodes.GCONTRACTBYTE
-        if gas >= gcost:
+        if gas >= gcost and len(dat) < 24000:
             gas -= gcost
         else:
             dat = []
@@ -160,7 +160,7 @@ def create_contract(ext, msg):
                 ext.revert(snapshot)
                 return 0, 0, b''
         ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
-        log_msg.debug('SETTING CODE', addr=encode_hex(msg.to))
+        log_msg.debug('SETTING CODE', addr=encode_hex(msg.to), lendat=len(dat))
         return 1, gas, msg.to
     else:
         ext.revert(snapshot)

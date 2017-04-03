@@ -15,7 +15,7 @@ from ethereum.config import Env
 from ethereum.config import default_config
 from ethereum.parse_genesis_declaration import state_from_genesis_declaration
 from ethereum import state_transition
-from state import State
+from ethereum.state import State
 import json
 import os
 import time

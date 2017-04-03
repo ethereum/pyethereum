@@ -31,6 +31,8 @@ else:
     from functools import lru_cache
 from ethereum.slogging import get_logger
 
+null_address = b'\xff' * 20
+
 log = get_logger('eth.block')
 log_tx = get_logger('eth.pb.tx')
 log_msg = get_logger('eth.pb.msg')
@@ -150,6 +152,25 @@ def verify_execution_results(state, block):
                          (block.header.gas_used, state.gas_used))
     return True
 
+def config_fork_specific_validation(config, blknum, tx):
+    # (1) The transaction signature is valid;
+    _ = tx.sender
+    if blknum >= config['METROPOLIS_FORK_BLKNUM']:
+        tx.check_low_s_metropolis()
+    else:
+        if tx.sender == null_address:
+            raise VerificationFailed("EIP86 transactions not available yet")
+        if blknum >= config['HOMESTEAD_FORK_BLKNUM']:
+            tx.check_low_s_homestead()
+    print(tx.network_id, config["NETWORK_ID"])
+    if blknum >= config["CLEARING_FORK_BLKNUM"]:
+        if tx.network_id not in (None, config["NETWORK_ID"]):
+            raise VerificationFailed("Wrong network ID")
+    else:
+        if tx.network_id is not None:
+            raise VerificationFailed("Wrong network ID")
+    return True
+
 def validate_transaction(state, tx):
 
     def rp(what, actual, target):
@@ -157,14 +178,9 @@ def validate_transaction(state, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
-        if state.is_METROPOLIS():
-            tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
-        else:
-            raise UnsignedTransaction(tx)
-    if state.is_METROPOLIS():
-        tx.check_low_s_metropolis()
-    elif state.is_HOMESTEAD():
-        tx.check_low_s_homestead()
+        raise UnsignedTransaction(tx)
+
+    assert config_fork_specific_validation(state.config, state.block_number, tx)
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);

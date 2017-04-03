@@ -16,6 +16,7 @@ log = get_logger('eth.chain.tx')
 
 # in the yellow paper it is specified that s should be smaller than secpk1n (eq.205)
 secpk1n = 115792089237316195423570985008687907852837564279074904382605163141518161494337
+null_address = b'\xff' * 20
 
 
 class Transaction(rlp.Serializable):
@@ -59,6 +60,7 @@ class Transaction(rlp.Serializable):
         assert len(to) == 20 or len(to) == 0
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
         self.logs = []
+        self.network_id = None
 
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
@@ -73,30 +75,28 @@ class Transaction(rlp.Serializable):
 
         if not self._sender:
             # Determine sender
-            if self.v:
-                if self.r >= N or self.s >= N or self.v not in (27, 28, 37, 38, 41, 42) \
-                or self.r == 0 or self.s == 0:
-                    raise InvalidTransaction("Invalid signature values!")
-                log.debug('reco< 27 or self.v > 28 \vering sender')
+            if self.r == 0 and self.s == 0:
+                self.network_id = self.v
+                self._sender = null_address
+            else:
                 if self.v in (27, 28):
-                    rlpdata = rlp.encode(self, UnsignedTransaction)
-                    rawhash = utils.sha3(rlpdata)
-                    v = self.v
-                elif self.v in (37, 38):
-                    rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + ['\x01', '', ''])
-                    rawhash = utils.sha3(rlpdata)
-                    v = self.v - 10
-                elif self.v in (41, 42):
-                    rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + ['\x03', '', ''])
-                    rawhash = utils.sha3(rlpdata)
-                    v = self.v - 14
-                pub = ecrecover_to_pub(rawhash, v, self.r, self.s)
+                    self.network_id = None
+                    vee = self.v
+                    sighash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+                elif self.v >= 37:
+                    self.network_id = ((self.v - 1) // 2) - 17
+                    vee = self.v - self.network_id * 2 - 8
+                    assert vee in (27, 28)
+                    rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + [self.network_id, '', ''])
+                    sighash = utils.sha3(rlpdata)
+                else:
+                    raise InvalidTransaction("Invalid V value")
+                if self.r >= N or self.s >= N or self.r == 0 or self.s == 0:
+                    raise InvalidTransaction("Invalid signature values!")
+                pub = ecrecover_to_pub(sighash, vee, self.r, self.s)
                 if pub == b"\x00" * 64:
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 self._sender = utils.sha3(pub)[-20:]
-                assert self.sender == self._sender
-            else:
-                self._sender = 0
         return self._sender
 
     @sender.setter

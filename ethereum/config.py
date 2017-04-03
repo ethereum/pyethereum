@@ -26,6 +26,8 @@ default_config = dict(
     GASLIMIT_ADJMAX_FACTOR=1024,
     BLKLIM_FACTOR_NOM=3,
     BLKLIM_FACTOR_DEN=2,
+    # Network ID
+    NETWORK_ID=1,
     # Block reward
     BLOCK_REWARD=5000 * utils.denoms.finney,
     NEPHEW_REWARD=5000 * utils.denoms.finney // 32,  # BLOCK_REWARD / 32
@@ -51,7 +53,6 @@ default_config = dict(
     HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF=10,
     # Metropolis fork
     METROPOLIS_FORK_BLKNUM=2**99,
-    METROPOLIS_ENTRY_POINT=utils.int_to_addr(2**160 - 1),
     METROPOLIS_STATEROOT_STORE=0x10,
     METROPOLIS_BLOCKHASH_STORE=0x20,
     METROPOLIS_WRAPAROUND=65536,
