@@ -39,7 +39,10 @@ class CallData(object):
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
         d += [0] * (self.size - len(d))
-        return b''.join([ascii_chr(x) for x in d])
+        o = bytearray(len(d))
+        for i, x in enumerate(d):
+            o[i] = x
+        return bytes(o)
 
     def extract32(self, i):
         if i >= self.size:
@@ -147,7 +150,7 @@ def eat_gas(compustate, amount):
 
 
 def all_but_1n(x, n):
-    return x - x / n
+    return x - x // n
 
 
 def vm_exception(error, **kargs):
@@ -701,6 +704,7 @@ def vm_execute(ext, msg, code):
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
 
+        # assert utils.is_numeric(compustate.gas)
         # this is slow!
         # for a in stk:
         #     assert is_numeric(a), (op, stk)

@@ -23,7 +23,7 @@ from ethereum.specials import specials as default_specials
 from ethereum.config import Env, default_config
 from ethereum.db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance, VerificationFailed
+    BlockGasLimitReached, InsufficientBalance, VerificationFailed, InvalidTransaction
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -159,16 +159,15 @@ def config_fork_specific_validation(config, blknum, tx):
         tx.check_low_s_metropolis()
     else:
         if tx.sender == null_address:
-            raise VerificationFailed("EIP86 transactions not available yet")
+            raise InvalidTransaction("EIP86 transactions not available yet")
         if blknum >= config['HOMESTEAD_FORK_BLKNUM']:
             tx.check_low_s_homestead()
-    print(tx.network_id, config["NETWORK_ID"])
     if blknum >= config["CLEARING_FORK_BLKNUM"]:
         if tx.network_id not in (None, config["NETWORK_ID"]):
-            raise VerificationFailed("Wrong network ID")
+            raise InvalidTransaction("Wrong network ID")
     else:
         if tx.network_id is not None:
-            raise VerificationFailed("Wrong network ID")
+            raise InvalidTransaction("Wrong network ID")
     return True
 
 def validate_transaction(state, tx):

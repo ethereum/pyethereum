@@ -1,6 +1,7 @@
 import json
 import sys
 import ethereum.testutils as testutils
+import ethereum.new_statetest_utils as new_statetest_utils
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -10,10 +11,16 @@ if '--trace' in sys.argv:  # not default
     configure_logging(':trace')
     sys.argv.remove('--trace')
 
+if '--new' in sys.argv:  # not default
+    checker = new_statetest_utils.verify_state_test
+    sys.argv.remove('--new')
+else:
+    checker = testutils.check_state_test
+
 
 def test_state(filename, testname, testdata):
     logger.debug('running test:%r in %r' % (testname, filename))
-    testutils.check_state_test(testutils.fixture_to_bytes(testdata))
+    checker(testutils.fixture_to_bytes(testdata))
 
 
 def pytest_generate_tests(metafunc):
@@ -43,7 +50,7 @@ def main():
         for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print("Testing: %s %s" % (filename, testname))
-                testutils.check_state_test(testdata)
+                checker(testdata)
 
 
 if __name__ == '__main__':
