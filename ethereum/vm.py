@@ -38,7 +38,7 @@ class CallData(object):
 
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
-        d += [0] * (self.size - len(d))
+        d.extend(bytearray(self.size - len(d)))
         o = bytearray(len(d))
         for i, x in enumerate(d):
             o[i] = x
@@ -48,7 +48,8 @@ class CallData(object):
         if i >= self.size:
             return 0
         o = self.data[self.offset + i: min(self.offset + i + 32, self.rlimit)]
-        return utils.bytearray_to_int(o + [0] * (32 - len(o)))
+        o.extend(bytearray(32 - len(o)))
+        return utils.bytearray_to_int(o)
 
     def extract_copy(self, mem, memstart, datastart, size):
         for i in range(size):
@@ -80,7 +81,7 @@ class Message(object):
 class Compustate():
 
     def __init__(self, **kwargs):
-        self.memory = []
+        self.memory = bytearray()
         self.stack = []
         self.pc = 0
         self.gas = 0
@@ -126,7 +127,7 @@ def mem_extend(mem, compustate, op, start, sz):
                 return False
             compustate.gas -= memfee
             m_extend = (newsize - oldsize) * 32
-            mem.extend([0] * m_extend)
+            mem.extend(bytearray(m_extend))
     return True
 
 

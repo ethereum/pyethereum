@@ -47,8 +47,35 @@ configs = {
     "Metropolis": konfig_metropolis
 }
 
-def compute_state_test_post(test, indices=None, _configs=None):
-    env, pre, txdata = test["env"], test["pre"], test["transaction"]
+def compute_state_test_unit(state, txdata, indices, konfig):
+    state.env.config = konfig
+    s = state.snapshot()
+    try:
+        # Create the transaction
+        tx = transactions.Transaction(
+            nonce=parse_int_or_hex(txdata['nonce'] or b"0"),
+            gasprice=parse_int_or_hex(txdata['gasPrice'] or b"0"),
+            startgas=parse_int_or_hex(txdata['gasLimit'][indices["gas"]] or b"0"),
+            to=decode_hex(txdata['to']),
+            value=parse_int_or_hex(txdata['value'][indices["value"]] or b"0"),
+            data=decode_hex(remove_0x_head(txdata['data'][indices["data"]])))
+        tx.sign(decode_hex(txdata['secretKey']))
+        # Run it
+        success, output = state_transition.apply_transaction(state, tx)
+        print("Applied tx")
+    except InvalidTransaction as e:
+        print("Exception: %r" % e)
+        success, output = False, b''
+    state.commit()
+    output_decl = {
+        "hash": encode_hex(state.trie.root_hash),
+        "indexes": indices
+    }
+    state.revert(s)
+    return output_decl
+
+
+def init_state(env, pre):
     # Setup env
     state = State(
         env=Env(config=konfig),
@@ -74,58 +101,20 @@ def compute_state_test_post(test, indices=None, _configs=None):
                                    big_endian_to_int(decode_hex(k[2:])),
                                    decode_hex(v[2:]))
 
-    
-    # We have an optional argument which is a list of JSONs specifying indices.
-    # If this argument is set, we compute only those scenarios. If not, we
-    # compute all of them.   
-    if indices is None:
-        indices = []
-        for data_index in range(len(txdata['data'])):
-            for value_index in range(len(txdata['value'])):
-                for gaslimit_index in range(len(txdata['gasLimit'])):
-                    indices.append({"data": data_index, "gas": gaslimit_index, "value": value_index})
-                
-    o = {}
-    for config_name in (configs.keys() if _configs is None else _configs):
-        state.env.config = configs[config_name]
-        output_decls = []
-        for index_json in indices:
-            print("Executing for indices %r" % index_json)
-            data_index, value_index, gaslimit_index = index_json["data"], index_json["value"], index_json["gas"]
-            try:
-                # Create the transaction
-                tx = transactions.Transaction(
-                    nonce=parse_int_or_hex(txdata['nonce'] or b"0"),
-                    gasprice=parse_int_or_hex(txdata['gasPrice'] or b"0"),
-                    startgas=parse_int_or_hex(txdata['gasLimit'][gaslimit_index] or b"0"),
-                    to=decode_hex(txdata['to']),
-                    value=parse_int_or_hex(txdata['value'][value_index] or b"0"),
-                    data=decode_hex(remove_0x_head(txdata['data'][data_index])))
-                tx.sign(decode_hex(txdata['secretKey']))
-                # Run it
-                success, output = state_transition.apply_transaction(state, tx)
-                print("Applied tx")
-            except InvalidTransaction as e:
-                print("Exception: %r" % e)
-                success, output = False, b''
-            state.commit()
-            output_decl = {
-                "hash": encode_hex(state.trie.root_hash),
-                "indexes": index_json
-            }
-            output_decls.append(output_decl)
-        o[config_name] = output_decls
-    return o
+    state.commit()
+    return state
 
 def verify_state_test(test):
     print("Verifying state test")
-    for config_name, result in test["post"].items():
+    _state = init_state(test["env"], test["pre"])
+    for config_name, results in test["post"].items():
         # Old protocol versions may not be supported
         if config_name not in configs:
             continue
         print("Testing for %s" % config_name)
-        computed = compute_state_test_post(test, [x["indexes"] for x in result], [config_name])[config_name]
-        supplied = test["post"][config_name]
-        assert len(computed) == len(supplied)
-        for c, s in zip(computed, supplied):
-            assert c["hash"] == s["hash"]
+        for result in results:
+            computed = compute_state_test_unit(_state, test["transaction"], result["indexes"], configs[config_name])
+            if computed["hash"] != result["hash"]:
+                raise Exception("Hash mismatch: %s computed % supplied" % (computed["hash"], result["hash"]))
+            else:
+                print("Hash matched!: %s" % computed["hash"])
