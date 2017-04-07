@@ -35,7 +35,8 @@ def pytest_generate_tests(metafunc):
             'stMemoryTest' in filename or
             'CALLCODE_Bounds3.json' in filename or
             'stPreCompiledContractsTransaction.json' in filename or
-            'MLOAD_Bounds.json' in filename
+            'MLOAD_Bounds.json' in filename or
+            'randomStatetest403.json' in filename
         )
     )
 
