@@ -11,6 +11,7 @@ from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
 from ethereum.block import FakeHeader
 from ethereum.db import BaseDB, EphemDB, OverlayDB
+from ethereum.specials import specials as default_specials
 import copy
 import sys
 if sys.version_info.major == 2:
@@ -252,7 +253,7 @@ class State():
                 if not acct.deleted:
                     acct._cached_rlp = None
                     # print 'moose', addr.encode('hex'), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code)
-                    if self.is_CLEARING() and acct.is_blank() and not allow_empties:
+                    if self.is_CLEARING() and acct.is_blank() and not allow_empties and addr not in default_specials:
                         self.trie.delete(addr)
                     else:
                         self.trie.update(addr, rlp.encode(acct))
@@ -292,11 +293,11 @@ class State():
     # Returns a value x, where State.revert(x) at any later point will return
     # you to the point at which the snapshot was made (unless journal_reset was called).
     def snapshot(self):
-        return (self.trie.root_hash, len(self.journal))
+        return (self.trie.root_hash, len(self.journal), {k: copy.copy(getattr(self, k)) for k in STATE_DEFAULTS})
 
     # Reverts to the provided snapshot
     def revert(self, snapshot):
-        root, journal_length = snapshot
+        root, journal_length, auxvars = snapshot
         if root != self.trie.root_hash and journal_length != 0:
             raise Exception("Cannot return to this snapshot")
         if root != self.trie.root_hash:
@@ -314,6 +315,8 @@ class State():
                 self.cache[addr][key] = preval
                 if not premod:
                     del self.modified[addr]
+        for k in STATE_DEFAULTS:
+            setattr(self, k, copy.copy(auxvars[k]))
 
     # Prints the state for a single account
     def account_to_dict(self, address):

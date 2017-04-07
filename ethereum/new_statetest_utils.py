@@ -8,9 +8,10 @@ import ethereum.transactions as transactions
 import ethereum.state_transition as state_transition
 import copy
 
-#from ethereum.slogging import LogRecorder, configure_logging, set_level
-#config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
-#configure_logging(config_string=config_string)
+from ethereum.slogging import LogRecorder, configure_logging, set_level
+config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+
+# configure_logging(config_string=config_string)
 
 fake_headers = {}
 
@@ -30,6 +31,18 @@ basic_env = {
 
 konfig = copy.copy(default_config)
 
+konfig_homestead = copy.copy(konfig)
+konfig_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
+konfig_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99
+konfig_homestead["CLEARING_FORK_BLKNUM"] = 2**99
+konfig_homestead["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+konfig_tangerine = copy.copy(konfig)
+konfig_tangerine["HOMESTEAD_FORK_BLKNUM"] = 0
+konfig_tangerine["ANTI_DOS_FORK_BLKNUM"] = 0
+konfig_tangerine["CLEARING_FORK_BLKNUM"] = 2**99
+konfig_tangerine["METROPOLIS_FORK_BLKNUM"] = 2**99
+
 konfig_spurious = copy.copy(konfig)
 konfig_spurious["HOMESTEAD_FORK_BLKNUM"] = 0
 konfig_spurious["ANTI_DOS_FORK_BLKNUM"] = 0
@@ -43,6 +56,8 @@ konfig_metropolis["CLEARING_FORK_BLKNUM"] = 0
 konfig_metropolis["METROPOLIS_FORK_BLKNUM"] = 0
 
 configs = {
+    #"Homestead": konfig_homestead,
+    "EIP150": konfig_tangerine,
     "EIP158": konfig_spurious,
     "Metropolis": konfig_metropolis
 }
@@ -115,6 +130,6 @@ def verify_state_test(test):
         for result in results:
             computed = compute_state_test_unit(_state, test["transaction"], result["indexes"], configs[config_name])
             if computed["hash"] != result["hash"]:
-                raise Exception("Hash mismatch: %s computed % supplied" % (computed["hash"], result["hash"]))
+                raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))
             else:
                 print("Hash matched!: %s" % computed["hash"])

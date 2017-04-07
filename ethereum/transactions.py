@@ -149,11 +149,11 @@ class Transaction(rlp.Serializable):
         d['hash'] = encode_hex(self.hash)
         return d
 
-    def log_dict(self):
+    def log_dict(self, abbrev=False):
         d = self.to_dict()
         d['sender'] = encode_hex(d['sender'] or '')
         d['to'] = encode_hex(d['to'])
-        d['data'] = encode_hex(d['data'])
+        d['data'] = encode_hex(d['data']) if len(d['data']) < 2500 or not abbrev else "data<%d>" % len(d['data'])
         return d
 
     @property

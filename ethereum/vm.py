@@ -245,11 +245,10 @@ def vm_execute(ext, msg, code):
             if steps == 0:
                 trace_data['depth'] = msg.depth
                 trace_data['address'] = msg.to
-            trace_data['op'] = op
             trace_data['steps'] = steps
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval
-            log_vm_op.trace('vm', **trace_data)
+            log_vm_op.trace('vm', op=op, **trace_data)
             steps += 1
             _prevop = op
 
@@ -702,7 +701,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
-            # print('suiciding %s %s %d' % (msg.to, to, xfer))
+            print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
 
         # assert utils.is_numeric(compustate.gas)
