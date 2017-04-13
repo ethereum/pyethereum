@@ -1,4 +1,5 @@
 import time
+from builtins import range
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
@@ -359,4 +360,3 @@ class Chain(object):
     @property
     def config(self):
         return self.env.config
-

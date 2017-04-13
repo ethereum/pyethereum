@@ -4,6 +4,7 @@ PyYAML
 repoze.lru
 pbkdf2
 pycryptodome>=3.3.1
+future==0.16.0
 scrypt
 rlp>=0.4.7
 https://github.com/ethereum/ethash/tarball/master
