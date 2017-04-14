@@ -4,13 +4,18 @@ import tempfile
 import time
 import types
 import warnings
+import copy
 
 import rlp
 from rlp.utils import ascii_chr
 
 from ethereum import db, opcodes, processblock, transactions
 from ethereum.abi import ContractTranslator
-from ethereum.config import Env
+from ethereum.config import Env, default_config
+konfig = copy.copy(default_config)
+konfig['HOMESTEAD_FORK_BLKNUM'] = 0
+konfig['ANTI_DOS_FORK_BLKNUM'] = 0
+konfig['CLEARING_FORK_BLKNUM'] = 0
 from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
 from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr, encode_hex
@@ -162,7 +167,7 @@ class state(object):
 
     def __init__(self, num_accounts=len(keys)):
         self.temp_data_dir = tempfile.mkdtemp()
-        self.env = Env()
+        self.env = Env(config=konfig)
         self.last_tx = None
         self.log_listeners = []
 
