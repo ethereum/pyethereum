@@ -1,9 +1,9 @@
 from ethereum import ethash, ethash_utils, utils
 import time
 import sys
-import sha3
 import warnings
 from collections import OrderedDict
+from ethereum import utils
 from ethereum.slogging import get_logger
 
 log = get_logger('eth.pow')
@@ -40,7 +40,7 @@ cache_by_seed.max_items = 10
 
 def get_cache(block_number):
     while len(cache_seeds) <= block_number // EPOCH_LENGTH:
-        cache_seeds.append(sha3.sha3_256(cache_seeds[-1]).digest())
+        cache_seeds.append(utils.sha3(cache_seeds[-1]))
     seed = cache_seeds[block_number // EPOCH_LENGTH]
     if seed in cache_by_seed:
         c = cache_by_seed.pop(seed)  # pop and append at end
