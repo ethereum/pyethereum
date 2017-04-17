@@ -8,12 +8,13 @@ import warnings
 import rlp
 from rlp.utils import ascii_chr
 
-from ethereum import blocks, db, opcodes, processblock, transactions
+from ethereum import blocks, db, opcodes, transactions, processblock
 from ethereum.abi import ContractTranslator
 from ethereum.config import Env
 from ethereum.slogging import LogRecorder
 from ethereum._solidity import get_solidity
 from ethereum.utils import to_string, sha3, privtoaddr, int_to_addr
+from ethereum.trace import Trace
 
 TRACE_LVL_MAP = [
     ':info',
@@ -24,21 +25,50 @@ TRACE_LVL_MAP = [
     'eth.vm.storage:trace,eth.vm.memory:trace'
 ]
 
-GAS_LIMIT = 3141592
-GAS_PRICE = 1
+GAS_LIMIT = 90000
+GAS_PRICE = 20000000000
 
 # pylint: disable=invalid-name
 
 gas_limit = GAS_LIMIT
 gas_price = GAS_PRICE
 
-accounts = []
-keys = []
+accounts = [
+        u"ac7bebd558c734fe105d09167860b230fb0a218d".decode('hex'),
+        u"6e5fd1741e45c966a76a077af9132627c07b0dc1".decode('hex'),
+        u"ef057953c56855f16e658bf8fd0d2e300961fc1f".decode('hex'),
+        u"2c284ef5a0d50dda177bd8c9fdf20610f6fdac09".decode('hex'),
+        u"bd3c601b59f46cc59be3446ba29c66b9182a70b6".decode('hex'),
+        u"e6e6033428cfc58af1585c26a823916c8120ca73".decode('hex'),
+        u"e2c628c146a9d40c9ed4c5c3e29cd0a609f7c6f1".decode('hex'),
+        u"3e2ff0583a5dec1bd3ac0f7b8d26fa96b759fe92".decode('hex'),
+        u"2827a89f78d70c422452528634cfe522b5c668c6".decode('hex'),
+        u"f56ae85523c6f4773954fe0b25ba1f52e1183689".decode('hex'),
+        u"7703aCa0f4ee937C3073ec80c7608B6f7cE2426B".decode('hex'),
+        u"153ee6aD2e7e665b8a07ff37d93271d6E5FDc6d4".decode('hex'),
+        u"4fe1ead95d882580561b704938ecbd5cb9450ab6".decode('hex'),
+]
+keys = [
+        u"43df74be7858da13bb08c1289fe488b9843c555538dd1638203725b18a19863e".decode('hex'),
+        u"0af37c53fdc5b97bf1f84d30e84f09c84f733e467a3b26c1ce6c5d448f9d7cec".decode('hex'),
+        u"0d5c1bd818a4086f28314415cb375a937593efab66f8f7d2903bf2a13ed35070".decode('hex'),
+        u"17029bda254fdf118125741e80d2d43e8ac1ffa8cca20c51683bc0735c802e5b".decode('hex'),
+        u"8d2fd08f91550712ec0db96bdbb849ec88a560e200c58f05954827b2593cf9e7".decode('hex'),
+        u"803ae2f3b0030390092910e0f1e8ec15dbc975d6422ab2274b175c74eed589fb".decode('hex'),
+        u"0c71a0e6e4bf22677a5750c123aaf988270e1c4025f80d82b7a18f2efe295cbf".decode('hex'),
+        u"9ca1d29731e6302e3e7d7f0ebaf2b4fa48d7b7fd4f5c82f59b3983b0a2160d7e".decode('hex'),
+        u"e2631c2443b12abdfc5e70e3b7643f2d340eb49c6102c66835d0c7286903b009".decode('hex'),
+        u"f7a590340d042a107ec3c9e82f81d2301ecc5b79f959f7a09d3c7fb7ab7f1024".decode('hex'),
+        u"9e256901c752616c231904281333e5dd11fa48fdfd7ffac3515923b1fe60a28e".decode('hex'),
+        u"b10ec925fccdaf155fa0b56bd55cf6ce3cc8927b304c0a563476529d925755d5".decode('hex'),
+        u"71c52b034f6405fbabb6ad5e91997dd2ea1f43d48502e10dd47d5a4a8a02cbdf".decode('hex'),
+]
+
 languages = {}
 
-for account_number in range(10):
-    keys.append(sha3(to_string(account_number)))
-    accounts.append(privtoaddr(keys[-1]))
+#for account_number in range(10):
+#    keys.append(sha3(to_string(account_number)))
+#    accounts.append(privtoaddr(keys[-1]))
 
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
@@ -157,13 +187,12 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
 
 
 class state(object):
-
     def __init__(self, num_accounts=len(keys)):
         self.temp_data_dir = tempfile.mkdtemp()
         self.db = db.EphemDB()
         self.env = Env(self.db)
         self.last_tx = None
-
+        
         initial_balances = {}
 
         for i in range(num_accounts):
@@ -293,7 +322,7 @@ class state(object):
             (success, output) = processblock.apply_transaction(self.block, transaction)
 
             if not success:
-                raise TransactionFailed()
+                raise TransactionFailed(transaction.hash.encode('hex'))
 
             out = {
                 'output': output,
