@@ -1,4 +1,5 @@
 import time
+import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
@@ -59,11 +60,11 @@ class Chain(object):
 
         self.head_hash = self.state.prev_headers[0].hash
         self.genesis = Block(self.state.prev_headers[0], [], [])
-        self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
+        self.db.put(b'state:' + self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-        self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
+        self.db.put('GENESIS_HASH', self.state.prev_headers[0].hash)
         assert self.state.block_number == self.state.prev_headers[0].number
-        self.db.put('score:' + self.state.prev_headers[0].hash, "0")
+        self.db.put(b'score:' + self.state.prev_headers[0].hash, "0")
         self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
         self.db.put(self.head_hash, 'GENESIS')
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
@@ -90,7 +91,7 @@ class Chain(object):
         if self.db.get(blockhash) == 'GENESIS':
             return State.from_snapshot(json.loads(self.db.get('GENESIS_STATE')), self.env)
         state = State(env=self.env)
-        state.trie.root_hash = self.db.get('state:'+blockhash)
+        state.trie.root_hash = self.db.get(b'state:' + blockhash)
         block = rlp.decode(self.db.get(blockhash), Block)
         update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
@@ -141,14 +142,14 @@ class Chain(object):
     # parent hash and see that it is one of its children
     def add_child(self, child):
         try:
-            existing = self.db.get('child:' + child.header.prevhash)
+            existing = self.db.get(b'child:' + child.header.prevhash)
         except:
-            existing = ''
+            existing = b''
         existing_hashes = []
         for i in range(0, len(existing), 32):
             existing_hashes.append(existing[i: i+32])
         if child.header.hash not in existing_hashes:
-            self.db.put('child:' + child.header.prevhash, existing + child.header.hash)
+            self.db.put(b'child:' + child.header.prevhash, existing + child.header.hash)
 
     def get_blockhash_by_number(self, number):
         try:
@@ -163,7 +164,7 @@ class Chain(object):
     def get_child_hashes(self, blockhash):
         o = []
         try:
-            data = self.db.get('child:' + blockhash)
+            data = self.db.get(b'child:' + blockhash)
             for i in range(0, len(data), 32):
                 o.append(data[i:i + 32])
             return o
@@ -181,14 +182,14 @@ class Chain(object):
     def get_score(self, block):
         if not block:
             return 0
-        key = 'score:' + block.header.hash
+        key = b'score:' + block.header.hash
         if key not in self.db:
             try:
                 parent_score = self.get_score(self.get_parent(block))
                 self.db.put(key, str(parent_score + block.difficulty +
                                      random.randrange(block.difficulty // 10**6 + 1)))
             except:
-                return int(self.db.get('score:' + block.prevhash))
+                return int(self.db.get(b'score:' + block.prevhash))
         return int(self.db.get(key))
 
     # These two functions should be called periodically so as to
@@ -234,20 +235,20 @@ class Chain(object):
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
-            self.db.put('state:' + block.header.hash, self.state.trie.root_hash)
+            self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
-                self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
+                self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
         elif block.header.prevhash in self.env.db:
             log.info('Receiving block not on head, adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
-            except (KeyError, ValueError), e:  # FIXME add relevant exceptions here
+            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
-            self.db.put('state:' + block.header.hash, temp_state.trie.root_hash)
+            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)
             # Replace the head
             if block_score > self.get_score(self.head):
@@ -263,7 +264,7 @@ class Chain(object):
                         break
                     b = self.get_parent(b)
                 replace_from = b.header.number
-                for i in xrange(replace_from, 2**63 - 1):
+                for i in itertools.count(replace_from):
                     log.info('Rewriting height %d' % i)
                     key = 'block:' + str(i)
                     orig_at_height = self.db.get(key) if key in self.db else None
@@ -271,13 +272,13 @@ class Chain(object):
                         self.db.delete(key)
                         orig_block_at_height = self.get_block(orig_at_height)
                         for tx in orig_block_at_height.transactions:
-                            if 'txindex:' + tx.hash in self.db:
-                                self.db.delete('txindex:' + tx.hash)
+                            if b'txindex:' + tx.hash in self.db:
+                                self.db.delete(b'txindex:' + tx.hash)
                     if i in new_chain:
                         new_block_at_height = new_chain[i]
                         self.db.put(key, new_block_at_height.header.hash)
                         for i, tx in enumerate(new_block_at_height.transactions):
-                            self.db.put('txindex:' + tx.hash,
+                            self.db.put(b'txindex:' + tx.hash,
                                         rlp.encode([new_block_at_height.number, i]))
                     if i not in new_chain and not orig_at_height:
                         break
@@ -324,7 +325,7 @@ class Chain(object):
         if frm is None:
             frm = int(self.db.get('GENESIS_NUMBER')) + 1
         chain = []
-        for i in xrange(frm, to):
+        for i in itertools.islice(itertools.count(), frm, to):
             h = self.get_blockhash_by_number(i)
             if not h:
                 return chain
@@ -334,8 +335,8 @@ class Chain(object):
     def get_transaction(self, tx):
         if not isinstance(tx, (str, bytes)):
             tx = tx.hash
-        if 'txindex:' + tx in self.db:
-            data = rlp.decode(self.db.get('txindex:' + tx))
+        if b'txindex:' + tx in self.db:
+            data = rlp.decode(self.db.get(b'txindex:' + tx))
             blk, index = self.get_block_by_number(
                 big_endian_to_int(data[0])), big_endian_to_int(data[1])
             tx = blk.transactions[index]
