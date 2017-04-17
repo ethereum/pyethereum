@@ -1,5 +1,5 @@
 import time
-from itertools import count, islice
+import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum import parse_genesis_declaration
@@ -264,7 +264,7 @@ class Chain(object):
                         break
                     b = self.get_parent(b)
                 replace_from = b.header.number
-                for i in islice(count(), replace_from, 2**63 - 1):
+                for i in itertools.count(replace_from):
                     log.info('Rewriting height %d' % i)
                     key = 'block:' + str(i)
                     orig_at_height = self.db.get(key) if key in self.db else None
@@ -325,7 +325,7 @@ class Chain(object):
         if frm is None:
             frm = int(self.db.get('GENESIS_NUMBER')) + 1
         chain = []
-        for i in islice(count(), frm, to):
+        for i in itertools.islice(itertools.count(), frm, to):
             h = self.get_blockhash_by_number(i)
             if not h:
                 return chain
