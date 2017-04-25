@@ -883,6 +883,49 @@ class Trie(object):
             res[key] = value
         return res
 
+    def iter_branch(self):
+        for key_str, value in self._iter_branch(self.root_node):
+            if key_str:
+                nibbles = [int(x) for x in key_str.split(b'+')]
+            else:
+                nibbles = []
+            key = nibbles_to_bin(without_terminator(nibbles))
+            yield key, value
+
+    def _iter_branch(self, node):
+        '''yield (key, value) stored in this and the descendant nodes
+        :param node: node in form of list, or BLANK_NODE
+
+        .. note::
+            Here key is in full form, rather than key of the individual node
+        '''
+        if node == BLANK_NODE:
+            raise StopIteration
+
+        node_type = self._get_node_type(node)
+
+        if is_key_value_type(node_type):
+            nibbles = without_terminator(unpack_to_nibbles(node[0]))
+            key = b'+'.join([to_string(x) for x in nibbles])
+            if node_type == NODE_TYPE_EXTENSION:
+                sub_tree = self._iter_branch(self._decode_to_node(node[1]))
+            else:
+                sub_tree = [(to_string(NIBBLE_TERMINATOR), node[1])]
+
+            # prepend key of this node to the keys of children
+            for sub_key, sub_value in sub_tree:
+                full_key = (key + b'+' + sub_key).strip(b'+')
+                yield (full_key, sub_value)
+
+        elif node_type == NODE_TYPE_BRANCH:
+            for i in range(16):
+                sub_tree = self._iter_branch(self._decode_to_node(node[i]))
+                for sub_key, sub_value in sub_tree:
+                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
+                    yield (full_key, sub_value)
+            if node[16]:
+                yield (to_string(NIBBLE_TERMINATOR), node[-1])
+
     def get(self, key):
         return self._get(self.root_node, bin_to_nibbles(to_string(key)))
 
