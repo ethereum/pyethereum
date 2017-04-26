@@ -262,16 +262,18 @@ def apply_transaction(state, tx):
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
                  data=data)
 
+    gas_used = tx.startgas - gas_remained
+
     if not result:  # 0 = OOG failure in both cases
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
         state.gas_used += tx.startgas
-        state.delta_balance(state.block_coinbase, tx.gasprice * tx.startgas)
+        state.delta_balance(tx.sender, tx.gasprice * gas_remained)
+        state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
         output = b''
         success = 0
     else:
         log_tx.debug('TX SUCCESS', data=data)
-        gas_used = tx.startgas - gas_remained
         state.refunds += len(set(state.suicides)) * opcodes.GSUICIDEREFUND
         if state.refunds > 0:
             log_tx.debug('Refunding', gas_refunded=min(state.refunds, gas_used // 2))

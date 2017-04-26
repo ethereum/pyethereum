@@ -11,7 +11,7 @@ import copy
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 
-# configure_logging(config_string=config_string)
+configure_logging(config_string=config_string)
 
 fake_headers = {}
 
@@ -128,6 +128,10 @@ def verify_state_test(test):
             continue
         print("Testing for %s" % config_name)
         for result in results:
+            print("Checking for values: g %d v %d d %s" % (
+                  parse_int_or_hex(test["transaction"]['gasLimit'][result["indexes"]["gas"]]),
+                  parse_int_or_hex(test["transaction"]['value'][result["indexes"]["value"]]),
+                  test["transaction"]['data'][result["indexes"]["data"]]))
             computed = compute_state_test_unit(_state, test["transaction"], result["indexes"], configs[config_name])
             if computed["hash"] != result["hash"]:
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))

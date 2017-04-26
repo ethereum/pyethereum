@@ -163,6 +163,10 @@ def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
+def revert(gas, data, **kargs):
+    log_vm_exit.trace('REVERT', **kargs)
+    return 0, gas, data
+
 code_cache = {}
 
 
@@ -571,7 +575,7 @@ def vm_execute(ext, msg, code):
                     compustate.gas = compustate.gas - ingas + gas
                 else:
                     stk.append(0)
-                    compustate.gas -= ingas
+                    compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
         elif op == 'CALL':
@@ -689,6 +693,13 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
+        elif op == 'REVERT':
+            if not ext.post_metropolis_hardfork():
+                return vm_exception('Opcode not yet enabled')
+            s0, s1 = stk.pop(), stk.pop()
+            if not mem_extend(mem, compustate, op, s0, s1):
+                return vm_exception('OOG EXTENDING MEMORY')
+            return revert(compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
@@ -701,7 +712,6 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
-            print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
 
         # assert utils.is_numeric(compustate.gas)
