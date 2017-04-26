@@ -47,8 +47,7 @@ def create_snapshot(chain, recent=1024):
     assert recent > env.config['MAX_UNCLE_DEPTH']+2
 
     head_block = chain.head
-    base_block_hash = chain.index.get_block_by_number(max(head_block.number-recent, 0))
-    base_block = chain.get(base_block_hash)
+    base_block = chain.get_block_by_number(max(head_block.number-recent, 0))
 
     snapshot = create_env_snapshot(base_block)
     snapshot['base'] = create_base_snapshot(base_block)
@@ -60,7 +59,7 @@ def create_snapshot(chain, recent=1024):
 
 def create_env_snapshot(base):
     return {
-        'chainDifficulty': snapshot_form(base.chain_difficulty())
+        'chainDifficulty': snapshot_form(base.get_score())
     }
 
 

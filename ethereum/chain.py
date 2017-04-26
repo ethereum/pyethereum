@@ -68,10 +68,14 @@ class Chain(object):
         if reset_genesis:
             self.genesis = Block(self.state.prev_headers[0], [], [])
             self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-            self.db.put('GENESIS_HASH', str(self.state.prev_headers[0].hash))
-            self.db.put('score:' + self.state.prev_headers[0].hash, "0")
+            self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
             self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
+            self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
+            self.db.put('score:' + self.genesis.header.hash, "0")
+            self.db.put('state:' + self.genesis.header.hash, self.state.trie.root_hash)
+            self.db.put('block:0', self.genesis.header.hash)
             self.db.put(self.head_hash, 'GENESIS')
+            self.db.commit()
         else:
             self.genesis = self.get_block_by_number(0)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
@@ -142,10 +146,13 @@ class Chain(object):
         try:
             block_rlp = self.db.get(blockhash)
             if block_rlp == 'GENESIS':
+                if not hasattr(self, 'genesis'):
+                    self.genesis = rlp.decode(self.db.get('GENESIS_RLP'), sedes=Block)
                 return self.genesis
             else:
                 return rlp.decode(block_rlp, Block)
-        except:
+        except Exception as e:
+            log.debug("Failed to get block", hash=blockhash, error=e)
             return None
 
     # Add a record allowing you to later look up the provided block's
@@ -163,7 +170,7 @@ class Chain(object):
 
     def get_blockhash_by_number(self, number):
         try:
-            return self.db.get('blocknumber:' + str(number))
+            return self.db.get('block:' + str(number))
         except:
             return None
 
