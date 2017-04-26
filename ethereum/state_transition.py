@@ -4,7 +4,8 @@ import serpent
 
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
-    safe_ord, int_to_addr, sha3, big_endian_to_int
+    safe_ord, int_to_addr, sha3, big_endian_to_int, \
+    ascii_chr
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import utils
@@ -216,7 +217,7 @@ def apply_message(state, msg=None, **kwargs):
         assert not kwargs
     ext = VMExt(state, transactions.Transaction(0, 0, 21000, b'', 0, b''))
     result, gas_remained, data = apply_msg(ext, msg)
-    return b''.join(map(lambda d: bytes([d]), data)) if result else None
+    return b''.join(map(ascii_chr, data)) if result else None
 
 
 def apply_transaction(state, tx):
