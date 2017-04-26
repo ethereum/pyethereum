@@ -214,9 +214,9 @@ def apply_message(state, msg=None, **kwargs):
         msg = vm.Message(**kwargs)
     else:
         assert not kwargs
-    ext = VMExt(state, transactions.Transaction(0, 0, 21000, '', 0, ''))
+    ext = VMExt(state, transactions.Transaction(0, 0, 21000, b'', 0, b''))
     result, gas_remained, data = apply_msg(ext, msg)
-    return ''.join(map(chr, data)) if result else None
+    return b''.join(map(lambda d: bytes([d]), data)) if result else None
 
 
 def apply_transaction(state, tx):
@@ -464,7 +464,7 @@ class BlankVMExt():
         for k, v in state.config['CUSTOM_SPECIALS']:
             self.specials[k] = v
         self._state = state
-        self.get_code = lambda addr: ''
+        self.get_code = lambda addr: b''
         self.set_code = lambda addr, code: None
         self.get_balance = lambda addr: 0
         self.set_balance = lambda addr, value: None
@@ -485,10 +485,10 @@ class BlankVMExt():
         self.block_difficulty = 0
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: None
-        self.create = lambda msg: 0, 0, ''
+        self.create = lambda msg: 0, 0, b''
         self.msg = lambda msg: _apply_msg(
-            self, msg, '') if msg.code_address in self.specials else (0, 0, '')
-        self.blackbox_msg = lambda msg, code: 0, 0, ''
+            self, msg, '') if msg.code_address in self.specials else (0, 0, b'')
+        self.blackbox_msg = lambda msg, code: 0, 0, b''
         self.account_exists = lambda addr: False
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
