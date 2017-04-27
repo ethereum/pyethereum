@@ -1,7 +1,7 @@
 import rlp
-from ethereum import blocks
-from ethereum.blocks import Account, BlockHeader, Block, CachedBlock
+from ethereum.block import BlockHeader, Block
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
+from ethereum.state import State, Account
 from ethereum.securetrie import SecureTrie
 from ethereum.trie import BLANK_NODE, BLANK_ROOT
 from ethereum.pruning_trie import Trie
@@ -43,34 +43,24 @@ class FakeBlock(object):
 
 
 def create_snapshot(chain, recent=1024):
-    env = chain.env
-    assert recent > env.config['MAX_UNCLE_DEPTH']+2
+    assert recent > chain.env.config['MAX_UNCLE_DEPTH']+2
 
     head_block = chain.head
     base_block = chain.get_block_by_number(max(head_block.number-recent, 0))
-
-    snapshot = create_env_snapshot(base_block)
-    snapshot['base'] = create_base_snapshot(base_block)
-    snapshot['blocks'] = create_blocks_snapshot(base_block, head_block)
-    snapshot['alloc'] = create_state_snapshot(env, base_block.state)
-
-    return snapshot
-
-
-def create_env_snapshot(base):
     return {
-        'chainDifficulty': snapshot_form(base.get_score())
+        'base': snapshot_form(rlp.encode(base_block.header)),
+        'chainDifficulty': snapshot_form(chain.get_score(base_block)),
+        'blocks': create_blocks_snapshot(chain, base_block, head_block),
+        'alloc': create_state_snapshot(chain, base_block)
     }
 
 
-def create_base_snapshot(base):
-    return snapshot_form(rlp.encode(base.header))
-
-
-def create_state_snapshot(env, state_trie):
+def create_state_snapshot(chain, block):
+    env = chain.env
+    state = State(block.state_root, env)
     alloc = dict()
     count = 0
-    for addr, account_rlp in state_trie.iter_branch():
+    for addr, account_rlp in state.trie.iter_branch():
         alloc[encode_hex(addr)] = create_account_snapshot(env, account_rlp)
         count += 1
         print "[%d] created account snapshot %s" % (count, encode_hex(addr))
@@ -91,13 +81,13 @@ def create_account_snapshot(env, rlpdata):
     }
 
 
-def create_blocks_snapshot(base, head):
+def create_blocks_snapshot(chain, base, head):
     recent_blocks = list()
     block = head
     while True:
         recent_blocks.append(snapshot_form(rlp.encode(block)))
-        if block.prevhash != base.hash:
-            block = block.get_parent()
+        if block and block.prevhash != base.hash:
+            block = chain.get_parent(block)
         else:
             break
     recent_blocks.reverse()
@@ -117,19 +107,19 @@ def load_snapshot(chain, snapshot):
     state = load_state(chain.env, snapshot['alloc'])
     assert state.root_hash == base_header.state_root
 
-    _get_block_header = blocks.get_block_header
-    def get_block_header(db, blockhash):
-        if blockhash == first_header_data[0]:  # first block's prevhash
-            return base_header
-        return _get_block_header(db, blockhash)
-    blocks.get_block_header = get_block_header
+    #_get_block_header = blocks.get_block_header
+    #def get_block_header(db, blockhash):
+        #if blockhash == first_header_data[0]:  # first block's prevhash
+            #return base_header
+        #return _get_block_header(db, blockhash)
+    #blocks.get_block_header = get_block_header
 
-    _get_block = blocks.get_block
-    def get_block(env, blockhash):
-        if blockhash == first_header_data[0]:
-            return FakeBlock(env, get_block_header(env.db, blockhash), int(snapshot['chainDifficulty']))
-        return _get_block(env, blockhash)
-    blocks.get_block = get_block
+    #_get_block = blocks.get_block
+    #def get_block(env, blockhash):
+        #if blockhash == first_header_data[0]:
+            #return FakeBlock(env, get_block_header(env.db, blockhash), int(snapshot['chainDifficulty']))
+        #return _get_block(env, blockhash)
+    #blocks.get_block = get_block
 
     def validate_uncles():
         return True

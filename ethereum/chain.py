@@ -203,8 +203,7 @@ class Chain(object):
         if key not in self.db:
             try:
                 parent_score = self.get_score(self.get_parent(block))
-                self.db.put(key, str(parent_score + block.difficulty +
-                                     random.randrange(block.difficulty // 10**6 + 1)))
+                self.db.put(key, str(parent_score + block.difficulty))
             except:
                 return int(self.db.get('score:' + block.prevhash))
         return int(self.db.get(key))
