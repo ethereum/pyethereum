@@ -67,7 +67,7 @@ class Message(object):
         self.to = to
         self.value = value
         self.gas = gas
-        self.data = CallData(map(ord, data)) if isinstance(data, (str, bytes)) else data
+        self.data = CallData(list(map(utils.safe_ord, data))) if isinstance(data, (str, bytes)) else data
         self.depth = depth
         self.logs = []
         self.code_address = to if code_address is None else code_address

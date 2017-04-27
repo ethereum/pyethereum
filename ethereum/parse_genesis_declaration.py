@@ -90,7 +90,7 @@ def mk_basic_state(alloc, header, env):
     if not header:
         header = {
             "number": 0, "gas_limit": 4712388, "gas_used": 0,
-            "timestamp": 1467446877, "difficulty": 2**25,
+            "timestamp": 1467446877, "difficulty": 1,
             "uncles_hash": '0x'+encode_hex(BLANK_UNCLES_HASH)
         }
     h = BlockHeader(number=parse_as_int(header['number']),
