@@ -13,11 +13,11 @@ import random
 
 
 try:
-    import secp256k1
+    import coincurve
 except ImportError:
-    import warnings
-    warnings.warn('could not import secp256k1', ImportWarning)
-    secp256k1 = None
+    import warning
+    warning.warn('could not import coincurve', ImportWarning)
+    coincurve = None
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
@@ -85,22 +85,15 @@ else:
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
-    if secp256k1 and hasattr(secp256k1, "PublicKey"):
-        # Legendre symbol check; the secp256k1 library does not seem to do this
-        pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
-        xc = r * r * r + 7
-        assert pow(xc, (SECP256K1P - 1) // 2, SECP256K1P) == 1
+    if coincurve and hasattr(coincurve, "PublicKey"):
         try:
-            pk.public_key = pk.ecdsa_recover(
+            pk = coincurve.PublicKey.from_signature_and_message(
+                zpad(utils.bytearray_to_bytestr(int_to_32bytearray(r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(s)), 32) +
+                utils.ascii_chr(v - 27),
                 rawhash,
-                pk.ecdsa_recoverable_deserialize(
-                    zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) +
-                    zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32),
-                    v - 27
-                ),
-                raw=True
+                hasher=None,
             )
-            pub = pk.serialize(compressed=False)[1:]
+            pub = pk.format(compressed=False)[1:]
         except:
             pub = b"\x00" * 64
     else:
@@ -111,12 +104,9 @@ def ecrecover_to_pub(rawhash, v, r, s):
 
 
 def ecsign(rawhash, key):
-    if secp256k1 and hasattr(secp256k1, 'PrivateKey'):
-        pk = secp256k1.PrivateKey(key, raw=True)
-        signature = pk.ecdsa_recoverable_serialize(
-            pk.ecdsa_sign_recoverable(rawhash, raw=True)
-        )
-        signature = signature[0] + bytearray_to_bytestr([signature[1]])
+    if coincurve and hasattr(coincurve, 'PrivateKey'):
+        pk = coincurve.PrivateKey(priv)
+        signature = pk.sign_recoverable(msghash, hasher=None)
         v = safe_ord(signature[64]) + 27
         r = big_endian_to_int(signature[0:32])
         s = big_endian_to_int(signature[32:64])
