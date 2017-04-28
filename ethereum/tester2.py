@@ -1,4 +1,4 @@
-from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string
+from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum import chain
 from ethereum.transactions import Transaction
@@ -90,6 +90,10 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
                 startgas=kwargs.get('startgas', STARTGAS)
             )
 
+            if result is False:
+                return result
+            if result == b'':
+                return None
             o = self.translator.decode(function_name, result)
             return o[0] if len(o) == 1 else o
         return kall
@@ -136,9 +140,18 @@ class Chain(object):
         assert self.chain.add_block(self.block)
         assert self.head_state.trie.root_hash == self.chain.state.trie.root_hash
         for i in range(1, number_of_blocks):
-            b = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 1)
+            b = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 14)
             pre_seal(self.chain.state.ephemeral_clone(), b)
             b = Miner(b).mine(rounds=100, start_nonce=0)
             assert self.chain.add_block(b)
-        self.block = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 1)
+        self.block = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 14)
         self.head_state = self.chain.state.ephemeral_clone()
+
+    def snapshot(self):
+        return self.head_state.snapshot(), len(self.block.transactions), self.block.number
+
+    def revert(self, snapshot):
+        state_snapshot, txcount, blknum = snapshot
+        assert blknum == self.block.number
+        self.block.transactions = self.block.transactions[:txcount]
+        self.head_state.revert(state_snapshot)
