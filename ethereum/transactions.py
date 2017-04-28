@@ -4,7 +4,7 @@ from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import str_to_bytes, ascii_chr
 from ethereum.utils import encode_hex
-from secp256k1 import PublicKey, ALL_FLAGS, PrivateKey
+from coincurve import PublicKey, PrivateKey
 
 from ethereum.exceptions import InvalidTransaction
 from ethereum import bloom
@@ -83,17 +83,14 @@ class Transaction(rlp.Serializable):
                 rlpdata = rlp.encode(self, UnsignedTransaction)
                 rawhash = utils.sha3(rlpdata)
 
-                pk = PublicKey(flags=ALL_FLAGS)
                 try:
-                    pk.public_key = pk.ecdsa_recover(
+                    pk = PublicKey.from_signature_and_message(
+                        zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32) +
+                        utils.ascii_chr(self.v - 27),
                         rawhash,
-                        pk.ecdsa_recoverable_deserialize(
-                            zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32),
-                            self.v - 27
-                        ),
-                        raw=True
+                        hasher=lambda x: x,
                     )
-                    pub = pk.serialize(compressed=False)
+                    pub = pk.format(compressed=False)
                 except Exception:
                     raise InvalidTransaction("Invalid signature values (x^3+7 is non-residue)")
 
@@ -123,11 +120,8 @@ class Transaction(rlp.Serializable):
             # we need a binary key
             key = encode_privkey(key, 'bin')
 
-        pk = PrivateKey(key, raw=True)
-        signature = pk.ecdsa_recoverable_serialize(
-            pk.ecdsa_sign_recoverable(rawhash, raw=True)
-        )
-        signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+        pk = PrivateKey(key)
+        signature = pk.sign_recoverable(rawhash, hasher=lambda x: x)
         self.v = utils.safe_ord(signature[64]) + 27
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])

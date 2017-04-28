@@ -2,7 +2,7 @@
 import os
 
 import bitcoin
-from secp256k1 import PrivateKey
+from coincurve import PrivateKey
 import pytest
 import serpent
 from rlp.utils import decode_hex
@@ -1203,11 +1203,8 @@ def test_ecrecover():
 
     msghash = utils.sha3('the quick brown fox jumps over the lazy dog')
 
-    pk = PrivateKey(priv, raw=True)
-    signature = pk.ecdsa_recoverable_serialize(
-        pk.ecdsa_sign_recoverable(msghash, raw=True)
-    )
-    signature = signature[0] + utils.bytearray_to_bytestr([signature[1]])
+    pk = PrivateKey(priv)
+    signature = pk.sign_recoverable(msghash, hasher=lambda x: x)
     V = utils.safe_ord(signature[64]) + 27
     R = big_endian_to_int(signature[0:32])
     S = big_endian_to_int(signature[32:64])
