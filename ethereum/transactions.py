@@ -88,7 +88,7 @@ class Transaction(rlp.Serializable):
                         zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(self.s)), 32) +
                         utils.ascii_chr(self.v - 27),
                         rawhash,
-                        hasher=lambda x: x,
+                        hasher=None,
                     )
                     pub = pk.format(compressed=False)
                 except Exception:
@@ -121,7 +121,7 @@ class Transaction(rlp.Serializable):
             key = encode_privkey(key, 'bin')
 
         pk = PrivateKey(key)
-        signature = pk.sign_recoverable(rawhash, hasher=lambda x: x)
+        signature = pk.sign_recoverable(rawhash, hasher=None)
         self.v = utils.safe_ord(signature[64]) + 27
         self.r = big_endian_to_int(signature[0:32])
         self.s = big_endian_to_int(signature[32:64])

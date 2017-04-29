@@ -1204,7 +1204,7 @@ def test_ecrecover():
     msghash = utils.sha3('the quick brown fox jumps over the lazy dog')
 
     pk = PrivateKey(priv)
-    signature = pk.sign_recoverable(msghash, hasher=lambda x: x)
+    signature = pk.sign_recoverable(msghash, hasher=None)
     V = utils.safe_ord(signature[64]) + 27
     R = big_endian_to_int(signature[0:32])
     S = big_endian_to_int(signature[32:64])

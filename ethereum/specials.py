@@ -40,7 +40,7 @@ def proc_ecrecover(ext, msg):
         pk = PublicKey.from_signature_and_message(
             signature,
             message_hash,
-            hasher=lambda x: x,
+            hasher=None,
         )
     except Exception:
         # Recovery failed
