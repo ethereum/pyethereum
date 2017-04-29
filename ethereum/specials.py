@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 import bitcoin
 from rlp.utils import ascii_chr
-from secp256k1 import PublicKey, ALL_FLAGS
+from coincurve import PublicKey
 
 from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex
@@ -30,26 +30,23 @@ def proc_ecrecover(ext, msg):
     if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, []
 
-    signature_bytes = [0] * 64
+    signature_bytes = [0] * 65
     msg.data.extract_copy(signature_bytes, 0, 64, 32)
     msg.data.extract_copy(signature_bytes, 32, 96, 32)
+    signature_bytes[64] = v - 27
     signature = b''.join(map(ascii_chr, signature_bytes))
 
-    pk = PublicKey(flags=ALL_FLAGS)
     try:
-        pk.public_key = pk.ecdsa_recover(
+        pk = PublicKey.from_signature_and_message(
+            signature,
             message_hash,
-            pk.ecdsa_recoverable_deserialize(
-                signature,
-                v - 27
-            ),
-            raw=True
+            hasher=None,
         )
     except Exception:
         # Recovery failed
         return 1, msg.gas - gas_cost, []
 
-    pub = pk.serialize(compressed=False)
+    pub = pk.format(compressed=False)
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
 
