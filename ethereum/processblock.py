@@ -30,6 +30,8 @@ OUT_OF_GAS = -1
 # contract creating transactions send to an empty address
 CREATE_CONTRACT_ADDRESS = b''
 
+null_address = b'\xff' * 20
+
 
 class Log(rlp.Serializable):
 
@@ -120,10 +122,11 @@ def create_contract(ext, msg):
     code = msg.data.extract_all()
     if ext.tx_origin != msg.sender:
         ext.increment_nonce(msg.sender)
-    nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
-    if ext.post_metropolis_hardfork() and msg.sender == ext.tx_origin and False:
-        msg.to = sha3(msg.sender + code)[12:]
+    if ext.post_metropolis_hardfork() and msg.sender == null_address:
+        msg.to = mk_contract_address(sender, 0)
+        # msg.to = sha3(msg.sender + code)[12:]
     else:
+        nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
@@ -159,4 +162,4 @@ def create_contract(ext, msg):
         return 1, gas, msg.to
     else:
         ext.revert(snapshot)
-        return 0, gas, b''
+        return 0, gas, dat

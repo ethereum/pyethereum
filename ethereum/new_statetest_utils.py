@@ -101,17 +101,19 @@ def compute_state_test_unit(state, txdata, indices, konfig):
             to=decode_hex(remove_0x_head(txdata['to'])),
             value=parse_int_or_hex(txdata['value'][indices["value"]] or b"0"),
             data=decode_hex(remove_0x_head(txdata['data'][indices["data"]])))
-        tx.sign(decode_hex(remove_0x_head(txdata['secretKey'])))
+        if 'secretKey' in txdata:
+            tx.sign(decode_hex(remove_0x_head(txdata['secretKey'])))
+        else:
+            tx.v = parse_int_or_hex(txdata['v'])
         # Run it
         prev = state.to_dict()
         success, output = state_transition.apply_transaction(state, tx)
-        post = state.to_dict()
         print("Applied tx")
     except InvalidTransaction as e:
         print("Exception: %r" % e)
-        post = state.to_dict()
         success, output = False, b''
     state.commit()
+    post = state.to_dict()
     output_decl = {
         "hash": '0x' + encode_hex(state.trie.root_hash),
         "indexes": indices,
@@ -167,7 +169,7 @@ def verify_state_test(test):
                   parse_int_or_hex(test["transaction"]['value'][result["indexes"]["value"]]),
                   data))
             computed = compute_state_test_unit(_state, test["transaction"], result["indexes"], configs[config_name])
-            if computed["hash"] != result["hash"]:
+            if computed["hash"][-64:] != result["hash"][-64:]:
                 for k in computed["diff"]:
                     print(k, computed["diff"][k])
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))

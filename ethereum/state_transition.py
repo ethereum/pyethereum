@@ -242,7 +242,13 @@ def apply_transaction(state, tx):
         txdict["data"] = "data<%d>" % (len(txdict["data"]) // 2 - 1)
     log_tx.debug('TX NEW', tx_dict=txdict)
     # start transacting #################
-    state.increment_nonce(tx.sender)
+    if tx.sender != null_address:
+        state.increment_nonce(tx.sender)
+    else:
+        if tx.gasprice != 0 or tx.value != 0 or tx.nonce != 0:
+            raise InvalidTransaction("EIP86 transactions must have 0 gasprice and value")
+        if tx.v != state.config['NETWORK_ID']:
+            raise InvalidTransaction("Wrong network ID for EIP86 transaction")
 
     # buy startgas
     assert state.get_balance(tx.sender) >= tx.startgas * tx.gasprice
