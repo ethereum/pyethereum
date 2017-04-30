@@ -1,6 +1,7 @@
 import rlp
 from ethereum.block import BlockHeader, Block
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
+from ethereum import state_transition
 from ethereum.state import State, Account
 from ethereum.securetrie import SecureTrie
 from ethereum.trie import BLANK_NODE, BLANK_ROOT
@@ -104,41 +105,32 @@ def load_snapshot(chain, snapshot):
     head_block_rlp = scan_bin(snapshot['blocks'][limit-1])
     head_header_data = rlp.decode(head_block_rlp)[0]
 
-    state = load_state(chain.env, snapshot['alloc'])
-    assert state.root_hash == base_header.state_root
-
-    #_get_block_header = blocks.get_block_header
-    #def get_block_header(db, blockhash):
-        #if blockhash == first_header_data[0]:  # first block's prevhash
-            #return base_header
-        #return _get_block_header(db, blockhash)
-    #blocks.get_block_header = get_block_header
-
-    #_get_block = blocks.get_block
-    #def get_block(env, blockhash):
-        #if blockhash == first_header_data[0]:
-            #return FakeBlock(env, get_block_header(env.db, blockhash), int(snapshot['chainDifficulty']))
-        #return _get_block(env, blockhash)
-    #blocks.get_block = get_block
-
-    def validate_uncles():
-        return True
+    trie = load_state(chain.env, snapshot['alloc'])
+    assert trie.root_hash == base_header.state_root
+    chain.state.trie = trie
 
     print "Start loading recent blocks from snapshot"
-    first_block = rlp.decode(first_block_rlp, Block, env=chain.env)
-    chain.index.add_block(first_block)
-    chain._store_block(first_block)
-    chain.blockchain.put('HEAD', first_block.hash)
-    chain.blockchain.put(chain.index._block_by_number_key(first_block.number), first_block.hash)
-    chain.blockchain.commit()
-    chain._update_head_candidate()
+    vbh = state_transition.validate_block_header
+    vus = state_transition.validate_uncles
+    def _vbh(state, header):
+        return True
+    def _vus(state, block):
+        return True
+    state_transition.validate_block_header = _vbh
+    state_transition.validate_uncles = _vus
+    # add the first block
+    first_block = rlp.decode(first_block_rlp, sedes=Block)
+    chain.head_hash = first_block.header.prevhash
+    chain.add_block(first_block)
+    assert chain.head_hash == first_block.header.hash
+    state_transition.validate_block_header = vbh
 
     count = 0
     for block_rlp in snapshot['blocks'][1:]:
         block_rlp = scan_bin(block_rlp)
-        block = rlp.decode(block_rlp, Block, env=chain.env)
-        if count < chain.env.config['MAX_UNCLE_DEPTH']+2:
-            block.__setattr__('validate_uncles', validate_uncles)
+        block = rlp.decode(block_rlp, Block)
+        if count == chain.state.config['MAX_UNCLE_DEPTH']+2:
+            state_transition.validate_uncles = vus
         if not chain.add_block(block):
             print "Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8])
         else:

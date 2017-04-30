@@ -5,7 +5,7 @@ import rlp
 from collections import OrderedDict
 from ethereum import ethash, ethash_utils, utils
 from ethereum.block import Block, BlockHeader
-from ethereum.utils import sha3
+from ethereum.utils import sha3, encode_hex
 from ethereum.slogging import get_logger
 from ethereum.ethpow import check_pow
 from ethereum.state_transition import calc_difficulty, check_gaslimit, initialize, \

@@ -306,7 +306,6 @@ class Chain(object):
             self.parent_queue[block.header.prevhash].append(block)
             log.info('No parent found. Delaying for now')
             return False
-        blk_txhashes = {tx.hash: True for tx in block.transactions}
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.header.hash, rlp.encode(block))
