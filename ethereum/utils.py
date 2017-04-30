@@ -207,6 +207,20 @@ def normalize_address(x, allow_blank=False):
         raise Exception("Invalid address format: %r" % x)
     return x
 
+def normalize_key(key):
+    if len(key) == 32:
+        o = key
+    elif len(key) == 64:
+        o = decode_hex(key)
+    elif len(key) == 66 and key[:2] == '0x':
+        o = decode_hex(key[2:])
+    elif is_numeric(key):
+        o = encode_int32(key)
+    else:
+        raise Exception("Invalid key format: %r" % key)
+    if o == b'\x00' * 32:
+        raise Exception("Zero privkey invalid")
+    return o
 
 def zpad(x, l):
     return b'\x00' * max(0, l - len(x)) + x
