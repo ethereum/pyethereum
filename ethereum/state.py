@@ -353,7 +353,7 @@ class State():
                     state_dump[encode_hex(address)][c] = snapshot_form(getattr(blanky, c))
             acct_dump = state_dump[encode_hex(address)]
             for key, val in v.items():
-                if key in ACCOUNT_SPECIAL_PARAMS:
+                if key in ACCOUNT_SPECIAL_PARAMS and key != 'storage':
                     acct_dump[key] = snapshot_form(val)
                 else:
                     if val:

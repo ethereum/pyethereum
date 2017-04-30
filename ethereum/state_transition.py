@@ -237,7 +237,10 @@ def apply_transaction(state, tx):
             if tx.startgas < intrinsic_gas:
                 raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas))
 
-    log_tx.debug('TX NEW', tx_dict=tx.to_dict())
+    txdict = tx.to_dict()
+    if len(txdict["data"]) > 2000:
+        txdict["data"] = "data<%d>" % (len(txdict["data"]) // 2 - 1)
+    log_tx.debug('TX NEW', tx_dict=txdict)
     # start transacting #################
     state.increment_nonce(tx.sender)
 

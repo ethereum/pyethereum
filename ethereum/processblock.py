@@ -8,7 +8,7 @@ from ethereum.specials import specials as default_specials
 from ethereum import bloom
 from ethereum import vm as vm
 from ethereum.utils import safe_ord, normalize_address, mk_contract_address, \
-    mk_metropolis_contract_address, int_to_addr, big_endian_to_int, encode_hex
+    mk_metropolis_contract_address, int_to_addr, big_endian_to_int, encode_hex, sha3
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
         BlockGasLimitReached, InsufficientBalance
 from ethereum import transactions
@@ -121,7 +121,10 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext.increment_nonce(msg.sender)
     nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
-    msg.to = mk_contract_address(sender, nonce)
+    if ext.post_metropolis_hardfork() and msg.sender == ext.tx_origin and False:
+        msg.to = sha3(msg.sender + code)[12:]
+    else:
+        msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
@@ -132,6 +135,8 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
+    # if len(ext.get_code(msg.to)):
+    #     return 0, 0, b''
     ext.set_nonce(msg.to, 1 if ext.post_clearing_hardfork() else 0)
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
@@ -145,7 +150,7 @@ def create_contract(ext, msg):
             gas -= gcost
         else:
             dat = []
-            log_msg.debug('CONTRACT CREATION OOG', have=gas, want=gcost, block_number=ext.block_number)
+            log_msg.debug('CONTRACT CREATION FAILED', have=gas, want=gcost, block_number=ext.block_number)
             if ext.post_homestead_hardfork():
                 ext.revert(snapshot)
                 return 0, 0, b''

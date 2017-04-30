@@ -15,6 +15,7 @@ from rlp.utils import encode_hex, ascii_chr
 from ethereum.utils import to_string, encode_int, zpad
 
 log_log = get_logger('eth.vm.log')
+log_msg = get_logger('eth.pb.msg')
 log_vm_exit = get_logger('eth.vm.exit')
 log_vm_op = get_logger('eth.vm.op')
 log_vm_op_stack = get_logger('eth.vm.op.stack')
@@ -250,6 +251,7 @@ def vm_execute(ext, msg, code):
                 trace_data['depth'] = msg.depth
                 trace_data['address'] = msg.to
             trace_data['steps'] = steps
+            trace_data['depth'] = msg.depth
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval
             log_vm_op.trace('vm', op=op, **trace_data)
@@ -712,6 +714,7 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
+            log_msg.debug('SUICIDING', addr=utils.checksum_encode(msg.to), to=utils.checksum_encode(to), xferring=xfer)
             return 1, compustate.gas, []
 
         # assert utils.is_numeric(compustate.gas)
