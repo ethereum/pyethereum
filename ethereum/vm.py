@@ -5,12 +5,15 @@ verify_stack_after_op = False
 #  ######################################
 import sys
 import copy
+import rlp
+from rlp.sedes import CountableList, binary
+from rlp.utils import decode_hex, ascii_chr
 from ethereum import utils
 from ethereum import opcodes
 from ethereum.slogging import get_logger
-from rlp.utils import ascii_chr
 from ethereum.utils import encode_hex
 from ethereum.utils import to_string
+
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -85,6 +88,42 @@ class Compustate():
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
 
+class CoverageLog(rlp.Serializable):
+
+    # TODO: original version used zpad (here replaced by int32.serialize); had
+    # comment "why zpad"?
+    fields = [
+        ('address', utils.address),
+        ('topics', CountableList(utils.int32)),
+        ('data', binary)
+    ]
+
+    def __init__(self, address, topics, data):
+        if len(address) == 40:
+            address = decode_hex(address)
+        assert len(address) == 20
+        super(CoverageLog, self).__init__(address, topics, data)
+
+    def bloomables(self):
+        return [self.address] + [utils.int32.serialize(x) for x in self.topics]
+
+    def to_dict(self):
+        return {
+            "bloom": encode_hex(bloom.b64(bloom.bloom_from_list(self.bloomables()))),
+            "address": encode_hex(self.address),
+            "data": b'0x' + encode_hex(self.data),
+            "topics": [encode_hex(utils.int32.serialize(t))
+                       for t in self.topics]
+        }
+
+    def __repr__(self):
+        return '{"address":"%r", "topics":%r, "data":"%r"}\n' %  \
+            (encode_hex(self.address), 
+            [topic_to_string(t) for t in self.topics], 
+             encode_hex(self.data))
+
+def topic_to_string(topic):
+    return '"' + encode_hex(utils.int32.serialize(topic)) + '"'
 
 # Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
@@ -506,10 +545,18 @@ def vm_execute(ext, msg, code):
             depth = int(op[3:])
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
-            compustate.gas -= msz * opcodes.GLOGBYTE
+            
+            #compustate.gas -= msz * opcodes.GLOGBYTE
+            
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
+
+            coverage_log = CoverageLog(msg.to, topics, data)
+            log_entry = repr(coverage_log).replace("'", "")
+            events_file = open('./allFiredEvents', "a")
+            events_file.write(log_entry)
+            
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(utils.safe_ord, data)))
             # print('LOG', msg.to, topics, list(map(ord, data)))
