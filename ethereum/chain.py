@@ -140,7 +140,7 @@ class Chain(object):
     def get_parent(self, block):
         if block.header.number == int(self.db.get('GENESIS_NUMBER')):
             return None
-        return rlp.decode(self.db.get(block.header.prevhash), Block)
+        return self.get_block(block.header.prevhash)
 
     def get_block(self, blockhash):
         try:
@@ -200,13 +200,19 @@ class Chain(object):
         if not block:
             return 0
         key = 'score:' + block.header.hash
-        if key not in self.db:
-            try:
-                parent_score = self.get_score(self.get_parent(block))
-                self.db.put(key, str(parent_score + block.difficulty))
-            except:
-                return int(self.db.get('score:' + block.prevhash))
-        return int(self.db.get(key))
+
+        fills = []
+        while key not in self.db:
+            fills.insert(0, block)
+            key = 'score:' + block.header.prevhash
+            block = self.get_parent(fills[0])
+        score = int(self.db.get(key))
+        for block in fills:
+            key = 'score:' + block.header.hash
+            score = score + block.difficulty + random.randrange(block.difficulty // 10**6 + 1)
+            self.db.put(key, str(score))
+
+        return score
 
     # These two functions should be called periodically so as to
     # process blocks that were received but laid aside because
@@ -252,6 +258,7 @@ class Chain(object):
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.db.put('state:' + block.header.hash, self.state.trie.root_hash)
+            block_score = self.get_score(block)  # side effect: put 'score:' cache in db
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put('txindex:' + tx.hash, rlp.encode([block.number, i]))
