@@ -108,6 +108,8 @@ def load_snapshot(chain, snapshot):
     trie = load_state(chain.env, snapshot['alloc'])
     assert trie.root_hash == base_header.state_root
     chain.state.trie = trie
+    chain.env.db.put('score:' + base_header.hash, snapshot['chainDifficulty'])
+    chain.env.db.commit()
 
     print "Start loading recent blocks from snapshot"
     vbh = state_transition.validate_block_header
