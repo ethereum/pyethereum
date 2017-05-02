@@ -203,13 +203,13 @@ class Chain(object):
 
         fills = []
         while key not in self.db:
-            fills.insert(0, block)
+            fills.insert(0, (block.header.hash, block.difficulty))
             key = 'score:' + block.header.prevhash
-            block = self.get_parent(fills[0])
+            block = self.get_parent(block)
         score = int(self.db.get(key))
-        for block in fills:
-            key = 'score:' + block.header.hash
-            score = score + block.difficulty + random.randrange(block.difficulty // 10**6 + 1)
+        for h,d in fills:
+            key = 'score:' + h
+            score = score + d + random.randrange(d // 10**6 + 1)
             self.db.put(key, str(score))
 
         return score
