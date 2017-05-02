@@ -110,7 +110,7 @@ class Chain(object):
 
     @property
     def last_tx(self):
-        return self.txs_this_block[-1] if self.txs_this_block else None
+        return self.block.transactions[-1] if self.block.transactions else None
 
     def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
@@ -133,7 +133,7 @@ class Chain(object):
             code = compiler.compile(sourcecode) + (ct.encode_constructor_arguments(args) if args else b'')
             addr = self.tx(sender=sender, to=b'', value=value, data=code, startgas=startgas, gasprice=gasprice)
             return ABIContract(self, ct, addr)
-        
+
     def mine(self, number_of_blocks=1, coinbase=a0):
         pre_seal(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
@@ -148,6 +148,7 @@ class Chain(object):
         self.head_state = self.chain.state.ephemeral_clone()
 
     def snapshot(self):
+        self.head_state.commit()
         return self.head_state.snapshot(), len(self.block.transactions), self.block.number
 
     def revert(self, snapshot):
