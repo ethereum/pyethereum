@@ -107,7 +107,7 @@ class Transaction(rlp.Serializable):
             rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
         else:
             assert 1 <= network_id < 2**63 - 18
-            rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + [big_endian_to_int(network_id), b'', b''])
+            rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + [network_id, b'', b''])
             rawhash = utils.sha3(rlpdata)
 
         key = normalize_key(key)

@@ -7,4 +7,3 @@ pycryptodome>=3.3.1
 scrypt
 rlp>=0.4.7
 https://github.com/ethereum/ethash/tarball/master
-secp256k1
