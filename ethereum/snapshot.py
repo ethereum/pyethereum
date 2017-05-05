@@ -147,14 +147,20 @@ def load_state(env, alloc):
     count = 0
     print "Start loading state from snapshot"
     for addr in alloc:
+        print "[%d] loading account %s" % (count, addr)
         account = alloc[addr]
         acct = Account.blank_account(db, env.config['ACCOUNT_INITIAL_NONCE'])
         if len(account['storage']) > 0:
             t = SecureTrie(Trie(db, BLANK_ROOT))
+            c = 0
             for k in account['storage']:
                 v = account['storage'][k]
                 enckey = zpad(decode_hex(k), 32)
                 t.update(enckey, decode_hex(v))
+                c += 1
+                if c % 1000 and len(db.db_service.uncommitted) > 50000:
+                    print "%d uncommitted. committing..." % len(db.db_service.uncommitted)
+                    db.commit()
             acct.storage = t.root_hash
         if account['nonce']:
             acct.nonce = int(account['nonce'])
@@ -164,9 +170,6 @@ def load_state(env, alloc):
             acct.code = decode_hex(account['code'])
         state.update(decode_hex(addr), rlp.encode(acct))
         count += 1
-        if count % 1000 == 0:
-            db.commit()
-        print "[%d] loaded account %s" % (count, addr)
     db.commit()
     return state
 
