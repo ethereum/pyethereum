@@ -5,10 +5,10 @@ import time
 import rlp
 
 from ethereum import parse_genesis_declaration
-from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
+from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.config import Env
 from ethereum.slogging import get_logger
-from ethereum.state import State, dict_to_prev_header
+from ethereum.state import State
 from ethereum.state_transition import apply_block, initialize, \
     update_block_env_variables
 from ethereum.utils import encode_hex, parse_as_bin, big_endian_to_int
@@ -127,7 +127,7 @@ class Chain(object):
             if state.db.get(b.header.prevhash) == 'GENESIS':
                 jsondata = json.loads(state.db.get('GENESIS_STATE'))
                 for h in jsondata["prev_headers"][:header_depth - i]:
-                    state.prev_headers.append(dict_to_prev_header(h))
+                    state.prev_headers.append(rlp.decode(parse_as_bin(h), BlockHeader))
                 for blknum, uncles in jsondata["recent_uncles"].items():
                     if blknum >= state.block_number - state.config['MAX_UNCLE_DEPTH']:
                         state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
@@ -190,7 +190,7 @@ class Chain(object):
     def get_children(self, block):
         if isinstance(block, Block):
             block = block.header.hash
-        if isinstance(block, (BlockHeader, FakeHeader)):
+        if isinstance(block, BlockHeader):
             block = block.hash
         return [self.get_block(h) for h in self.get_child_hashes(block)]
 
@@ -377,13 +377,6 @@ class Chain(object):
     @property
     def db(self):
         return self.env.db
-
-    def get_descendants(self, block, count=1):
-        log.debug("get_descendants", block_hash=block)
-        assert block.hash in self
-        block_numbers = list(range(block.number + 1, min(self.head.number + 1,
-                                                         block.number + count + 1)))
-        return [self.get(self.index.get_block_by_number(n)) for n in block_numbers]
 
     def get_blockhashes_from_hash(self, hash, max):
         try:

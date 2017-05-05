@@ -260,7 +260,7 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
     if anc:
         descendants = chain.get_descendants(anc)
     else:
-        descendants = chain.get_descendants(chain.db.get('GENESIS_HASH'))
+        descendants = chain.get_descendants(chain.get_block(chain.db.get('GENESIS_HASH')))
     potential_uncles = [x for x in descendants if x not in chain and isinstance(x, Block)]
     uncles = [x.header for x in potential_uncles if not call_casper(chain.state, 'isDunkleIncluded', [x.header.hash])]
     dunkle_txs = []

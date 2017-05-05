@@ -7,9 +7,9 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
+from ethereum.block import BlockHeader
 from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
-from ethereum.block import FakeHeader
 from ethereum.db import BaseDB, EphemDB, OverlayDB
 import copy
 import sys
@@ -383,7 +383,7 @@ class State():
                 setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
             elif k == 'prev_headers':
                 if k in snapshot_data:
-                    headers = [dict_to_prev_header(h) for h in v]
+                    headers = [rlp.decode(parse_as_bin(h), BlockHeader) for h in v]
                 else:
                     headers = default
                 setattr(state, k, headers)
@@ -419,7 +419,7 @@ class State():
             elif isinstance(default, (str, bytes)):
                 snapshot[k] = '0x'+encode_hex(v)
             elif k == 'prev_headers' and not no_prevblocks:
-                snapshot[k] = [prev_header_to_dict(h) for h in v[:self.config['PREV_HEADER_DEPTH']]]
+                snapshot[k] = ['0x' + encode_hex(rlp.encode(h)) for h in v[:self.config['PREV_HEADER_DEPTH']]]
             elif k == 'recent_uncles' and not no_prevblocks:
                 snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
         return snapshot
@@ -466,28 +466,8 @@ class State():
         return self._is_X_fork('DAO', at_fork_height)
 
 
-def prev_header_to_dict(h):
-    return {
-        "hash": '0x'+encode_hex(h.hash),
-        "number": str(h.number),
-        "timestamp": str(h.timestamp),
-        "difficulty": str(h.difficulty),
-        "gas_used": str(h.gas_used),
-        "gas_limit": str(h.gas_limit),
-        "uncles_hash": '0x'+encode_hex(h.uncles_hash)
-    }
-
-
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 
-def dict_to_prev_header(h):
-    return FakeHeader(hash=parse_as_bin(h['hash']),
-                      number=parse_as_int(h['number']),
-                      timestamp=parse_as_int(h['timestamp']),
-                      difficulty=parse_as_int(h['difficulty']),
-                      gas_used=parse_as_int(h.get('gas_used', '0')),
-                      gas_limit=parse_as_int(h['gas_limit']),
-                      uncles_hash=parse_as_bin(h.get('uncles_hash', '0x'+encode_hex(BLANK_UNCLES_HASH))))
 
 class Account(rlp.Serializable):
 
