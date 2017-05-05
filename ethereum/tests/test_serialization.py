@@ -20,7 +20,7 @@ return(x.double(5))
 ''' % filename
 
 
-@pytest.skip
+@pytest.mark.skip()
 def test_returnten():
     s = tester.state()
     open(filename, 'w').write(mul2_code)
