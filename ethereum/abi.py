@@ -1,4 +1,4 @@
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 from __future__ import print_function
 
 import ast
@@ -6,7 +6,8 @@ import re
 import warnings
 
 import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 
 from ethereum import utils
 from ethereum.utils import (

@@ -5,7 +5,8 @@ import ethereum.state_transition as state_transition
 import ethereum.parse_genesis_declaration
 from ethereum.transaction_queue import TransactionQueue
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 import ethereum.ethpow as ethpow
 import ethereum.ethpow_utils as ethpow_utils
 import ethereum.utils as utils
@@ -34,10 +35,10 @@ alt_db = db
 
 @pytest.fixture(scope="module")
 def accounts():
-    k = utils.sha3(b'cow')
-    v = utils.privtoaddr(k)
-    k2 = utils.sha3(b'horse')
-    v2 = utils.privtoaddr(k2)
+    k = sha3(b'cow')
+    v = privtoaddr(k)
+    k2 = sha3(b'horse')
+    v2 = privtoaddr(k2)
     return k, v, k2, v2
 
 
@@ -91,7 +92,7 @@ def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
         nonce, gasprice, startgas=100000,
-        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+        to=v2, value=denoms.finney * 10, data='').sign(k)
     return tx
 
 
@@ -105,6 +106,14 @@ def test_transfer(db):
     assert success
     assert chain.state.get_balance(v) == b_v - value
     assert chain.state.get_balance(v2) == b_v2 + value
+
+
+def test_alloc_too_big(db):
+    k, v, k2, v2 = accounts()
+    blk = None
+    with pytest.raises(ValueError):
+        blk = blocks.genesis(env(db), start_alloc={v: {"balance": 2 ** 256}})
+    assert blk is None
 
 
 def test_failing_transfer(db):

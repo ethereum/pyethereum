@@ -1,9 +1,9 @@
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 from os import path
 
 import pytest
 
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 
 from ethereum import tester
 from ethereum import utils
@@ -16,6 +16,7 @@ CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
 def bytecode_is_generated(cinfo, cname):
     return 'code' in cinfo[cname] and len(cinfo[cname]['code']) > 10
+
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_library_from_file():
@@ -249,6 +250,7 @@ def test_abi_contract():
     assert contract.mul2(2) == 4
     assert contract.mul2(-2) == -4
 
+
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_extra_args():
     src = """
@@ -269,3 +271,10 @@ def test_extra_args():
         extra_args=["--optimize-runs", "100"]
     )
     assert bytecode_is_generated(contract_info, 'foo')
+
+def test_missing_solc(monkeypatch):
+    monkeypatch.setattr(_solidity, 'get_compiler_path', lambda: None)
+    assert _solidity.get_compiler_path() is None
+    sample_sol_code = "contract SampleContract {}"
+    with pytest.raises(_solidity.SolcMissing):
+        _solidity.compile_code(sample_sol_code)

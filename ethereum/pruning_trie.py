@@ -5,8 +5,9 @@ import rlp
 from ethereum import utils
 from ethereum.utils import to_string
 from ethereum.utils import is_string
+from ethereum.utils import encode_hex
 import copy
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, ascii_chr, str_to_bytes
 import sys
 from ethereum.fast_rlp import encode_optimized
 rlp_encode = encode_optimized

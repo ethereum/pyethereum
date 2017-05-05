@@ -3,7 +3,6 @@ import random
 import time
 
 import rlp
-from rlp.utils import encode_hex
 
 from ethereum import parse_genesis_declaration
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
@@ -12,7 +11,7 @@ from ethereum.slogging import get_logger
 from ethereum.state import State, dict_to_prev_header
 from ethereum.state_transition import apply_block, initialize, \
     update_block_env_variables
-from ethereum.utils import parse_as_bin, big_endian_to_int
+from ethereum.utils import encode_hex, parse_as_bin, big_endian_to_int
 
 log = get_logger('eth.chain')
 

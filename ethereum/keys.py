@@ -2,7 +2,8 @@ import os
 import pbkdf2
 import sys
 
-from rlp.utils import encode_hex, decode_hex
+from rlp.utils import decode_hex
+from ethereum.utils import encode_hex
 
 try:
     scrypt = __import__('scrypt')

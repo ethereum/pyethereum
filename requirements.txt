@@ -1,5 +1,5 @@
 bitcoin
-pysha3
+pysha3>=1.0.1
 PyYAML
 repoze.lru
 pbkdf2
