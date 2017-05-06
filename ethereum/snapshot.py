@@ -1,7 +1,8 @@
 import rlp
-from ethereum import blocks
-from ethereum.blocks import Account, BlockHeader, Block, CachedBlock
+from ethereum.block import BlockHeader, Block
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
+from ethereum import state_transition
+from ethereum.state import State, Account
 from ethereum.securetrie import SecureTrie
 from ethereum.trie import BLANK_NODE, BLANK_ROOT
 from ethereum.pruning_trie import Trie
@@ -43,35 +44,24 @@ class FakeBlock(object):
 
 
 def create_snapshot(chain, recent=1024):
-    env = chain.env
-    assert recent > env.config['MAX_UNCLE_DEPTH']+2
+    assert recent > chain.env.config['MAX_UNCLE_DEPTH']+2
 
     head_block = chain.head
-    base_block_hash = chain.index.get_block_by_number(max(head_block.number-recent, 0))
-    base_block = chain.get(base_block_hash)
-
-    snapshot = create_env_snapshot(base_block)
-    snapshot['base'] = create_base_snapshot(base_block)
-    snapshot['blocks'] = create_blocks_snapshot(base_block, head_block)
-    snapshot['alloc'] = create_state_snapshot(env, base_block.state)
-
-    return snapshot
-
-
-def create_env_snapshot(base):
+    base_block = chain.get_block_by_number(max(head_block.number-recent, 0))
     return {
-        'chainDifficulty': snapshot_form(base.chain_difficulty())
+        'base': snapshot_form(rlp.encode(base_block.header)),
+        'chainDifficulty': snapshot_form(chain.get_score(base_block)),
+        'blocks': create_blocks_snapshot(chain, base_block, head_block),
+        'alloc': create_state_snapshot(chain, base_block)
     }
 
 
-def create_base_snapshot(base):
-    return snapshot_form(rlp.encode(base.header))
-
-
-def create_state_snapshot(env, state_trie):
+def create_state_snapshot(chain, block):
+    env = chain.env
+    state = State(block.state_root, env)
     alloc = dict()
     count = 0
-    for addr, account_rlp in state_trie.iter_branch():
+    for addr, account_rlp in state.trie.iter_branch():
         alloc[encode_hex(addr)] = create_account_snapshot(env, account_rlp)
         count += 1
         print "[%d] created account snapshot %s" % (count, encode_hex(addr))
@@ -92,13 +82,13 @@ def create_account_snapshot(env, rlpdata):
     }
 
 
-def create_blocks_snapshot(base, head):
+def create_blocks_snapshot(chain, base, head):
     recent_blocks = list()
     block = head
     while True:
         recent_blocks.append(snapshot_form(rlp.encode(block)))
-        if block.prevhash != base.hash:
-            block = block.get_parent()
+        if block and block.prevhash != base.hash:
+            block = chain.get_parent(block)
         else:
             break
     recent_blocks.reverse()
@@ -115,41 +105,34 @@ def load_snapshot(chain, snapshot):
     head_block_rlp = scan_bin(snapshot['blocks'][limit-1])
     head_header_data = rlp.decode(head_block_rlp)[0]
 
-    state = load_state(chain.env, snapshot['alloc'])
-    assert state.root_hash == base_header.state_root
-
-    _get_block_header = blocks.get_block_header
-    def get_block_header(db, blockhash):
-        if blockhash == first_header_data[0]:  # first block's prevhash
-            return base_header
-        return _get_block_header(db, blockhash)
-    blocks.get_block_header = get_block_header
-
-    _get_block = blocks.get_block
-    def get_block(env, blockhash):
-        if blockhash == first_header_data[0]:
-            return FakeBlock(env, get_block_header(env.db, blockhash), int(snapshot['chainDifficulty']))
-        return _get_block(env, blockhash)
-    blocks.get_block = get_block
-
-    def validate_uncles():
-        return True
+    trie = load_state(chain.env, snapshot['alloc'])
+    assert trie.root_hash == base_header.state_root
+    chain.state.trie = trie
+    chain.env.db.put('score:' + base_header.hash, snapshot['chainDifficulty'])
+    chain.env.db.commit()
 
     print "Start loading recent blocks from snapshot"
-    first_block = rlp.decode(first_block_rlp, Block, env=chain.env)
-    chain.index.add_block(first_block)
-    chain._store_block(first_block)
-    chain.blockchain.put('HEAD', first_block.hash)
-    chain.blockchain.put(chain.index._block_by_number_key(first_block.number), first_block.hash)
-    chain.blockchain.commit()
-    chain._update_head_candidate()
+    vbh = state_transition.validate_block_header
+    vus = state_transition.validate_uncles
+    def _vbh(state, header):
+        return True
+    def _vus(state, block):
+        return True
+    state_transition.validate_block_header = _vbh
+    state_transition.validate_uncles = _vus
+    # add the first block
+    first_block = rlp.decode(first_block_rlp, sedes=Block)
+    chain.head_hash = first_block.header.prevhash
+    chain.add_block(first_block)
+    assert chain.head_hash == first_block.header.hash
+    state_transition.validate_block_header = vbh
 
     count = 0
     for block_rlp in snapshot['blocks'][1:]:
         block_rlp = scan_bin(block_rlp)
-        block = rlp.decode(block_rlp, Block, env=chain.env)
-        if count < chain.env.config['MAX_UNCLE_DEPTH']+2:
-            block.__setattr__('validate_uncles', validate_uncles)
+        block = rlp.decode(block_rlp, Block)
+        if count == chain.state.config['MAX_UNCLE_DEPTH']+2:
+            state_transition.validate_uncles = vus
         if not chain.add_block(block):
             print "Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8])
         else:
@@ -164,14 +147,20 @@ def load_state(env, alloc):
     count = 0
     print "Start loading state from snapshot"
     for addr in alloc:
+        print "[%d] loading account %s" % (count, addr)
         account = alloc[addr]
         acct = Account.blank_account(db, env.config['ACCOUNT_INITIAL_NONCE'])
         if len(account['storage']) > 0:
             t = SecureTrie(Trie(db, BLANK_ROOT))
+            c = 0
             for k in account['storage']:
                 v = account['storage'][k]
                 enckey = zpad(decode_hex(k), 32)
                 t.update(enckey, decode_hex(v))
+                c += 1
+                if c % 1000 and len(db.db_service.uncommitted) > 50000:
+                    print "%d uncommitted. committing..." % len(db.db_service.uncommitted)
+                    db.commit()
             acct.storage = t.root_hash
         if account['nonce']:
             acct.nonce = int(account['nonce'])
@@ -181,9 +170,6 @@ def load_state(env, alloc):
             acct.code = decode_hex(account['code'])
         state.update(decode_hex(addr), rlp.encode(acct))
         count += 1
-        if count % 1000 == 0:
-            db.commit()
-        print "[%d] loaded account %s" % (count, addr)
     db.commit()
     return state
 

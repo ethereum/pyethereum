@@ -15,6 +15,8 @@ bin_to_nibbles_cache = {}
 hti = {}
 for i, c in enumerate(b'0123456789abcdef'):
     hti[c] = i
+for i, c in enumerate('0123456789abcdef'):
+    hti[c] = i
 
 
 def bin_to_nibbles(s):

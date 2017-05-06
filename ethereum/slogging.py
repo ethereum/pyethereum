@@ -3,7 +3,7 @@ import json
 import textwrap
 from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
-from ethereum.utils import bcolors, isnumeric
+from ethereum.utils import bcolors, is_numeric
 
 
 DEFAULT_LOGLEVEL = 'INFO'
@@ -190,7 +190,7 @@ class SLogger(logging.Logger):
                     msg = json.dumps(message, cls=_LogJSONEncoder)
             except UnicodeDecodeError:
                 message.update({
-                    k: v if isnumeric(v) or isinstance(v, (float, complex)) else repr(v)
+                    k: v if is_numeric(v) or isinstance(v, (float, complex)) else repr(v)
                     for k, v in kwargs.items()
                 })
                 msg = json.dumps(message, cls=_LogJSONEncoder)

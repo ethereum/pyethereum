@@ -1,7 +1,7 @@
 import pytest
 
 from ethereum import tester as t
-from ethereum import blocks, utils, transactions, vm, abi, opcodes
+from ethereum import utils, transactions, vm, abi, opcodes
 from ethereum.exceptions import InvalidTransaction
 import rlp
 from rlp.utils import decode_hex, ascii_chr, str_to_bytes
@@ -11,7 +11,12 @@ import copy
 from ethereum.db import EphemDB
 from ethereum.utils import to_string, safe_ord, parse_int_or_hex
 from ethereum.utils import remove_0x_head, int_to_hex, normalize_address
+from ethereum.block import FakeHeader, Block
 from ethereum.config import Env
+from ethereum.config import default_config
+from ethereum.parse_genesis_declaration import state_from_genesis_declaration
+from ethereum import state_transition
+from state import State
 import json
 import os
 import time
@@ -59,7 +64,13 @@ fixture_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures')
 
 
 def normalize_hex(s):
-    return s if len(s) > 2 else b'0x00'
+    if s[:2] != '0x':
+        s = '0x' + s
+    if s == '0x':
+        s = '0x00'
+    if len(s) < 66:
+        s = s[:2] + b'0' * (66 - len(s)) + s[2:]
+    return s
 
 
 def acct_standard_form(a):
@@ -68,7 +79,7 @@ def acct_standard_form(a):
         "nonce": parse_int_or_hex(a["nonce"]),
         "code": to_string(a["code"]),
         "storage": {normalize_hex(k): normalize_hex(v) for
-                    k, v in a["storage"].items() if normalize_hex(v).rstrip(b'0') != b'0x'}
+                    k, v in a["storage"].items() if normalize_hex(v).rstrip('0') != '0x'}
     }
 
 
@@ -111,13 +122,13 @@ def mktest(code, language, data=None, fun=None, args=None,
     pre = s.block.to_dict(True)['state']
     if test_type == VM:
         exek = {"address": ca, "caller": t.a0,
-                "code": b'0x' + encode_hex(s.block.get_code(ca)),
-                "data": b'0x' + encode_hex(d), "gas": to_string(gas),
+                "code": '0x' + encode_hex(s.block.get_code(ca)),
+                "data": '0x' + encode_hex(d), "gas": to_string(gas),
                 "gasPrice": to_string(1), "origin": t.a0,
                 "value": to_string(value)}
         return fill_vm_test({"env": env, "pre": pre, "exec": exek})
     else:
-        tx = {"data": b'0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
+        tx = {"data": '0x' + encode_hex(d), "gasLimit": parse_int_or_hex(gas),
               "gasPrice": to_string(1), "nonce": to_string(s.block.get_nonce(t.a0)),
               "secretKey": encode_hex(t.k0), "to": ca, "value": to_string(value)}
         return fill_state_test({"env": env, "pre": pre, "transaction": tx})
@@ -135,33 +146,32 @@ def run_vm_test(params, mode, profiler=None):
                                    'previousHash', 'currentCoinbase',
                                    'currentDifficulty', 'currentNumber'])
     # setup env
-    header = blocks.BlockHeader(
-        prevhash=decode_hex(env['previousHash']),
-        number=parse_int_or_hex(env['currentNumber']),
-        coinbase=decode_hex(env['currentCoinbase']),
-        difficulty=parse_int_or_hex(env['currentDifficulty']),
+    state = State(
+        block_prevhash=decode_hex(env['previousHash']),
+        prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
+        block_number=parse_int_or_hex(env['currentNumber']),
+        block_coinbase=decode_hex(env['currentCoinbase']),
+        block_difficulty=parse_int_or_hex(env['currentDifficulty']),
         gas_limit=parse_int_or_hex(env['currentGasLimit']),
         timestamp=parse_int_or_hex(env['currentTimestamp']))
-
-    blk = blocks.Block(header, env=db_env)
 
     # setup state
     for address, h in list(pre.items()):
         assert len(address) == 40
         address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
-        blk.set_nonce(address, parse_int_or_hex(h['nonce']))
-        blk.set_balance(address, parse_int_or_hex(h['balance']))
-        blk.set_code(address, decode_hex(h['code'][2:]))
+        state.set_nonce(address, parse_int_or_hex(h['nonce']))
+        state.set_balance(address, parse_int_or_hex(h['balance']))
+        state.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
-            blk.set_storage_data(address,
-                                 utils.big_endian_to_int(decode_hex(k[2:])),
-                                 utils.big_endian_to_int(decode_hex(v[2:])))
+            state.set_storage_data(address,
+                                   utils.big_endian_to_int(decode_hex(k[2:])),
+                                   decode_hex(v[2:]))
 
     # execute transactions
     sender = decode_hex(exek['caller'])  # a party that originates a call
     recvaddr = decode_hex(exek['address'])
-    nonce = blk._get_acct_item(sender, 'nonce')
+    nonce = state.get_nonce(sender)
     gasprice = parse_int_or_hex(exek['gasPrice'])
     startgas = parse_int_or_hex(exek['gas'])
     value = parse_int_or_hex(exek['value'])
@@ -182,37 +192,29 @@ def run_vm_test(params, mode, profiler=None):
     apply_message_calls = []
     orig_apply_msg = pb.apply_msg
 
-    ext = pb.VMExt(blk, tx)
+    ext = state_transition.VMExt(state, tx)
 
     def msg_wrapper(msg):
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
                                         destination=encode_hex(msg.to),
-                                        data=b'0x' + hexdata))
+                                        data='0x' + hexdata))
         return 1, msg.gas, b''
 
     def create_wrapper(msg):
         sender = decode_hex(msg.sender) if \
             len(msg.sender) == 40 else msg.sender
-        nonce = utils.encode_int(ext._block.get_nonce(msg.sender))
+        nonce = utils.encode_int(ext.get_nonce(msg.sender))
         addr = utils.sha3(rlp.encode([sender, nonce]))[12:]
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=to_string(msg.gas),
                                         value=to_string(msg.value),
-                                        destination=b'', data=b'0x' + hexdata))
+                                        destination=b'', data='0x' + hexdata))
         return 1, msg.gas, addr
 
     ext.msg = msg_wrapper
     ext.create = create_wrapper
-
-    def blkhash(n):
-        if n >= ext.block_number or n < ext.block_number - 256:
-            return b''
-        else:
-            return utils.sha3(to_string(n))
-
-    ext.block_hash = blkhash
 
     msg = vm.Message(tx.sender, tx.to, tx.value, tx.startgas,
                      vm.CallData([safe_ord(x) for x in tx.data]))
@@ -224,9 +226,9 @@ def run_vm_test(params, mode, profiler=None):
     if profiler:
         profiler.disable()
     pb.apply_msg = orig_apply_msg
-    blk.commit_state()
-    for s in blk.suicides:
-        blk.del_account(s)
+    for s in state.suicides:
+        state.del_account(s)
+    state.commit()
     time_post = time.time()
 
     """
@@ -240,10 +242,10 @@ def run_vm_test(params, mode, profiler=None):
 
     if success:
         params2['callcreates'] = apply_message_calls
-        params2['out'] = b'0x' + encode_hex(b''.join(map(ascii_chr, output)))
+        params2['out'] = '0x' + encode_hex(b''.join(map(ascii_chr, output)))
         params2['gas'] = to_string(gas_remained)
-        params2['logs'] = [log.to_dict() for log in blk.logs]
-        params2['post'] = blk.to_dict(with_state=True)['state']
+        params2['logs'] = [log.to_dict() for log in state.logs]
+        params2['post'] = state.to_dict()
 
     if mode == FILL:
         return params2
@@ -275,8 +277,13 @@ def run_vm_test(params, mode, profiler=None):
     elif mode == TIME:
         return time_post - time_pre
 
+fake_headers = {}
 
-# Fills up a vm test without post data, or runs the test
+def mk_fake_header(blknum):
+    if blknum not in fake_headers:
+        fake_headers[blknum] = FakeHeader(utils.sha3(to_string(blknum)))
+    return fake_headers[blknum]
+
 def run_state_test(params, mode):
     pre = params['pre']
     exek = params['transaction']
@@ -287,57 +294,38 @@ def run_state_test(params, mode):
                                    'currentDifficulty', 'currentNumber'])
     assert len(env['currentCoinbase']) == 40
 
-    # setup env
-    header = blocks.BlockHeader(
-        prevhash=decode_hex(env['previousHash']),
-        number=parse_int_or_hex(env['currentNumber']),
-        coinbase=decode_hex(env['currentCoinbase']),
-        difficulty=parse_int_or_hex(env['currentDifficulty']),
-        timestamp=parse_int_or_hex(env['currentTimestamp']),
-        # work around https://github.com/ethereum/pyethereum/issues/390 [1]:
-        gas_limit=min(db_env.config['MAX_GAS_LIMIT'], parse_int_or_hex(env['currentGasLimit'])))
-    blk = blocks.Block(header, env=db_env)
+    konfig = copy.deepcopy(default_config)
+    # konfig['HOMESTEAD_FORK_BLKNUM'] = 1000000
 
-    # work around https://github.com/ethereum/pyethereum/issues/390 [2]:
-    blk.gas_limit = parse_int_or_hex(env['currentGasLimit'])
+    state = State(env=Env(db, konfig),
+                  prev_headers=[mk_fake_header(i) for i in range(parse_int_or_hex(env['currentNumber']) -1, max(-1, parse_int_or_hex(env['currentNumber']) -257), -1)],
+                  block_number=parse_int_or_hex(env['currentNumber']),
+                  block_coinbase=utils.normalize_address(env['currentCoinbase']),
+                  timestamp=parse_int_or_hex(env['currentTimestamp']),
+                  gas_limit=parse_int_or_hex(env['currentGasLimit']),
+                  block_difficulty=parse_int_or_hex(env['currentDifficulty']))
 
     # setup state
     for address, h in list(pre.items()):
         assert len(address) == 40
         address = decode_hex(address)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
-        blk.set_nonce(address, parse_int_or_hex(h['nonce']))
-        blk.set_balance(address, parse_int_or_hex(h['balance']))
-        blk.set_code(address, decode_hex(h['code'][2:]))
+        state.set_nonce(address, parse_int_or_hex(h['nonce']))
+        state.set_balance(address, parse_int_or_hex(h['balance']))
+        state.set_code(address, decode_hex(h['code'][2:]))
         for k, v in h['storage'].items():
-            blk.set_storage_data(address,
-                                 utils.big_endian_to_int(decode_hex(k[2:])),
-                                 utils.big_endian_to_int(decode_hex(v[2:])))
+            state.set_storage_data(address,
+                                   utils.big_endian_to_int(decode_hex(k[2:])),
+                                   decode_hex(v[2:]))
 
     for address, h in list(pre.items()):
         address = decode_hex(address)
-        assert blk.get_nonce(address) == parse_int_or_hex(h['nonce'])
-        assert blk.get_balance(address) == parse_int_or_hex(h['balance'])
-        assert blk.get_code(address) == decode_hex(h['code'][2:])
+        assert state.get_nonce(address) == parse_int_or_hex(h['nonce'])
+        assert state.get_balance(address) == parse_int_or_hex(h['balance'])
+        assert state.get_code(address) == decode_hex(h['code'][2:])
         for k, v in h['storage'].items():
-            assert blk.get_storage_data(address, utils.big_endian_to_int(
+            assert state.get_storage_data(address, utils.big_endian_to_int(
                 decode_hex(k[2:]))) == utils.big_endian_to_int(decode_hex(v[2:]))
-
-    # execute transactions
-    orig_apply_msg = pb.apply_msg
-
-    def apply_msg_wrapper(ext, msg):
-
-        def blkhash(n):
-            if n >= blk.number or n < blk.number - 256:
-                return b''
-            else:
-                return utils.sha3(to_string(n))
-
-        ext.block_hash = blkhash
-        return orig_apply_msg(ext, msg)
-
-    pb.apply_msg = apply_msg_wrapper
 
     try:
         tx = transactions.Transaction(
@@ -352,6 +340,7 @@ def run_state_test(params, mode):
         success, output = False, b''
         time_pre = time.time()
         time_post = time_pre
+        state.commit(allow_empties=True)
     else:
         if 'secretKey' in exek:
             tx.sign(exek['secretKey'])
@@ -363,29 +352,38 @@ def run_state_test(params, mode):
             assert False
 
         time_pre = time.time()
+        state.commit(allow_empties=True)
+        snapshot = state.snapshot()
         try:
             print('trying')
-            success, output = pb.apply_transaction(blk, tx)
-            blk.commit_state()
-            print('success', blk.get_receipts()[-1].gas_used)
+            success, output = state_transition.apply_transaction(state, tx)
+            logs = state.receipts[-1].logs
+            assert success
+            state.commit()
+            print('tx applied')
         except InvalidTransaction:
             success, output = False, b''
-            blk.commit_state()
+            state.commit()
+            pass
+        except AssertionError:
+            success, output = False, b''
+            state.commit()
             pass
         time_post = time.time()
 
-        if tx.to == b'':
-            output = blk.get_code(output)
 
-    pb.apply_msg = orig_apply_msg
+        if tx.to == b'':
+            output = state.get_code(output) if output else b''
+
 
     params2 = copy.deepcopy(params)
     if success:
-        params2['logs'] = [log.to_dict() for log in blk.get_receipt(0).logs]
+        params2['logs'] = [log.to_dict() for log in logs]
 
-    params2['out'] = b'0x' + encode_hex(output)
-    params2['post'] = copy.deepcopy(blk.to_dict(True)['state'])
-    params2['postStateRoot'] = encode_hex(blk.state.root_hash)
+
+    params2['out'] = '0x' + encode_hex(output)
+    params2['post'] = copy.deepcopy(state.to_dict())
+    params2['postStateRoot'] = encode_hex(state.trie.root_hash)
 
     if mode == FILL:
         return params2
@@ -397,13 +395,16 @@ def run_state_test(params, mode):
                   'out', 'gas', 'logs', 'postStateRoot']:
             _shouldbe = params1.get(k, None)
             _reallyis = params2.get(k, None)
-            if str_to_bytes(k) == b'out' and _shouldbe[:1] in ('#', b'#'):
-                _reallyis = str_to_bytes('#%s' % ((len(_reallyis) - 2) // 2))
-            if _shouldbe != _reallyis:
-                print(('Mismatch {key}: shouldbe {shouldbe_key} != reallyis {reallyis_key}.\n'
-                       'post: {shouldbe_post} != {reallyis_post}').format(
-                    shouldbe_key=_shouldbe, reallyis_key=_reallyis,
-                    shouldbe_post=shouldbe, reallyis_post=reallyis, key=k))
+            passed = False
+            if isinstance(_shouldbe, (str, bytes, unicode)) and _shouldbe[0] == '#':
+                if int(_shouldbe[1:]) == len(decode_hex(remove_0x_head(_reallyis))):
+                    passed = True
+            if _shouldbe == _reallyis:
+                passed = True
+            if not passed:
+                print('s', shouldbe)
+                print('r', reallyis)
+                print(state.trie.to_dict())
                 raise Exception("Mismatch: " + k + ':\n shouldbe %r\n reallyis %r' %
                                 (_shouldbe, _reallyis))
 
@@ -412,6 +413,7 @@ def run_state_test(params, mode):
 
 
 def run_ethash_test(params, mode):
+    raise Exception("Test type currently not supported")
     if 'header' not in params:
         b = blocks.genesis(db)
         b.nonce = decode_hex(params['nonce'])
@@ -504,28 +506,19 @@ def run_genesis_test(params, mode):
     if 'coinbase' not in params:
         params['coinbase'] = '0x' + '3' * 40
     x = time.time()
-    b = blocks.genesis(EphemDB(), start_alloc=params['alloc'],
-                       difficulty=parse_int_or_hex(params['difficulty']),
-                       timestamp=parse_int_or_hex(params['timestamp']),
-                       extra_data=decode_hex(remove_0x_head(params['extraData'])),
-                       gas_limit=parse_int_or_hex(params['gasLimit']),
-                       mixhash=decode_hex(remove_0x_head(params['mixhash'])),
-                       prevhash=decode_hex(remove_0x_head(params['parentHash'])),
-                       coinbase=decode_hex(remove_0x_head(params['coinbase'])),
-                       nonce=decode_hex(remove_0x_head(params['nonce'])))
-    assert b.difficulty == parse_int_or_hex(params['difficulty'])
-    assert b.timestamp == parse_int_or_hex(params['timestamp'])
-    assert b.extra_data == decode_hex(remove_0x_head(params['extraData']))
-    assert b.gas_limit == parse_int_or_hex(params['gasLimit'])
-    assert b.mixhash == decode_hex(remove_0x_head(params['mixhash']))
-    assert b.prevhash == decode_hex(remove_0x_head(params['parentHash']))
-    assert b.nonce == decode_hex(remove_0x_head(params['nonce']))
-    print(9)
+    s = state_from_genesis_declaration(params, Env())
+    assert s.block_difficulty == parse_int_or_hex(params['difficulty'])
+    assert s.timestamp == parse_int_or_hex(params['timestamp'])
+    assert s.prev_headers[0].extra_data == decode_hex(remove_0x_head(params['extraData']))
+    assert s.gas_limit == parse_int_or_hex(params['gasLimit'])
+    assert s.prev_headers[0].mixhash == decode_hex(remove_0x_head(params['mixhash']))
+    assert s.prev_headers[0].prevhash == decode_hex(remove_0x_head(params['parentHash']))
+    assert s.prev_headers[0].nonce == decode_hex(remove_0x_head(params['nonce']))
     if mode == FILL:
-        params['result'] = encode_hex(rlp.encode(b))
+        params['result'] = encode_hex(Block(s.prev_headers[0]))
         return params
     elif mode == VERIFY:
-        assert params['result'] == encode_hex(rlp.encode(b))
+        assert params['result'] == encode_hex(rlp.encode(Block(s.prev_headers[0])))
     elif mode == TIME:
         return {
             'creation': time.time() - x

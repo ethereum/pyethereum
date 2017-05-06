@@ -11,7 +11,7 @@ from ethereum.utils import encode_hex
 
 from ethereum import utils
 from ethereum.utils import (
-    big_endian_to_int, ceil32, int_to_big_endian, encode_int, is_numeric, isnumeric, is_string,
+    big_endian_to_int, ceil32, int_to_big_endian, encode_int, is_numeric, is_string,
     rzpad, TT255, TT256, zpad,
 )
 
@@ -362,7 +362,7 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         if not (int(sub) and int(sub) <= 32):
             raise EncodingError('too long: %r' % arg)
 
-        if isnumeric(arg):
+        if is_numeric(arg):
             return zpad(encode_int(arg), 32)
 
         if len(arg) == int(sub):
@@ -376,7 +376,7 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
     if base == 'address':
         assert sub == ''
 
-        if isnumeric(arg):
+        if is_numeric(arg):
             return zpad(encode_int(arg), 32)
 
         if len(arg) == 20:
@@ -734,9 +734,9 @@ def decode_single(typ, data):
             l = big_endian_to_int(data[0:32])
             return data[32:][:l]
     elif base == 'uint':
-        return big_endian_to_int(data)
+        return big_endian_to_int(data) % 2**int(sub)
     elif base == 'int':
-        o = big_endian_to_int(data)
+        o = big_endian_to_int(data) % 2 ** int(sub)
         return (o - 2 ** int(sub)) if o >= 2 ** (int(sub) - 1) else o
     elif base == 'ufixed':
         high, low = [int(x) for x in sub.split('x')]
