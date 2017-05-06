@@ -61,6 +61,7 @@ default_config = dict(
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
     # DAO fork
     DAO_FORK_BLKNUM=1920000,
+    DAO_FORK_BLKHASH=decode_hex('4985f5ca3d2afbec36529aa96f74de3cc10a2a4a6c44f2157a57d2c6059a11bb'),
     DAO_FORK_BLKEXTRA=decode_hex('64616f2d686172642d666f726b'),
     CHILD_DAO_LIST=map(utils.normalize_address, child_dao_list),
     DAO_WITHDRAWER=utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
