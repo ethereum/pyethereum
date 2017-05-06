@@ -2,8 +2,8 @@ from ethereum.state import State
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int, normalize_address
-from ethereum.state_transition import initialize
 from ethereum.config import Env
+from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.db import OverlayDB
 import rlp
 
@@ -41,7 +41,7 @@ def state_from_genesis_declaration(genesis_data, env, block=None):
         if 'storage' in data:
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
-    initialize(state, block)
+    get_consensus_strategy(state.config).initialize(state, block)
     state.commit()
     block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
@@ -85,8 +85,8 @@ def mk_genesis_block(env, **kwargs):
     return block
 
 
-def mk_basic_state(alloc, header, env):
-    state = State(env=env)
+def mk_basic_state(alloc, header=None, env=None):
+    state = State(env=env or Env())
     if not header:
         header = {
             "number": 0, "gas_limit": 4712388, "gas_used": 0,
@@ -121,5 +121,3 @@ def mk_basic_state(alloc, header, env):
     state.block_difficulty = header["difficulty"]
     state.commit()
     return state
-
-

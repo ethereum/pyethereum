@@ -1,3 +1,4 @@
+# TODO: integrate this and make it actually work as a consensus strategy
 import os
 import copy
 import rlp

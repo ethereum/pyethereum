@@ -2,11 +2,10 @@ import time
 import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
-from ethereum import parse_genesis_declaration
-from ethereum.state_transition import apply_block, initialize, \
-    pre_seal_finalize, post_seal_finalize, apply_transaction, mk_receipt_sha, \
-    mk_transaction_sha, calc_difficulty, Receipt, mk_receipt, \
-    update_block_env_variables, validate_uncles, validate_block_header
+from ethereum import genesis_helpers
+from ethereum.meta import apply_block
+from ethereum.common import update_block_env_variables
+from ethereum.messages import apply_transaction
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -15,6 +14,8 @@ from ethereum.slogging import get_logger
 from ethereum.config import Env
 from ethereum.state import State, dict_to_prev_header
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
+from ethereum.pow.consensus import initialize
+from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration
 import random
 import json
 log = get_logger('eth.chain')
@@ -33,10 +34,12 @@ class Chain(object):
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
+            assert env is None
             self.state = genesis
+            self.env = self.state.env
             print('Initializing chain from provided state')
         elif "extraData" in genesis:
-            self.state = parse_genesis_declaration.state_from_genesis_declaration(
+            self.state = state_from_genesis_declaration(
                 genesis, self.env)
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
@@ -45,7 +48,7 @@ class Chain(object):
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
             print('Initializing chain from new state based on alloc')
-            self.state = parse_genesis_declaration.mk_basic_state(genesis, {
+            self.state = mk_basic_state(genesis, {
                 "number": kwargs.get('number', 0),
                 "gas_limit": kwargs.get('gas_limit', 4712388),
                 "gas_used": kwargs.get('gas_used', 0),
@@ -54,6 +57,8 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+
+        assert self.env.db == self.state.db
 
         initialize(self.state)
         self.new_head_cb = new_head_cb

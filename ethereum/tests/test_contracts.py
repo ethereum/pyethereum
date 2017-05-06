@@ -6,7 +6,8 @@ import pytest
 import serpent
 from rlp.utils import decode_hex
 
-from ethereum import utils, abi, tester2
+from ethereum import utils, abi
+from ethereum.tools import tester2
 from ethereum.utils import safe_ord, big_endian_to_int
 
 

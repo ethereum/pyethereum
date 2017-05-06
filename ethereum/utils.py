@@ -97,7 +97,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
 
 
 def ecsign(rawhash, key):
-    if secp256k1:
+    if secp256k1 and hasattr(secp256k1, 'PrivateKey'):
         pk = secp256k1.PrivateKey(key, raw=True)
         signature = pk.ecdsa_recoverable_serialize(
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
@@ -207,14 +207,14 @@ def normalize_address(x, allow_blank=False):
     return x
 
 def normalize_key(key):
-    if len(key) == 32:
+    if is_numeric(key):
+        o = encode_int32(key)
+    elif len(key) == 32:
         o = key
     elif len(key) == 64:
         o = decode_hex(key)
     elif len(key) == 66 and key[:2] == '0x':
         o = decode_hex(key[2:])
-    elif is_numeric(key):
-        o = encode_int32(key)
     else:
         raise Exception("Invalid key format: %r" % key)
     if o == b'\x00' * 32:
@@ -223,13 +223,6 @@ def normalize_key(key):
 
 def zpad(x, l):
     return b'\x00' * max(0, l - len(x)) + x
-
-
-def zunpad(x):
-    i = 0
-    while i < len(x) and (x[i] == 0 or x[i] == b'\x00'):
-        i += 1
-    return x[i:]
 
 
 def int_to_addr(x):

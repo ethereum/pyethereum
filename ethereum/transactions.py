@@ -59,7 +59,6 @@ class Transaction(rlp.Serializable):
         to = utils.normalize_address(to, allow_blank=True)
 
         super(Transaction, self).__init__(nonce, gasprice, startgas, to, value, data, v, r, s)
-        self.network_id = None
 
         if self.gasprice >= TT256 or self.startgas >= TT256 or \
                 self.value >= TT256 or self.nonce >= TT256:
@@ -71,15 +70,12 @@ class Transaction(rlp.Serializable):
         if not self._sender:
             # Determine sender
             if self.r == 0 and self.s == 0:
-                self.network_id = self.v
                 self._sender = null_address
             else:
                 if self.v in (27, 28):
-                    self.network_id = None
                     vee = self.v
                     sighash = utils.sha3(rlp.encode(self, UnsignedTransaction))
                 elif self.v >= 37:
-                    self.network_id = ((self.v - 1) // 2) - 17
                     vee = self.v - self.network_id * 2 - 8
                     assert vee in (27, 28)
                     rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[:-3] + [self.network_id, '', ''])
@@ -93,6 +89,15 @@ class Transaction(rlp.Serializable):
                     raise InvalidTransaction("Invalid signature (zero privkey cannot sign)")
                 self._sender = utils.sha3(pub)[-20:]
         return self._sender
+
+    @property
+    def network_id(self):
+        if self.r == 0 and self.s == 0:
+            return self.v
+        elif self.v in (27, 28):
+            return None
+        else:
+            return ((self.v - 1) // 2) - 17
 
     @sender.setter
     def sender(self, value):

@@ -1,12 +1,13 @@
 from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int
-from ethereum.parse_genesis_declaration import mk_basic_state
-from ethereum import chain
+from ethereum.genesis_helpers import mk_basic_state
+from ethereum.pow import chain
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.config import Env
-from ethereum.ethpow import Miner
-from ethereum.state_transition import apply_transaction, verify_execution_results
-from ethereum.block_creation import pre_seal
+from ethereum.pow.ethpow import Miner
+from ethereum.messages import apply_transaction
+from ethereum.common import verify_execution_results, mk_block_from_prevstate, set_execution_results
+from ethereum.meta import make_head_candidate
 from ethereum.abi import ContractTranslator
 import rlp
 # Initialize accounts
@@ -35,7 +36,7 @@ try:
 except ImportError:
     pass
 
-from ethereum._solidity import get_solidity
+from ethereum.tools._solidity import get_solidity
 _solidity = get_solidity()
 if _solidity:
     languages['solidity'] = _solidity
@@ -105,8 +106,9 @@ class Chain(object):
                                                 None,
                                                 Env() if env is None else env))
         self.cs = get_consensus_strategy(self.chain.env.config)
-        self.block = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 1)
+        self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
+        self.cs.initialize(self.head_state, self.block)
 
     @property
     def last_tx(self):
@@ -135,17 +137,18 @@ class Chain(object):
             return ABIContract(self, ct, addr)
         
     def mine(self, number_of_blocks=1, coinbase=a0):
-        pre_seal(self.head_state, self.block)
+        self.cs.finalize(self.head_state, self.block)
+        set_execution_results(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
         assert self.chain.add_block(self.block)
         assert self.head_state.trie.root_hash == self.chain.state.trie.root_hash
         for i in range(1, number_of_blocks):
-            b = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 14)
-            pre_seal(self.chain.state.ephemeral_clone(), b)
+            b = make_head_candidate(self.chain, timestamp=self.chain.state.timestamp + 14)
             b = Miner(b).mine(rounds=100, start_nonce=0)
             assert self.chain.add_block(b)
-        self.block = self.cs.block_setup(self.chain, timestamp=self.chain.state.timestamp + 14)
+        self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 14)
         self.head_state = self.chain.state.ephemeral_clone()
+        self.cs.initialize(self.head_state, self.block)
 
     def snapshot(self):
         return self.head_state.snapshot(), len(self.block.transactions), self.block.number

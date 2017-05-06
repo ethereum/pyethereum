@@ -1,4 +1,5 @@
-from ethereum import ethash, ethash_utils, utils
+from ethereum.pow import ethash
+from ethereum import utils
 import time
 import sys
 import sha3
@@ -23,11 +24,11 @@ except ImportError:
 
 if ETHASH_LIB == 'ethash':
     mkcache = ethash.mkcache
-    EPOCH_LENGTH = ethash_utils.EPOCH_LENGTH
+    EPOCH_LENGTH = 30000
     hashimoto_light = ethash.hashimoto_light
 elif ETHASH_LIB == 'pyethash':
     mkcache = pyethash.mkcache_bytes
-    EPOCH_LENGTH = pyethash.EPOCH_LENGTH
+    EPOCH_LENGTH = 30000
     hashimoto_light = lambda s, c, h, n: \
         pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
 else:

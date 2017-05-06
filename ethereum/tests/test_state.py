@@ -1,7 +1,6 @@
 import json
 import sys
-import ethereum.testutils as testutils
-import ethereum.new_statetest_utils as new_statetest_utils
+import ethereum.tools.new_statetest_utils as new_statetest_utils
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -26,7 +25,7 @@ def test_state(filename, testname, testdata):
 
 
 def pytest_generate_tests(metafunc):
-    testutils.generate_test_params(
+    new_statetest_utils.generate_test_params(
         place_to_check,
         metafunc,
         exclude_func=lambda filename, _, __: (

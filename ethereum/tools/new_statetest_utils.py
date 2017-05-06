@@ -5,14 +5,17 @@ from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
 from ethereum.config import default_config, Env
 from ethereum.exceptions import InvalidTransaction
 import ethereum.transactions as transactions
-import ethereum.state_transition as state_transition
+from ethereum.messages import apply_transaction
 import copy
 import json
+import os
 
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 
 # configure_logging(config_string=config_string)
+
+fixture_path = os.path.join(os.path.dirname(__file__), '../..', 'fixtures')
 
 fake_headers = {}
 
@@ -107,7 +110,7 @@ def compute_state_test_unit(state, txdata, indices, konfig):
             tx.v = parse_int_or_hex(txdata['v'])
         # Run it
         prev = state.to_dict()
-        success, output = state_transition.apply_transaction(state, tx)
+        success, output = apply_transaction(state, tx)
         print("Applied tx")
     except InvalidTransaction as e:
         print("Exception: %r" % e)
@@ -175,3 +178,50 @@ def verify_state_test(test):
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))
             else:
                 print("Hash matched!: %s" % computed["hash"])
+
+
+def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+    if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
+        return
+
+    fixtures = get_tests_from_file_or_dir(
+        os.path.join(fixture_path, testsource))
+
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    params = []
+    for filename, tests in fixtures.items():
+        if isinstance(tests, dict):
+            filename = os.path.relpath(filename, base_dir)
+            for testname, testdata in tests.items():
+                if exclude_func and exclude_func(filename, testname, testdata):
+                    continue
+                if skip_func:
+                    skipif = pytest.mark.skipif(
+                        skip_func(filename, testname, testdata),
+                        reason="Excluded"
+                    )
+                    params.append(skipif((filename, testname, testdata)))
+                else:
+                    params.append((filename, testname, testdata))
+
+    metafunc.parametrize(
+        ('filename', 'testname', 'testdata'),
+        params
+    )
+    return params
+
+
+def get_tests_from_file_or_dir(dname, json_only=False):
+    if os.path.isfile(dname):
+        if dname[-5:] == '.json' or not json_only:
+            with open(dname) as f:
+                return {dname: json.load(f)}
+        else:
+            return {}
+    else:
+        o = {}
+        for f in os.listdir(dname):
+            fullpath = os.path.join(dname, f)
+            for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
+                o[k] = v
+        return o
