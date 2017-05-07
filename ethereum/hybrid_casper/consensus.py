@@ -1,11 +1,5 @@
-# Update block variables into the state
-def update_block_env_variables(state, block):
-    state.timestamp = block.header.timestamp
-    state.gas_limit = block.header.gas_limit
-    state.block_number = block.header.number
-    state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
-    state.block_coinbase = block.header.coinbase
-    state.block_difficulty = block.header.difficulty
+from ethereum import utils
+from ethereum.common import update_block_env_variables
 
 # Block initialization state transition
 def initialize(state, block=None):
@@ -16,7 +10,7 @@ def initialize(state, block=None):
     state.bloom = 0
     state.receipts = []
 
-    if block != None:
+    if block is not None:
         update_block_env_variables(state, block)
 
     if state.is_DAO(at_fork_height=True):
@@ -28,4 +22,3 @@ def initialize(state, block=None):
             config["METROPOLIS_STATEROOT_STORE"]), config["METROPOLIS_GETTER_CODE"])
         state.set_code(utils.normalize_address(
             config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
-
