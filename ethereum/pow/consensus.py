@@ -1,6 +1,7 @@
 from ethereum.pow import ethash, ethash_utils, ethpow
 from ethereum import utils
-from ethereum.common import update_block_env_variables
+from ethereum.common import update_block_env_variables, calc_difficulty
+from ethereum.exceptions import VerificationFailed
 import rlp
 
 # Block initialization state transition
@@ -19,11 +20,11 @@ def initialize(state, block=None):
         for acct in state.config['CHILD_DAO_LIST']:
             state.transfer_value(acct, state.config['DAO_WITHDRAWER'], state.get_balance(acct))
 
-    if state.is_METROPOLIS(at_fork_height=True):
-        state.set_code(utils.normalize_address(
-            config["METROPOLIS_STATEROOT_STORE"]), config["METROPOLIS_GETTER_CODE"])
-        state.set_code(utils.normalize_address(
-            config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
+    # if state.is_METROPOLIS(at_fork_height=True):
+    #     state.set_code(utils.normalize_address(
+    #         config["METROPOLIS_STATEROOT_STORE"]), config["METROPOLIS_GETTER_CODE"])
+    #     state.set_code(utils.normalize_address(
+    #         config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
 
 # Check that proof of work is valid
 def check_pow(state, header):
@@ -70,7 +71,7 @@ def validate_uncles(state, block):
     # be uncles included 1-6 blocks ago
     ineligible = [b.hash for b in ancestor_chain]
     for blknum, uncles in state.recent_uncles.items():
-        if state.block_number > blknum >= state.block_number - MAX_UNCLE_DEPTH:
+        if state.block_number > int(blknum) >= state.block_number - MAX_UNCLE_DEPTH:
             ineligible.extend([u for u in uncles])
     eligible_ancestor_hashes = [x.hash for x in ancestor_chain[2:]]
     for uncle in block.uncles:
@@ -85,9 +86,8 @@ def validate_uncles(state, block):
             raise VerificationFailed("Timestamp mismatch")
         if uncle.hash in ineligible:
             raise VerificationFailed("Duplicate uncle")
-        if not check_pow(uncle.number, uncle.mining_hash, uncle.mixhash,
-                         uncle.nonce, uncle.difficulty):
-            raise VerificationFailed('pow mismatch')
+        if not check_pow(state, uncle):
+            raise VerificationFailed('uncle pow mismatch')
         ineligible.append(uncle.hash)
     return True
 

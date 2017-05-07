@@ -1,20 +1,18 @@
 import pytest
-import ethereum.processblock as processblock
+import ethereum.messages as messages
 import ethereum.transactions as transactions
-import ethereum.state_transition as state_transition
-import ethereum.parse_genesis_declaration
+import ethereum.meta as meta
 from ethereum.transaction_queue import TransactionQueue
 import rlp
 from rlp.utils import decode_hex, encode_hex
-import ethereum.ethpow as ethpow
-import ethereum.ethpow_utils as ethpow_utils
+import ethereum.pow.ethpow as ethpow
 import ethereum.utils as utils
-from ethereum.chain import Chain
+from ethereum.pow.chain import Chain
 from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
 from ethereum.state import State
 from ethereum.block import Block
-from ethereum.block_creation import make_head_candidate
+from ethereum.consensus_strategy import get_consensus_strategy
 
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -56,7 +54,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
     for t in transactions:
         txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
-    hc = make_head_candidate(chain, txqueue, parent,
+    hc = meta.make_head_candidate(chain, txqueue, parent,
                              timestamp or parent_timestamp + 1, coinbase or '\x00'*20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
@@ -67,7 +65,6 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         if b:
             break
         nonce += rounds
-    assert ethpow_utils.ethereum1_check_header(b.header)
     assert chain.add_block(b)
     return b
 
@@ -186,7 +183,7 @@ def test_transaction(db):
     blk = mine_next_block(chain)
     tx = get_transaction()
     assert tx not in blk.transactions
-    state_transition.apply_transaction(chain.state, tx)
+    messages.apply_transaction(chain.state, tx)
     assert chain.state.get_balance(v) == utils.denoms.finney * 990
     assert chain.state.get_balance(v2) == utils.denoms.finney * 10
 

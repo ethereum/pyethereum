@@ -5,6 +5,9 @@ from ethereum.db import EphemDB
 from ethereum.utils import sha3, encode_hex
 import rlp
 from ethereum.slogging import get_logger
+from ethereum.exceptions import InsufficientBalance, BlockGasLimitReached, \
+    InsufficientStartGas, InvalidNonce, UnsignedTransaction
+from ethereum.messages import apply_transaction
 log = get_logger('eth.block')
 
 # Gas limit adjustment algo
@@ -133,17 +136,17 @@ def set_execution_results(state, block):
 
 # Verify state root, receipt root, etc
 def verify_execution_results(state, block):
-    if block.header.receipts_root != mk_receipt_sha(state.receipts):
-        raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
-                         (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),
-                         block.header.gas_used, state.gas_used, len(state.receipts)))
+    if block.header.bloom != state.bloom:
+        raise ValueError("Bloom mismatch: header %d computed %d" %
+                         (block.header.bloom, state.bloom))
     state.commit()
     if block.header.state_root != state.trie.root_hash:
         raise ValueError("State root mismatch: header %s computed %s" %
                          (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
-    if block.header.bloom != state.bloom:
-        raise ValueError("Bloom mismatch: header %d computed %d" %
-                         (block.header.bloom, state.bloom))
+    if block.header.receipts_root != mk_receipt_sha(state.receipts):
+        raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
+                         (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),
+                         block.header.gas_used, state.gas_used, len(state.receipts)))
     if block.header.gas_used != state.gas_used:
         raise ValueError("Gas used mismatch: header %d computed %d" %
                          (block.header.gas_used, state.gas_used))

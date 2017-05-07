@@ -1,6 +1,7 @@
 import json
 import sys
 import ethereum.tools.new_statetest_utils as new_statetest_utils
+import ethereum.tools.testutils as testutils
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -10,13 +11,8 @@ if '--trace' in sys.argv:  # not default
     configure_logging(':trace')
     sys.argv.remove('--trace')
 
-if '--old' in sys.argv:  # not default
-    checker = lambda x: testutils.check_state_test(testutils.fixture_to_bytes(x))
-    place_to_check = 'StateTests'
-    sys.argv.remove('--old')
-else:
-    checker = new_statetest_utils.verify_state_test
-    place_to_check = 'GeneralStateTests'
+checker = new_statetest_utils.verify_state_test
+place_to_check = 'GeneralStateTests'
 
 
 def test_state(filename, testname, testdata):
@@ -25,7 +21,7 @@ def test_state(filename, testname, testdata):
 
 
 def pytest_generate_tests(metafunc):
-    new_statetest_utils.generate_test_params(
+    testutils.generate_test_params(
         place_to_check,
         metafunc,
         exclude_func=lambda filename, _, __: (

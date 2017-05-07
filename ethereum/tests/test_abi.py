@@ -1,6 +1,6 @@
 import os
 import pytest
-import ethereum.testutils as testutils
+import ethereum.tools.testutils as testutils
 from ethereum.slogging import get_logger
 import ethereum.abi as abi
 from ethereum.utils import zpad
@@ -24,7 +24,7 @@ def test_abi_encode_single_int():
     assert abi.encode_single(['int', '256', []], -2**255) == (b'\x80'+b'\x00'*31)
     assert abi.encode_single(['int', '256', []], (b'\x80'+b'\x00'*31)) == (b'\x80'+b'\x00'*31)
 
-    assert abi.encode_single(['int', '8', []], -128) == zpad(b'\x80', 32)
+    assert abi.encode_single(['int', '8', []], -128)[-1:] == b'\x80'
     with pytest.raises(abi.ValueOutOfBounds):
         assert abi.encode_single(['int', '8', []], -129)
 
@@ -75,7 +75,8 @@ def test_abi_decode_single_real():
 
 # Will be parametrized fron json fixtures
 def test_state(filename, testname, testdata):
-    testutils.check_abi_test(testutils.fixture_to_bytes(testdata))
+    print(testdata)
+    testutils.check_abi_test(testdata)
 
 
 def pytest_generate_tests(metafunc):

@@ -7,7 +7,8 @@ import yaml  # use yaml instead of json to get non unicode (works with ascii onl
 from rlp.utils import decode_hex, encode_hex
 
 from ethereum import utils
-from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
+from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, \
+    is_string, ceil32, str_to_bytes
 from ethereum.utils import TT256, TT255
 
 
@@ -315,6 +316,8 @@ def encode_single(typ, arg):
         return zpad(encode_int(val_to_encode % 2**256), 32)
     # Strings
     elif base == 'string' or base == 'bytes':
+        if isinstance(arg, str):
+            arg = str_to_bytes(arg)
         if not is_string(arg):
             raise EncodingError("Expecting string: %r" % arg)
         # Fixed length: string<sz>

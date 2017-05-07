@@ -32,9 +32,9 @@ def apply_block(state, block):
         assert verify_execution_results(state, block)
         # Post-finalize (ie. add the block header to the state for now)
         post_finalize(state, block)
-    except Exception as e:
+    except (ValueError, AssertionError) as e:
         state.revert(snapshot)
-        raise ValueError(str(e))
+        raise e
     return state
 
 

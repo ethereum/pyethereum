@@ -184,7 +184,7 @@ def apply_transaction(state, tx):
             if tx.startgas < intrinsic_gas:
                 raise InsufficientStartGas(rp(tx, 'startgas', tx.startgas, intrinsic_gas))
 
-    log_tx.debug('TX NEW', tx.to_dict())
+    log_tx.debug('TX NEW', txdict=tx.to_dict(), a1=tx.intrinsic_gas_used, a2=intrinsic_gas, to=tx.to, h=state.is_HOMESTEAD())
 
     # start transacting #################
     if tx.sender != null_address:

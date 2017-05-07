@@ -1,11 +1,9 @@
-from ethereum import tester
 import ethereum.utils as utils
 import rlp
-import ethereum.testutils as testutils
-from ethereum.testutils import fixture_to_bytes
+import ethereum.tools.testutils as testutils
 import ethereum.config as config
 from ethereum.state import State
-from ethereum.state_transition import calc_difficulty
+from ethereum.common import calc_difficulty
 from ethereum.block import Block, BlockHeader
 import sys
 import os
@@ -19,7 +17,6 @@ logger = get_logger()
 
 
 def test_difficulty(filename, testname, testdata):
-    testdata = fixture_to_bytes(testdata)
 
     parent_timestamp=int(testdata["parentTimestamp"], 10 if testdata["parentTimestamp"].isdigit() else 16)
     parent_difficulty=int(testdata["parentDifficulty"], 10 if testdata["parentDifficulty"].isdigit() else 16)
@@ -31,10 +28,14 @@ def test_difficulty(filename, testname, testdata):
     env = config.Env()
     if 'Homestead' in filename:
         env.config['HOMESTEAD_FORK_BLKNUM'] = 0
+    elif 'difficultyFrontier' in filename:
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 2**99
     elif 'difficultyMorden' in filename:
-        env.config['HOMESTEAD_FORK_BLKNUM'] = 3**33   # 494000
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 494000
+    elif 'difficultyRopsten' in filename:
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 0
     else:
-        env.config['HOMESTEAD_FORK_BLKNUM'] = 3**33  # 1150000
+        env.config['HOMESTEAD_FORK_BLKNUM'] = 1150000
     # env.config['EXPDIFF_FREE_PERIODS'] = 2**98
 
     parent = Block(BlockHeader(timestamp=parent_timestamp,
@@ -45,7 +46,7 @@ def test_difficulty(filename, testname, testdata):
 
     print(calculated_dif)
     print(reference_dif)
-    assert calculated_dif == reference_dif, (parent_difficulty, parent.header.difficulty, reference_dif, calculated_dif, parent.header.number, parent_timestamp, cur_blk_timestamp)
+    assert calculated_dif == reference_dif, (parent.header.difficulty, reference_dif, calculated_dif, parent.header.number, cur_blk_timestamp - parent_timestamp)
 
 
 def not_a_difficulty_test(filename, testname, testdata):

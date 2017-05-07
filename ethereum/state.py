@@ -300,10 +300,6 @@ class State():
         root, journal_length, auxvars = snapshot
         if root != self.trie.root_hash and journal_length != 0:
             raise Exception("Cannot return to this snapshot")
-        if root != self.trie.root_hash:
-            self.trie.root_hash = root
-            self.cache = {}
-            self.modified = {}
         while len(self.journal) > journal_length:
             addr, key, preval, premod = self.journal.pop()
             if addr in STATE_DEFAULTS:
@@ -315,6 +311,10 @@ class State():
                 self.cache[addr][key] = preval
                 if not premod:
                     del self.modified[addr]
+        if root != self.trie.root_hash:
+            self.trie.root_hash = root
+            self.cache = {}
+            self.modified = {}
         for k in STATE_DEFAULTS:
             setattr(self, k, copy.copy(auxvars[k]))
 

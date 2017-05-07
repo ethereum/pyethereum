@@ -9,7 +9,7 @@ from ethereum.messages import apply_transaction
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance
+    BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger
 from ethereum.config import Env
 from ethereum.state import State, dict_to_prev_header
@@ -20,11 +20,16 @@ import random
 import json
 log = get_logger('eth.chain')
 
+from ethereum.slogging import LogRecorder, configure_logging, set_level
+config_string = ':info,eth.chain:debug'
+#config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+configure_logging(config_string=config_string)
+
 
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 new_head_cb=None, **kwargs):
+                 new_head_cb=None, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:
@@ -77,6 +82,7 @@ class Chain(object):
         self.extra_data = 'moo ha ha says the laughing cow.'
         self.time_queue = []
         self.parent_queue = {}
+        self.localtime = time.time() if localtime is None else localtime
 
     @property
     def head(self):
@@ -121,7 +127,7 @@ class Chain(object):
                 for h in jsondata["prev_headers"][:header_depth - i]:
                     state.prev_headers.append(dict_to_prev_header(h))
                 for blknum, uncles in jsondata["recent_uncles"].items():
-                    if blknum >= state.block_number - state.config['MAX_UNCLE_DEPTH']:
+                    if int(blknum) >= state.block_number - int(state.config['MAX_UNCLE_DEPTH']):
                         state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
             else:
                 raise Exception("Dangling prevhash")
@@ -201,10 +207,10 @@ class Chain(object):
     # process blocks that were received but laid aside because
     # either the parent was missing or they were received
     # too early
-    def process_time_queue(self):
-        now = self.time()
+    def process_time_queue(self, new_time=None):
+        self.localtime = time.time() if new_time is None else new_time
         i = 0
-        while i < len(self.time_queue) and self.time_queue[i].timestamp <= now:
+        while i < len(self.time_queue) and self.time_queue[i].timestamp <= new_time:
             log.info('Adding scheduled block')
             pre_len = len(self.time_queue)
             self.add_block(self.time_queue.pop(i))
@@ -218,12 +224,9 @@ class Chain(object):
                     self.add_block(block)
                 del self.parent_queue[parent_hash]
 
-    def time(self):
-        return int(time.time())
-
     # Call upon receiving a block
     def add_block(self, block):
-        now = self.time()
+        now = self.localtime
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -236,7 +239,7 @@ class Chain(object):
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
-            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
@@ -250,7 +253,7 @@ class Chain(object):
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
-            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
