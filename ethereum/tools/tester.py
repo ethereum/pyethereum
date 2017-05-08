@@ -63,6 +63,7 @@ from ethereum.slogging import configure_logging
 config_string = ':info'
 # configure_logging(config_string=config_string)
 
+
 class ABIContract(object):  # pylint: disable=too-few-public-methods
 
     def __init__(self, _chain, _abi, address):
@@ -76,12 +77,15 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
         self.translator = abi_translator
 
         for function_name in self.translator.function_data:
-            function = self.method_factory(_chain, function_name)
+            if self.translator.function_data[function_name]['is_constant']:
+                function = self.method_factory(_chain.call, function_name)
+            else:
+                function = self.method_factory(_chain.tx, function_name)
             method = types.MethodType(function, self)
             setattr(self, function_name, method)
 
     @staticmethod
-    def method_factory(test_chain, function_name):
+    def method_factory(tx_or_call, function_name):
         """ Return a proxy for calling a contract method with automatic encoding of
         argument and decoding of results.
         """
@@ -89,7 +93,7 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
         def kall(self, *args, **kwargs):
             key = kwargs.get('sender', k0)
 
-            result = test_chain.tx(  # pylint: disable=protected-access
+            result = tx_or_call(  # pylint: disable=protected-access
                 sender=key,
                 to=self.address,
                 value=kwargs.get('value', 0),
@@ -143,6 +147,16 @@ class Chain(object):
             raise TransactionFailed()
         return output
 
+    def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        snapshot = self.snapshot()
+        try:
+            output = self.tx(sender, to, value, data, startgas, gasprice)
+            self.revert(snapshot)
+            return output
+        except Exception as e:
+            self.revert(snapshot)
+            raise e
+
     def contract(self, sourcecode, args=[], sender=k0, value=0, language='evm', startgas=STARTGAS, gasprice=GASPRICE):
         if language == 'evm':
             assert len(args) == 0
@@ -185,7 +199,7 @@ def int_to_0x_hex(v):
         return '0x' + o[1:]
     else:
         return '0x' + o
-    
+
 
 def mk_state_test_prefill(c):
     env = {
