@@ -312,7 +312,7 @@ class Solc(object):
 
     @staticmethod
     def _code_or_path(sourcecode, path, contract_name, libraries, combined):
-        warnings.warn('solc_wrapper is deprecated, please use the functions compile_file or compile_code')
+        # warnings.warn('solc_wrapper is deprecated, please use the functions compile_file or compile_code')
 
         if sourcecode and path:
             raise ValueError('sourcecode and path are mutually exclusive.')
@@ -331,7 +331,12 @@ class Solc(object):
         last_contract = all_contract_names[-1]
 
         result = compile_code(sourcecode, libraries=libraries, combined=combined)
-        return result[last_contract]
+        if last_contract in result:
+            return result[last_contract]
+        elif '<stdin>:' + last_contract in result:
+            return result['<stdin>:' + last_contract]
+        else:
+            raise Exception("Solidity compiler did not output code for the last contract for some reason")
 
     @classmethod
     def compile(cls, code, path=None, libraries=None, contract_name=''):
