@@ -80,7 +80,7 @@ def make_casper_chain():
 
     print('Casper code length', len(compiler.compile(casper_code)))
     casper = t.contract(casper_code, language='viper', startgas=4096181)
-    print('Gas consumed to launch Casper', t.chain.state.receipts[-1].gas_used - t.chain.state.receipts[-2].gas_used)
+    print('Gas consumed to launch Casper', t.head_state.receipts[-1].gas_used - t.head_state.receipts[-2].gas_used)
     t.mine()
     return t, casper, purity_checker_address, ct
 
@@ -115,7 +115,7 @@ print("Reward factor: %.8f" % (casper.get_reward_factor() * 2 / 3))
 # configure_logging(config_string=config_string)
 casper.prepare(mk_prepare(0, 1, epoch_blockhash(1), epoch_blockhash(0), 0, epoch_blockhash(0), k0))
 print('Gas consumed for a prepare: %d (including %d intrinsic gas)' %
-      (t.chain.state.receipts[-1].gas_used, t.last_tx.intrinsic_gas_used))
+      (t.head_state.receipts[-1].gas_used, t.last_tx.intrinsic_gas_used))
 epoch_1_anchash = utils.sha3(epoch_blockhash(1) + epoch_blockhash(0))
 assert casper.get_consensus_messages__hash_justified(1, epoch_blockhash(1))
 assert casper.get_consensus_messages__ancestry_hash_justified(1, epoch_1_anchash)
@@ -131,7 +131,7 @@ print("Prepare message fails the second time")
 # Send a commit message
 print('commit!', casper.commit(mk_commit(0, 1, epoch_blockhash(1), 0, k0)))
 print('Gas consumed for a commit: %d (including %d intrinsic gas)' %
-      (t.chain.state.receipts[-1].gas_used, t.last_tx.intrinsic_gas_used))
+      (t.head_state.receipts[-1].gas_used, t.last_tx.intrinsic_gas_used))
 # Check that we committed
 assert casper.get_consensus_messages__committed(1)
 print("Commit message processed")
@@ -389,14 +389,14 @@ for i, k in enumerate([k0, k1, k2]):
     #if i == 1:
     #    configure_logging(config_string=config_string)
     casper.prepare(mk_prepare(i, 7, epoch_blockhash(7), epoch_6_anchash, 6, epoch_6_anchash, k))
-    print('Gas consumed for prepare', i, t.chain.state.receipts[-1].gas_used)
+    print('Gas consumed for prepare', i, t.head_state.receipts[-1].gas_used)
     t.mine()
     #if i == 1:
     #    import sys
     #    sys.exit()
 for i, k in enumerate([k0, k1, k2]):
     casper.commit(mk_commit(i, 7, epoch_blockhash(7), 6, k))
-    print('Gas consumed for prepare', i, t.chain.state.receipts[-1].gas_used)
+    print('Gas consumed for prepare', i, t.head_state.receipts[-1].gas_used)
     t.mine()
 assert casper.get_consensus_messages__committed(7)
 print("Three of four prepares and commits sufficient")
