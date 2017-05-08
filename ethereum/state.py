@@ -79,18 +79,11 @@ class State():
         return self.env.config
 
     def get_block_hash(self, n):
-        if self.is_METROPOLIS():
-            if self.block_number < n or n >= self.config['METROPOLIS_WRAPAROUND'] or n < 0:
-                o = b'\x00' * 32
-            sbytes = self.get_storage_bytes(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
-                                            (self.block_number - n - 1) % self.config['METROPOLIS_WRAPAROUND'])
-            return sbytes or (b'\x00' * 32)
+        if self.block_number < n or n > 256 or n < 0:
+            o = b'\x00' * 32
         else:
-            if self.block_number < n or n > 256 or n < 0:
-                o = b'\x00' * 32
-            else:
-                o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
-            return o
+            o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
+        return o
 
     def add_block_header(self, block_header):
         self.prev_headers = [block_header] + self.prev_headers
