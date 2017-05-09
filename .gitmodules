@@ -2,3 +2,6 @@
 	path = fixtures
 	url = git://github.com/ethereum/tests.git
 	branch = develop
+[submodule "casper"]
+	path = casper
+	url = https://github.com/ethereum/casper.git
