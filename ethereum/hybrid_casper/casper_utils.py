@@ -3,10 +3,14 @@ import pkg_resources
 from ethereum import utils, messages, transactions, abi, genesis_helpers, config
 from ethereum.hybrid_casper import consensus
 import serpent
+from viper import compiler as viper
 import rlp
 
-_casper_contract_path = '/'.join(('contracts', 'simple_casper.v.py'))
-casper_contract = pkg_resources.resource_string('casper', _casper_contract_path)
+_casper_contract_path = '/'.join(('..', 'casper', 'casper', 'contracts', 'simple_casper.v.py'))
+casper_contract = pkg_resources.resource_string('ethereum', _casper_contract_path)
+casper_abi = viper.mk_full_signature(casper_contract)
+purity_checker_address = utils.mk_contract_address(utils.decode_hex('ea0f0d55ee82edf248ed648a9a8d213fba8b5081'), 0)
+ct = abi.ContractTranslator([{'name': 'check(address)', 'type': 'function', 'constant': True, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}, {'name': 'submit(address)', 'type': 'function', 'constant': False, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}])  # noqa: E501
 
 # Helper functions for creating consensus messages
 def mk_prepare(validator_index, epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash, key):
@@ -28,17 +32,18 @@ def mk_status_flicker(validator_index, epoch, login, key):
     return rlp.encode([validator_index, epoch, login, sig])
 
 # Get a genesis state which is primed for Casper
-def make_casper_genesis(initial_validator, alloc, timestamp=0):
+def make_casper_genesis(initial_validator, alloc, epoch_length, slash_delay):
     # The Casper-specific config declaration
     casper_config = copy.deepcopy(config.default_config)
     casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
     casper_config['ANTI_DOS_FORK_BLKNUM'] = 0
     casper_config['CLEARING_FORK_BLKNUM'] = 0
-    # casper_config['CONSENSUS_STRATEGY'] = 'casper'
+    casper_config['CONSENSUS_STRATEGY'] = 'hybrid_casper'
     # Create state and apply required state_transitions for initializing Casper
     state = genesis_helpers.mk_basic_state(alloc, None, env=config.Env(config=casper_config))
+    state.gas_limit = 10**8
     consensus.initialize(state)
-    inject_casper_contracts(state, initial_validator)
+    inject_casper_contracts(state, initial_validator, epoch_length, slash_delay)
     state.commit()
     return state
 
@@ -50,7 +55,7 @@ return(~mload(0) == %s)
     """
     return serpent.compile(code_template % (utils.checksum_encode(address)))
 
-def inject_casper_contracts(state, initial_validator):
+def inject_casper_contracts(state, initial_validator, epoch_length, slash_delay):
     def inject_tx(txhex):
         tx = rlp.decode(utils.decode_hex(txhex[2:]), transactions.Transaction)
         state.set_balance(tx.sender, tx.startgas * tx.gasprice)
@@ -80,10 +85,19 @@ def inject_casper_contracts(state, initial_validator):
     # Install purity checker
     purity_checker_address = inject_tx('0xf90467808506fc23ac00830583c88080b904546104428061000e60003961045056600061033f537c0100000000000000000000000000000000000000000000000000000000600035047f80010000000000000000000000000000000000000030ffff1c0e00000000000060205263a1903eab8114156103f7573659905901600090523660048237600435608052506080513b806020015990590160009052818152602081019050905060a0526080513b600060a0516080513c6080513b8060200260200159905901600090528181526020810190509050610100526080513b806020026020015990590160009052818152602081019050905061016052600060005b602060a05103518212156103c957610100601f8360a051010351066020518160020a161561010a57fe5b80606013151561011e57607f811315610121565b60005b1561014f5780607f036101000a60018460a0510101510482602002610160510152605e8103830192506103b2565b60f18114801561015f5780610164565b60f282145b905080156101725780610177565b60f482145b9050156103aa5760028212151561019e5760606001830360200261010051015112156101a1565b60005b156101bc57607f6001830360200261010051015113156101bf565b60005b156101d157600282036102605261031e565b6004821215156101f057600360018303602002610100510151146101f3565b60005b1561020d57605a6002830360200261010051015114610210565b60005b1561022b57606060038303602002610100510151121561022e565b60005b1561024957607f60038303602002610100510151131561024c565b60005b1561025e57600482036102605261031d565b60028212151561027d57605a6001830360200261010051015114610280565b60005b1561029257600282036102605261031c565b6002821215156102b157609060018303602002610100510151146102b4565b60005b156102c657600282036102605261031b565b6002821215156102e65760806001830360200261010051015112156102e9565b60005b156103035760906001830360200261010051015112610306565b60005b1561031857600282036102605261031a565bfe5b5b5b5b5b604060405990590160009052600081526102605160200261016051015181602001528090502054156103555760016102a052610393565b60306102605160200261010051015114156103755760016102a052610392565b60606102605160200261010051015114156103915760016102a0525b5b5b6102a051151561039f57fe5b6001830192506103b1565b6001830192505b5b8082602002610100510152600182019150506100e0565b50506001604060405990590160009052600081526080518160200152809050205560016102e05260206102e0f35b63c23697a8811415610440573659905901600090523660048237600435608052506040604059905901600090526000815260805181602001528090502054610300526020610300f35b505b6000f31b2d4f')  # noqa: E501
 
-    ct = abi.ContractTranslator([{'name': 'check(address)', 'type': 'function', 'constant': True, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}, {'name': 'submit(address)', 'type': 'function', 'constant': False, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}])  # noqa: E501
     # Check that the RLP decoding library and the sig hashing library are "pure"
     assert utils.big_endian_to_int(apply_tx(state, initial_validator, purity_checker_address, 0, ct.encode('submit', [rlp_decoder_address]))) == 1
     assert utils.big_endian_to_int(apply_tx(state, initial_validator, purity_checker_address, 0, ct.encode('submit', [sighasher_address]))) == 1
 
     k1_valcode_addr = apply_tx(state, initial_validator, "", 0, mk_validation_code(utils.privtoaddr(initial_validator)))
     assert utils.big_endian_to_int(apply_tx(state, initial_validator, purity_checker_address, 0, ct.encode('submit', [k1_valcode_addr]))) == 1
+
+    # Install Casper
+
+    casper_code = casper_contract.decode('utf8').replace('epoch_length = 100', 'epoch_length = ' + str(epoch_length)) \
+                                                .replace('insufficiency_slash_delay = 86400', 'insufficiency_slash_delay = ' + str(slash_delay)) \
+                                                .replace('0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6', utils.checksum_encode(k1_valcode_addr)) \
+                                                .replace('0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24', utils.checksum_encode(sighasher_address)) \
+                                                .replace('0xD7a3BD6C9eA32efF147d067f907AE6b22d436F91', utils.checksum_encode(purity_checker_address))
+    apply_tx(state, initial_validator, b'', 0, evmdata=viper.compile(casper_code), gas=4096181)
+    print('Gas consumed to launch Casper', state.receipts[-1].gas_used - state.receipts[-2].gas_used)
