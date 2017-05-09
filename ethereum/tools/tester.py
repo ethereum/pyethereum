@@ -1,6 +1,7 @@
 from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int, checksum_encode, int_to_big_endian, encode_hex
 from ethereum.genesis_helpers import mk_basic_state
-from ethereum.pow import chain
+from ethereum.pow import chain as pow_chain
+from ethereum.hybrid_casper import chain as hybrid_casper_chain
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.config import config_homestead, config_tangerine, config_spurious, config_metropolis, default_config, Env
@@ -122,13 +123,12 @@ def get_env(env):
 
 
 class Chain(object):
-    def __init__(self, alloc=None, env=None):
-        self.chain = chain.Chain(
-            genesis=mk_basic_state(base_alloc if alloc is None else alloc,
-                                   None,
-                                   get_env(env)),
-            reset_genesis=True
-        )
+    def __init__(self, genesis=None):
+        genesis = genesis or mk_basic_state(base_alloc, None, Env())
+        if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+            self.chain = hybrid_casper_chain.Chain(genesis)
+        else:
+            self.chain = pow_chain.Chain(genesis)
         self.cs = get_consensus_strategy(self.chain.env.config)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
