@@ -46,7 +46,7 @@ def make_head_candidate(chain, txqueue=None,
                         extra_data='moo ha ha says the laughing cow.',
                         min_gasprice=0):
     log.info('Creating head candidate')
-    if parent is None:
+    if parent is None or chain.head_hash == parent.header.hash:
         temp_state = State.from_snapshot(chain.state.to_snapshot(root_only=True), chain.env)
     else:
         temp_state = chain.mk_poststate_of_blockhash(parent.hash)
