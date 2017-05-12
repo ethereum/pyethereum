@@ -157,6 +157,10 @@ def validate_transaction(state, tx):
     if state.gas_used + tx.startgas > state.gas_limit:
         raise BlockGasLimitReached(rp(tx, 'gaslimit', state.gas_used + tx.startgas, state.gas_limit))
 
+    # EIP86-specific restrictions
+    if tx.sender == null_address and (tx.value != 0 or tx.gasprice != 0):
+        raise InvalidTransaction("EIP86 transactions must have 0 value and gasprice")
+
     return True
 
 
@@ -184,7 +188,7 @@ def apply_transaction(state, tx):
             if tx.startgas < intrinsic_gas:
                 raise InsufficientStartGas(rp(tx, 'startgas', tx.startgas, intrinsic_gas))
 
-    log_tx.debug('TX NEW', txdict=tx.to_dict(), a1=tx.intrinsic_gas_used, a2=intrinsic_gas, to=tx.to, h=state.is_HOMESTEAD())
+    log_tx.debug('TX NEW', txdict=tx.to_dict())
 
     # start transacting #################
     if tx.sender != null_address:
@@ -319,7 +323,8 @@ def _apply_msg(ext, msg, code):
     if trace_msg:
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
-                      data=encode_hex(msg.data.extract_all()) if msg.data.size < 2500 else ("data<%d>" % msg.data.size))
+                      data=encode_hex(msg.data.extract_all()) if msg.data.size < 2500 else ("data<%d>" % msg.data.size),
+                      pre_storage=ext.log_storage(msg.to))
 
     # Transfer value, instaquit if not enough
     snapshot = ext.snapshot()
@@ -339,7 +344,8 @@ def _apply_msg(ext, msg, code):
     if trace_msg:
         log_msg.debug('MSG APPLIED', gas_remained=gas,
                       sender=encode_hex(msg.sender), to=encode_hex(msg.to),
-                      data=dat if len(dat) < 2500 else ("data<%d>" % len(dat)))
+                      data=dat if len(dat) < 2500 else ("data<%d>" % len(dat)),
+                      post_storage=ext.log_storage(msg.to))
 
     if res == 0:
         log_msg.debug('REVERTING')
@@ -374,7 +380,8 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
-    # if len(ext.get_code(msg.to)):
+    if len(ext.get_code(msg.to)):
+        log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
     #     return 0, 0, b''
 
     ext.set_nonce(msg.to, 1 if ext.post_clearing_hardfork() else 0)

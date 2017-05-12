@@ -1,9 +1,9 @@
-from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int
+from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int, checksum_encode, int_to_big_endian, encode_hex
 from ethereum.genesis_helpers import mk_basic_state
 from ethereum.pow import chain
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
-from ethereum.config import Env
+from ethereum.config import config_homestead, config_tangerine, config_spurious, config_metropolis, default_config, Env
 from ethereum.pow.ethpow import Miner
 from ethereum.messages import apply_transaction
 from ethereum.common import verify_execution_results, mk_block_from_prevstate, set_execution_results
@@ -99,25 +99,35 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
             return o[0] if len(o) == 1 else o
         return kall
 
+def get_env(env):
+    d = {
+        None: config_spurious,
+        'mainnet': default_config,
+        'homestead': config_homestead,
+        'tangerine': config_tangerine,
+        'spurious': config_spurious,
+        'metropolis': config_metropolis,
+    }
+    return env if isinstance(env, Env) else Env(config=d[env])
+
 
 class Chain(object):
     def __init__(self, alloc=None, env=None):
         self.chain = chain.Chain(mk_basic_state(base_alloc if alloc is None else alloc,
                                                 None,
-                                                Env() if env is None else env))
+                                                get_env(env)))
         self.cs = get_consensus_strategy(self.chain.env.config)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
         self.cs.initialize(self.head_state, self.block)
-
-    @property
-    def last_tx(self):
-        return self.block.transactions[-1] if self.block.transactions else None
+        self.last_sender = None
+        self.last_tx = None
 
     def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
         transaction = Transaction(self.head_state.get_nonce(sender_addr), gasprice, startgas,
                                   to, value, data).sign(sender)
+        self.last_tx, self.last_sender = transaction, sender
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)
         if not success:
@@ -159,3 +169,53 @@ class Chain(object):
         assert blknum == self.block.number
         self.block.transactions = self.block.transactions[:txcount]
         self.head_state.revert(state_snapshot)
+
+def int_to_0x_hex(v):
+    o = encode_hex(int_to_big_endian(v))
+    if o and o[0] == '0':
+        return '0x' + o[1:]
+    else:
+        return '0x' + o
+    
+
+def mk_state_test_prefill(c):
+    env = {
+        "currentCoinbase": checksum_encode(c.head_state.block_coinbase),
+        "currentDifficulty": int_to_0x_hex(c.head_state.block_difficulty),
+        "currentGasLimit": int_to_0x_hex(c.head_state.gas_limit),
+        "currentNumber": int_to_0x_hex(c.head_state.block_number),
+        "currentTimestamp": int_to_0x_hex(c.head_state.timestamp),
+        "previousHash": "0x"+encode_hex(c.head_state.prev_headers[0].hash),
+    }
+    pre = c.head_state.to_dict()
+    return {"env": env, "pre": pre}
+
+def mk_state_test_postfill(c, prefill):
+    txdata = c.last_tx.to_dict()
+    modified_tx_data = {
+        "data": [ txdata["data"] ],
+        "gasLimit": [ int_to_0x_hex(txdata["startgas"]) ],
+        "gasPrice": int_to_0x_hex(txdata["gasprice"]),
+        "nonce": int_to_0x_hex(txdata["nonce"]),
+        "secretKey": '0x' + encode_hex(c.last_sender),
+        "to": txdata["to"],
+        "value": [ int_to_0x_hex(txdata["value"]) ],
+    }
+    c.head_state.commit()
+    postStateHash = '0x' + encode_hex(c.head_state.trie.root_hash)
+    if c.chain.config == config_homestead:
+        config = 'Homestead'
+    elif c.chain.config == config_tangerine:
+        config = 'EIP150'
+    elif c.chain.config == config_spurious:
+        config = 'EIP158'
+    elif c.chain.config == config_metropolis:
+        config = 'Metropolis'
+    else:
+        raise Exception("Cannot get config")
+    return {
+        "env": prefill["env"],
+        "pre": prefill["pre"],
+        "transaction": modified_tx_data,
+        "post": {config: [ { "hash": postStateHash, "indexes": {"data": 0, "gas": 0, "value": 0} } ] }
+    }

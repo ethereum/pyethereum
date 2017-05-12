@@ -578,9 +578,9 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     stk.append(1)
-                    compustate.gas += gas
                     for i in range(min(len(data), memoutsz)):
                         mem[memoutstart + i] = data[i]
+                compustate.gas += gas
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
@@ -624,9 +624,9 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     stk.append(1)
-                    compustate.gas += gas
                     for i in range(min(len(data), memoutsz)):
                         mem[memoutstart + i] = data[i]
+                compustate.gas += gas
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)

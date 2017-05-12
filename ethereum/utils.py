@@ -182,7 +182,7 @@ def checksum_encode(addr): # Takes a 20-byte binary address as input
     addr = normalize_address(addr)
     o = ''
     v = big_endian_to_int(sha3(encode_hex(addr)))
-    for i, c in enumerate(addr.hex()):
+    for i, c in enumerate(encode_hex(addr)):
         if c in '0123456789':
             o += c
         else:

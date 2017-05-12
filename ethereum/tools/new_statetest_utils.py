@@ -2,7 +2,7 @@ from ethereum.state import State
 from ethereum.block import FakeHeader, Block
 from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
     remove_0x_head, encode_hex, big_endian_to_int
-from ethereum.config import default_config, Env
+from ethereum.config import default_config, config_homestead, config_tangerine, config_spurious, config_metropolis, Env
 from ethereum.exceptions import InvalidTransaction
 import ethereum.transactions as transactions
 from ethereum.messages import apply_transaction
@@ -12,6 +12,8 @@ import os
 
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+
+konfig=copy.copy(default_config)
 
 # configure_logging(config_string=config_string)
 
@@ -25,45 +27,20 @@ def mk_fake_header(blknum):
     return fake_headers[blknum]
 
 basic_env = {
-    "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-    "currentDifficulty": "256",
-    "currentGasLimit": "1000000000",
-    "currentNumber": "257",
-    "currentTimestamp": "1",
-    "previousHash": "5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+    "currentCoinbase": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+    "currentDifficulty": "0x020000",
+    "currentGasLimit": "0x7fffffffffffffff",
+    "currentNumber": "0x01",
+    "currentTimestamp": "0x03e8",
+    "previousHash": "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
 }
 
-konfig = copy.copy(default_config)
-
-konfig_homestead = copy.copy(konfig)
-konfig_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
-konfig_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99
-konfig_homestead["CLEARING_FORK_BLKNUM"] = 2**99
-konfig_homestead["METROPOLIS_FORK_BLKNUM"] = 2**99
-
-konfig_tangerine = copy.copy(konfig)
-konfig_tangerine["HOMESTEAD_FORK_BLKNUM"] = 0
-konfig_tangerine["ANTI_DOS_FORK_BLKNUM"] = 0
-konfig_tangerine["CLEARING_FORK_BLKNUM"] = 2**99
-konfig_tangerine["METROPOLIS_FORK_BLKNUM"] = 2**99
-
-konfig_spurious = copy.copy(konfig)
-konfig_spurious["HOMESTEAD_FORK_BLKNUM"] = 0
-konfig_spurious["ANTI_DOS_FORK_BLKNUM"] = 0
-konfig_spurious["CLEARING_FORK_BLKNUM"] = 0
-konfig_spurious["METROPOLIS_FORK_BLKNUM"] = 2**99
-
-konfig_metropolis = copy.copy(konfig)
-konfig_metropolis["HOMESTEAD_FORK_BLKNUM"] = 0
-konfig_metropolis["ANTI_DOS_FORK_BLKNUM"] = 0
-konfig_metropolis["CLEARING_FORK_BLKNUM"] = 0
-konfig_metropolis["METROPOLIS_FORK_BLKNUM"] = 0
 
 configs = {
-    #"Homestead": konfig_homestead,
-    #"EIP150": konfig_tangerine,
-    "EIP158": konfig_spurious,
-    "Metropolis": konfig_metropolis
+    #"Homestead": config_homestead,
+    #"EIP150": config_tangerine,
+    "EIP158": config_spurious,
+    "Metropolis": config_metropolis
 }
 
 def mk_state_diff(prev, post):
@@ -178,3 +155,4 @@ def verify_state_test(test):
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))
             else:
                 print("Hash matched!: %s" % computed["hash"])
+    return True

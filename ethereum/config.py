@@ -3,6 +3,7 @@ from rlp.utils import decode_hex
 from ethereum import utils
 from ethereum.db import BaseDB, EphemDB
 from ethereum.child_dao_list import L as child_dao_list
+import copy
 
 default_config = dict(
     # Genesis block difficulty
@@ -88,3 +89,27 @@ class Env(object):
         assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
+
+config_homestead = copy.copy(default_config)
+config_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
+config_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99
+config_homestead["CLEARING_FORK_BLKNUM"] = 2**99
+config_homestead["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_tangerine = copy.copy(default_config)
+config_tangerine["HOMESTEAD_FORK_BLKNUM"] = 0
+config_tangerine["ANTI_DOS_FORK_BLKNUM"] = 0
+config_tangerine["CLEARING_FORK_BLKNUM"] = 2**99
+config_tangerine["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_spurious = copy.copy(default_config)
+config_spurious["HOMESTEAD_FORK_BLKNUM"] = 0
+config_spurious["ANTI_DOS_FORK_BLKNUM"] = 0
+config_spurious["CLEARING_FORK_BLKNUM"] = 0
+config_spurious["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_metropolis = copy.copy(default_config)
+config_metropolis["HOMESTEAD_FORK_BLKNUM"] = 0
+config_metropolis["ANTI_DOS_FORK_BLKNUM"] = 0
+config_metropolis["CLEARING_FORK_BLKNUM"] = 0
+config_metropolis["METROPOLIS_FORK_BLKNUM"] = 0
