@@ -42,8 +42,9 @@ def mk_test(p1, m, execgas, datarestrict=96):
                             (p1, m, datarestrict, py_pairing.normalize(py_pairing.multiply(p1, m)), (x, y)))
         print('Succeeded! %r %d %d %r' % (p1, m, datarestrict, (x, y)))
     o = tester2.mk_state_test_postfill(c, pre)
+    o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
-    return o
+    return o, o2
 
 
 zero = (py_pairing.FQ(1), py_pairing.FQ(1), py_pairing.FQ(0))
@@ -70,7 +71,13 @@ for g in gaslimits:
                 tests.append((pt, m, g, 40))
 
 testout = {}
+testout_filler = {}
 
 for test in tests:
-    testout["ecadd_%r_%r_%d_%d" % test] = mk_test(*test)
+    o1, o2 = mk_test(*test)
+    n = py_pairing.normalize(test[0])
+    testout["ecmul_%r-%r_%d_%d_%d" % (n[0], n[1], test[1], test[2], test[3])] = o1
+    o2["explanation"] = "Puts the point %r and the factor %d into the ECMUL precompile, truncating or expanding the input data to %d bytes. Gives the execution %d bytes" % (n, test[1], test[3], test[2])
+    testout_filler["ecmul_%r-%r_%d_%d_%d" % (n[0], n[1], test[1], test[2], test[3])] = o2
 open('ecmul_tests.json', 'w').write(json.dumps(testout, indent=4))
+open('ecmul_tests_filler.json', 'w').write(json.dumps(testout_filler, indent=4))

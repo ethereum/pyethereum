@@ -44,8 +44,9 @@ def mk_test(p1, p2, execgas, datarestrict=128):
                             (p1, p2, datarestrict, py_pairing.normalize(py_pairing.add(p1, p2)), (x, y)))
         print('Succeeded! %r %r %d %r' % (p1, p2, datarestrict, (x, y)))
     o = tester2.mk_state_test_postfill(c, pre)
+    o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
-    return o
+    return o, o2
 
 gaslimits = [21000, 25000]
 
@@ -78,7 +79,13 @@ for g in gaslimits:
     tests.append((wrong3, wrong4, g, 128))
 
 testout = {}
+testout_filler = {}
 
 for test in tests:
-    testout["ecadd_%r_%r_%d_%d" % test] = mk_test(*test)
+    o1, o2 = mk_test(*test)
+    n1, n2 = py_pairing.normalize(test[0]), py_pairing.normalize(test[1])
+    testout["ecadd_%r-%r_%r-%r_%d_%d" % (n1[0], n1[1], n2[0], n2[1], test[2], test[3])] = o1
+    o2["explanation"] = "Puts the points %r and %r into the ECADD precompile, truncating or expanding the input data to %d bytes. Gives the execution %d bytes" % (n1, n2, test[3], test[2])
+    testout_filler["ecadd_%r-%r_%r-%r_%d_%d" % (n1[0], n1[1], n2[0], n2[1], test[2], test[3])] = o2
 open('ecadd_tests.json', 'w').write(json.dumps(testout, indent=4))
+open('ecadd_tests_filler.json', 'w').write(json.dumps(testout_filler, indent=4))

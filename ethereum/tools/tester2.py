@@ -22,10 +22,13 @@ k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = accounts[:10]
 
 base_alloc = {}
+minimal_alloc = {}
 for a in accounts:
     base_alloc[a] = {'balance': 10**18}
-for i in range(16):
+for i in range(8):
     base_alloc[int_to_addr(i)] = {'balance': 1}
+    minimal_alloc[int_to_addr(i)] = {'balance': 1}
+minimal_alloc[accounts[0]] = {'balance': 10**18}
 
 # Initialize languages
 languages = {}
@@ -190,7 +193,7 @@ def mk_state_test_prefill(c):
     pre = c.head_state.to_dict()
     return {"env": env, "pre": pre}
 
-def mk_state_test_postfill(c, prefill):
+def mk_state_test_postfill(c, prefill, filler_mode=False):
     txdata = c.last_tx.to_dict()
     modified_tx_data = {
         "data": [ txdata["data"] ],
@@ -213,9 +216,13 @@ def mk_state_test_postfill(c, prefill):
         config = 'Metropolis'
     else:
         raise Exception("Cannot get config")
-    return {
+    o = {
         "env": prefill["env"],
         "pre": prefill["pre"],
         "transaction": modified_tx_data,
-        "post": {config: [ { "hash": postStateHash, "indexes": {"data": 0, "gas": 0, "value": 0} } ] }
     }
+    if not filler_mode:
+        o["post"] = {config: [ { "hash": postStateHash, "indexes": {"data": 0, "gas": 0, "value": 0} } ] }
+    else:
+        o["expect"] = [ {"indexes": {"data": 0, "gas": 0, "value": 0}, "network": ["Metropolis"], "result": c.head_state.to_dict() } ]
+    return o

@@ -4,7 +4,7 @@ from ethereum.utils import int_to_big_endian, encode_int32, big_endian_to_int
 from ethereum.tools import new_statetest_utils
 import json
 
-c = tester2.Chain(env='metropolis')
+c = tester2.Chain(alloc=tester2.minimal_alloc, env='metropolis')
 c.head_state.gas_limit = 10**8
 
 kode = """
@@ -30,6 +30,7 @@ def intrinsic_gas_of_data(d):
 
 def mk_test(b, e, m, execgas):
     encoded = mk_modexp_data(b, e, m)
+    s = c.snapshot()
     x = c.contract(kode % (len(encoded) + 36, max(intlen(m), 1), max(intlen(m), 1)), language='viper')
     pre = tester2.mk_state_test_prefill(c)
     o = x.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x.translator.encode('foo', [encoded])) + execgas)
@@ -38,10 +39,12 @@ def mk_test(b, e, m, execgas):
     else:
         if big_endian_to_int(o[:intlen(m)]) != (pow(b, e, m) if m else 0):
             raise Exception("Mismatch! %d %d %d expected %d computed %d" % (b, e, m, pow(b, e, m), big_endian_to_int(o[:intlen(m)])))
-        print('Succeeded %d %d %d sg %d' % (b, e, m, execgas))
+        print("Succeeded %d %d %d sg %d" % (b, e, m, execgas))
     o = tester2.mk_state_test_postfill(c, pre)
+    o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
-    return o
+    c.revert(s)
+    return o, o2
 
 gaslimits = [20500, 22000, 25000, 35000, 155000, 1000000]
 
@@ -80,7 +83,12 @@ for g in gaslimits:
     tests.append((3**160 - 11, 3**160 - 11, 2**160 - 11, g))
 
 testout = {}
+testout_filler = {}
 
 for test in tests:
-    testout["modexp_%d_%d_%d_%d" % test] = mk_test(*test)
+    o1, o2 = mk_test(*test)
+    testout["modexp_%d_%d_%d_%d" % test] = o1
+    o2["explanation"] = "Puts the base %d, exponent %d and modulus %d into the MODEXP precompile, saves the hash of the result. Gives the execution %d gas" % test
+    testout_filler["modexp_%d_%d_%d_%d" % test] = o2
 open('modexp_tests.json', 'w').write(json.dumps(testout, indent=4))
+open('modexp_tests_filler.json', 'w').write(json.dumps(testout_filler, indent=4))
