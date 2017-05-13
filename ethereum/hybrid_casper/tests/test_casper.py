@@ -6,8 +6,8 @@ from ethereum.hybrid_casper.casper_utils import mk_prepare, mk_commit, mk_status
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
-EPOCH_LENGTH = 100
-SLASH_DELAY = 8640
+EPOCH_LENGTH = 23
+SLASH_DELAY = 864
 ALLOC = {a: {'balance': 5*10**19} for a in tester2.accounts[:10]}
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = tester2.keys[:10]
 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = tester2.accounts[:10]
@@ -25,22 +25,22 @@ def init_chain_and_casper():
 def epoch_blockhash(epoch):
     if epoch == 0:
         return b'\x00' * 32
-    return t.chain.get_blockhash_by_number(epoch*EPOCH_LENGTH)
+    return t.head_state.prev_headers[epoch*EPOCH_LENGTH * -1 - 1].hash
 
 def mine_and_init_epochs(number_of_epochs):
-    distance_to_next_epoch = (EPOCH_LENGTH - t.chain.state.block_number) % EPOCH_LENGTH
+    distance_to_next_epoch = (EPOCH_LENGTH - t.head_state.block_number) % EPOCH_LENGTH
     t.mine(number_of_blocks=distance_to_next_epoch)
-    casper.initialize_epoch(t.chain.state.block_number // EPOCH_LENGTH)
+    casper.initialize_epoch(t.head_state.block_number // EPOCH_LENGTH)
     for i in range(number_of_epochs-1):
-        print("Initializing epoch", t.chain.state.block_number // EPOCH_LENGTH)
+        print("Initializing epoch", t.head_state.block_number // EPOCH_LENGTH)
         t.mine(number_of_blocks=EPOCH_LENGTH)
-        casper.initialize_epoch(t.chain.state.block_number // EPOCH_LENGTH)
-    print("Initializing epoch", t.chain.state.block_number // EPOCH_LENGTH)
+        casper.initialize_epoch(t.head_state.block_number // EPOCH_LENGTH)
+    print("Initializing epoch", t.head_state.block_number // EPOCH_LENGTH)
     t.mine(number_of_blocks=2)
 
-# Begin the test
 print("Starting tests")
 t, casper = init_chain_and_casper()
+start_hash = t.chain.head_hash
 # Initialize the first epoch
 mine_and_init_epochs(1)
 assert casper.get_nextValidatorIndex() == 1
@@ -165,7 +165,7 @@ print("PREPARE_REQ slashing condition works")
 
 print("Creating a new chain for test 2")
 # Create a new chain
-t, casper = init_chain_and_casper()
+t.change_head(start_hash)
 # Initialize the first epoch
 mine_and_init_epochs(1)
 assert casper.get_nextValidatorIndex() == 1

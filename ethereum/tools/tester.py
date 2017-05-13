@@ -174,7 +174,6 @@ class Chain(object):
         set_execution_results(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
         assert self.chain.add_block(self.block)
-        assert self.head_state.trie.root_hash == self.chain.state.trie.root_hash  # NOTE: Should end up being false
         for i in range(1, number_of_blocks):
             self.block = make_head_candidate(self.chain, parent=self.block, timestamp=self.chain.state.timestamp + 14)
             self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
