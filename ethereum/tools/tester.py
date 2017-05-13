@@ -176,15 +176,17 @@ class Chain(object):
         set_execution_results(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
         assert self.chain.add_block(self.block)
+        b = self.block
         for i in range(1, number_of_blocks):
-            self.block = make_head_candidate(self.chain, parent=self.block, timestamp=self.chain.state.timestamp + 14)
-            self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
-            assert self.chain.add_block(self.block)
-        self.change_head(self.block.header.hash)
+            b = make_head_candidate(self.chain, parent=b, timestamp=self.chain.state.timestamp + 14, coinbase=coinbase)
+            b = Miner(b).mine(rounds=100, start_nonce=0)
+            assert self.chain.add_block(b)
+        self.change_head(b.header.hash, coinbase)
+        return b
 
-    def change_head(self, parent):
+    def change_head(self, parent, coinbase=a0):
         self.head_state = self.chain.mk_poststate_of_blockhash(parent).ephemeral_clone()
-        self.block, _  = mk_block_from_prevstate(self.chain, self.head_state, timestamp=self.chain.state.timestamp)
+        self.block, _ = mk_block_from_prevstate(self.chain, self.head_state, timestamp=self.chain.state.timestamp, coinbase=coinbase)
         self.cs.initialize(self.head_state, self.block)
 
     def snapshot(self):
