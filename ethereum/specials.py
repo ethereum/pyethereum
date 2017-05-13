@@ -151,7 +151,7 @@ def proc_ecpairing(ext, msg):
     # Data must be an exact multiple of 192 byte
     if msg.data.size % 192:
         return 0, 0, []
-    gascost = opcodes.GPAIRINGBASE + msg.data.size / 192 * opcodes.GPAIRINGPERPOINT
+    gascost = opcodes.GPAIRINGBASE + msg.data.size // 192 * opcodes.GPAIRINGPERPOINT
     if msg.gas < gascost:
         return 0, 0, []
     zero = (py_pairing.FQ2.one(), py_pairing.FQ2.one(), py_pairing.FQ2.zero())
@@ -169,18 +169,18 @@ def proc_ecpairing(ext, msg):
         for v in (x2_i, x2_r, y2_i, y2_r):
             if v >= py_pairing.field_modulus:
                 return 0, 0, []
-        fq2_x = py_pairing.FQ2([py_pairing.FQ(x2_r), py_pairing.FQ(x2_i)])
-        fq2_y = py_pairing.FQ2([py_pairing.FQ(y2_r), py_pairing.FQ(y2_i)])
+        fq2_x = py_pairing.FQ2([x2_r, x2_i])
+        fq2_y = py_pairing.FQ2([y2_r, y2_i])
         if (fq2_x, fq2_y) != (py_pairing.FQ2.zero(), py_pairing.FQ2.zero()):
             p2 = (fq2_x, fq2_y, py_pairing.FQ2.one())
             if not py_pairing.is_on_curve(p2, py_pairing.b2):
                 return 0, 0, []
         else:
             p2 = zero
-        if py_pairing.multiply(p2, py_pairing.curve_order) != zero:
+        if py_pairing.multiply(p2, py_pairing.curve_order)[-1] != py_pairing.FQ2.zero():
             return 0, 0, []
-        exponent *= py_pairing.pairing(p1, p2, final_exponentiate=False)
-    result = py_pairing.final_exponentiate(exponent) == FQ12.one()
+        exponent *= py_pairing.pairing(p2, p1, final_exponentiate=False)
+    result = py_pairing.final_exponentiate(exponent) == py_pairing.FQ12.one()
     return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
 
 specials = {
