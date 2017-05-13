@@ -20,7 +20,7 @@ def block_from_genesis_declaration(genesis_data, env):
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
     return Block(h, [], [])
 
-def state_from_genesis_declaration(genesis_data, env, block=None):
+def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=False):
     if block:
         assert isinstance(block, Block)
     else:
@@ -42,7 +42,7 @@ def state_from_genesis_declaration(genesis_data, env, block=None):
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
     get_consensus_strategy(state.config).initialize(state, block)
-    state.commit()
+    state.commit(allow_empties=allow_empties)
     block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
     return state
