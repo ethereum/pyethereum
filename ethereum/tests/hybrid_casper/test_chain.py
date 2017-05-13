@@ -42,7 +42,6 @@ def init_chain_and_casper():
     t = tester2.Chain(genesis=genesis)
     casper = tester2.ABIContract(t, casper_utils.casper_abi, casper_address)
     casper.initiate()
-    t.mine()
     return t, casper
 
 # Helper function for gettting blockhashes by epoch, based on the current chain
@@ -59,13 +58,13 @@ def mine_epochs(t, number_of_epochs):
 
 def test_mining(db):
     t, casper = init_chain_and_casper()
-    assert t.chain.state.block_number == 1
+    assert t.chain.state.block_number == 0
     assert t.chain.state.block_difficulty == 1
     for i in range(2):
         t.mine()
-        assert t.chain.state.block_number == i + 2
+        assert t.chain.state.block_number == i + 1
 
-def test_mine_block(db):
+def test_mining_block_rewards(db):
     t, casper = init_chain_and_casper()
     genesis = t.mine(coinbase=a1)
     blk2 = t.mine(coinbase=a1)
@@ -77,3 +76,27 @@ def test_mine_block(db):
     assert t.chain.state.get_balance(a1) == t.chain.env.config['BLOCK_REWARD'] * 3 + t.chain.mk_poststate_of_blockhash(blk2.hash).get_balance(a1)
     assert t.chain.state.get_balance(a1) == t.chain.env.config['BLOCK_REWARD'] * 4 + t.chain.mk_poststate_of_blockhash(genesis.hash).get_balance(a1)
     assert blk2.prevhash == genesis.hash
+
+def test_simple_chain(db):
+    t, casper = init_chain_and_casper()
+    t.tx(k0, a1, 20, gasprice=0)
+
+    blk2 = t.mine()
+    blk3 = t.mine()
+
+    assert blk2.hash in t.chain
+    assert blk3.hash in t.chain
+    assert t.chain.has_block(blk2.hash)
+    assert t.chain.has_block(blk3.hash)
+    assert t.chain.get_block(blk2.hash) == blk2
+    assert t.chain.get_block(blk3.hash) == blk3
+    assert t.chain.head == blk3
+    assert t.chain.get_children(blk2) == [blk3]
+    assert t.chain.get_chain() == [blk2, blk3]
+    assert t.chain.get_block_by_number(1) == blk2
+    assert t.chain.get_block_by_number(2) == blk3
+    assert not t.chain.get_block_by_number(3)
+
+# TODO: def test_add_side_chain(db, alt_db):
+# TODO: def test_add_longer_side_chain(db, alt_db):
+# TODO: def test_add_longer_side_chain(db, alt_db):
