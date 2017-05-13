@@ -27,22 +27,17 @@ def epoch_blockhash(epoch):
         return b'\x00' * 32
     return t.head_state.prev_headers[epoch*EPOCH_LENGTH * -1 - 1].hash
 
-def mine_and_init_epochs(number_of_epochs):
+# Mines blocks required for number_of_epochs epoch changes, plus an offset of 2 blocks
+def mine_epochs(number_of_epochs):
     distance_to_next_epoch = (EPOCH_LENGTH - t.head_state.block_number) % EPOCH_LENGTH
-    t.mine(number_of_blocks=distance_to_next_epoch)
-    casper.initialize_epoch(t.head_state.block_number // EPOCH_LENGTH)
-    for i in range(number_of_epochs-1):
-        print("Initializing epoch", t.head_state.block_number // EPOCH_LENGTH)
-        t.mine(number_of_blocks=EPOCH_LENGTH)
-        casper.initialize_epoch(t.head_state.block_number // EPOCH_LENGTH)
-    print("Initializing epoch", t.head_state.block_number // EPOCH_LENGTH)
-    t.mine(number_of_blocks=2)
+    number_of_blocks = distance_to_next_epoch + EPOCH_LENGTH*(number_of_epochs-1) + 2
+    t.mine(number_of_blocks=number_of_blocks)
 
 print("Starting tests")
 t, casper = init_chain_and_casper()
 start_hash = t.chain.head_hash
 # Initialize the first epoch
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_nextValidatorIndex() == 1
 print("Epoch initialized")
 print("Reward factor: %.8f" % (casper.get_reward_factor() * 2 / 3))
@@ -71,7 +66,7 @@ print('Gas consumed for a commit: %d (including %d intrinsic gas)' %
 assert casper.get_consensus_messages__committed(1)
 print("Commit message processed")
 # Initialize the second epoch
-mine_and_init_epochs(1)
+mine_epochs(1)
 # Check that the dynasty increased as expected
 assert casper.get_dynasty() == 1
 print("Second epoch initialized, dynasty increased as expected")
@@ -91,7 +86,7 @@ assert post_prepare_deposits - casper.get_total_deposits(0) > 0
 assert casper.get_total_deposits(1) - post_prepare_deposits > 0
 print('Initial deposits: %d, post-prepare: %d, post-commit: %d' % (casper.get_total_deposits(0), post_prepare_deposits, casper.get_total_deposits(1)))
 # Initialize the third epoch
-mine_and_init_epochs(1)
+mine_epochs(1)
 print("Second epoch prepared and committed, third epoch initialized")
 # Test the NO_DBL_PREPARE slashing condition
 p1 = mk_prepare(0, 3, epoch_blockhash(3), epoch_2_anchash, 2, epoch_2_anchash, k0)
@@ -113,13 +108,13 @@ epoch_3_anchash = utils.sha3(epoch_blockhash(3) + epoch_2_anchash)
 assert casper.get_consensus_messages__ancestry_hash_justified(3, epoch_3_anchash)
 assert casper.get_consensus_messages__committed(3)
 # Initialize the fourth epoch. Not doing prepares or commits during this epoch.
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_dynasty() == 3
 epoch_4_anchash = utils.sha3(epoch_blockhash(4) + epoch_3_anchash)
 # Not publishing this prepare for the time being
 p4 = mk_prepare(0, 4, epoch_blockhash(4), '\x12' * 32, 3, '\x24' * 32, k0)
 # Initialize the fifth epoch
-mine_and_init_epochs(1)
+mine_epochs(1)
 print("Epochs up to 5 initialized")
 # Dynasty not incremented because no commits were made
 assert casper.get_dynasty() == 3
@@ -130,7 +125,7 @@ casper.prepare(p5)  # Prepare works, and no reward is given
 kommit = mk_commit(0, 5, b'\x80' * 32, 3, k0)
 epoch_inc = 1 + int(SLASH_DELAY / 14 / EPOCH_LENGTH)
 print("Speeding up time to test remaining two slashing conditions")
-mine_and_init_epochs(epoch_inc)
+mine_epochs(epoch_inc)
 print("Epochs up to %d initialized" % (6 + epoch_inc))
 snapshot = t.snapshot()
 casper.commit_non_justification_slash(kommit)
@@ -167,7 +162,7 @@ print("Creating a new chain for test 2")
 # Create a new chain
 t.change_head(start_hash)
 # Initialize the first epoch
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_nextValidatorIndex() == 1
 assert casper.get_dynasty() == 0
 assert casper.get_current_epoch() == 1
@@ -184,7 +179,7 @@ casper.commit(mk_commit(0, 1, epoch_blockhash(1), 0, k0))
 epoch_1_anchash = utils.sha3(epoch_blockhash(1) + epoch_blockhash(0))
 assert casper.get_consensus_messages__committed(1)
 print("Prepared and committed")
-mine_and_init_epochs(1)
+mine_epochs(1)
 print("Epoch 2 initialized")
 assert casper.get_dynasty() == 1
 casper.prepare(mk_prepare(0, 2, epoch_blockhash(2), epoch_1_anchash, 1, epoch_1_anchash, k0))
@@ -192,7 +187,7 @@ casper.commit(mk_commit(0, 2, epoch_blockhash(2), 1, k0))
 epoch_2_anchash = utils.sha3(epoch_blockhash(2) + epoch_1_anchash)
 casper.get_consensus_messages__committed(2)
 print("Confirmed that one key is still sufficient to prepare and commit")
-mine_and_init_epochs(1)
+mine_epochs(1)
 print("Epoch 3 initialized")
 assert casper.get_dynasty() == 2
 assert 3 * 10**18 <= casper.get_total_deposits(0) < 4 * 10**18
@@ -239,7 +234,7 @@ for i, k in enumerate([k0, k1, k2, k3, k4]):
 assert casper.get_consensus_messages__committed(3)
 print("Commit from five of seven validators sufficient")
 # Start epoch 4
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_dynasty() == 3
 print("Epoch 4 initialized")
 # Prepare and commit
@@ -253,7 +248,7 @@ for i, k in enumerate([k0, k1, k2, k3, k4]):
 assert casper.get_consensus_messages__committed(4)
 print("Prepared and committed")
 # Start epoch 5 / dynasty 4
-mine_and_init_epochs(1)
+mine_epochs(1)
 print("Epoch 5 initialized")
 assert casper.get_dynasty() == 4
 assert 21 * 10**18 <= casper.get_total_deposits(3) <= 22 * 10**18
@@ -279,7 +274,7 @@ for i, k in enumerate([k0, k1, k2, k3, k4]):
 # Committed!
 assert casper.get_consensus_messages__committed(5)
 # Start epoch 6 / dynasty 5
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_dynasty() == 5
 print("Epoch 6 initialized")
 # Log back in
@@ -313,7 +308,7 @@ for i, k in enumerate([k0, k1, k2]):
 assert casper.get_consensus_messages__committed(6)
 print("Three of four prepares and commits sufficient")
 # Start epoch 7 / dynasty 6
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_dynasty() == 6
 print("Epoch 7 initialized")
 # Here three prepares and three commits should be sufficient!
@@ -334,7 +329,7 @@ for i, k in enumerate([k0, k1, k2]):
 assert casper.get_consensus_messages__committed(7)
 print("Three of four prepares and commits sufficient")
 # Start epoch 8 / dynasty 7
-mine_and_init_epochs(1)
+mine_epochs(1)
 assert casper.get_dynasty() == 7
 print("Epoch 8 initialized")
 assert 12 * 10**18 <= casper.get_total_deposits(6) <= 13 * 10**18
