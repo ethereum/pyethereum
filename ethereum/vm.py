@@ -13,7 +13,7 @@ from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
 from rlp.utils import encode_hex, ascii_chr
-from ethereum.utils import to_string, encode_int, zpad
+from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr
 
 log_log = get_logger('eth.vm.log')
 log_msg = get_logger('eth.pb.msg')
@@ -350,7 +350,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG PAYING FOR SHA3')
                 if not mem_extend(mem, compustate, op, s0, s1):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = b''.join(map(ascii_chr, mem[s0: s0 + s1]))
+                data = bytearray_to_bytestr(mem[s0: s0 + s1])
                 stk.append(utils.big_endian_to_int(utils.sha3(data)))
             elif op == 'ADDRESS':
                 stk.append(utils.coerce_to_int(msg.to))
@@ -439,8 +439,7 @@ def vm_execute(ext, msg, code):
                 s0 = stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):
                     return vm_exception('OOG EXTENDING MEMORY')
-                data = b''.join(map(ascii_chr, mem[s0: s0 + 32]))
-                stk.append(utils.big_endian_to_int(data))
+                stk.append(utils.big_endian_to_int(bytearray_to_bytestr(mem[s0: s0 + 32])))
             elif op == 'MSTORE':
                 s0, s1 = stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, s0, 32):
@@ -493,16 +492,13 @@ def vm_execute(ext, msg, code):
             elif op == 'GAS':
                 stk.append(compustate.gas)  # AFTER subtracting cost 1
         elif op[:4] == 'PUSH':
-            pushnum = int(op[4:])
-            compustate.pc += pushnum
+            compustate.pc += opcode - 0x5f # Move 1 byte forward for 0x60, up to 32 bytes for 0x7f
             stk.append(pushval)
         elif op[:3] == 'DUP':
-            depth = int(op[3:])
-            stk.append(stk[-depth])
+            stk.append(stk[0x7f - opcode]) # 0x7f - opcode is a negative number, -1 for 0x80 ... -16 for 0x8f
         elif op[:4] == 'SWAP':
-            depth = int(op[4:])
-            temp = stk[-depth - 1]
-            stk[-depth - 1] = stk[-1]
+            temp = stk[0x8e - opcode] # 0x8e - opcode is a negative number, -2 for 0x90 ... -17 for 0x9f
+            stk[0x8e - opcode] = stk[-1]
             stk[-1] = temp
 
         elif op[:3] == 'LOG':
@@ -524,7 +520,7 @@ def vm_execute(ext, msg, code):
             compustate.gas -= msz * opcodes.GLOGBYTE
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            data = b''.join(map(ascii_chr, mem[mstart: mstart + msz]))
+            data = bytearray_to_bytestr(mem[mstart: mstart + msz])
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(utils.safe_ord, data)))
             # print('LOG', msg.to, topics, list(map(ord, data)))
@@ -578,8 +574,8 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     stk.append(1)
-                    for i in range(min(len(data), memoutsz)):
-                        mem[memoutstart + i] = data[i]
+                for i in range(min(len(data), memoutsz)):
+                    mem[memoutstart + i] = data[i]
                 compustate.gas += gas
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
@@ -624,8 +620,8 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     stk.append(1)
-                    for i in range(min(len(data), memoutsz)):
-                        mem[memoutstart + i] = data[i]
+                for i in range(min(len(data), memoutsz)):
+                    mem[memoutstart + i] = data[i]
                 compustate.gas += gas
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)

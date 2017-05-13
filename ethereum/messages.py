@@ -4,7 +4,7 @@ import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
     big_endian_int, address, int256, encode_int, \
     safe_ord, int_to_addr, sha3, big_endian_to_int, \
-    ascii_chr
+    ascii_chr, bytearray_to_bytestr
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from rlp.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import utils
@@ -171,7 +171,7 @@ def apply_message(state, msg=None, **kwargs):
         assert not kwargs
     ext = VMExt(state, transactions.Transaction(0, 0, 21000, b'', 0, b''))
     result, gas_remained, data = apply_msg(ext, msg)
-    return b''.join(map(ascii_chr, data)) if result else None
+    return bytearray_to_bytestr(data) if result else None
 
 
 def apply_transaction(state, tx):
@@ -239,7 +239,7 @@ def apply_transaction(state, tx):
         state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
         state.gas_used += gas_used
         if tx.to:
-            output = b''.join(map(ascii_chr, data))
+            output = bytearray_to_bytestr(data)
         else:
             output = data
         success = 1
@@ -391,6 +391,7 @@ def create_contract(ext, msg):
 
     if res:
         if not len(dat):
+            # ext.set_code(msg.to, b'')
             return 1, gas, msg.to
         gcost = len(dat) * opcodes.GCONTRACTBYTE
         if gas >= gcost and (len(dat) <= 24576 or not ext.post_anti_dos_hardfork()):
@@ -401,7 +402,7 @@ def create_contract(ext, msg):
             if ext.post_homestead_hardfork():
                 ext.revert(snapshot)
                 return 0, 0, b''
-        ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
+        ext.set_code(msg.to, bytearray_to_bytestr(dat))
         log_msg.debug('SETTING CODE', addr=encode_hex(msg.to), lendat=len(dat))
         return 1, gas, msg.to
     else:

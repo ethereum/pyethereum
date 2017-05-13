@@ -245,10 +245,11 @@ class State():
             if addr in self.modified or True:
                 if not acct.deleted:
                     acct._cached_rlp = None
-                    # print 'moose', addr.encode('hex'), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code)
                     if self.is_CLEARING() and acct.is_blank() and not allow_empties:  # and addr not in default_specials:
+                        # print('del', encode_hex(addr), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code))
                         self.trie.delete(addr)
                     else:
+                        # print('upd', encode_hex(addr), self.is_CLEARING(), acct.is_blank(), acct.nonce, acct.balance, repr(acct.code))
                         self.trie.update(addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)

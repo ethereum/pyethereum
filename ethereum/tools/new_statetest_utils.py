@@ -92,6 +92,7 @@ def compute_state_test_unit(state, txdata, indices, konfig):
     except InvalidTransaction as e:
         print("Exception: %r" % e)
         success, output = False, b''
+    # state.set_code('0x3e180b1862f9d158abb5e519a6d8605540c23682', b'')
     state.commit()
     post = state.to_dict()
     output_decl = {
@@ -129,6 +130,7 @@ def init_state(env, pre):
                                    big_endian_to_int(decode_hex(k[2:])),
                                    decode_hex(v[2:]))
 
+    # state.commit(allow_empties=True)
     state.commit()
     return state
 
@@ -144,10 +146,13 @@ def verify_state_test(test):
             data = test["transaction"]['data'][result["indexes"]["data"]]
             if len(data) > 2000:
                 data = "data<%d>" % (len(data) // 2 - 1)
-            print("Checking for values: g %d v %d d %s" % (
+            print("Checking for values: g %d v %d d %s (indexes g %d v %d d %d)" % (
                   parse_int_or_hex(test["transaction"]['gasLimit'][result["indexes"]["gas"]]),
                   parse_int_or_hex(test["transaction"]['value'][result["indexes"]["value"]]),
-                  data))
+                  data,
+                  result["indexes"]["gas"],
+                  result["indexes"]["value"],
+                  result["indexes"]["data"]))
             computed = compute_state_test_unit(_state, test["transaction"], result["indexes"], configs[config_name])
             if computed["hash"][-64:] != result["hash"][-64:]:
                 for k in computed["diff"]:

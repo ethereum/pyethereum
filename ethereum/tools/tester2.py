@@ -25,7 +25,7 @@ base_alloc = {}
 minimal_alloc = {}
 for a in accounts:
     base_alloc[a] = {'balance': 10**18}
-for i in range(8):
+for i in range(1, 9):
     base_alloc[int_to_addr(i)] = {'balance': 1}
     minimal_alloc[int_to_addr(i)] = {'balance': 1}
 minimal_alloc[accounts[0]] = {'balance': 10**18}

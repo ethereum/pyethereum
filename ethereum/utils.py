@@ -161,11 +161,11 @@ def int_to_32bytearray(i):
         i >>= 8
     return o
 
-sha3_count = [0]
+# sha3_count = [0]
 
 
 def sha3(seed):
-    sha3_count[0] += 1
+    # sha3_count[0] += 1
     # print seed
     return sha3_256(to_string(seed))
 

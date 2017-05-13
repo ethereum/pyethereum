@@ -142,6 +142,47 @@ def proc_ecmul(ext, msg):
     o = py_pairing.normalize(py_pairing.multiply(p, m))
     return 1, msg.gas - opcodes.GECMUL, [safe_ord(x) for x in (encode_int32(o[0].n) + encode_int32(o[1].n))]
 
+def proc_ecpairing(ext, msg):
+    if not ext.post_metropolis_hardfork():
+        return 1, msg.gas, []
+    import py_pairing
+    FQ = py_pairing.FQ
+    print('pairing proc', msg.gas)
+    # Data must be an exact multiple of 192 byte
+    if msg.data.size % 192:
+        return 0, 0, []
+    gascost = opcodes.GPAIRINGBASE + msg.data.size / 192 * opcodes.GPAIRINGPERPOINT
+    if msg.gas < gascost:
+        return 0, 0, []
+    zero = (py_pairing.FQ2.one(), py_pairing.FQ2.one(), py_pairing.FQ2.zero())
+    exponent = py_pairing.FQ12.one()
+    for i in range(0, msg.data.size, 192):
+        x1 = msg.data.extract32(i)
+        y1 = msg.data.extract32(i + 32)
+        x2_i = msg.data.extract32(i + 64)
+        x2_r = msg.data.extract32(i + 96)
+        y2_i = msg.data.extract32(i + 128)
+        y2_r = msg.data.extract32(i + 160)
+        p1 = validate_point(x1, y1)
+        if p1 is False:
+            return 0, 0, []
+        for v in (x2_i, x2_r, y2_i, y2_r):
+            if v >= py_pairing.field_modulus:
+                return 0, 0, []
+        fq2_x = py_pairing.FQ2([py_pairing.FQ(x2_r), py_pairing.FQ(x2_i)])
+        fq2_y = py_pairing.FQ2([py_pairing.FQ(y2_r), py_pairing.FQ(y2_i)])
+        if (fq2_x, fq2_y) != (py_pairing.FQ2.zero(), py_pairing.FQ2.zero()):
+            p2 = (fq2_x, fq2_y, py_pairing.FQ2.one())
+            if not py_pairing.is_on_curve(p2, py_pairing.b2):
+                return 0, 0, []
+        else:
+            p2 = zero
+        if py_pairing.multiply(p2, py_pairing.curve_order) != zero:
+            return 0, 0, []
+        exponent *= py_pairing.pairing(p1, p2, final_exponentiate=False)
+    result = py_pairing.final_exponentiate(exponent) == FQ12.one()
+    return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
+
 specials = {
     decode_hex(k): v for k, v in
     {
@@ -152,6 +193,7 @@ specials = {
         b'0000000000000000000000000000000000000005': proc_modexp,
         b'0000000000000000000000000000000000000006': proc_ecadd,
         b'0000000000000000000000000000000000000007': proc_ecmul,
+        b'0000000000000000000000000000000000000008': proc_ecpairing,
     }.items()
 }
 
