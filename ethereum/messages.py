@@ -105,8 +105,8 @@ class Receipt(rlp.Serializable):
         return bloom.bloom_from_list(utils.flatten(bloomables))
 
 def mk_receipt(state, logs):
-    if state.is_METROPOLIS() or SKIP_RECEIPT_ROOT_VALIDATION:
-        return Receipt('\x00' * 32, state.gas_used, logs)
+    # if state.is_METROPOLIS() or SKIP_RECEIPT_ROOT_VALIDATION:
+    #     return MetropolisReceipt(state.gas_used, logs)
     return Receipt(state.trie.root_hash, state.gas_used, logs)
 
 def config_fork_specific_validation(config, blknum, tx):

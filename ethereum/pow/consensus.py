@@ -86,6 +86,8 @@ def validate_uncles(state, block):
             raise VerificationFailed("Timestamp mismatch")
         if uncle.hash in ineligible:
             raise VerificationFailed("Duplicate uncle")
+        if uncle.gas_used > uncle.gas_limit:
+            raise VerificationFailed("Uncle used too much gas")
         if not check_pow(state, uncle):
             raise VerificationFailed('uncle pow mismatch')
         ineligible.append(uncle.hash)

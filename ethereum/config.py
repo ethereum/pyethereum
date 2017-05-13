@@ -61,7 +61,7 @@ default_config = dict(
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
     # DAO fork
     DAO_FORK_BLKNUM = 1920000,
-    CHILD_DAO_LIST = map(utils.normalize_address, child_dao_list),
+    CHILD_DAO_LIST = list(map(utils.normalize_address, child_dao_list)),
     DAO_WITHDRAWER = utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Anti-DoS fork
     ANTI_DOS_FORK_BLKNUM = 2463000,

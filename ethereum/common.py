@@ -81,8 +81,8 @@ def validate_header(state, header):
         if not check_gaslimit(parent, header.gas_limit, config=state.config):
             raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
         if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
-            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d" %
-                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty))
+            raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d. Time diff %d" %
+                             (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty, header.timestamp - parent.timestamp))
         if header.gas_used > header.gas_limit:
             raise ValueError("Gas used exceeds gas limit")
         if len(header.extra_data) > 32 and not state.is_SERENITY():

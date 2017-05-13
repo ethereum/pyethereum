@@ -102,17 +102,18 @@ def run_block_test(params, config_overrides=None):
 
 def get_config_overrides(filename, testname):
     o = {}
-    if 'Homestead' in testname:
-        o['HOMESTEAD_FORK_BLKNUM'] = 0
     if 'TestNetwork' in filename:
         o['HOMESTEAD_FORK_BLKNUM'] = 5
-        if 'EIP150' in filename:
-            o['DAO_FORK_BLKNUM'] = 8
-            o['ANTI_DOS_FORK_BLKNUM'] = 10
-    elif 'EIP150' in testname:
+        # o['DAO_FORK_BLKNUM'] = 8
+        o['ANTI_DOS_FORK_BLKNUM'] = 10
+        o['CLEARING_FORK_BLKNUM'] = 14
+        o['METROPOLIS_FORK_BLKNUM'] = 16
+    elif 'EIP150' in filename or 'EIP150' in testname:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
         o['DAO_FORK_BLKNUM'] = 2**99
         o['ANTI_DOS_FORK_BLKNUM'] = 0
+    elif 'Homestead' in filename or 'Homestead' in testname:
+        o['HOMESTEAD_FORK_BLKNUM'] = 0
     elif 'EIP158' in testname:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
         o['DAO_FORK_BLKNUM'] = 2**99
