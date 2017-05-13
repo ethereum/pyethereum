@@ -123,12 +123,14 @@ def get_env(env):
 
 
 class Chain(object):
-    def __init__(self, genesis=None):
-        genesis = genesis or mk_basic_state(base_alloc, None, Env())
-        if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
-            self.chain = hybrid_casper_chain.Chain(genesis)
+    def __init__(self, alloc=base_alloc, env=None, genesis=None):
+        if genesis:
+            if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+                self.chain = hybrid_casper_chain.Chain(genesis)
+            else:
+                self.chain = pow_chain.Chain(genesis)
         else:
-            self.chain = pow_chain.Chain(genesis)
+            self.chain = pow_chain.Chain(mk_basic_state(alloc, None, get_env(env)))
         self.cs = get_consensus_strategy(self.chain.env.config)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
