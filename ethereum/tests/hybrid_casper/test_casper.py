@@ -15,7 +15,7 @@ a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = tester2.accounts[:10]
 def init_chain_and_casper():
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
     casper_address = utils.mk_contract_address(a0, genesis.get_nonce(a0) - 1)
-    t = tester2.Chain(genesis)
+    t = tester2.Chain(genesis=genesis)
     casper = tester2.ABIContract(t, casper_utils.casper_abi, casper_address)
     casper.initiate()
     t.mine()
