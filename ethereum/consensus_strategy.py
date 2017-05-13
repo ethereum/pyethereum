@@ -17,8 +17,9 @@ def get_consensus_strategy(config):
             get_uncles=get_uncle_candidates,
         )
     elif config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+        from ethereum.hybrid_casper.consensus import initialize
         from ethereum.pow.consensus import check_pow, validate_uncles, \
-            initialize, finalize, get_uncle_candidates
+            finalize, get_uncle_candidates
         return ConsensusStrategy(
             check_seal=check_pow,
             validate_uncles=validate_uncles,

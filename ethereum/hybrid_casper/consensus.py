@@ -1,5 +1,8 @@
-from ethereum import utils
+from ethereum import utils, transactions
+from ethereum.tools import tester2
 from ethereum.common import update_block_env_variables
+from ethereum.messages import apply_transaction
+from ethereum.hybrid_casper import casper_utils
 
 # Block initialization state transition
 def initialize(state, block=None):
@@ -12,6 +15,15 @@ def initialize(state, block=None):
 
     if block is not None:
         update_block_env_variables(state, block)
+
+    # Initalize the next epoch in the Casper contract
+    if state.block_number % state.env.config['EPOCH_LENGTH'] == 0 and state.block_number != 0:
+        casper_address = utils.mk_contract_address(tester2.a0, 4)
+        data = casper_utils.casper_translator.encode('initialize_epoch', [state.block_number // state.env.config['EPOCH_LENGTH']])
+        transaction = transactions.Transaction(state.get_nonce(tester2.a0), 0, 3141592,
+                                               casper_address, 0, data).sign(tester2.k0)
+        success, output = apply_transaction(state, transaction)
+        assert success
 
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
