@@ -2,6 +2,7 @@ import copy
 import pkg_resources
 from ethereum import utils, messages, transactions, abi, genesis_helpers, config
 from ethereum.hybrid_casper import consensus
+from ethereum.abi import ContractTranslator
 import serpent
 from viper import compiler as viper
 import rlp
@@ -9,6 +10,7 @@ import rlp
 _casper_contract_path = '/'.join(('..', 'casper', 'casper', 'contracts', 'simple_casper.v.py'))
 casper_contract = pkg_resources.resource_string('ethereum', _casper_contract_path)
 casper_abi = viper.mk_full_signature(casper_contract)
+casper_translator = ContractTranslator(casper_abi)
 purity_checker_address = utils.mk_contract_address(utils.decode_hex('ea0f0d55ee82edf248ed648a9a8d213fba8b5081'), 0)
 ct = abi.ContractTranslator([{'name': 'check(address)', 'type': 'function', 'constant': True, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}, {'name': 'submit(address)', 'type': 'function', 'constant': False, 'inputs': [{'name': 'addr', 'type': 'address'}], 'outputs': [{'name': 'out', 'type': 'bool'}]}])  # noqa: E501
 
@@ -39,6 +41,7 @@ def make_casper_genesis(initial_validator, alloc, epoch_length, slash_delay):
     casper_config['ANTI_DOS_FORK_BLKNUM'] = 0
     casper_config['CLEARING_FORK_BLKNUM'] = 0
     casper_config['CONSENSUS_STRATEGY'] = 'hybrid_casper'
+    casper_config['EPOCH_LENGTH'] = epoch_length
     # Create state and apply required state_transitions for initializing Casper
     state = genesis_helpers.mk_basic_state(alloc, None, env=config.Env(config=casper_config))
     state.gas_limit = 10**8
