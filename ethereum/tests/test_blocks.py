@@ -106,17 +106,17 @@ def run_block_test(params, config_overrides=None):
 
 def get_config_overrides(filename, testname):
     o = {}
-    if 'TestNetwork' in filename:
+    if '/TestNetwork/' in filename:
         o['HOMESTEAD_FORK_BLKNUM'] = 5
         # o['DAO_FORK_BLKNUM'] = 8
         o['ANTI_DOS_FORK_BLKNUM'] = 10
         o['CLEARING_FORK_BLKNUM'] = 14
         o['METROPOLIS_FORK_BLKNUM'] = 16
-    elif 'EIP150' in filename or 'EIP150' in testname:
+    elif '/EIP150/' in filename or 'EIP150' in testname:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
         o['DAO_FORK_BLKNUM'] = 2**99
         o['ANTI_DOS_FORK_BLKNUM'] = 0
-    elif 'Homestead' in filename or 'Homestead' in testname:
+    elif '/Homestead/' in filename or 'Homestead' in testname:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
     elif 'EIP158' in testname:
         o['HOMESTEAD_FORK_BLKNUM'] = 0
@@ -143,6 +143,7 @@ skips = {
     ('bl10251623GO.json', u'randomBlockTest'),
     ('bl201507071825GO.json', u'randomBlockTest'),
     ('call_OOG_additionalGasCosts2.json', 'call_OOG_additionalGasCosts2_d0g0v0_EIP158'),
+    ('MLOAD_Bounds.json', 'MLOAD_Bounds_d0g0v0_EIP158'),
 }
 
 def exclude(filename, testname, _):

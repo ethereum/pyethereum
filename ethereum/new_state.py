@@ -70,8 +70,6 @@ class Account(rlp.Serializable):
 
     def commit(self):
         for k, v in self.storage_cache.items():
-            assert is_numeric(k)
-            assert is_numeric(v)
             if v:
                 self.storage_trie.update(utils.encode_int32(k), rlp.encode(v))
             else:
@@ -85,7 +83,6 @@ class Account(rlp.Serializable):
 
     @code.setter
     def code(self, value):
-        assert is_string(value)
         self.code_hash = utils.sha3(value)
         # Technically a db storage leak, but doesn't really matter; the only
         # thing that fails to get garbage collected is when code disappears due
@@ -94,15 +91,12 @@ class Account(rlp.Serializable):
         # self.env.db.inc_refcount(self.code_hash, value)
 
     def get_storage_data(self, key):
-        assert is_numeric(key)
         if key not in self.storage_cache:
             v = self.storage_trie.get(utils.encode_int32(key))
             self.storage_cache[key] = utils.big_endian_to_int(rlp.decode(v) if v else b'')
         return self.storage_cache[key]
 
     def set_storage_data(self, key, value):
-        assert is_numeric(key)
-        assert is_numeric(value)
         self.storage_cache[key] = value
 
     @classmethod
@@ -186,7 +180,6 @@ class State():
         # self.journal.append((acct, param, getattr(acct, param)))
         preval = getattr(acct, param)
         self.journal.append(lambda: setattr(acct, param, preval))
-        assert acct._mutable
         setattr(acct, param, val)
 
     def set_balance(self, address, value):
@@ -368,6 +361,57 @@ class State():
                 snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
         return snapshot
 
+    # Creates a state from a snapshot
+    @classmethod
+    def from_snapshot(cls, snapshot_data, env):
+        state = State(env = env)
+        if "alloc" in snapshot_data:
+            for addr, data in snapshot_data["alloc"].items():
+                if len(addr) == 40:
+                    addr = decode_hex(addr)
+                assert len(addr) == 20
+                if 'wei' in data:
+                    state.set_balance(addr, parse_as_int(data['wei']))
+                if 'balance' in data:
+                    state.set_balance(addr, parse_as_int(data['balance']))
+                if 'code' in data:
+                    state.set_code(addr, parse_as_bin(data['code']))
+                if 'nonce' in data:
+                    state.set_nonce(addr, parse_as_int(data['nonce']))
+                if 'storage' in data:
+                    for k, v in data['storage'].items():
+                        state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
+        elif "state_root" in snapshot_data:
+            state.trie.root_hash = parse_as_bin(snapshot_data["state_root"])
+        else:
+            raise Exception("Must specify either alloc or state root parameter")
+        for k, default in STATE_DEFAULTS.items():
+            default = copy.copy(default)
+            v = snapshot_data[k] if k in snapshot_data else None
+            if is_numeric(default):
+                setattr(state, k, parse_as_int(v) if k in snapshot_data else default)
+            elif is_string(default):
+                setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
+            elif k == 'prev_headers':
+                if k in snapshot_data:
+                    headers = [dict_to_prev_header(h) for h in v]
+                else:
+                    headers = default
+                setattr(state, k, headers)
+            elif k == 'recent_uncles':
+                if k in snapshot_data:
+                    uncles = {}
+                    for height, _uncles in v.items():
+                        uncles[int(height)] = []
+                        for uncle in _uncles:
+                            uncles[int(height)].append(parse_as_bin(uncle))
+                else:
+                    uncles = default
+                setattr(state, k, uncles)
+        state.commit()
+        return state
+
+
     def ephemeral_clone(self):
         snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
         env2 = Env(OverlayDB(self.env.db), self.env.config)
@@ -376,8 +420,9 @@ class State():
             setattr(s, param, getattr(self, param))
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
-        assert len(self.journal) == len(self.cache) == 0
-        s.journal = []
+        for acct in self.cache.values():
+            assert not acct.touched
+        s.journal = copy.copy(self.journal)
         s.cache = {}
         return s
 

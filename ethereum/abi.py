@@ -117,25 +117,29 @@ class ContractTranslator(object):
         for description in contract_interface:
             encode_types = [
                 element['type']
-                for element in description['inputs']
+                for element in description.get('inputs', [])
             ]
 
             signature = [
                 (element['type'], element['name'])
-                for element in description['inputs']
+                for element in description.get('inputs', [])
             ]
 
             # type can be omitted, defaulting to function
-            if description.get('type', 'function') == 'function':
-                normalized_name = _normalize_name(description['name'])
+            if description.get('type', 'function') in ('function', 'fallback'):
+                if description.get('type', 'function') == 'function':
+                    normalized_name = _normalize_name(description['name'])
+                    prefix = method_id(normalized_name, encode_types)
+                else:
+                    prefix = 0
 
                 decode_types = [
                     element['type']
-                    for element in description['outputs']
+                    for element in description.get('outputs', [])
                 ]
 
                 self.function_data[normalized_name] = {
-                    'prefix': method_id(normalized_name, encode_types),
+                    'prefix': prefix,
                     'encode_types': encode_types,
                     'decode_types': decode_types,
                     'is_constant': description.get('constant', False),
