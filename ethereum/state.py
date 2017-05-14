@@ -24,15 +24,6 @@ ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
 ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
 BLANK_HASH = utils.sha3(b'')
 
-@lru_cache(1024)
-def get_block(db, blockhash):
-    """
-    Assumption: blocks loaded from the db are not manipulated
-                -> can be cached including hash
-    """
-    return rlp.decode(rlp.descend(db.get(blockhash), 0), BlockHeader)
-
-
 def snapshot_form(val):
     if is_numeric(val):
         return str(val)
@@ -125,6 +116,12 @@ class State():
         l = getattr(self, k)
         self.journal.append((k, None, len(l), None))
         l.append(v)
+
+    def add_suicide(self, addr):
+        self.add_to_list('suicides', addr)
+
+    def add_receipt(self, receipt):
+        self.add_to_list('receipts', receipt)
 
     # It's unsafe because it passes through the cache
     def _get_account_unsafe(self, addr):

@@ -1,4 +1,4 @@
-from ethereum.state import State
+from ethereum.new_state import State
 from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int, normalize_address
@@ -40,7 +40,7 @@ def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=
             state.set_nonce(addr, parse_as_int(data['nonce']))
         if 'storage' in data:
             for k, v in data['storage'].items():
-                state.set_storage_data(addr, parse_as_bin(k), parse_as_bin(v))
+                state.set_storage_data(addr, big_endian_to_int(parse_as_bin(k)), big_endian_to_int(parse_as_bin(v)))
     get_consensus_strategy(state.config).initialize(state, block)
     state.commit(allow_empties=allow_empties)
     block.header.state_root = state.trie.root_hash

@@ -7,7 +7,7 @@ from ethereum.common import mk_block_from_prevstate, validate_header, \
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.messages import apply_transaction
 from ethereum.state import State
-from ethereum.utils import sha3
+from ethereum.utils import sha3, encode_hex
 import rlp
 
 # Applies the block-level state transition function

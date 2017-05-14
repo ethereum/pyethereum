@@ -1,4 +1,4 @@
-from ethereum.state import State
+from ethereum.new_state import State
 from ethereum.block import FakeHeader, Block
 from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
     remove_0x_head, encode_hex, big_endian_to_int
@@ -95,6 +95,7 @@ def compute_state_test_unit(state, txdata, indices, konfig):
     # state.set_code('0x3e180b1862f9d158abb5e519a6d8605540c23682', b'')
     state.commit()
     post = state.to_dict()
+    # print('pozt', post)
     output_decl = {
         "hash": '0x' + encode_hex(state.trie.root_hash),
         "indexes": indices,
@@ -128,10 +129,10 @@ def init_state(env, pre):
         for k, v in h['storage'].items():
             state.set_storage_data(address,
                                    big_endian_to_int(decode_hex(k[2:])),
-                                   decode_hex(v[2:]))
+                                   big_endian_to_int(decode_hex(v[2:])))
 
-    # state.commit(allow_empties=True)
-    state.commit()
+    state.commit(allow_empties=True)
+    # state.commit()
     return state
 
 def verify_state_test(test):
@@ -159,5 +160,7 @@ def verify_state_test(test):
                     print(k, computed["diff"][k])
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))
             else:
+                # for k in computed["diff"]:
+                #     print(k, computed["diff"][k])
                 print("Hash matched!: %s" % computed["hash"])
     return True

@@ -14,8 +14,12 @@ import sys
 import ethereum.tools.testutils as testutils
 import copy
 
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
+
+if '--trace' in sys.argv:  # not default
+    configure_logging(':trace')
+    sys.argv.remove('--trace')
 
 # from ethereum.slogging import LogRecorder, configure_logging, set_level
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'

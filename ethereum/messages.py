@@ -14,7 +14,6 @@ from ethereum import transactions
 from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum import opcodes
-from ethereum.state import State, get_block
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum import vm
@@ -259,7 +258,7 @@ def apply_transaction(state, tx):
     r = mk_receipt(state, state.logs)
     _logs = list(state.logs)
     state.logs = []
-    state.add_to_list('receipts', r)
+    state.add_receipt(r)
     state.set_param('bloom', state.bloom | r.bloom)
     state.set_param('txindex', state.txindex + 1)
 
@@ -286,7 +285,7 @@ class VMExt():
         self.set_storage_data = state.set_storage_data
         self.get_storage_data = state.get_storage_data
         self.log_storage = lambda x: state.account_to_dict(x)
-        self.add_suicide = lambda x: state.add_to_list('suicides', x)
+        self.add_suicide = lambda x: state.add_suicide(x)
         self.add_refund = lambda x: \
             state.set_param('refunds', state.refunds + x)
         self.block_hash = lambda x: state.get_block_hash(state.block_number - x - 1) \
