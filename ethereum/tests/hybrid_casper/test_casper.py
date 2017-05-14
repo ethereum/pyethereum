@@ -158,8 +158,8 @@ except:
 assert not success
 print("PREPARE_REQ slashing condition works")
 
-print("Creating a new chain for test 2")
-# Create a new chain
+print("Creating a new fork for test 2")
+# Create a new fork
 t.change_head(start_hash)
 # Initialize the first epoch
 mine_epochs(1)
