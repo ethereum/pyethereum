@@ -33,13 +33,13 @@ def mk_test(b, e, m, execgas):
     s = c.snapshot()
     x = c.contract(kode % (len(encoded) + 36, max(intlen(m), 1), max(intlen(m), 1)), language='viper')
     pre = tester2.mk_state_test_prefill(c)
-    o = x.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x.translator.encode('foo', [encoded])) + execgas)
-    if o is False:
-        print('OOG %d %d %d sg %d' % (b, e, m, execgas))
-    else:
+    try:
+        o = x.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x.translator.encode('foo', [encoded])) + execgas)
         if big_endian_to_int(o[:intlen(m)]) != (pow(b, e, m) if m else 0):
             raise Exception("Mismatch! %d %d %d expected %d computed %d" % (b, e, m, pow(b, e, m), big_endian_to_int(o[:intlen(m)])))
         print("Succeeded %d %d %d sg %d" % (b, e, m, execgas))
+    except tester2.TransactionFailed:
+        print('OOG %d %d %d sg %d' % (b, e, m, execgas))
     o = tester2.mk_state_test_postfill(c, pre)
     o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)

@@ -54,7 +54,10 @@ def intrinsic_gas_of_data(d):
 
 def mk_test(encoded, execgas, expect):
     pre = tester2.mk_state_test_prefill(c)
-    o = x1.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x1.translator.encode('foo', [encoded])) + execgas)
+    try:
+        o = x1.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x1.translator.encode('foo', [encoded])) + execgas)
+    except tester2.TransactionFailed:
+        o = False
     if o is False:
         if expect != 'error':
             raise Exception('OOG')

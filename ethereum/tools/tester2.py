@@ -50,6 +50,9 @@ try:
 except ImportError:
     pass
 
+class TransactionFailed(Exception):
+    pass
+
 from ethereum.abi import ContractTranslator
 import types
 
@@ -134,7 +137,7 @@ class Chain(object):
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)
         if not success:
-            return False
+            raise TransactionFailed()
         return output
 
     def contract(self, sourcecode, args=[], sender=k0, value=0, language='evm', startgas=STARTGAS, gasprice=GASPRICE):

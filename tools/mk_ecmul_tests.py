@@ -31,16 +31,15 @@ def intrinsic_gas_of_data(d):
 def mk_test(p1, m, execgas, datarestrict=96):
     encoded = mk_ecmul_data(p1, m)[:datarestrict] + b'\x00' * max(datarestrict - 96, 0)
     pre = tester2.mk_state_test_prefill(c)
-    o = x1.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x1.translator.encode('foo', [encoded])) + execgas)
-    if o is False:
-        print('OOG %r %d %d %d' % (p1, m, datarestrict, execgas))
-    else:
+    try:
+        o = x1.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x1.translator.encode('foo', [encoded])) + execgas)
         x, y = big_endian_to_int(o[:32]), big_endian_to_int(o[32:])
-        print('m', p1, m, py_pairing.multiply(p1, m))
         if py_pairing.normalize(py_pairing.multiply(p1, m)) != (py_pairing.FQ(x), py_pairing.FQ(y)):
             raise Exception("Mismatch! %r %r %d, expected %r computed %r" %
                             (p1, m, datarestrict, py_pairing.normalize(py_pairing.multiply(p1, m)), (x, y)))
         print('Succeeded! %r %d %d %r' % (p1, m, datarestrict, (x, y)))
+    except tester2.TransactionFailed:
+        print('OOG %r %d %d %d' % (p1, m, datarestrict, execgas))
     o = tester2.mk_state_test_postfill(c, pre)
     o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
