@@ -14,7 +14,7 @@ _db = new_db()
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
-EPOCH_LENGTH = 23
+EPOCH_LENGTH = 25
 SLASH_DELAY = 864
 ALLOC = {a: {'balance': 5*10**19} for a in tester2.accounts[:10]}
 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = tester2.keys[:10]
@@ -37,9 +37,8 @@ def accounts():
 
 def init_chain_and_casper():
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
-    casper_address = utils.mk_contract_address(a0, genesis.get_nonce(a0) - 1)
     t = tester2.Chain(genesis=genesis)
-    casper = tester2.ABIContract(t, casper_utils.casper_abi, casper_address)
+    casper = tester2.ABIContract(t, casper_utils.casper_abi, t.chain.env.config['CASPER_ADDRESS'])
     casper.initiate()
     return t, casper
 
@@ -135,15 +134,15 @@ def test_head_change_for_longer_pow_chain(db):
 
 def test_head_change_for_more_commits(db):
     """" [L & R are checkpoints. Ex: L0_4 is local chain, root epoch, with 4 stake weight]
-    Local: L0_5, L1_1
+    Local: L3_5, L4_1
     add
-    Remote: R0_5, R2_1, R3_1
+    Remote: R3_5, R5_1, R6_1
     """
     keys = tester2.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
     epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
     epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
-    # L0_5: Prepare and commit all
+    # L3_5: Prepare and commit all
     for i, k in enumerate(keys):
         casper.prepare(mk_prepare(i, 3, epoch_blockhash(t, 3), epoch_2_anchash, 2, epoch_2_anchash, k))
         t.mine()
@@ -152,7 +151,7 @@ def test_head_change_for_more_commits(db):
         t.mine()
     epoch_3_anchash = utils.sha3(epoch_blockhash(t, 3) + epoch_2_anchash)
     root_hash = t.mine().hash
-    # L1_1: Prepare all, commit 1
+    # L4_1: Prepare all, commit 1
     mine_epochs(t, 1)
     for i, k in enumerate(keys):
         casper.prepare(mk_prepare(i, 4, epoch_blockhash(t, 4), epoch_3_anchash, 3, epoch_3_anchash, k))
@@ -161,21 +160,23 @@ def test_head_change_for_more_commits(db):
     L = t.mine()
     assert t.chain.head_hash == L.hash
     t.change_head(root_hash)
-    # R2_1: Prepare all except v0, commit 1 -- Head will not change even with longer PoW chain
+    # R5_1: Prepare all except v0, commit 1 -- Head will not change even with longer PoW chain
     mine_epochs(t, 2)
     for i, k in enumerate(keys[1:], 1):
         casper.prepare(mk_prepare(i, 5, epoch_blockhash(t, 5), epoch_3_anchash, 3, epoch_3_anchash, k))
         t.mine()
     casper.commit(mk_commit(1, 5, epoch_blockhash(t, 5), 3, keys[1]))
-    R = t.mine()
+    epoch_5_anchash = utils.sha3(epoch_blockhash(t, 5) + epoch_3_anchash)
+    t.mine()
     assert t.chain.head_hash == L.hash
-    # # R3_1: Prepare all except v0, commit 1 -- Head will change
-    # mine_epochs(t, 2)
-    # for i, k in enumerate(keys[1:], 1):
-    #     casper.prepare(mk_prepare(i, 5, epoch_blockhash(t, 5), epoch_3_anchash, 3, epoch_3_anchash, k))
-    #     t.mine()
-    # casper.commit(mk_commit(1, 5, epoch_blockhash(t, 5), 3, keys[0]))
-    # t.mine()
-
-
-# TODO: def test_add_longer_side_chain(db, alt_db):
+    # R6_1: Prepare all except v0, commit 1 -- Head will change because of extra commit
+    mine_epochs(t, 1)
+    for i, k in enumerate(keys[1:], 1):
+        casper.prepare(mk_prepare(i, 6, epoch_blockhash(t, 6), epoch_5_anchash, 5, epoch_5_anchash, k))
+        t.mine()
+    assert t.chain.head_hash == L.hash
+    casper.commit(mk_commit(1, 6, epoch_blockhash(t, 6), 5, keys[1]))
+    t.mine()
+    R = t.mine()
+    assert t.chain.head_hash == R.hash
+    # The head switched to R becasue it has 7 commits as opposed to 6
