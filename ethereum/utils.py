@@ -40,7 +40,7 @@ if sys.version_info.major == 2:
 
 else:
     is_numeric = lambda x: isinstance(x, int)
-    is_string = lambda x: isinstance(x, bytes)
+    is_string = lambda x: isinstance(x, str)
 
     def to_string(value):
         if isinstance(value, bytes):
