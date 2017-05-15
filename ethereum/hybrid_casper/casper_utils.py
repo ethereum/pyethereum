@@ -42,6 +42,7 @@ def make_casper_genesis(initial_validator, alloc, epoch_length, slash_delay):
     casper_config['CLEARING_FORK_BLKNUM'] = 0
     casper_config['CONSENSUS_STRATEGY'] = 'hybrid_casper'
     casper_config['EPOCH_LENGTH'] = epoch_length
+    casper_config['CASPER_ADDRESS'] = utils.mk_contract_address(utils.privtoaddr(initial_validator), 4)
     # Create state and apply required state_transitions for initializing Casper
     state = genesis_helpers.mk_basic_state(alloc, None, env=config.Env(config=casper_config))
     state.gas_limit = 10**8
