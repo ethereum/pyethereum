@@ -67,7 +67,7 @@ config_string = ':info'
 
 class ABIContract(object):  # pylint: disable=too-few-public-methods
 
-    def __init__(self, _chain, _abi, address):
+    def __init__(self, _tester, _abi, address):
         self.address = address
 
         if isinstance(_abi, ContractTranslator):
@@ -79,9 +79,9 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
 
         for function_name in self.translator.function_data:
             if self.translator.function_data[function_name]['is_constant']:
-                function = self.method_factory(_chain.call, function_name)
+                function = self.method_factory(_tester.call, function_name)
             else:
-                function = self.method_factory(_chain.tx, function_name)
+                function = self.method_factory(_tester.tx, function_name)
             method = types.MethodType(function, self)
             setattr(self, function_name, method)
 
@@ -99,7 +99,8 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
                 to=self.address,
                 value=kwargs.get('value', 0),
                 data=self.translator.encode(function_name, args),
-                startgas=kwargs.get('startgas', STARTGAS)
+                startgas=kwargs.get('startgas', STARTGAS),
+                gasprice=kwargs.get('gasprice', GASPRICE)
             )
 
             if result is False:
@@ -121,6 +122,29 @@ def get_env(env):
     }
     return env if isinstance(env, Env) else Env(config=d[env])
 
+
+class State(object):
+    def __init__(self, genesis):
+        self.state = genesis
+
+    def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        sender_addr = privtoaddr(sender)
+        transaction = Transaction(self.state.get_nonce(sender_addr), gasprice, startgas,
+                                  to, value, data).sign(sender)
+        success, output = apply_transaction(self.state, transaction)
+        if not success:
+            raise TransactionFailed()
+        return output
+
+    def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        snapshot = self.state.snapshot()
+        try:
+            output = self.tx(sender, to, value, data, startgas, gasprice)
+            self.state.revert(snapshot)
+            return output
+        except Exception as e:
+            self.state.revert(snapshot)
+            raise e
 
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
