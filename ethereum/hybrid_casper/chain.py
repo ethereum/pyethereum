@@ -6,7 +6,9 @@ from ethereum import genesis_helpers
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
+from ethereum import transactions
 from ethereum.hybrid_casper import casper_utils
+from ethereum.tools import tester2
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -70,8 +72,8 @@ class Chain(object):
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
-        self.checkpoint_head_epoch = None
         self.checkpoint_head_hash = None
+        self.casper_address = self.env.config['CASPER_ADDRESS']
         self.genesis = Block(self.state.prev_headers[0], [], [])
         self.db.put(b'state:' + self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
@@ -99,26 +101,26 @@ class Chain(object):
             log.error(e)
             return None
 
-    def casper_log_handler(self, log, temp_state, blockhash):
+    def casper_log_handler(self, contract_log, fork_state, blockhash):
         # We only want logs from the Casper contract
-        if log.address != casper_utils.get_casper_address():
+        if contract_log.address != self.casper_address:
             return
         # Check to see if it is a prepare or a commit
-        if log.topics[0] == utils.bytearray_to_int(utils.sha3("prepare()")):
-            print('recieved prepare!')
-        elif log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
-            print('recieved commit!')
-            commit = self.get_decoded_commit(log.data)
-            checkpoint_id = utils.sha3(commit['epoch'] + commit['hash'])
+        if contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("prepare()")):
+            log.info('Recieved prepare')
+        elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
+            log.info('Recieved commit')
+            new_commit = self.get_decoded_commit(contract_log.data)
+            checkpoint_id = utils.sha3(new_commit['epoch'] + new_commit['hash'])
             try:
                 commits = self.db.get(b'checkpoint:' + checkpoint_id)
             except KeyError:
                 commits = dict()
-            if commit['sig'] in commits:
+            if new_commit['sig'] in commits:
                 return
-            commits[commit['sig']] = log.data
+            commits[new_commit['sig']] = contract_log.data
             self.db.put(b'checkpoint:' + checkpoint_id, commits)
-            self.maybe_update_checkpoint_head_hash(checkpoint_id, temp_state, commit)
+            self.maybe_update_checkpoint_head_hash(fork_state, commits, new_commit)
         else:
             raise(Exception('Recieved unexpected topic!'))
 
@@ -130,77 +132,70 @@ class Chain(object):
         commit['raw_rlp'] = commit_rlp
         return commit
 
-    def apply_commits(self, state, commits):
+    def apply_commits(self, casper, commits):
         for sig in commits:
             commit = self.get_decoded_commit(commits[sig])
             try:
-                state.gas_used = 0
-                # TODO: Remove the hardcoded tester address
-                # NOTE: This will fail if the state is not from the correct epoch. However, I don't think that is possible
-                # because the state should always be one in which the commits passed `assert self.current_epoch == epoch`
-                tx = casper_utils.generate_casper_transaction(state, tester.k0, 'commit', [commit['raw_rlp']], gas=3141592)
-                apply_transaction(state, tx)
+                casper.commit(commit['rlp'])
             except Exception as e:
-                print('EXCEPTION:', e)
+                log.error('EXCEPTION:', e)
 
-    def get_checkpoint_score(self, state, epoch, hash):
+    def get_checkpoint_score(self, casper, epoch, hash):
         # Calculate the current dynasty score
-        dynasty = casper_utils.call_casper(state, 'get_dynasty_in_epoch', [epoch])
-        curr_dynasty_deposits = casper_utils.call_casper(state, 'get_consensus_messages__commits', [epoch, hash])
-        curr_dynasty_total_deposits = casper_utils.call_casper(state, 'get_total_deposits', [dynasty])
+        dynasty = casper.get_dynasty_in_epoch(epoch)
+        curr_dynasty_deposits = casper.get_consensus_messages__commits(epoch, hash)
+        curr_dynasty_total_deposits = casper.get_total_deposits(dynasty)
         curr_score = curr_dynasty_deposits / curr_dynasty_total_deposits
 
         # Calculate the previous dynasty score
         if dynasty >= 1:
-            prev_dynasty_deposits = casper_utils.call_casper(state, 'get_consensus_messages__prev_dyn_commits', [epoch, hash])
-            prev_dynasty_total_deposits = casper_utils.call_casper(state, 'get_total_deposits', [dynasty-1])
+            prev_dynasty_deposits = casper.get_consensus_messages__prev_dyn_commits(epoch, hash)
+            prev_dynasty_total_deposits = casper.get_total_deposits(dynasty-1)
             prev_score = prev_dynasty_deposits / prev_dynasty_total_deposits
         else:
             prev_score = 1
         return min(curr_score, prev_score)
 
-    def get_prev_checkpoint_block(self, hash):
-        epoch_length = casper_utils.get_casper_epoch_length()
-        block = self.get_block(hash)
-        checkpoint_distance = epoch_length - block.header.number % epoch_length
+    def get_prev_checkpoint_block(self, block):
+        epoch_length = self.env.config['EPOCH_LENGTH']
+        checkpoint_distance = (block.header.number) % epoch_length
+        if checkpoint_distance == 0:
+            checkpoint_distance = epoch_length
         for i in range(checkpoint_distance):
-            block = self.get_parent(block)
-            if block.header.number == 1:  # TODO: Change this to use GENESIS_NUMBER
+            if block.header.prevhash == b'\x00' * 32:
                 return block
+            block = self.get_block(block.header.prevhash)
         return block
 
-    def maybe_update_checkpoint_head_hash(self, candidate_checkpoint_id, candidate_state, commit):
-        try:
-            candidate_commits = self.db.get(b'checkpoint:' + candidate_checkpoint_id)
-        except KeyError as e:
-            print(e)
-            return
-        self.apply_commits(candidate_state, candidate_commits)
+    def maybe_update_checkpoint_head_hash(self, fork_state, commits, commit):
+        fork_t = tester2.State(fork_state)
+        fork_casper = tester2.ABIContract(fork_t, casper_utils.casper_abi, self.casper_address)
         head_state = self.mk_poststate_of_blockhash(self.head_hash)
+        head_t = tester2.State(head_state)
+        head_casper = tester2.ABIContract(head_t, casper_utils.casper_abi, self.casper_address)
         # If we have not yet set a checkpoint head, just use the first one we are given
         if not self.checkpoint_head_hash:
-            self.checkpoint_head_epoch = commit['epoch']
             self.checkpoint_head_hash = commit['hash']
             return
+
         # Look for a common ancestor while recording the scores along the way
-        epoch_length = casper_utils.get_casper_epoch_length()
-        # Create the head cursor (hc) and candidate cursor (cc) and their corresponding score counters
+        epoch_length = self.env.config['EPOCH_LENGTH']
+        # Create the head cursor (hc) and fork cursor (fc) and their corresponding score counters
         hc = self.get_block(self.checkpoint_head_hash)
-        head_score = self.get_checkpoint_score(head_state, hc.header.number//epoch_length, hc.header.hash)
-        cc = self.get_block(commit['hash'])
-        candidate_score = self.get_checkpoint_score(candidate_state, cc.header.number//epoch_length, cc.header.hash)
-        # Loop over the hc & cc until they are equal (share a parent)
-        while cc != hc:
-            if cc.header.number > hc.header.number:
-                cc = self.get_prev_checkpoint_block(cc.header.hash)
-                candidate_score += self.get_checkpoint_score(candidate_state, cc.header.number//epoch_length, cc.header.hash)
+        head_score = self.get_checkpoint_score(head_casper, hc.header.number//epoch_length, hc.header.hash)
+        fc = self.get_block(commit['hash'])
+        fork_score = self.get_checkpoint_score(fork_casper, fc.header.number//epoch_length, fc.header.hash)
+        # Loop over the hc & fc until they are equal (share a parent)
+        while fc != hc:
+            if fc.header.number > hc.header.number:
+                fc = self.get_prev_checkpoint_block(fc)
+                fork_score += self.get_checkpoint_score(fork_casper, fc.header.number//epoch_length, fc.header.hash)
             else:
-                hc = self.get_prev_checkpoint_block(hc.header.hash)
-                head_score += self.get_checkpoint_score(head_state, hc.header.number//epoch_length, hc.header.hash)
-        # If the candidate score is higher than our head, set our checkpoint head as the candidate
-        if candidate_score > head_score:
-            print('Update head to:', commit['hash'])
-            self.checkpoint_head_epoch = commit['epoch']
+                hc = self.get_prev_checkpoint_block(hc)
+                head_score += self.get_checkpoint_score(head_casper, hc.header.number//epoch_length, hc.header.hash)
+        # If the fork score is higher than our head, set our checkpoint head as the fork
+        if fork_score > head_score:
+            log.info('Update head to: %s' % str(commit['hash']))
             self.checkpoint_head_hash = commit['hash']
 
     def mk_poststate_of_blockhash(self, blockhash):
@@ -332,7 +327,7 @@ class Chain(object):
                 del self.parent_queue[parent_hash]
 
     # Call upon receiving a block
-    def add_block(self, block):
+    def add_block(self, block):  # TODO: Refactor this massive function
         now = self.localtime
         if block.header.timestamp > now:
             i = 0
@@ -342,6 +337,19 @@ class Chain(object):
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
+
+        # Check what the current head should be
+        temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+        try:
+            apply_block(temp_state, block)
+        except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+            return False
+        self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
+        # Check to see if we need to update the checkpoint_head
+        for r in temp_state.receipts:
+            [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
+
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
@@ -365,8 +373,14 @@ class Chain(object):
                 return False
             self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)
-            # Replace the head
-            if block_score > self.get_score(self.head):
+            # Get the checkpoint in the fork with the same block number as our head checkpoint, if they are equal, the block is a child
+            # TODO: Clean up this logic--it's super ugly
+            fork_cp_block = self.get_prev_checkpoint_block(block)
+            head_cp_block = self.get_block(self.checkpoint_head_hash) if self.checkpoint_head_hash else fork_cp_block
+            while(fork_cp_block.header.number > head_cp_block.header.number):
+                fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
+            # Replace the head only if the fork block is a child of the head checkpoint
+            if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)) or block.hash == self.checkpoint_head_hash:
                 b = block
                 new_chain = {}
                 while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
