@@ -117,7 +117,7 @@ class BlockHeader(rlp.Serializable):
             d[field] = encode_hex(getattr(self, field))
         for field in ('number', 'difficulty', 'gas_limit', 'gas_used',
                       'timestamp'):
-            d[field] = to_string(getattr(self, field))
+            d[field] = utils.to_string(getattr(self, field))
         d['bloom'] = encode_hex(int256.serialize(self.bloom))
         assert len(d) == len(BlockHeader.fields)
         return d
