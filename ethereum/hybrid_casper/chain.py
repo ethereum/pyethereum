@@ -339,16 +339,17 @@ class Chain(object):
             return False
 
         # Check what the current head should be
-        temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
-        try:
-            apply_block(temp_state, block)
-        except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
-            log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
-            return False
-        self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
-        # Check to see if we need to update the checkpoint_head
-        for r in temp_state.receipts:
-            [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
+        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1:
+            temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+            try:
+                apply_block(temp_state, block)
+            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+                return False
+            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
+            # Check to see if we need to update the checkpoint_head
+            for r in temp_state.receipts:
+                [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
 
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
