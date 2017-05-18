@@ -24,8 +24,8 @@ import json
 log = get_logger('eth.chain')
 
 from ethereum.slogging import LogRecorder, configure_logging, set_level
-config_string = ':info,eth.chain:debug'
-#config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+# config_string = ':info,eth.chain:debug'
+config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 
@@ -132,13 +132,14 @@ class Chain(object):
         commit['raw_rlp'] = commit_rlp
         return commit
 
-    def apply_commits(self, casper, commits):
+    def apply_commits(self, state, casper, commits):
         for sig in commits:
-            commit = self.get_decoded_commit(commits[sig])
             try:
-                casper.commit(commit['rlp'])
+                casper.commit(commits[sig], gasprice=0)
             except Exception as e:
-                log.error('EXCEPTION:', e)
+                print('EXCEPTION:')
+                print(e)
+            state.gas_used = 0
 
     def get_checkpoint_score(self, casper, epoch, hash):
         # Calculate the current dynasty score
@@ -170,6 +171,7 @@ class Chain(object):
     def maybe_update_checkpoint_head_hash(self, fork_state, commits, commit):
         fork_t = tester2.State(fork_state)
         fork_casper = tester2.ABIContract(fork_t, casper_utils.casper_abi, self.casper_address)
+        self.apply_commits(fork_t.state, fork_casper, commits)
         head_state = self.mk_poststate_of_blockhash(self.head_hash)
         head_t = tester2.State(head_state)
         head_casper = tester2.ABIContract(head_t, casper_utils.casper_abi, self.casper_address)
@@ -196,6 +198,7 @@ class Chain(object):
         # If the fork score is higher than our head, set our checkpoint head as the fork
         if fork_score > head_score:
             log.info('Update head to: %s' % str(commit['hash']))
+            print('Update head to: %s' % str(commit['hash']))
             self.checkpoint_head_hash = commit['hash']
 
     def mk_poststate_of_blockhash(self, blockhash):
@@ -382,6 +385,7 @@ class Chain(object):
                 fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
             # Replace the head only if the fork block is a child of the head checkpoint
             if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)) or block.hash == self.checkpoint_head_hash:
+                print('REPLACE HEAD')
                 b = block
                 new_chain = {}
                 while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
