@@ -137,13 +137,14 @@ class State(object):
         return output
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
-        snapshot = self.state.snapshot()
+        state = self.state
+        self.state = self.state.ephemeral_clone()
         try:
             output = self.tx(sender, to, value, data, startgas, gasprice)
-            self.state.revert(snapshot)
+            self.state = state
             return output
         except Exception as e:
-            self.state.revert(snapshot)
+            self.state = state
             raise e
 
 class Chain(object):
