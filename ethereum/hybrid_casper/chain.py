@@ -136,9 +136,10 @@ class Chain(object):
         for sig in commits:
             try:
                 casper.commit(commits[sig], gasprice=0)
-            except Exception as e:
-                print('EXCEPTION:')
-                print(e)
+            except tester2.TransactionFailed:
+                commit = self.get_decoded_commit(commits[sig])
+                print('Transaction failed! Commit was probably already counted.',
+                      'Epoch:', commit['epoch'], '| validator_index:', commit['validator_index'])
             state.gas_used = 0
 
     def get_checkpoint_score(self, casper, epoch, hash):
