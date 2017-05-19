@@ -26,7 +26,7 @@ opcodes = {
     0x1a: ['BYTE', 2, 1, 3],
     0x20: ['SHA3', 2, 1, 30],
     0x30: ['ADDRESS', 0, 1, 2],
-    0x31: ['BALANCE', 1, 1, 20],
+    0x31: ['BALANCE', 1, 1, 20], # now 400
     0x32: ['ORIGIN', 0, 1, 2],
     0x33: ['CALLER', 0, 1, 2],
     0x34: ['CALLVALUE', 0, 1, 2],
@@ -36,8 +36,8 @@ opcodes = {
     0x38: ['CODESIZE', 0, 1, 2],
     0x39: ['CODECOPY', 3, 0, 3],
     0x3a: ['GASPRICE', 0, 1, 2],
-    0x3b: ['EXTCODESIZE', 1, 1, 20],
-    0x3c: ['EXTCODECOPY', 4, 0, 20],
+    0x3b: ['EXTCODESIZE', 1, 1, 20], # now 700
+    0x3c: ['EXTCODECOPY', 4, 0, 20], # now 700
     0x40: ['BLOCKHASH', 1, 1, 20],
     0x41: ['COINBASE', 0, 1, 2],
     0x42: ['TIMESTAMP', 0, 1, 2],
@@ -48,8 +48,8 @@ opcodes = {
     0x51: ['MLOAD', 1, 1, 3],
     0x52: ['MSTORE', 2, 0, 3],
     0x53: ['MSTORE8', 2, 0, 3],
-    0x54: ['SLOAD', 1, 1, 50],
-    0x55: ['SSTORE', 2, 0, 0],
+    0x54: ['SLOAD', 1, 1, 50], # 200 now
+    0x55: ['SSTORE', 2, 0, 0], # actual cost 5000-20000 depending on circumstance
     0x56: ['JUMP', 1, 0, 8],
     0x57: ['JUMPI', 2, 0, 10],
     0x58: ['PC', 0, 1, 2],
@@ -61,12 +61,16 @@ opcodes = {
     0xa2: ['LOG2', 4, 0, 1125],
     0xa3: ['LOG3', 5, 0, 1500],
     0xa4: ['LOG4', 6, 0, 1875],
+    0xe1: ['SLOADBYTES', 3, 0, 50], # to be discontinued
+    0xe2: ['SSTOREBYTES', 3, 0, 0], # to be discontinued
+    0xe3: ['SSIZE', 1, 1, 50], # to be discontinued
     0xf0: ['CREATE', 3, 1, 32000],
-    0xf1: ['CALL', 7, 1, 40],
-    0xf2: ['CALLCODE', 7, 1, 40],
+    0xf1: ['CALL', 7, 1, 40], # 700 now
+    0xf2: ['CALLCODE', 7, 1, 40], # 700 now
     0xf3: ['RETURN', 2, 0, 0],
-    0xf4: ['DELEGATECALL', 6, 0, 40],
-    0xff: ['SUICIDE', 1, 0, 0],
+    0xf4: ['DELEGATECALL', 6, 1, 40], # 700 now
+    0xf5: ['CALLBLACKBOX', 7, 1, 40],
+    0xff: ['SUICIDE', 1, 0, 0], # 5000 now
 }
 
 for i in range(1, 33):
@@ -85,10 +89,6 @@ for o in opcodes:
 GDEFAULT = 1
 GMEMORY = 3
 GQUADRATICMEMDENOM = 512  # 1 gas per 512 quadwords
-GSTORAGEREFUND = 15000
-GSTORAGEKILL = 5000
-GSTORAGEMOD = 5000
-GSTORAGEADD = 20000
 GEXPONENTBYTE = 10    # cost of EXP exponent per byte
 GCOPY = 3             # cost to copy one 32 byte word
 GCONTRACTBYTE = 200   # one byte of code in contract creation
@@ -111,6 +111,20 @@ GSTIPEND = 2300
 
 GCALLNEWACCOUNT = 25000
 GSUICIDEREFUND = 24000
+
+GSTORAGEBASE = 2500
+GSTORAGEBYTESTORAGE = 250
+GSTORAGEBYTECHANGE = 40
+GSTORAGEMIN = 2500
+GSSIZE = 50
+GSLOADBYTES = 50
+
+GSTORAGEREFUND = 15000
+GSTORAGEKILL = 5000
+GSTORAGEMOD = 5000
+GSTORAGEADD = 20000
+
+EXP_SUPPLEMENTAL_GAS = 40
 
 # Anti-DoS HF changes
 SLOAD_SUPPLEMENTAL_GAS = 150

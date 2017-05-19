@@ -1,7 +1,7 @@
 from rlp.utils import decode_hex
 
 from ethereum import utils
-from ethereum.db import BaseDB
+from ethereum.db import BaseDB, EphemDB
 from ethereum.child_dao_list import L as child_dao_list
 
 
@@ -61,11 +61,25 @@ default_config = dict(
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
     # DAO fork
     DAO_FORK_BLKNUM=1920000,
+    DAO_FORK_BLKHASH=decode_hex('4985f5ca3d2afbec36529aa96f74de3cc10a2a4a6c44f2157a57d2c6059a11bb'),
+    DAO_FORK_BLKEXTRA=decode_hex('64616f2d686172642d666f726b'),
     CHILD_DAO_LIST=map(utils.normalize_address, child_dao_list),
     DAO_WITHDRAWER=utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Anti-DoS fork
-    ANTI_DOS_FORK_BLKNUM=2457000,
-    CLEARING_FORK_BLKNUM=2 ** 98,
+    ANTI_DOS_FORK_BLKNUM = 2463000,
+    SPURIOUS_DRAGON_FORK_BLKNUM = 2675000,
+    CONTRACT_CODE_SIZE_LIMIT = 0x6000,
+    # Default consensus strategy: ethash, poa, casper, pbft
+    CONSENSUS_STRATEGY = 'ethash',
+    # Serenity fork
+    SERENITY_FORK_BLKNUM = 2**99,
+    PREV_HEADER_DEPTH = 256,
+    SYSTEM_ENTRY_POINT = utils.int_to_addr(2**160 - 2),
+    SERENITY_HEADER_VERIFIER = utils.int_to_addr(255),
+    SERENITY_HEADER_POST_FINALIZER = utils.int_to_addr(254),
+    SERENITY_GETTER_CODE = decode_hex('60ff331436604014161560155760203560003555005b6000355460205260206020f3'),
+    # Custom specials
+    CUSTOM_SPECIALS = {},
 )
 assert default_config['NEPHEW_REWARD'] == \
     default_config['BLOCK_REWARD'] // 32
@@ -73,8 +87,8 @@ assert default_config['NEPHEW_REWARD'] == \
 
 class Env(object):
 
-    def __init__(self, db, config=None, global_config=None):
-        assert isinstance(db, BaseDB)
-        self.db = db
+    def __init__(self, db=None, config=None, global_config=None):
+        self.db = EphemDB() if db is None else db
+        assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()

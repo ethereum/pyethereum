@@ -24,10 +24,18 @@ def test_transaction(filename, testname, testdata):
     try:
         rlpdata = decode_hex(testdata["rlp"][2:])
         o = {}
-        tx = rlp.decode(rlpdata, transactions.Transaction)
+
         blknum = int(testdata["blocknumber"])
+        if blknum >= config.default_config["SPURIOUS_DRAGON_FORK_BLKNUM"]:
+            signer_class = transactions.EIP155TransactionSigner
+        else:
+            signer_class = transactions.TransactionSigner
+        tx = rlp.decode(rlpdata,
+                        sedes=transactions.Transaction,
+                        signer_class=signer_class)
+
         if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
-            tx.check_low_s()
+            tx.check_low_s_homestead()
         o["sender"] = tx.sender
         o["transaction"] = {
             "data": b'0x' * (len(tx.data) > 0) + encode_hex(tx.data),
