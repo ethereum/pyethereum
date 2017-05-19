@@ -385,7 +385,7 @@ class Solc(object):
         return result['abi']
 
     @classmethod
-    def combined(cls, code, path=None, optimize=True, extra_args=None):
+    def combined(cls, code, path=None, optimize=True, libraries=None, extra_args=None):
         """ Compile combined-json with abi,bin,devdoc,userdoc.
 
         @param code: literal solidity code as a string.
@@ -400,13 +400,13 @@ class Solc(object):
             raise ValueError('sourcecode and path are mutually exclusive.')
 
         if path:
-            contracts = compile_file(path, optimize=optimize, extra_args=extra_args)
+            contracts = compile_file(path, optimize=optimize, libraries=libraries, extra_args=extra_args)
 
             with open(path) as handler:
                 code = handler.read()
 
         elif code:
-            contracts = compile_code(code, optimize=optimize, extra_args=extra_args)
+            contracts = compile_code(code, optimize=optimize, libraries=libraries, extra_args=extra_args)
 
         else:
             raise ValueError('either code or path needs to be supplied.')
