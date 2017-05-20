@@ -74,6 +74,7 @@ class Chain(object):
         self.head_hash = self.state.prev_headers[0].hash
         self.checkpoint_head_hash = None
         self.casper_address = self.env.config['CASPER_ADDRESS']
+        self.db.put('slashed_validators', [])
         self.genesis = Block(self.state.prev_headers[0], [], [])
         self.db.put(b'state:' + self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
@@ -101,6 +102,11 @@ class Chain(object):
             log.error(e)
             return None
 
+    # Casper fork choice outline:
+    # 1. Each commit, store that commit for the checkpoint, then attempt to change the head
+    # 2. Each call to checkpoint score, make a poststate of the checkpoint block, and add up all desposits from *non-slashed* validators
+    # 3. Each slash, add the validator to the slashed validators list
+
     def casper_log_handler(self, contract_log, fork_state, blockhash):
         # We only want logs from the Casper contract
         if contract_log.address != self.casper_address:
@@ -111,16 +117,16 @@ class Chain(object):
         elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
             log.info('Recieved commit')
             new_commit = self.get_decoded_commit(contract_log.data)
-            checkpoint_id = utils.sha3(new_commit['epoch'] + new_commit['hash'])
+            checkpoint_id = self.mk_checkpoint_id(new_commit['epoch'], new_commit['hash'])
             try:
-                commits = self.db.get(b'checkpoint:' + checkpoint_id)
+                commits = self.db.get(b'cp_commits:' + checkpoint_id)
             except KeyError:
                 commits = dict()
             if new_commit['sig'] in commits:
                 return
             commits[new_commit['sig']] = contract_log.data
-            self.db.put(b'checkpoint:' + checkpoint_id, commits)
-            self.maybe_update_checkpoint_head_hash(fork_state, commits, new_commit)
+            self.db.put(b'cp_commits:' + checkpoint_id, commits)
+            self.maybe_update_checkpoint_head_hash(new_commit['hash'])
         else:
             raise(Exception('Recieved unexpected topic!'))
 
@@ -132,31 +138,23 @@ class Chain(object):
         commit['raw_rlp'] = commit_rlp
         return commit
 
-    def apply_commits(self, state, casper, commits):
+    def get_checkpoint_score(self, blockhash, commits):
+        state = self.mk_poststate_of_blockhash(blockhash)
+        casper = tester2.ABIContract(tester2.State(state), casper_utils.casper_abi, self.casper_address)
+        epoch = casper.get_current_epoch()
+        curr_dynasty_deposits = 0
+        prev_dynasty_deposits = 0
+        # Calculate the current & previous dynasty scores
         for sig in commits:
-            try:
-                casper.commit(commits[sig], gasprice=0)
-            except tester2.TransactionFailed:
-                commit = self.get_decoded_commit(commits[sig])
-                print('Transaction failed! Commit was probably already counted.',
-                      'Epoch:', commit['epoch'], '| validator_index:', commit['validator_index'])
-            state.gas_used = 0
-
-    def get_checkpoint_score(self, casper, epoch, hash):
-        # Calculate the current dynasty score
-        dynasty = casper.get_dynasty_in_epoch(epoch)
-        curr_dynasty_deposits = casper.get_consensus_messages__commits(epoch, hash)
-        curr_dynasty_total_deposits = casper.get_total_deposits(dynasty)
-        curr_score = curr_dynasty_deposits / curr_dynasty_total_deposits
-
-        # Calculate the previous dynasty score
-        if dynasty >= 1:
-            prev_dynasty_deposits = casper.get_consensus_messages__prev_dyn_commits(epoch, hash)
-            prev_dynasty_total_deposits = casper.get_total_deposits(dynasty-1)
-            prev_score = prev_dynasty_deposits / prev_dynasty_total_deposits
-        else:
-            prev_score = 1
-        return min(curr_score, prev_score)
+            commit = self.get_decoded_commit(commits[sig])
+            if commit['validator_index'] in self.db.get('slashed_validators'):
+                continue
+            epochcheck = casper.check_eligible_in_epoch(commit['validator_index'], epoch)
+            if epochcheck >= 2:
+                curr_dynasty_deposits += casper.get_validators__deposit(commit['validator_index'])
+            if epochcheck % 2:
+                prev_dynasty_deposits += casper.get_validators__deposit(commit['validator_index'])
+        return min(curr_dynasty_deposits, prev_dynasty_deposits)
 
     def get_prev_checkpoint_block(self, block):
         epoch_length = self.env.config['EPOCH_LENGTH']
@@ -169,38 +167,41 @@ class Chain(object):
             block = self.get_block(block.header.prevhash)
         return block
 
-    def maybe_update_checkpoint_head_hash(self, fork_state, commits, commit):
-        fork_t = tester2.State(fork_state)
-        fork_casper = tester2.ABIContract(fork_t, casper_utils.casper_abi, self.casper_address)
-        self.apply_commits(fork_t.state, fork_casper, commits)
-        head_state = self.mk_poststate_of_blockhash(self.head_hash)
-        head_t = tester2.State(head_state)
-        head_casper = tester2.ABIContract(head_t, casper_utils.casper_abi, self.casper_address)
+    def mk_checkpoint_id(self, epoch, blockhash):
+        return utils.sha3(bytes(epoch) + blockhash)
+
+    def get_commits(self, checkpoint_id):
+        try:
+            return self.db.get(b'cp_commits:' + checkpoint_id)
+        except KeyError:
+            return {}
+
+    def maybe_update_checkpoint_head_hash(self, fork_hash):
         # If we have not yet set a checkpoint head, just use the first one we are given
         if not self.checkpoint_head_hash:
-            self.checkpoint_head_hash = commit['hash']
+            self.checkpoint_head_hash = fork_hash
             return
-
         # Look for a common ancestor while recording the scores along the way
         epoch_length = self.env.config['EPOCH_LENGTH']
-        # Create the head cursor (hc) and fork cursor (fc) and their corresponding score counters
+        head_score = 0
+        fork_score = 0
+        # Create the head cursor (hc) and fork cursor (fc)
         hc = self.get_block(self.checkpoint_head_hash)
-        head_score = self.get_checkpoint_score(head_casper, hc.header.number//epoch_length, hc.header.hash)
-        fc = self.get_block(commit['hash'])
-        fork_score = self.get_checkpoint_score(fork_casper, fc.header.number//epoch_length, fc.header.hash)
-        # Loop over the hc & fc until they are equal (share a parent)
+        fc = self.get_block(fork_hash)
+        # Loop over the hc & fc until they are equal (we find a shared parent)
         while fc != hc:
             if fc.header.number > hc.header.number:
+                checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(fc.header.number // epoch_length), fc.header.hash)
+                fork_score += self.get_checkpoint_score(fc.header.hash, self.get_commits(checkpoint_id))
                 fc = self.get_prev_checkpoint_block(fc)
-                fork_score += self.get_checkpoint_score(fork_casper, fc.header.number//epoch_length, fc.header.hash)
             else:
+                checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(hc.header.number // epoch_length), hc.header.hash)
+                head_score += self.get_checkpoint_score(hc.header.hash, self.get_commits(checkpoint_id))
                 hc = self.get_prev_checkpoint_block(hc)
-                head_score += self.get_checkpoint_score(head_casper, hc.header.number//epoch_length, hc.header.hash)
         # If the fork score is higher than our head, set our checkpoint head as the fork
         if fork_score > head_score:
-            log.info('Update head to: %s' % str(commit['hash']))
-            print('Update head to: %s' % str(commit['hash']))
-            self.checkpoint_head_hash = commit['hash']
+            log.info('Update head to: %s' % str(fork_hash))
+            self.checkpoint_head_hash = fork_hash
 
     def mk_poststate_of_blockhash(self, blockhash):
         if blockhash not in self.db:

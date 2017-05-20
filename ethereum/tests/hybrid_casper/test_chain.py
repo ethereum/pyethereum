@@ -282,10 +282,6 @@ def test_head_change_for_more_commits_on_parent_fork(db):
         t.mine()
     assert t.chain.head_hash == L.hash
     casper.commit(mk_commit(1, 6, epoch_blockhash(t, 6), 5, keys[1]))
-    t.mine()
-    # Total commits in this history is 2, but total observed is 3. We fork choice based only on the history, so don't change
-    assert t.chain.head_hash == L.hash
-    # Add one more and the fork changes
-    casper.commit(mk_commit(3, 6, epoch_blockhash(t, 6), 3, keys[3]))
     R = t.mine()
+    # Total commits in this history is 2, but total observed is 3. We fork choice with all info, so we change
     assert t.chain.head_hash == R.hash
