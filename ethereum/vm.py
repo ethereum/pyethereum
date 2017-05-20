@@ -85,6 +85,7 @@ class Compustate():
         self.stack = []
         self.pc = 0
         self.gas = 0
+        self.last_returned = bytearray()
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
 
@@ -381,16 +382,27 @@ def vm_execute(ext, msg, code):
             elif op == 'CODESIZE':
                 stk.append(len(processed_code))
             elif op == 'CODECOPY':
-                start, s1, size = stk.pop(), stk.pop(), stk.pop()
-                if not mem_extend(mem, compustate, op, start, size):
+                mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, mstart, size):
                     return vm_exception('OOG EXTENDING MEMORY')
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
-                    if s1 + i < len(processed_code):
-                        mem[start + i] = processed_code[s1 + i][4]
+                    if dstart + i < len(processed_code):
+                        mem[mstart + i] = processed_code[dstart + i][4]
                     else:
-                        mem[start + i] = 0
+                        mem[mstart + i] = 0
+            elif op == 'RETURNDATACOPY':
+                mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
+                if not mem_extend(mem, compustate, op, mstart, size):
+                    return vm_exception('OOG EXTENDING MEMORY')
+                if not data_copy(compustate, size):
+                    return vm_exception('OOG COPY DATA')
+                if dstart + size > len(compustate.last_returned):
+                    return vm_exception('RETURNDATACOPY out of range')
+                mem[mstart: mstart + size] = compustate.last_returned
+            elif op == 'RETURNDATASIZE':
+                stk.append(len(compustate.last_returned))
             elif op == 'GASPRICE':
                 stk.append(ext.tx_gasprice)
             elif op == 'EXTCODESIZE':
@@ -614,6 +626,7 @@ def vm_execute(ext, msg, code):
                 for i in range(min(len(data), memoutsz)):
                     mem[memoutstart + i] = data[i]
                 compustate.gas += gas
+                compustate.last_returned = bytearray(data)
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):
