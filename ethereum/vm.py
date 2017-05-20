@@ -61,7 +61,7 @@ class CallData(object):
 class Message(object):
 
     def __init__(self, sender, to, value=0, gas=1000000, data='', depth=0,
-            code_address=None, is_create=False, transfers_value=True):
+            code_address=None, is_create=False, transfers_value=True, static=False):
         self.sender = sender
         self.to = to
         self.value = value
@@ -72,6 +72,7 @@ class Message(object):
         self.code_address = to if code_address is None else code_address
         self.is_create = is_create
         self.transfers_value = transfers_value
+        self.static = static
 
     def __repr__(self):
         return '<Message(to:%s...)>' % self.to[:8]
@@ -460,6 +461,8 @@ def vm_execute(ext, msg, code):
                 stk.append(ext.get_storage_data(msg.to, stk.pop()))
             elif op == 'SSTORE':
                 s0, s1 = stk.pop(), stk.pop()
+                if msg.static:
+                    return vm_exception('Cannot SSTORE inside a static context')
                 if ext.get_storage_data(msg.to, s0):
                     gascost = opcodes.GSTORAGEMOD if s1 else opcodes.GSTORAGEKILL
                     refund = 0 if s1 else opcodes.GSTORAGEREFUND
@@ -529,6 +532,8 @@ def vm_execute(ext, msg, code):
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
+            if msg.static:
+                return vm_exception('Cannot CREATE inside a static context')
             if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
                 cd = CallData(mem, mstart, msz)
                 ingas = compustate.gas
@@ -543,56 +548,28 @@ def vm_execute(ext, msg, code):
                 compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
-        elif op == 'CALL':
-            gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
-                stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
-            if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
-                    not mem_extend(mem, compustate, op, memoutstart, memoutsz):
-                return vm_exception('OOG EXTENDING MEMORY')
-            to = utils.encode_int(to)
-            to = ((b'\x00' * (32 - len(to))) + to)[12:]
-            extra_gas = (not ext.account_exists(to)) * (value > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT + \
-                (value > 0) * opcodes.GCALLVALUETRANSFER + \
-                ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
-            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if ext.post_anti_dos_hardfork():
-                if compustate.gas < extra_gas:
-                    return vm_exception('OUT OF GAS', needed=extra_gas)
-                gas = min(gas, all_but_1n(compustate.gas - extra_gas, opcodes.CALL_CHILD_LIMIT_DENOM))
-            else:
-                if compustate.gas < gas + extra_gas:
-                    return vm_exception('OUT OF GAS', needed=gas+extra_gas)
-            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
-                compustate.gas -= (gas + extra_gas)
-                assert compustate.gas >= 0
-                cd = CallData(mem, meminstart, meminsz)
-                call_msg = Message(msg.to, to, value, submsg_gas, cd,
-                                   msg.depth + 1, code_address=to)
-                result, gas, data = ext.msg(call_msg)
-                if result == 0:
-                    stk.append(0)
-                else:
-                    stk.append(1)
-                for i in range(min(len(data), memoutsz)):
-                    mem[memoutstart + i] = data[i]
-                compustate.gas += gas
-            else:
-                compustate.gas -= (gas + extra_gas - submsg_gas)
-                stk.append(0)
-        elif op == 'CALLCODE' or op == 'DELEGATECALL':
-            if op == 'CALLCODE':
+        elif op in ('CALL', 'CALLCODE', 'DELEGATECALL', 'STATICCALL'):
+            # Pull arguments from the stack
+            if op in ('CALL', 'CALLCODE'):
                 gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
             else:
                 gas, to, meminstart, meminsz, memoutstart, memoutsz = \
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
                 value = 0
+            # Static context prohibition
+            if msg.static and op != 'STATICCALL':
+                return vm_exception('Cannot %s inside a static context' % op)
+            # Expand memory
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
-            extra_gas = (value > 0) * opcodes.GCALLVALUETRANSFER + \
+            to = utils.int_to_addr(to)
+            # Extra gas costs based on hard fork-dependent factors
+            extra_gas = (not ext.account_exists(to)) * (op == 'CALL') * (value > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT + \
+                (value > 0) * opcodes.GCALLVALUETRANSFER + \
                 ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
+            # Compute child gas limit
             if ext.post_anti_dos_hardfork():
                 if compustate.gas < extra_gas:
                     return vm_exception('OUT OF GAS', needed=extra_gas)
@@ -601,31 +578,42 @@ def vm_execute(ext, msg, code):
                 if compustate.gas < gas + extra_gas:
                     return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
-            if ext.get_balance(msg.to) >= value and msg.depth < MAX_DEPTH:
+            # Verify that there is sufficient balance and depth
+            if ext.get_balance(msg.to) < value or msg.depth >= MAX_DEPTH:
+                compustate.gas -= (gas + extra_gas - submsg_gas)
+                stk.append(0)
+            else:
+                # Subtract gas from parent
                 compustate.gas -= (gas + extra_gas)
                 assert compustate.gas >= 0
-                to = utils.encode_int(to)
-                to = ((b'\x00' * (32 - len(to))) + to)[12:]
                 cd = CallData(mem, meminstart, meminsz)
-                if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
+                # Generate the message
+                if op == 'CALL':
+                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to)
+                elif ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, transfers_value=False)
                 elif op == 'DELEGATECALL':
                     return vm_exception('OPCODE INACTIVE')
-                else:
+                elif op == 'CALLCODE':
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to)
+                elif op == 'STATICCALL':
+                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to, static=True)
+                else:
+                    raise Exception("Lolwut")
+                # Get result
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
                 else:
                     stk.append(1)
+                # Set output memory
                 for i in range(min(len(data), memoutsz)):
                     mem[memoutstart + i] = data[i]
                 compustate.gas += gas
-            else:
-                compustate.gas -= (gas + extra_gas - submsg_gas)
-                stk.append(0)
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):
@@ -639,6 +627,8 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             return revert(compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
+            if msg.static:
+                return vm_exception('Cannot SUICIDE inside a static context')
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
             xfer = ext.get_balance(msg.to)
