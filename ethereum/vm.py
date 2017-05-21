@@ -533,6 +533,8 @@ def vm_execute(ext, msg, code):
             mstart, msz = stk.pop(), stk.pop()
             topics = [stk.pop() for x in range(depth)]
             compustate.gas -= msz * opcodes.GLOGBYTE
+            if msg.static:
+                return vm_exception('Cannot LOG inside a static context')
             if not mem_extend(mem, compustate, op, mstart, msz):
                 return vm_exception('OOG EXTENDING MEMORY')
             data = bytearray_to_bytestr(mem[mstart: mstart + msz])
@@ -570,8 +572,8 @@ def vm_execute(ext, msg, code):
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
                 value = 0
             # Static context prohibition
-            if msg.static and op != 'STATICCALL':
-                return vm_exception('Cannot %s inside a static context' % op)
+            if msg.static and value > 0:
+                return vm_exception('Cannot make a non-zero-value call inside a static context')
             # Expand memory
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
@@ -602,15 +604,15 @@ def vm_execute(ext, msg, code):
                 # Generate the message
                 if op == 'CALL':
                     call_msg = Message(msg.to, to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to)
+                                       msg.depth + 1, code_address=to, static=msg.static)
                 elif ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to, transfers_value=False)
+                                       msg.depth + 1, code_address=to, transfers_value=False, static=msg.static)
                 elif op == 'DELEGATECALL':
                     return vm_exception('OPCODE INACTIVE')
                 elif op == 'CALLCODE':
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to)
+                                       msg.depth + 1, code_address=to, static=msg.static)
                 elif op == 'STATICCALL':
                     call_msg = Message(msg.to, to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, static=True)

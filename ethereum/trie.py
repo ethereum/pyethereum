@@ -220,7 +220,7 @@ class Trie(object):
     def _decode_to_node(self, encoded):
         if encoded == BLANK_NODE:
             return BLANK_NODE
-        # if isinstance(encoded, list):
+        if isinstance(encoded, list):
             return encoded
         o = rlp.decode(self.db.get(encoded))
         return o
