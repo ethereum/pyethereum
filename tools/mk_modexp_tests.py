@@ -1,10 +1,10 @@
-from ethereum.tools import tester2
+from ethereum.tools import tester
 from ethereum import opcodes
 from ethereum.utils import int_to_big_endian, encode_int32, big_endian_to_int
 from ethereum.tools import new_statetest_utils
 import json
 
-c = tester2.Chain(alloc=tester2.minimal_alloc, env='metropolis')
+c = tester.Chain(alloc=tester.minimal_alloc, env='metropolis')
 c.head_state.gas_limit = 10**8
 
 kode = """
@@ -32,16 +32,16 @@ def mk_test(b, e, m, execgas):
     encoded = mk_modexp_data(b, e, m)
     s = c.snapshot()
     x = c.contract(kode % (len(encoded) + 36, max(intlen(m), 1), max(intlen(m), 1)), language='viper')
-    pre = tester2.mk_state_test_prefill(c)
+    pre = tester.mk_state_test_prefill(c)
     try:
         o = x.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x.translator.encode('foo', [encoded])) + execgas)
         if big_endian_to_int(o[:intlen(m)]) != (pow(b, e, m) if m else 0):
             raise Exception("Mismatch! %d %d %d expected %d computed %d" % (b, e, m, pow(b, e, m), big_endian_to_int(o[:intlen(m)])))
         print("Succeeded %d %d %d sg %d" % (b, e, m, execgas))
-    except tester2.TransactionFailed:
+    except tester.TransactionFailed:
         print('OOG %d %d %d sg %d' % (b, e, m, execgas))
-    o = tester2.mk_state_test_postfill(c, pre)
-    o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
+    o = tester.mk_state_test_postfill(c, pre)
+    o2 = tester.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
     c.revert(s)
     return o, o2

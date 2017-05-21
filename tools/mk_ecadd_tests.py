@@ -1,11 +1,11 @@
-from ethereum.tools import tester2
+from ethereum.tools import tester
 from ethereum import opcodes
 from ethereum.utils import int_to_big_endian, encode_int32, big_endian_to_int
 from ethereum.tools import new_statetest_utils
 import json
 import py_pairing
 
-c = tester2.Chain(env='metropolis')
+c = tester.Chain(env='metropolis')
 c.head_state.gas_limit = 10**8
 
 kode = """
@@ -33,7 +33,7 @@ def intrinsic_gas_of_data(d):
 
 def mk_test(p1, p2, execgas, datarestrict=128):
     encoded = mk_ecadd_data(p1, p2)[:datarestrict] + b'\x00' * max(datarestrict - 128, 0)
-    pre = tester2.mk_state_test_prefill(c)
+    pre = tester.mk_state_test_prefill(c)
     try:
         o = x1.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x1.translator.encode('foo', [encoded])) + execgas)
         x, y = big_endian_to_int(o[:32]), big_endian_to_int(o[32:])
@@ -41,10 +41,10 @@ def mk_test(p1, p2, execgas, datarestrict=128):
             raise Exception("Mismatch! %r %r %d, expected %r computed %r" %
                             (p1, p2, datarestrict, py_pairing.normalize(py_pairing.add(p1, p2)), (x, y)))
         print('Succeeded! %r %r %d %r' % (p1, p2, datarestrict, (x, y)))
-    except tester2.TransactionFailed:
+    except tester.TransactionFailed:
         print('OOG %r %r %d %d' % (p1, p2, datarestrict, execgas))
-    o = tester2.mk_state_test_postfill(c, pre)
-    o2 = tester2.mk_state_test_postfill(c, pre, filler_mode=True)
+    o = tester.mk_state_test_postfill(c, pre)
+    o2 = tester.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)
     return o, o2
 

@@ -7,7 +7,7 @@ import serpent
 from rlp.utils import decode_hex
 
 from ethereum import utils, abi
-from ethereum.tools import tester2
+from ethereum.tools import tester
 from ethereum.utils import safe_ord, big_endian_to_int
 
 
@@ -23,9 +23,9 @@ def test_evm():
     translator = abi.ContractTranslator(serpent.mk_full_signature(
                                         serpent_code))
     data = translator.encode('main', [2, 5])
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(evm_code)
-    o = translator.decode('main', c.tx(tester2.k0, x, 0, data))
+    o = translator.decode('main', c.tx(tester.k0, x, 0, data))
     assert o == [32]
 
 
@@ -47,10 +47,10 @@ sixten_code =\
 
 
 def test_sixten():
-    c = tester2.Chain()
+    c = tester.Chain()
     addr = decode_hex('1231231231231234564564564564561231231231')
     c.head_state.set_code(addr, serpent.compile_lll(sixten_code))
-    o1 = c.tx(tester2.k0, addr, 0)
+    o1 = c.tx(tester.k0, addr, 0)
     assert utils.big_endian_to_int(o1) == 610
 
 
@@ -94,7 +94,7 @@ def f4():
 
 
 def test_with():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(with_code, language='serpent')
     assert x.f1() == [5, 7, 8, 5]
     assert x.f2() == 2
@@ -123,10 +123,10 @@ return(x.double(5))
 
 
 def test_returnten():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename, 'w').write(mul2_code)
     x = c.contract(returnten_code, language='serpent')
-    o1 = c.tx(tester2.k0, x.address, 0)
+    o1 = c.tx(tester.k0, x.address, 0)
     os.remove(filename)
     assert utils.big_endian_to_int(o1) == 10
 
@@ -155,7 +155,7 @@ def foo():
 
 
 def test_inset():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename2, 'w').write(inset_inner_code)
     x = c.contract(inset_outer_code, language='serpent')
     assert x.foo() == 22
@@ -186,7 +186,7 @@ inset("%s")
 
 
 def test_inset2():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename25, 'w').write(inset_inner_code2)
     x = c.contract(inset_outer_code2, language='serpent')
     assert x.foo() == 22
@@ -207,7 +207,7 @@ def main(k, v):
 
 
 def test_namecoin():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(namecoin_code, language='serpent')
     o1 = x.main("george", 45)
     assert o1 == 1
@@ -243,15 +243,15 @@ def send(to, value):
 
 
 def test_currency():
-    c = tester2.Chain()
-    x = c.contract(currency_code, sender=tester2.k0, language='serpent')
-    o1 = x.send(tester2.a2, 200)
+    c = tester.Chain()
+    x = c.contract(currency_code, sender=tester.k0, language='serpent')
+    o1 = x.send(tester.a2, 200)
     assert o1 == 1
-    o2 = x.send(tester2.a2, 900)
+    o2 = x.send(tester.a2, 900)
     assert o2 == 0
-    o3 = x.query(tester2.a0)
+    o3 = x.query(tester.a0)
     assert o3 == 800
-    o4 = x.query(tester2.a2)
+    o4 = x.query(tester.a2)
     assert o4 == 200
 
 # Test a data feed
@@ -277,15 +277,15 @@ def get(k):
 
 
 def test_data_feeds():
-    c = tester2.Chain()
-    x = c.contract(data_feed_code, sender=tester2.k0, language='serpent')
+    c = tester.Chain()
+    x = c.contract(data_feed_code, sender=tester.k0, language='serpent')
     o2 = x.get(500)
     assert o2 == 0
     o3 = x.set(500, 19)
     assert o3 == 1
     o4 = x.get(500)
     assert o4 == 19
-    o5 = x.set(500, 726, sender=tester2.k1)
+    o5 = x.set(500, 726, sender=tester.k1)
     assert o5 == 0
     o6 = x.set(500, 726)
     assert o6 == 1
@@ -338,7 +338,7 @@ def main(datafeed, index):
 
 def test_hedge():
     c, x = test_data_feeds()
-    x2 = c.contract(hedge_code, sender=tester2.k0, language='serpent')
+    x2 = c.contract(hedge_code, sender=tester.k0, language='serpent')
     # Have the first party register, sending 10^16 wei and
     # asking for a hedge using currency code 500
     o1 = x2.main(x.address, 500, value=10 ** 16)
@@ -347,7 +347,7 @@ def test_hedge():
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
-    o2 = x2.main(0, 0, value=10 ** 16, sender=tester2.k2)
+    o2 = x2.main(0, 0, value=10 ** 16, sender=tester.k2)
     assert o2 == 7260000000000000000
     c.head_state.commit()
     snapshot = c.snapshot()
@@ -362,7 +362,7 @@ def test_hedge():
     # the time has not expired yet
     o5 = x2.main(0, 0)
     assert o5 == 5
-    c.mine(100, tester2.a3)
+    c.mine(100, tester.a3)
     # Mine ten blocks, and try. Expect code 4, meaning a normal execution
     # where both get their share
     o6 = x2.main(0, 0)
@@ -388,7 +388,7 @@ def f3():
 
 
 def test_lifo():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(arither_code, language='serpent')
     x.f2()
     assert x.f3() == 1010
@@ -420,7 +420,7 @@ def ping_storage15():
 
 
 def test_suicider():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(suicider_code, language='serpent')
     # Run normally: suicide processes, so the attempt to ping the
     # contract fails
@@ -463,7 +463,7 @@ def recurse():
 
 
 def test_reverter():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(reverter_code, value=10 ** 15, language='serpent')
     x.entry()
     assert c.head_state.get_storage_data(x.address, 8080) == 4040
@@ -495,11 +495,11 @@ return(self.storage[1])
 
 
 def test_callcode():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename3, 'w').write(add1_code)
     x = c.contract(callcode_test_code, language='serpent')
     c.mine(1)
-    o1 = c.tx(tester2.k0, x.address, 0)
+    o1 = c.tx(tester.k0, x.address, 0)
     os.remove(filename3)
     assert utils.big_endian_to_int(o1) == 64
 
@@ -514,7 +514,7 @@ def main():
 
 
 def test_array():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(array_code, language='serpent')
     assert x.main() == [1]
 
@@ -528,7 +528,7 @@ def main():
 
 
 def test_array2():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(array_code2, language='serpent')
     assert x.main() == [1]
 
@@ -540,7 +540,7 @@ def main():
 
 
 def test_array3():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(array_code3, language='serpent')
     assert x.main() == [0, 0, 0]
 
@@ -566,7 +566,7 @@ def get(k):
 
 
 def test_calls():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(calltest_code, language='serpent')
     x.main()
     assert 12345 == x.get(1)
@@ -639,7 +639,7 @@ def testping2(x):
 
 
 def test_storage_objects():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(storage_object_test_code, language='serpent')
     x.ping()
     assert 1 == x.query_chessboard(0, 0)
@@ -706,7 +706,7 @@ def query_person():
 
 
 def test_infinite_storage_objects():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(infinite_storage_object_test_code, language='serpent')
     x.ping()
     assert 1 == x.query_chessboard(0, 0)
@@ -767,7 +767,7 @@ def main():
 
 
 def test_storagevar_fails():
-    c = tester2.Chain()
+    c = tester.Chain()
     success1, success2, success3, success4, success5, success6 = \
         0, 0, 0, 0, 0, 0
     try:
@@ -808,7 +808,7 @@ def test_storagevar_fails():
 
 
 def test_type_system_fails():
-    c = tester2.Chain()
+    c = tester.Chain()
     success7 = False
 
     try:
@@ -828,7 +828,7 @@ def main():
 
 
 def test_returnarray_code():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(working_returnarray_code, language='serpent')
     assert x.main() == [1, 2, 3]
 
@@ -891,31 +891,31 @@ def clear(self, id):
 
 
 def test_crowdfund():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(crowdfund_code, language='serpent')
     # Create a campaign with id 100
     x.create_campaign(100, 45, 100000, 2)
     # Create a campaign with id 200
     x.create_campaign(200, 48, 100000, 2)
     # Make some contributions
-    x.contribute(100, value=1, sender=tester2.k1)
+    x.contribute(100, value=1, sender=tester.k1)
     assert 1 == x.progress_report(100)
-    x.contribute(200, value=30000, sender=tester2.k2)
-    x.contribute(100, value=59049, sender=tester2.k3)
+    x.contribute(200, value=30000, sender=tester.k2)
+    x.contribute(100, value=59049, sender=tester.k3)
     assert 59050 == x.progress_report(100)
-    x.contribute(200, value=70001, sender=tester2.k4)
+    x.contribute(200, value=70001, sender=tester.k4)
     # Expect the 100001 units to be delivered to the destination
     # account for campaign 2
     assert 100001 == c.head_state.get_balance(utils.int_to_addr(48))
-    mida1 = c.head_state.get_balance(tester2.a1)
-    mida3 = c.head_state.get_balance(tester2.a3)
+    mida1 = c.head_state.get_balance(tester.a1)
+    mida3 = c.head_state.get_balance(tester.a3)
     # Mine 5 blocks to expire the campaign
     c.mine(5)
     # Ping the campaign after expiry
     x.contribute(100, value=1)
     # Expect refunds
-    assert mida1 + 1 == c.head_state.get_balance(tester2.a1)
-    assert mida3 + 59049 == c.head_state.get_balance(tester2.a3)
+    assert mida1 + 1 == c.head_state.get_balance(tester.a1)
+    assert mida3 + 59049 == c.head_state.get_balance(tester.a3)
 
 saveload_code = """
 
@@ -932,7 +932,7 @@ def kall():
 
 
 def test_saveload():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(saveload_code, language='serpent')
     o = x.kall()
     assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
@@ -954,9 +954,9 @@ save(self.buf2, mystr, chars=4)
 
 
 def test_saveload2():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(saveload_code2, language='serpent')
-    c.tx(tester2.k0, x.address, 0)
+    c.tx(tester.k0, x.address, 0)
     assert bitcoin.encode(c.head_state.get_storage_data(x.address, 0), 256) == b'01ab' + b'\x00' * 28
     assert bitcoin.encode(c.head_state.get_storage_data(x.address, 1), 256) == b'01ab' + b'\x00' * 28
 
@@ -968,7 +968,7 @@ def kall():
 
 
 def test_sdiv():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(sdiv_code, language='serpent')
     assert [-4, -2] == x.kall()
 
@@ -989,7 +989,7 @@ def argkall(args:arr):
 
 
 def test_argcall():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(basic_argcall_code, language='serpent')
     assert 375 == x.argcall([5, 7, 3])
     assert 376 == x.argkall([6, 7, 3])
@@ -1006,7 +1006,7 @@ def argkall(args:arr):
 
 
 def test_argcall2():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(more_complex_argcall_code, language='serpent')
     assert [4, 8] == x.argcall([2, 4])
     assert [6, 10] == x.argkall([3, 5])
@@ -1048,7 +1048,7 @@ def sort(args:arr):
 
 @pytest.mark.timeout(100)
 def test_sort():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(sort_code, language='serpent')
     assert x.sort([9]) == [9]
     assert x.sort([9, 5]) == [5, 9]
@@ -1072,7 +1072,7 @@ def test(args:arr):
 
 @pytest.mark.timeout(100)
 def test_indirect_sort():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename9, 'w').write(sort_code)
     x = c.contract(sort_tester_code, language='serpent')
     os.remove(filename9)
@@ -1086,7 +1086,7 @@ def kall(a:arr, b, c:arr, d:str, e):
 
 
 def test_multiarg_code():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(multiarg_code, language='serpent')
     o = x.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
     assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
@@ -1141,7 +1141,7 @@ def main():
 
 
 def test_macros():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(peano_code, language='serpent')
     assert x.main() == [27, 120]
 
@@ -1182,9 +1182,9 @@ return(e)
 
 
 def test_types():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(type_code, language='serpent')
-    assert utils.big_endian_to_int(c.tx(tester2.k0, x.address, 0)) == 5
+    assert utils.big_endian_to_int(c.tx(tester.k0, x.address, 0)) == 5
 
 
 ecrecover_code = """
@@ -1194,7 +1194,7 @@ def test_ecrecover(h:uint256, v:uint256, r:uint256, s:uint256):
 
 
 def test_ecrecover():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(ecrecover_code, language='serpent')
 
     priv = utils.sha3('some big long brainwallet password')
@@ -1220,7 +1220,7 @@ def main():
 
 
 def test_sha256():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(sha256_code, language='serpent')
     assert x.main() == [
         0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2 ** 256,
@@ -1239,7 +1239,7 @@ def main():
 
 
 def test_ripemd160():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(ripemd160_code, language='serpent')
     assert x.main() == [
         0x9c1185a5c5e9fc54612808977ee8f548b2258d31,
@@ -1257,7 +1257,7 @@ def main():
 
 
 def test_sha3():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(sha3_code, language='serpent')
     assert x.main() == [
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2 ** 256,
@@ -1292,7 +1292,7 @@ def sqrdiv(a, b):
 
 
 def test_types_in_functions():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(types_in_functions_code, language='serpent')
     assert x.sqrdiv(25, 2) == 156
 
@@ -1311,7 +1311,7 @@ def testVerifyTx():
 
 
 def test_more_infinites():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(more_infinites_code, language='serpent')
     assert x.testVerifyTx() == 33
 
@@ -1330,7 +1330,7 @@ def get_prevhashes(k):
 @pytest.mark.timeout(100)
 def test_prevhashes():
     return
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(prevhashes_code, language='serpent')
     c.mine(7)
     # Hashes of last 14 blocks including existing one
@@ -1358,7 +1358,7 @@ def returnten():
 
 
 def test_abi_contract():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(abi_contract_code, language='serpent')
     assert x.mul2(3) == 6
     assert x.returnten() == 10
@@ -1376,7 +1376,7 @@ def mcopy_test(foo:str, a, b, c):
 
 
 def test_mcopy():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(mcopy_code, language='serpent')
     assert x.mcopy_test("123", 5, 6, 259) == \
         b'\x00'*31+b'\x05'+b'\x00'*31+b'\x06'+b'\x00'*30+b'\x01\x03'+b'123'
@@ -1396,7 +1396,7 @@ def mcopy_test():
 
 
 def test_mcopy2():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(mcopy_code_2, language='serpent')
     assert x.mcopy_test() == \
         b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
@@ -1415,7 +1415,7 @@ def array_saveload():
 
 
 def test_saveload3():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(array_saveload_code, language='serpent')
     assert x.array_saveload() == [1, 2, 3, 4]
 
@@ -1434,7 +1434,7 @@ def t1():
 
 
 def test_string_manipulation():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(string_manipulation_code, language='serpent')
     assert x.t1() == [97, 98]
 
@@ -1465,7 +1465,7 @@ def test2():
 
 
 def test_more_infinite_storage():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(more_infinite_storage_object_code, language='serpent')
     assert x.test2() == [2, 2]
 
@@ -1490,7 +1490,7 @@ def bar(a:arr, m:str, b:arr):
 
 
 def test_double_array():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(double_array_code, language='serpent')
     assert x.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
     assert x.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
@@ -1517,7 +1517,7 @@ def test_chicken(em:address):
 
 
 def test_abi_logging():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(abi_logging_code, language='serpent')
     o = []
     c.head_state.log_listeners.append(lambda f: o.append(x.translator.listen(f)))
@@ -1531,9 +1531,9 @@ def test_abi_logging():
     assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
                  "c": 11, "d": [13, 15, 17]}]
     o.pop()
-    x.test_chicken(tester2.a0)
+    x.test_chicken(tester.a0)
     assert o == [{"_event_type": b"chicken",
-                  "m": "0x"+utils.encode_hex(tester2.a0)}]
+                  "m": "0x"+utils.encode_hex(tester.a0)}]
     o.pop()
 
 
@@ -1554,7 +1554,7 @@ def bar():
 
 
 def test_new_format():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename4, 'w').write(new_format_inner_test_code)
     x = c.contract(new_format_outer_test_code, language='serpent')
     assert x.bar() == 175
@@ -1573,7 +1573,7 @@ def register(key, addr:address):
 
 
 def test_abi_address_output():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(abi_address_output_test_code, language='serpent')
     x.register(123, b'1212121212121212121212121212121212121212')
     x.register(123, b'3434343434343434343434343434343434343434')
@@ -1599,7 +1599,7 @@ def register(key, addr:address):
 
 
 def test_inner_abi_address_output():
-    c = tester2.Chain()
+    c = tester.Chain()
     open(filename5, 'w').write(abi_address_output_test_code)
     x = c.contract(abi_address_caller_code, language='serpent')
     x.register(123, b'1212121212121212121212121212121212121212')
@@ -1618,7 +1618,7 @@ def moo():
 
 
 def test_string_logging():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(string_logging_code, language='serpent')
     o = []
     c.head_state.log_listeners.append(lambda f: o.append(x.translator.listen(f)))
@@ -1651,7 +1651,7 @@ def marble():
 
 
 def test_params_contract():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(params_code % (4, "horse"), language='serpent')
     assert x.garble() == 4
     assert x.marble() == b'horse'
@@ -1680,13 +1680,13 @@ def sqrdiv(fp_a, fp_b):
 
 
 def test_prefix_types_in_functions():
-    c = tester2.Chain()
+    c = tester.Chain()
     x = c.contract(prefix_types_in_functions_code, language='serpent')
     assert x.sqrdiv(25, 2) == 156
 
 
 def test_delegatecall():
-    c = tester2.Chain()
+    c = tester.Chain()
     c.head_state.block_number = 5555555
     x1 = c.contract("""
 data v
