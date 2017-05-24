@@ -181,27 +181,36 @@ class Chain(object):
         if not self.checkpoint_head_hash:
             self.checkpoint_head_hash = fork_hash
             return
-        # Look for a common ancestor while recording the scores along the way
+        # Check that the fork is heavier than the head
+        if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
+            return
+        # TODO: Look for prepares
+        # TODO: Update head_hash -- ie. self.head_hash = self.db.get('cp_head:' + fork_checkpoint_id)
+        log.info('Update head to: %s' % str(fork_hash))
+        print('Update head to: %s' % str(fork_hash))
+        self.checkpoint_head_hash = fork_hash
+
+    def is_fork_commits_heavier_than_head(self, checkpoint_head_hash, fork_hash):
         epoch_length = self.env.config['EPOCH_LENGTH']
-        head_score = 0
-        fork_score = 0
-        # Create the head cursor (hc) and fork cursor (fc)
+        # Get the related blocks
         hc = self.get_block(self.checkpoint_head_hash)
         fc = self.get_block(fork_hash)
+        # Calculate the score for the fork checkpoint
+        fork_checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(fc.header.number // epoch_length), fc.header.hash)
+        fork_score = self.get_checkpoint_score(fc.header.hash, self.get_commits(fork_checkpoint_id))
         # Loop over the hc & fc until they are equal (we find a shared parent)
         while fc != hc:
             if fc.header.number > hc.header.number:
-                checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(fc.header.number // epoch_length), fc.header.hash)
-                fork_score += self.get_checkpoint_score(fc.header.hash, self.get_commits(checkpoint_id))
                 fc = self.get_prev_checkpoint_block(fc)
-            else:
-                checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(hc.header.number // epoch_length), hc.header.hash)
-                head_score += self.get_checkpoint_score(hc.header.hash, self.get_commits(checkpoint_id))
-                hc = self.get_prev_checkpoint_block(hc)
-        # If the fork score is higher than our head, set our checkpoint head as the fork
-        if fork_score > head_score:
-            log.info('Update head to: %s' % str(fork_hash))
-            self.checkpoint_head_hash = fork_hash
+                continue
+            checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(hc.header.number // epoch_length), hc.header.hash)
+            head_score = self.get_checkpoint_score(hc.header.hash, self.get_commits(checkpoint_id))
+            # If the fork score is lower than the head at any point, return False
+            if fork_score < head_score:
+                return False
+            hc = self.get_prev_checkpoint_block(hc)
+        # We've compared the fork score to all head scores, and so return True
+        return True
 
     def mk_poststate_of_blockhash(self, blockhash):
         if blockhash not in self.db:
@@ -343,7 +352,7 @@ class Chain(object):
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
 
-        # Check what the current head should be
+        # Check what the current checkpoint head should be
         if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1:
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
