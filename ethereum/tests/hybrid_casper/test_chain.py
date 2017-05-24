@@ -230,7 +230,7 @@ def test_head_change_for_more_commits_on_parent_fork(db):
     Test that all commits from parent checkpoints are counted, even if they exist
     on different forks.
 
-    Local: L3_5, L4_2
+    Local: L3_5, L4_1
     add
     Remote: R3_5, RF5_1, R6_1
     add
