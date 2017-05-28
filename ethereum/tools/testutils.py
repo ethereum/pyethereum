@@ -3,7 +3,6 @@ import time
 import os
 import json
 from ethereum.utils import encode_hex, str_to_bytes
-import pytest
 
 FILL = 1
 VERIFY = 2
@@ -36,6 +35,7 @@ def run_abi_test(params, mode):
         }
 
 def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+    import pytest
     if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
         return
 
