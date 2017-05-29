@@ -14,8 +14,8 @@ import random
 try:
     import secp256k1
 except ImportError:
-    import warning
-    warning.ImportWarning('could not import secp256k1')
+    import warnings
+    warnings.warn('could not import secp256k1', ImportWarning)
     secp256k1 = None
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
