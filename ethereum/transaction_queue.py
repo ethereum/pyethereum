@@ -2,32 +2,51 @@ import heapq
 heapq.heaptop = lambda x: x[0]
 PRIO_INFINITY = -2**100
 
+class OrderableTx(object):
+
+    def __init__(self, prio, counter, tx):
+        self.prio = prio
+        self.counter = counter
+        self.tx = tx
+
+    def __lt__(self, other):
+        if self.prio < other.prio:
+            return True
+        elif self.prio == other.prio:
+            return self.counter < other.counter
+        else:
+            return False
+
+
 class TransactionQueue():
 
     def __init__(self):
+        self.counter = 0
         self.txs = []
         self.aside = []
-        self.last_max_gas = 2**100
 
     def __len__(self):
         return len(self.txs)
 
     def add_transaction(self, tx, force=False):
         prio = PRIO_INFINITY if force else -tx.gasprice
-        heapq.heappush(self.txs, (prio, tx))
+        heapq.heappush(self.txs, OrderableTx(prio, self.counter, tx))
+        self.counter += 1
 
     def pop_transaction(self, max_gas=9999999999, max_seek_depth=16, min_gasprice=0):
-        while len(self.aside) and max_gas >= heapq.heaptop(self.aside)[0]:
-            tx = heapq.heappop(self.aside)[1]
-            heapq.heappush(self.txs, (-tx.gasprice, tx))
+        while len(self.aside) and max_gas >= heapq.heaptop(self.aside).prio:
+            item = heapq.heappop(self.aside)
+            item.prio = -item.tx.gasprice
+            heapq.heappush(self.txs, item)
         for i in range(min(len(self.txs), max_seek_depth)):
-            prio, tx = heapq.heaptop(self.txs)
-            if tx.startgas > max_gas:
+            item = heapq.heaptop(self.txs)
+            if item.tx.startgas > max_gas:
                 heapq.heappop(self.txs)
-                heapq.heappush(self.aside, (tx.startgas, tx))
-            elif tx.gasprice >= min_gasprice or prio == PRIO_INFINITY:
+                item.prio = item.tx.startgas
+                heapq.heappush(self.aside, item)
+            elif item.tx.gasprice >= min_gasprice or prio == PRIO_INFINITY:
                 heapq.heappop(self.txs)
-                return tx
+                return item.tx
             else:
                 return None
         return None
@@ -40,15 +59,15 @@ class TransactionQueue():
 
     def diff(self, txs):
         remove_hashes = [tx.hash for tx in txs]
-        keep = [(prio, tx) for (prio, tx) in self.txs if tx.hash not in remove_hashes]
+        keep = [item for item in self.txs if item.tx.hash not in remove_hashes]
         q = TransactionQueue()
         q.txs = keep
         return q
 
 
-def make_test_tx(s=100000, g=50, data=''):
+def make_test_tx(s=100000, g=50, data='', nonce=0):
     from ethereum.transactions import Transaction
-    return Transaction(nonce=0, startgas=s, gasprice=g,
+    return Transaction(nonce=nonce, startgas=s, gasprice=g,
                        value=0, data=data, to='\x35' * 20)
 
 
@@ -89,11 +108,36 @@ def test_diff():
         q1.add_transaction(tx)
     q2 = q1.diff([tx2])
     assert len(q2) == 3
-    assert tx1 in [tx for (_, tx) in q2.txs]
-    assert tx3 in [tx for (_, tx) in q2.txs]
-    assert tx4 in [tx for (_, tx) in q2.txs]
+    assert tx1 in [item.tx for item in q2.txs]
+    assert tx3 in [item.tx for item in q2.txs]
+    assert tx4 in [item.tx for item in q2.txs]
 
     q3 = q2.diff([tx4])
     assert len(q3) == 2
-    assert tx1 in [tx for (_, tx) in q3.txs]
-    assert tx3 in [tx for (_, tx) in q3.txs]
+    assert tx1 in [item.tx for item in q3.txs]
+    assert tx3 in [item.tx for item in q3.txs]
+
+
+def test_orderable_tx():
+    assert OrderableTx(-1, 0, None) < OrderableTx(0, 0, None)
+    assert OrderableTx(-1, 0, None) < OrderableTx(-1, 1, None)
+    assert not OrderableTx(1, 0, None) < OrderableTx(-1, 0, None)
+    assert not OrderableTx(1, 1, None) < OrderableTx(-1, 0, None)
+
+
+def test_ordering_for_same_prio():
+    q = TransactionQueue()
+    count = 10
+    # Add <count> transactions to the queue, all with the same
+    # startgas/gasprice but with sequential nonces.
+    for i in range(count):
+        q.add_transaction(make_test_tx(nonce=i))
+
+    expected_nonce_order = range(count)
+    nonces = []
+    for i in range(count):
+        tx = q.pop_transaction()
+        nonces.append(tx.nonce)
+    # Since they have the same gasprice they should have the same priority and
+    # thus be popped in the order they were inserted.
+    assert nonces == expected_nonce_order
