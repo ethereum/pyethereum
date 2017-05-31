@@ -67,7 +67,7 @@ def mk_genesis_data(env, **kwargs):
 
     allowed_args = set([
         'start_alloc',
-        'prevhash',
+        'parent_hash',
         'coinbase',
         'difficulty',
         'gas_limit',
@@ -79,12 +79,12 @@ def mk_genesis_data(env, **kwargs):
     assert set(kwargs.keys()).issubset(allowed_args)
 
     genesis_data = {
-        "prevhash": kwargs.get('prevhash', encode_hex(env.config['GENESIS_PREVHASH'])),
+        "parentHash": kwargs.get('parent_hash', encode_hex(env.config['GENESIS_PREVHASH'])),
         "coinbase": kwargs.get('coinbase', encode_hex(env.config['GENESIS_COINBASE'])),
         "difficulty": kwargs.get('difficulty', env.config['GENESIS_DIFFICULTY']),
-        "gas_limit": kwargs.get('gas_limit', env.config['GENESIS_GAS_LIMIT']),
+        "gasLimit": kwargs.get('gas_limit', env.config['GENESIS_GAS_LIMIT']),
         "timestamp": kwargs.get('timestamp', 0),
-        "extra_data": kwargs.get('extra_data', encode_hex(env.config['GENESIS_EXTRA_DATA'])),
+        "extraData": kwargs.get('extra_data', encode_hex(env.config['GENESIS_EXTRA_DATA'])),
         "mixhash": kwargs.get('mixhash', encode_hex(env.config['GENESIS_MIXHASH'])),
         "nonce": kwargs.get('nonce', encode_hex(env.config['GENESIS_NONCE'])),
         "alloc": kwargs.get('start_alloc', env.config['GENESIS_INITIAL_ALLOC'])
