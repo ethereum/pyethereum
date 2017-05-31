@@ -187,7 +187,7 @@ def casper_contract_bootstrap(state, timestamp=0, epoch_length=100, number=0, ga
     ct = get_casper_ct()
     # Set genesis time, and initialize epoch number
     t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], 0, ct.encode('initialize', [timestamp, epoch_length, number, gas_limit]))
-    success = apply_transaction(state, t)
+    success, output = apply_transaction(state, t)
     assert success
 
 def validator_inject(state, vcode, deposit_size, randao_commitment, address, nonce=0, ct=None):
@@ -197,7 +197,7 @@ def validator_inject(state, vcode, deposit_size, randao_commitment, address, non
     t = Transaction(nonce, 0, 10**8, casper_config['CASPER_ADDR'], deposit_size,
                     ct.encode('deposit', [vcode, randao_commitment, address]))
     t._sender = utils.int_to_addr(1)
-    success = apply_transaction(state, t)
+    success, output = apply_transaction(state, t)
     assert success
 
 def casper_state_initialize(state):
