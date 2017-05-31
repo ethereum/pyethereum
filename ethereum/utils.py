@@ -45,6 +45,12 @@ if sys.version_info.major == 2:
     def bytearray_to_bytestr(value):
         return bytes(''.join(chr(c) for c in value))
 
+    def encode_int32(v):
+        return zpad(int_to_big_endian(v), 32)
+
+    def bytes_to_int(value):
+        return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
+
 else:
     is_numeric = lambda x: isinstance(x, int)
     is_string = lambda x: isinstance(x, bytes)
@@ -68,6 +74,12 @@ else:
 
     def bytearray_to_bytestr(value):
         return bytes(value)
+
+    def encode_int32(v):
+        return v.to_bytes(32, byteorder='big')
+
+    def bytes_to_int(value):
+        return int.from_bytes(value, byteorder='big')
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
@@ -339,9 +351,6 @@ def encode_int(v):
 
 def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
-
-def encode_int32(v):
-    return zpad(int_to_big_endian(v), 32)
 
 
 def scan_bin(v):
