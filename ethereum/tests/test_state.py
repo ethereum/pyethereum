@@ -1,6 +1,7 @@
 import json
 import sys
 import ethereum.testutils as testutils
+import ethereum.new_statetest_utils as new_statetest_utils
 
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
@@ -10,20 +11,32 @@ if '--trace' in sys.argv:  # not default
     configure_logging(':trace')
     sys.argv.remove('--trace')
 
+if '--old' in sys.argv:  # not default
+    checker = lambda x: testutils.check_state_test(testutils.fixture_to_bytes(x))
+    place_to_check = 'StateTests'
+    sys.argv.remove('--old')
+else:
+    checker = new_statetest_utils.verify_state_test
+    place_to_check = 'GeneralStateTests'
+
 
 def test_state(filename, testname, testdata):
     logger.debug('running test:%r in %r' % (testname, filename))
-    testutils.check_state_test(testutils.fixture_to_bytes(testdata))
+    checker(testdata)
 
 
 def pytest_generate_tests(metafunc):
     testutils.generate_test_params(
-        'StateTests',
+        place_to_check,
         metafunc,
-        lambda filename, _, __: (
-            'stQuadraticComplexityTest.json' in filename or
-            'stMemoryStressTest.json' in filename or
-            'stPreCompiledContractsTransaction.json' in filename
+        exclude_func=lambda filename, _, __: (
+            'stQuadraticComplexityTest' in filename or
+            'stMemoryStressTest' in filename or
+            'stMemoryTest' in filename or
+            'CALLCODE_Bounds3.json' in filename or
+            'stPreCompiledContractsTransaction.json' in filename or
+            'MLOAD_Bounds.json' in filename or
+            'randomStatetest403.json' in filename
         )
     )
 
@@ -43,7 +56,7 @@ def main():
         for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print("Testing: %s %s" % (filename, testname))
-                testutils.check_state_test(testdata)
+                checker(testdata)
 
 
 if __name__ == '__main__':

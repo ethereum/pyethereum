@@ -221,9 +221,9 @@ def test_invalid_transaction(db):
 def test_prevhash(db):
     chain = Chain({}, difficulty=1, min_gasprice=0)
     L1 = mine_on_chain(chain)
-    assert chain.state.get_block_hash(0) != '\x00'*32
-    assert chain.state.get_block_hash(1) != '\x00'*32
-    assert chain.state.get_block_hash(2) == '\x00'*32
+    assert chain.state.get_block_hash(0) != b'\x00'*32
+    assert chain.state.get_block_hash(1) != b'\x00'*32
+    assert chain.state.get_block_hash(2) == b'\x00'*32
 
 
 def test_genesis_chain(db):

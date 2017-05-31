@@ -1533,7 +1533,7 @@ def test_abi_logging():
     o.pop()
     c.test_chicken(tester.a0)
     assert o == [{"_event_type": b"chicken",
-                  "m": utils.encode_hex(tester.a0)}]
+                  "m": "0x"+utils.encode_hex(tester.a0)}]
     o.pop()
 
 
@@ -1578,8 +1578,8 @@ def test_abi_address_output():
     c.register(123, b'1212121212121212121212121212121212121212')
     c.register(123, b'3434343434343434343434343434343434343434')
     c.register(125, b'5656565656565656565656565656565656565656')
-    assert c.get_address(123) == b'1212121212121212121212121212121212121212'
-    assert c.get_address(125) == b'5656565656565656565656565656565656565656'
+    assert c.get_address(123) == '0x1212121212121212121212121212121212121212'
+    assert c.get_address(125) == '0x5656565656565656565656565656565656565656'
 
 filename5 = 'abi_output_tester_1264876521746198724124'
 
@@ -1605,8 +1605,8 @@ def test_inner_abi_address_output():
     c.register(123, b'1212121212121212121212121212121212121212')
     c.register(123, b'3434343434343434343434343434343434343434')
     c.register(125, b'5656565656565656565656565656565656565656')
-    assert c.get_address(123) == b'1212121212121212121212121212121212121212'
-    assert c.get_address(125) == b'5656565656565656565656565656565656565656'
+    assert c.get_address(123) == '0x1212121212121212121212121212121212121212'
+    assert c.get_address(125) == '0x5656565656565656565656565656565656565656'
 
 
 string_logging_code = """

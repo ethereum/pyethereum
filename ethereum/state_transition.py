@@ -22,13 +22,15 @@ from ethereum.specials import specials as default_specials
 from ethereum.config import Env, default_config
 from ethereum.db import BaseDB, EphemDB
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance, VerificationFailed
+    BlockGasLimitReached, InsufficientBalance, VerificationFailed, InvalidTransaction
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
 else:
     from functools import lru_cache
 from ethereum.slogging import get_logger
+
+null_address = b'\xff' * 20
 
 log = get_logger('eth.block')
 log_tx = get_logger('eth.pb.tx')
@@ -149,6 +151,24 @@ def verify_execution_results(state, block):
                          (block.header.gas_used, state.gas_used))
     return True
 
+def config_fork_specific_validation(config, blknum, tx):
+    # (1) The transaction signature is valid;
+    _ = tx.sender
+    if blknum >= config['METROPOLIS_FORK_BLKNUM']:
+        tx.check_low_s_metropolis()
+    else:
+        if tx.sender == null_address:
+            raise InvalidTransaction("EIP86 transactions not available yet")
+        if blknum >= config['HOMESTEAD_FORK_BLKNUM']:
+            tx.check_low_s_homestead()
+    if blknum >= config["SPURIOUS_DRAGON_FORK_BLKNUM"]:
+        if tx.network_id not in (None, config["NETWORK_ID"]):
+            raise InvalidTransaction("Wrong network ID")
+    else:
+        if tx.network_id is not None:
+            raise InvalidTransaction("Wrong network ID")
+    return True
+
 def validate_transaction(state, tx):
 
     def rp(what, actual, target):
@@ -156,14 +176,9 @@ def validate_transaction(state, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
-        if state.is_METROPOLIS():
-            tx._sender = normalize_address(state.config["METROPOLIS_ENTRY_POINT"])
-        else:
-            raise UnsignedTransaction(tx)
-    if state.is_METROPOLIS():
-        tx.check_low_s_metropolis()
-    elif state.is_HOMESTEAD():
-        tx.check_low_s_homestead()
+        raise UnsignedTransaction(tx)
+
+    assert config_fork_specific_validation(state.config, state.block_number, tx)
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
@@ -198,9 +213,9 @@ def apply_message(state, msg=None, **kwargs):
         msg = vm.Message(**kwargs)
     else:
         assert not kwargs
-    ext = VMExt(state, transactions.Transaction(0, 0, 21000, '', 0, ''))
+    ext = VMExt(state, transactions.Transaction(0, 0, 21000, b'', 0, b''))
     result, gas_remained, data = apply_msg(ext, msg)
-    return ''.join(map(chr, data)) if result else None
+    return b''.join(map(lambda d: bytes([d]), data)) if result else None
 
 
 def apply_transaction(state, tx):
@@ -220,7 +235,7 @@ def apply_transaction(state, tx):
             if tx.startgas < intrinsic_gas:
                 raise InsufficientStartGas(rp('startgas', tx.startgas, intrinsic_gas))
 
-    log_tx.debug('TX NEW', tx_dict=tx.log_dict())
+    log_tx.debug('TX NEW', tx_dict=tx.log_dict(abbrev=True))
     # start transacting #################
     state.increment_nonce(tx.sender)
 
@@ -246,16 +261,18 @@ def apply_transaction(state, tx):
     log_tx.debug("TX APPLIED", result=result, gas_remained=gas_remained,
                  data=data)
 
+    gas_used = tx.startgas - gas_remained
+
     if not result:  # 0 = OOG failure in both cases
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
         state.gas_used += tx.startgas
-        state.delta_balance(state.block_coinbase, tx.gasprice * tx.startgas)
+        state.delta_balance(tx.sender, tx.gasprice * gas_remained)
+        state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
         output = b''
         success = 0
     else:
         log_tx.debug('TX SUCCESS', data=data)
-        gas_used = tx.startgas - gas_remained
         state.refunds += len(set(state.suicides)) * opcodes.GSUICIDEREFUND
         if state.refunds > 0:
             log_tx.debug('Refunding', gas_refunded=min(state.refunds, gas_used // 2))
@@ -408,7 +425,7 @@ class VMExt():
         self.get_storage_data = state.get_storage_data
         self.get_storage_bytes = state.get_storage_bytes
         self.set_storage_bytes = state.set_storage_bytes
-        self.log_storage = lambda x: 'storage logging stub'
+        self.log_storage = lambda x: state.account_to_dict(x)
         self.add_suicide = lambda x: state.add_to_list('suicides', x)
         self.add_refund = lambda x: \
             state.set_param('refunds', state.refunds + x)
@@ -446,7 +463,7 @@ class BlankVMExt():
         for k, v in state.config['CUSTOM_SPECIALS']:
             self.specials[k] = v
         self._state = state
-        self.get_code = lambda addr: ''
+        self.get_code = lambda addr: b''
         self.set_code = lambda addr, code: None
         self.get_balance = lambda addr: 0
         self.set_balance = lambda addr, value: None
@@ -467,10 +484,10 @@ class BlankVMExt():
         self.block_difficulty = 0
         self.block_gas_limit = 0
         self.log = lambda addr, topics, data: None
-        self.create = lambda msg: 0, 0, ''
+        self.create = lambda msg: 0, 0, b''
         self.msg = lambda msg: _apply_msg(
-            self, msg, '') if msg.code_address in self.specials else (0, 0, '')
-        self.blackbox_msg = lambda msg, code: 0, 0, ''
+            self, msg, '') if msg.code_address in self.specials else (0, 0, b'')
+        self.blackbox_msg = lambda msg, code: 0, 0, b''
         self.account_exists = lambda addr: False
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()

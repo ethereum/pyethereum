@@ -41,14 +41,18 @@ class CallData(object):
 
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
-        d += [0] * (self.size - len(d))
-        return b''.join([ascii_chr(x) for x in d])
+        d.extend(bytearray(self.size - len(d)))
+        o = bytearray(len(d))
+        for i, x in enumerate(d):
+            o[i] = x
+        return bytes(o)
 
     def extract32(self, i):
         if i >= self.size:
             return 0
         o = self.data[self.offset + i: min(self.offset + i + 32, self.rlimit)]
-        return utils.bytearray_to_int(o + [0] * (32 - len(o)))
+        o.extend(bytearray(32 - len(o)))
+        return utils.bytearray_to_int(o)
 
     def extract_copy(self, mem, memstart, datastart, size):
         for i in range(size):
@@ -80,7 +84,7 @@ class Message(object):
 class Compustate():
 
     def __init__(self, **kwargs):
-        self.memory = []
+        self.memory = bytearray()
         self.stack = []
         self.pc = 0
         self.gas = 0
@@ -127,7 +131,7 @@ def mem_extend(mem, compustate, op, start, sz):
                 return False
             compustate.gas -= memfee
             m_extend = (newsize - oldsize) * 32
-            mem.extend([0] * m_extend)
+            mem.extend(bytearray(m_extend))
     return True
 
 
@@ -151,7 +155,7 @@ def eat_gas(compustate, amount):
 
 
 def all_but_1n(x, n):
-    return x - x / n
+    return x - x // n
 
 
 def vm_exception(error, **kargs):
@@ -162,6 +166,13 @@ def vm_exception(error, **kargs):
 def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
+
+
+def revert(gas, data, **kargs):
+    log_vm_exit.trace('REVERT', **kargs)
+    return 0, gas, data
+
+code_cache = {}
 
 
 def vm_execute(ext, msg, code):
@@ -225,9 +236,9 @@ def vm_execute(ext, msg, code):
                                   in compustate.memory])
                 else:
                     trace_data['sha3memory'] = \
-                        encode_hex(utils.sha3(''.join([ascii_chr(x) for
+                        encode_hex(utils.sha3(b''.join([ascii_chr(x) for
                                               x in compustate.memory])))
-            if _prevop in ('SSTORE', 'SLOAD') or steps == 0:
+            if _prevop in ('SSTORE',) or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
             trace_data['gas'] = to_string(compustate.gas + fee)
             trace_data['inst'] = opcode
@@ -235,11 +246,10 @@ def vm_execute(ext, msg, code):
             if steps == 0:
                 trace_data['depth'] = msg.depth
                 trace_data['address'] = msg.to
-            trace_data['op'] = op
             trace_data['steps'] = steps
             if op[:4] == 'PUSH':
                 trace_data['pushvalue'] = pushval
-            log_vm_op.trace('vm', **trace_data)
+            log_vm_op.trace('vm', op=op, **trace_data)
             steps += 1
             _prevop = op
 
@@ -562,7 +572,7 @@ def vm_execute(ext, msg, code):
                     compustate.gas = compustate.gas - ingas + gas
                 else:
                     stk.append(0)
-                    compustate.gas -= ingas
+                    compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
         elif op == 'CALL':
@@ -680,6 +690,13 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
+        elif op == 'REVERT':
+            if not ext.post_metropolis_hardfork():
+                return vm_exception('Opcode not yet enabled')
+            s0, s1 = stk.pop(), stk.pop()
+            if not mem_extend(mem, compustate, op, s0, s1):
+                return vm_exception('OOG EXTENDING MEMORY')
+            return revert(compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
             to = ((b'\x00' * (32 - len(to))) + to)[12:]
@@ -692,9 +709,9 @@ def vm_execute(ext, msg, code):
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
-            # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
 
+        # assert utils.is_numeric(compustate.gas)
         # this is slow!
         # for a in stk:
         #     assert is_numeric(a), (op, stk)

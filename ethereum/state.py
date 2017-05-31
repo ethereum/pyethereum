@@ -11,6 +11,7 @@ from ethereum.block import BlockHeader
 from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
 from ethereum.db import BaseDB, EphemDB, OverlayDB
+from ethereum.specials import specials as default_specials
 import copy
 import sys
 if sys.version_info.major == 2:
@@ -294,11 +295,11 @@ class State():
     # Returns a value x, where State.revert(x) at any later point will return
     # you to the point at which the snapshot was made (unless journal_reset was called).
     def snapshot(self):
-        return (self.trie.root_hash, len(self.journal))
+        return (self.trie.root_hash, len(self.journal), {k: copy.copy(getattr(self, k)) for k in STATE_DEFAULTS})
 
     # Reverts to the provided snapshot
     def revert(self, snapshot):
-        root, journal_length = snapshot
+        root, journal_length, auxvars = snapshot
         if root != self.trie.root_hash and journal_length != 0:
             raise Exception("Cannot return to this snapshot")
         if root != self.trie.root_hash:
@@ -318,6 +319,21 @@ class State():
                 # https://github.com/ethereum/go-ethereum/pull/3341/files#r89548312
                 if not premod and addr != RIPEMD160_ADDR:
                     del self.modified[addr]
+        for k in STATE_DEFAULTS:
+            setattr(self, k, copy.copy(auxvars[k]))
+
+    # Prints the state for a single account
+    def account_to_dict(self, address):
+        address = normalize_address(address)
+        acct = self._get_account_unsafe(address)
+        acct_trie = SecureTrie(Trie(self.db))
+        acct_trie.root_hash = acct.storage
+        odict = acct_trie.to_dict()
+        if address in self.cache:
+            for k, v in self.cache[address].items():
+                if k not in ACCOUNT_SPECIAL_PARAMS:
+                    odict[k] = v 
+        return {'0x'+encode_hex(key): '0x'+encode_hex(val) for key, val in odict.items()}
 
     # Converts the state tree to a dictionary
     def to_dict(self):
@@ -328,7 +344,7 @@ class State():
             acct_trie = SecureTrie(Trie(self.db))
             acct_trie.root_hash = acct.storage
             for key, v in acct_trie.to_dict().items():
-                storage_dump[encode_hex(key.lstrip('\x00') or '\x00')] = encode_hex(rlp.decode(v))
+                storage_dump['0x'+encode_hex(key.lstrip(b'\x00') or b'\x00')] = '0x'+encode_hex(rlp.decode(v))
             acct_dump = {"storage": storage_dump}
             for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                 acct_dump[c] = snapshot_form(getattr(acct, c))
@@ -345,7 +361,7 @@ class State():
                     acct_dump[key] = snapshot_form(val)
                 else:
                     if val:
-                        acct_dump["storage"][encode_hex(key)] = encode_hex(val)
+                        acct_dump["storage"]['0x'+encode_hex(key)] = '0x'+encode_hex(val)
                     elif encode_hex(key) in acct_dump["storage"]:
                         del acct_dump["storage"][val]
         return state_dump

@@ -91,7 +91,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
         # Legendre symbol check; the secp256k1 library does not seem to do this
         pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
         xc = r * r * r + 7
-        assert pow(xc, (SECP256K1P - 1) / 2, SECP256K1P) == 1
+        assert pow(xc, (SECP256K1P - 1) // 2, SECP256K1P) == 1
         try:
             pk.public_key = pk.ecdsa_recover(
                 rawhash,
@@ -187,19 +187,22 @@ def sha3(seed):
 assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def privtoaddr(x, extended=False):
+def privtoaddr(x):
     if len(x) > 32:
         x = decode_hex(x)
-    o = sha3(privtopub(x)[1:])[12:]
-    return add_checksum(o) if extended else o
+    return sha3(privtopub(x)[1:])[12:]
 
 
-def add_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    if len(x) == 24:
-        return x
-    return x + sha3(x)[:4]
+def checksum_encode(addr): # Takes a 20-byte binary address as input
+    addr = normalize_address(addr)
+    o = ''
+    v = big_endian_to_int(sha3(encode_hex(addr)))
+    for i, c in enumerate(addr.hex()):
+        if c in '0123456789':
+            o += c
+        else:
+            o += c.upper() if (v & (2**(255 - 4*i))) else c.lower()
+    return '0x'+o
 
 
 def add_cool_checksum(addr):
@@ -219,13 +222,6 @@ def add_cool_checksum(addr):
         else:
             o += c.lower() if h[i] in '01234567' else c.upper()
     return '0x' + o
-
-
-def check_and_strip_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
-    return x[:20]
 
 
 def check_and_strip_cool_checksum(addr):

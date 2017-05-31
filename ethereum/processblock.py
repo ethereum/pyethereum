@@ -75,7 +75,7 @@ def _apply_msg(ext, msg, code):
     if trace_msg:
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
-                      data=encode_hex(msg.data.extract_all()))
+                      data=encode_hex(msg.data.extract_all()) if msg.data.size < 2500 else ("data<%d>" % msg.data.size))
         if log_state.is_active('trace'):
             log_state.trace('MSG PRE STATE SENDER', account=encode_hex(msg.sender),
                             bal=ext.get_balance(msg.sender),
@@ -100,7 +100,7 @@ def _apply_msg(ext, msg, code):
     # assert utils.is_numeric(gas)
     if trace_msg:
         log_msg.debug('MSG APPLIED', gas_remained=gas,
-                      sender=encode_hex(msg.sender), to=encode_hex(msg.to), data=dat)
+                      sender=encode_hex(msg.sender), to=encode_hex(msg.to), data=dat if len(dat) < 2500 else ("data<%d>" % len(dat)))
         if log_state.is_active('trace'):
             log_state.trace('MSG POST STATE SENDER', account=encode_hex(msg.sender),
                             bal=ext.get_balance(msg.sender),
@@ -121,35 +121,24 @@ def create_contract(ext, msg):
     #print('CREATING WITH GAS', msg.gas)
     sender = decode_hex(msg.sender) if len(msg.sender) == 40 else msg.sender
     code = msg.data.extract_all()
-    if ext.block_number >= ext._state.config['METROPOLIS_FORK_BLKNUM']:
-        msg.to = mk_metropolis_contract_address(msg.sender, code)
-        if ext.get_code(msg.to):
-            if ext.get_nonce(msg.to) >= 2 ** 40:
-                ext.set_nonce(msg.to, (ext.get_nonce(msg.to) + 1) % 2 ** 160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
-            else:
-                ext.set_nonce(msg.to, (big_endian_to_int(msg.to) + 2) % 2 ** 160)
-                msg.to = normalize_address((ext.get_nonce(msg.to) - 1) % 2 ** 160)
-    else:
-        if ext.tx_origin != msg.sender:
-            ext._state.increment_nonce(msg.sender)
-        nonce = utils.encode_int(ext._state.get_nonce(msg.sender) - 1)
-        msg.to = mk_contract_address(sender, nonce)
+    if ext.tx_origin != msg.sender:
+        ext.increment_nonce(msg.sender)
+    nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
+    msg.to = mk_contract_address(sender, nonce)
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
-        ext._state.set_nonce(msg.to, 0)
-        ext._state.set_code(msg.to, b'')
-        ext._state.reset_storage(msg.to)
+        ext.set_nonce(msg.to, 0)
+        ext.set_code(msg.to, b'')
+        # ext.reset_storage(msg.to)
     msg.is_create = True
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
-    if ext.post_spurious_dragon_hardfork():
-        ext.set_nonce(msg.to, 1)
+    ext.set_nonce(msg.to, 1 if ext.post_spurious_dragon_hardfork() else 0)
     res, gas, dat = _apply_msg(ext, msg, code)
     assert utils.is_numeric(gas)
-    log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat)
+    log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat if len(dat) < 2500 else ("data<%d>" % len(dat)))
 
     if res:
         if not len(dat):
@@ -169,7 +158,7 @@ def create_contract(ext, msg):
                 ext._state.revert(snapshot)
                 return 0, 0, b''
         ext.set_code(msg.to, b''.join(map(ascii_chr, dat)))
-        log_msg.debug('SETTING CODE', addr=encode_hex(msg.to))
+        log_msg.debug('SETTING CODE', addr=encode_hex(msg.to), lendat=len(dat))
         return 1, gas, msg.to
     else:
         ext.revert(snapshot)
