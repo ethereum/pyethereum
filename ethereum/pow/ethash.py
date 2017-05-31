@@ -1,5 +1,4 @@
 import copy
-from ethereum.ethash_utils import *
 import sys
 
 

@@ -1,4 +1,5 @@
-from ethereum import ethash, ethash_utils, utils
+from ethereum.pow import ethash
+from ethereum import utils
 import time
 import sys
 import warnings
@@ -23,11 +24,11 @@ except ImportError:
 
 if ETHASH_LIB == 'ethash':
     mkcache = ethash.mkcache
-    EPOCH_LENGTH = ethash_utils.EPOCH_LENGTH
+    EPOCH_LENGTH = 30000
     hashimoto_light = ethash.hashimoto_light
 elif ETHASH_LIB == 'pyethash':
     mkcache = pyethash.mkcache_bytes
-    EPOCH_LENGTH = pyethash.EPOCH_LENGTH
+    EPOCH_LENGTH = 30000
     hashimoto_light = lambda s, c, h, n: \
         pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
 else:
@@ -40,6 +41,7 @@ cache_by_seed.max_items = 10
 
 
 def get_cache(block_number):
+    import sha3
     while len(cache_seeds) <= block_number // EPOCH_LENGTH:
         cache_seeds.append(utils.sha3(cache_seeds[-1]))
     seed = cache_seeds[block_number // EPOCH_LENGTH]
@@ -112,7 +114,7 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
     assert utils.is_numeric(start_nonce)
     cache = get_cache(block_number)
     nonce = start_nonce
-    target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1)), 32)
+    target = utils.zpad(utils.int_to_big_endian(2**256 // (difficulty or 1) - 1), 32)
     for i in range(1, rounds + 1):
         bin_nonce = utils.zpad(utils.int_to_big_endian((nonce + i) & TT64M1), 8)
         o = hashimoto_light(block_number, cache, mining_hash, bin_nonce)

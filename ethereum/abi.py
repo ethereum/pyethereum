@@ -12,8 +12,9 @@ from ethereum.utils import encode_hex
 from ethereum import utils
 from ethereum.utils import (
     big_endian_to_int, ceil32, int_to_big_endian, encode_int, is_numeric, is_string,
-    rzpad, TT255, TT256, zpad,
+    rzpad, zpad, str_to_bytes
 )
+from ethereum.utils import TT256, TT255
 
 # The number of bytes is encoded as a uint256
 # Type used to encode a string/bytes length
@@ -417,24 +418,25 @@ class ContractTranslator(object):
             if entry_type != 'fallback' and 'inputs' in description:
                 encode_types = [
                     element['type']
-                    for element in description.get('inputs')
+                    for element in description.get('inputs', [])
                 ]
 
                 signature = [
                     (element['type'], element['name'])
-                    for element in description.get('inputs')
+                    for element in description.get('inputs', [])
                 ]
 
             if entry_type == 'function':
                 normalized_name = normalize_name(description['name'])
+                prefix = method_id(normalized_name, encode_types)
 
                 decode_types = [
                     element['type']
-                    for element in description['outputs']
+                    for element in description.get('outputs', [])
                 ]
 
                 self.function_data[normalized_name] = {
-                    'prefix': method_id(normalized_name, encode_types),
+                    'prefix': prefix,
                     'encode_types': encode_types,
                     'decode_types': decode_types,
                     'is_constant': description.get('constant', False),

@@ -2,55 +2,60 @@ import json
 import random
 import time
 import itertools
-
+from ethereum import utils
+from ethereum.utils import parse_as_bin, big_endian_to_int
+from ethereum import genesis_helpers
+from ethereum.meta import apply_block
+from ethereum.common import update_block_env_variables
+from ethereum.messages import apply_transaction
 import rlp
-
-from ethereum import parse_genesis_declaration
-from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
-from ethereum.config import Env
+from rlp.utils import encode_hex
+from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
+    BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger
-from ethereum.state import State
-from ethereum.state_transition import apply_block, initialize, \
-    pre_seal_finalize, post_seal_finalize, apply_transaction, mk_receipt_sha, \
-    mk_transaction_sha, calc_difficulty, Receipt, mk_receipt, \
-    update_block_env_variables, validate_uncles, validate_block_header
-from ethereum.utils import encode_hex, parse_as_bin, big_endian_to_int
-
+from ethereum.config import Env
+from ethereum.new_state import State, dict_to_prev_header
+from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
+from ethereum.pow.consensus import initialize
+from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration
+import random
+import json
 log = get_logger('eth.chain')
+
+from ethereum.slogging import LogRecorder, configure_logging, set_level
+config_string = ':info,eth.chain:debug'
+#config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+configure_logging(config_string=config_string)
 
 
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 new_head_cb=None, reset_genesis=False, **kwargs):
+                 new_head_cb=None, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
             print('Initializing chain from saved head, #%d (%s)' % \
                 (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
-        elif 'HEAD' in self.db:  # deprecated head tag
-            self.state = self.mk_poststate_of_blockhash(self.db.get('HEAD'), convert=True)
-            print('Converting chain from saved head in deprecated format, #%d (%s)' % \
-                  (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
+            assert env is None
             self.state = genesis
+            self.env = self.state.env
             print('Initializing chain from provided state')
         elif "extraData" in genesis:
-            self.state = parse_genesis_declaration.state_from_genesis_declaration(
+            self.state = state_from_genesis_declaration(
                 genesis, self.env)
-            reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
-            reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
             print('Initializing chain from new state based on alloc')
-            self.state = parse_genesis_declaration.mk_basic_state(genesis, {
+            self.state = mk_basic_state(genesis, {
                 "number": kwargs.get('number', 0),
                 "gas_limit": kwargs.get('gas_limit', 4712388),
                 "gas_used": kwargs.get('gas_used', 0),
@@ -59,32 +64,31 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
-            reset_genesis = True
+
+        assert self.env.db == self.state.db
 
         initialize(self.state)
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
+        self.genesis = Block(self.state.prev_headers[0], [], [])
+        self.db.put(b'block:0', self.genesis.header.hash)
+        self.db.put(b'state:' + self.genesis.header.hash, self.state.trie.root_hash)
+        self.db.put('GENESIS_NUMBER', str(self.state.block_number))
+        self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
         assert self.state.block_number == self.state.prev_headers[0].number
+        self.db.put(b'score:' + self.genesis.header.hash, "0")
+        self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
+        self.db.put(self.head_hash, 'GENESIS')
         self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
-        if reset_genesis:
-            self.genesis = Block(self.state.prev_headers[0], [], [])
-            self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-            self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
-            self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
-            self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
-            self.db.put(b'score:' + self.genesis.header.hash, "0")
-            self.db.put(b'state:' + self.genesis.header.hash, self.state.trie.root_hash)
-            self.db.put(b'block:0', self.genesis.header.hash)
-            self.db.put(self.head_hash, 'GENESIS')
-            self.db.commit()
-        else:
-            self.genesis = self.get_block_by_number(0)
+        self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
+        #self.db.commit()
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
         self.time_queue = []
         self.parent_queue = {}
+        self.localtime = time.time() if localtime is None else localtime
 
     @property
     def head(self):
@@ -130,9 +134,9 @@ class Chain(object):
             if state.db.get(b.header.prevhash) == 'GENESIS':
                 jsondata = json.loads(state.db.get('GENESIS_STATE'))
                 for h in jsondata["prev_headers"][:header_depth - i]:
-                    state.prev_headers.append(rlp.decode(parse_as_bin(h), BlockHeader))
+                    state.prev_headers.append(dict_to_prev_header(h))
                 for blknum, uncles in jsondata["recent_uncles"].items():
-                    if blknum >= state.block_number - state.config['MAX_UNCLE_DEPTH']:
+                    if int(blknum) >= state.block_number - int(state.config['MAX_UNCLE_DEPTH']):
                         state.recent_uncles[blknum] = [parse_as_bin(u) for u in uncles]
             else:
                 raise Exception("Dangling prevhash")
@@ -220,10 +224,10 @@ class Chain(object):
     # process blocks that were received but laid aside because
     # either the parent was missing or they were received
     # too early
-    def process_time_queue(self):
-        now = self.time()
+    def process_time_queue(self, new_time=None):
+        self.localtime = time.time() if new_time is None else new_time
         i = 0
-        while i < len(self.time_queue) and self.time_queue[i].timestamp <= now:
+        while i < len(self.time_queue) and self.time_queue[i].timestamp <= new_time:
             log.info('Adding scheduled block')
             pre_len = len(self.time_queue)
             self.add_block(self.time_queue.pop(i))
@@ -237,12 +241,9 @@ class Chain(object):
                     self.add_block(block)
                 del self.parent_queue[parent_hash]
 
-    def time(self):
-        return int(time.time())
-
     # Call upon receiving a block
     def add_block(self, block):
-        now = self.time()
+        now = self.localtime
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -255,7 +256,7 @@ class Chain(object):
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
-            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put(b'block:' + str(block.header.number), block.header.hash)
@@ -270,7 +271,7 @@ class Chain(object):
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
-            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)

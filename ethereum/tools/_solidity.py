@@ -8,7 +8,7 @@ import shlex
 import yaml
 
 from rlp.utils import decode_hex
-from . import utils
+from ethereum import utils
 
 BINARY = 'solc'
 

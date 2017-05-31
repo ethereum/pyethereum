@@ -305,9 +305,9 @@ def test_logging_reconfigure():
     main_logger = slogging.getLogger()
 
     slogging.configure(config_string)
-    assert len(main_logger.handlers) == 2  # pytest-capturelog adds it's own handler
+    assert len(main_logger.handlers) == 1
     slogging.configure(config_string)
-    assert len(main_logger.handlers) == 2  # pytest-capturelog adds it's own handler
+    assert len(main_logger.handlers) == 1
 
     eth_logger = slogging.getLogger('eth')
     slogging.configure(config_string1)
