@@ -4,7 +4,6 @@ import time
 import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
-from ethereum import genesis_helpers
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
@@ -12,17 +11,16 @@ import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
     BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure_logging
 from ethereum.config import Env
 from ethereum.new_state import State, dict_to_prev_header
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
-from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration
-import random
-import json
-log = get_logger('eth.chain')
+from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
+        initialize_genesis_keys
 
-from ethereum.slogging import LogRecorder, configure_logging, set_level
+
+log = get_logger('eth.chain')
 config_string = ':info,eth.chain:debug'
 #config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 configure_logging(config_string=config_string)
@@ -77,15 +75,7 @@ class Chain(object):
         assert self.state.block_number == self.state.prev_headers[0].number
         if reset_genesis:
             self.genesis = Block(self.state.prev_headers[0], [], [])
-            self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-            self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
-            self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
-            self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
-            self.db.put(b'block:0', self.genesis.header.hash)
-            self.db.put(b'score:' + self.genesis.header.hash, "0")
-            self.db.put(b'state:' + self.genesis.header.hash, self.state.trie.root_hash)
-            self.db.put(self.head_hash, 'GENESIS')
-            self.db.commit()
+            initialize_genesis_keys(self.state, self.genesis)
         else:
             self.genesis = self.get_block_by_number(0)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)

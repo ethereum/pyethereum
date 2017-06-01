@@ -6,19 +6,14 @@ verify_stack_after_op = False
 import sys
 sys.setrecursionlimit(10000)
 
-import copy
-
-from rlp.utils import encode_hex, ascii_chr
 from ethereum import utils
 from ethereum.abi import is_numeric
+import copy
 from ethereum import opcodes
+import time
 from ethereum.slogging import get_logger
+from rlp.utils import encode_hex, ascii_chr
 from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr
-
-if sys.version_info.major == 2:
-    from repoze.lru import lru_cache
-else:
-    from functools import lru_cache
 
 log_log = get_logger('eth.vm.log')
 log_msg = get_logger('eth.pb.msg')
@@ -33,6 +28,8 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 
 MAX_DEPTH = 1024
+
+JUMPDEST = 0x5b # Hardcoded, change if needed
 
 
 class CallData(object):
@@ -94,34 +91,55 @@ class Compustate():
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
 
+break_list = ('JUMP', 'GAS', 'JUMPI', 'CALL', 'CREATE', 'CALLCODE', 'DELEGATECALL', 'STATICCALL',
+                    'SUICIDE', 'RETURN', 'REVERT', 'STOP', 'INVALID')
 
 # Preprocesses code, and determines which locations are in the middle
 # of pushdata and thus invalid
-@lru_cache(128)
 def preprocess_code(code):
     assert isinstance(code, bytes)
-    code = memoryview(code).tolist()
+    lencode = len(code)
+    code = memoryview(code + b'\x00' * 32).tolist()
+    outdict = {}
+    cur_start = 0
     ops = []
     i = 0
-    while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
-        ops.append(o)
+    stack = 0
+    minstack = 0
+    maxstack = 0
+    gascost = 0
+    while i < lencode:
+        o = opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0])
+        if i > cur_start and o[0] in ('JUMPDEST', 'PC'):
+            outdict[cur_start] = (ops, minstack, 1024 - maxstack, gascost, i)
+            cur_start = i
+            ops = []
+            minstack, maxstack, stack, gascost = 0, 0, 0, 0
+        ops.append([o[0], code[i], 0])
         if o[0][:4] == 'PUSH':
-            for j in range(int(o[0][4:])):
-                i += 1
-                byte = code[i] if i < len(code) else 0
-                o[-1] = (o[-1] << 8) + byte
-                if i < len(code):
-                    ops.append(['INVALID', 0, 0, 0, byte, 0])
+            pushlen = int(o[0][4:])
+            ops[-1][2] = utils.bytes_to_int(code[i + 1: i + pushlen + 1])
+            i += pushlen
+        minstack = max(o[1] - stack, minstack)
+        stack += o[2] - o[1]
+        maxstack = max(stack, maxstack)
+        gascost += o[3]
+        if o[0] in break_list:
+            outdict[cur_start] = (ops, minstack, 1024 - maxstack, gascost, i + 1)
+            cur_start = i + 1
+            ops = []
+            minstack, maxstack, stack, gascost = 0, 0, 0, 0
         i += 1
-    return ops
+    if ops:
+        outdict[cur_start] = (ops, minstack, 1024 - maxstack, gascost, i)
+    return outdict
 
 
 def mem_extend(mem, compustate, op, start, sz):
     if sz and start + sz > len(mem):
         oldsize = len(mem) // 32
         old_totalfee = oldsize * opcodes.GMEMORY + \
-            oldsize ** 2 // opcodes.GQUADRATICMEMDENOM
+            oldsize**2 // opcodes.GQUADRATICMEMDENOM
         newsize = utils.ceil32(start + sz) // 32
         new_totalfee = newsize * opcodes.GMEMORY + \
             newsize**2 // opcodes.GQUADRATICMEMDENOM
@@ -167,7 +185,6 @@ def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
-
 def revert(gas, data, **kargs):
     log_vm_exit.trace('REVERT', **kargs)
     return 0, gas, data
@@ -184,39 +201,39 @@ def vm_execute(ext, msg, code):
     stk = compustate.stack
     mem = compustate.memory
 
-    processed_code = preprocess_code(code)
-    codelen = len(processed_code)
+    if code in code_cache:
+        processed_code = code_cache[code]
+    else:
+        processed_code = preprocess_code(code)
+        code_cache[code] = processed_code
+        # print(processed_code.keys(), code)
 
-    op = None
+    codelen = len(code)
+
+    s = time.time()
     steps = 0
     _prevop = None  # for trace only
 
-    while compustate.pc < codelen:
-        # print('op: ', op, time.time() - s)
-        # s = time.time()
-        # stack size limit error
+    while compustate.pc in processed_code:
+      ops, minstack, maxstack, totgas, nextpos = processed_code[compustate.pc]
 
-        op, in_args, out_args, fee, opcode, pushval = \
-            processed_code[compustate.pc]
+      if len(compustate.stack) < minstack:
+          return vm_exception('INSUFFICIENT STACK')
+      if len(compustate.stack) > maxstack:
+          return vm_exception('STACK SIZE LIMIT EXCEEDED')
+      if totgas > compustate.gas:
+          return vm_exception('OUT OF GAS %d %d' % (totgas, compustate.gas))
+      jumped = False
 
-        # out of gas error
-        if fee > compustate.gas:
-            return vm_exception('OUT OF GAS')
+      compustate.gas -= totgas
+      compustate.pc = nextpos
 
-        # empty stack error
-        if in_args > len(compustate.stack):
-            return vm_exception('INSUFFICIENT STACK',
-                                op=op, needed=to_string(in_args),
-                                available=to_string(len(compustate.stack)))
 
-        if len(compustate.stack) - in_args + out_args > 1024:
-            return vm_exception('STACK SIZE LIMIT EXCEEDED',
-                                op=op,
-                                pre_height=to_string(len(compustate.stack)))
+      # Invalid operation; can only come at the end of a chunk
+      if ops[-1][0] == 'INVALID':
+          return vm_exception('INVALID OP', opcode=opcode)
 
-        # Apply operation
-        compustate.gas -= fee
-        compustate.pc += 1
+      for op, opcode, pushval in ops:
 
         if trace_vm:
             """
@@ -240,7 +257,7 @@ def vm_execute(ext, msg, code):
                                               x in compustate.memory])))
             if _prevop in ('SSTORE',) or steps == 0:
                 trace_data['storage'] = ext.log_storage(msg.to)
-            trace_data['gas'] = to_string(compustate.gas + fee)
+            trace_data['gas'] = to_string(compustate.gas + totgas)
             trace_data['inst'] = opcode
             trace_data['pc'] = to_string(compustate.pc - 1)
             if steps == 0:
@@ -254,14 +271,10 @@ def vm_execute(ext, msg, code):
             steps += 1
             _prevop = op
 
-        # Invalid operation
-        if op == 'INVALID':
-            return vm_exception('INVALID OP', opcode=opcode)
-
         # Valid operations
         # Pushes first because they are very frequent
         if 0x60 <= opcode <= 0x7f:
-            compustate.pc += opcode - 0x5f # Move 1 byte forward for 0x60, up to 32 bytes for 0x7f
+            # compustate.pc += opcode - 0x5f # Move 1 byte forward for 0x60, up to 32 bytes for 0x7f
             stk.append(pushval)
         elif opcode < 0x10:
             if op == 'STOP':
@@ -298,7 +311,7 @@ def vm_execute(ext, msg, code):
                 # calc n bytes to represent exponent
                 nbytes = len(utils.encode_int(exponent))
                 expfee = nbytes * opcodes.GEXPONENTBYTE
-                if ext.post_spurious_dragon_hardfork():
+                if ext.post_clearing_hardfork():
                     expfee += opcodes.EXP_SUPPLEMENTAL_GAS * nbytes
                 if compustate.gas < expfee:
                     compustate.gas = 0
@@ -380,7 +393,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 msg.data.extract_copy(mem, mstart, dstart, size)
             elif op == 'CODESIZE':
-                stk.append(len(processed_code))
+                stk.append(len(code))
             elif op == 'CODECOPY':
                 mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, mstart, size):
@@ -388,8 +401,8 @@ def vm_execute(ext, msg, code):
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
-                    if dstart + i < len(processed_code):
-                        mem[mstart + i] = processed_code[dstart + i][4]
+                    if dstart + i < len(code):
+                        mem[mstart + i] = utils.safe_ord(code[dstart + i])
                     else:
                         mem[mstart + i] = 0
             elif op == 'RETURNDATACOPY':
@@ -485,17 +498,17 @@ def vm_execute(ext, msg, code):
                 ext.set_storage_data(msg.to, s0, s1)
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
-                opnew = processed_code[compustate.pc][0] if \
-                    compustate.pc < len(processed_code) else 'STOP'
-                if opnew != 'JUMPDEST':
+                opnew = code[compustate.pc] if compustate.pc < codelen else 0
+                jumped = True
+                if opnew != JUMPDEST:
                     return vm_exception('BAD JUMPDEST')
             elif op == 'JUMPI':
                 s0, s1 = stk.pop(), stk.pop()
                 if s1:
                     compustate.pc = s0
-                    opnew = processed_code[compustate.pc][0] if \
-                        compustate.pc < len(processed_code) else 'STOP'
-                    if opnew != 'JUMPDEST':
+                    opnew = code[compustate.pc] if compustate.pc < codelen else 0
+                    jumped = True
+                    if opnew != JUMPDEST:
                         return vm_exception('BAD JUMPDEST')
             elif op == 'PC':
                 stk.append(compustate.pc - 1)
@@ -574,7 +587,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.int_to_addr(to)
             # Extra gas costs based on hard fork-dependent factors
-            extra_gas = (not ext.account_exists(to)) * (op == 'CALL') * (value > 0 or not ext.post_spurious_dragon_hardfork()) * opcodes.GCALLNEWACCOUNT + \
+            extra_gas = (not ext.account_exists(to)) * (op == 'CALL') * (value > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER + \
                 ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
             # Compute child gas limit
@@ -643,7 +656,7 @@ def vm_execute(ext, msg, code):
             xfer = ext.get_balance(msg.to)
             if ext.post_anti_dos_hardfork():
                 extra_gas = opcodes.SUICIDE_SUPPLEMENTAL_GAS + \
-                    (not ext.account_exists(to)) * (xfer > 0 or not ext.post_spurious_dragon_hardfork()) * opcodes.GCALLNEWACCOUNT
+                    (not ext.account_exists(to)) * (xfer > 0 or not ext.post_clearing_hardfork()) * opcodes.GCALLNEWACCOUNT
                 if not eat_gas(compustate, extra_gas):
                     return vm_exception("OUT OF GAS")
             ext.set_balance(to, ext.get_balance(to) + xfer)
@@ -657,7 +670,12 @@ def vm_execute(ext, msg, code):
         # for a in stk:
         #     assert is_numeric(a), (op, stk)
         #     assert a >= 0 and a < 2**256, (a, op, stk)
-    return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
+      #if not jumped:
+      #    assert compustate.pc == nextpos
+      #    compustate.pc = nextpos
+    if compustate.pc >= codelen:
+        return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
+    return vm_exception('INVALID JUMP')
 
 
 class VmExtBase():

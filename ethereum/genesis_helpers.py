@@ -6,6 +6,7 @@ from ethereum.config import Env
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.db import OverlayDB
 import rlp
+import json
 
 def block_from_genesis_declaration(genesis_data, env):
     h = BlockHeader(nonce=parse_as_bin(genesis_data["nonce"]),
@@ -46,6 +47,19 @@ def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=
     block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
     return state
+
+
+def initialize_genesis_keys(state, genesis):
+    db = state.db
+    db.put('GENESIS_NUMBER', str(genesis.header.number))
+    db.put('GENESIS_HASH', str(genesis.header.hash))
+    db.put('GENESIS_STATE', json.dumps(state.to_snapshot()))
+    db.put('GENESIS_RLP', rlp.encode(genesis))
+    db.put(b'block:0', genesis.header.hash)
+    db.put(b'score:' + genesis.header.hash, "0")
+    db.put(b'state:' + genesis.header.hash, state.trie.root_hash)
+    db.put(genesis.header.hash, 'GENESIS')
+    db.commit()
 
 
 def mk_genesis_data(env, **kwargs):

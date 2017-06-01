@@ -5,7 +5,7 @@ from ethereum.pow import chain
 from ethereum.exceptions import VerificationFailed, InvalidTransaction, InvalidNonce
 from ethereum.block import Block
 from ethereum.config import Env
-from ethereum.genesis_helpers import state_from_genesis_declaration
+from ethereum.genesis_helpers import state_from_genesis_declaration, initialize_genesis_keys
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
@@ -78,6 +78,7 @@ def run_block_test(params, config_overrides=None):
 
     # print('overrides', config_overrides)
     s = state_from_genesis_declaration(genesis_decl, env, allow_empties=True)
+    initialize_genesis_keys(s, Block(s.prev_headers[0], [], []))
     c = chain.Chain(genesis=s, localtime=2**99)
     # print('h', encode_hex(c.state.prev_headers[0].state_root))
     # print(c.state.to_dict())

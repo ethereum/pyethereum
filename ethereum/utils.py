@@ -8,7 +8,7 @@ from bitcoin import privtopub
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import decode_hex, encode_hex as _encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
 
 try:
@@ -46,7 +46,11 @@ if sys.version_info.major == 2:
     def bytearray_to_bytestr(value):
         return bytes(''.join(chr(c) for c in value))
 
-    encode_hex = _encode_hex
+    def encode_int32(v):
+        return zpad(int_to_big_endian(v), 32)
+
+    def bytes_to_int(value):
+        return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
 
 else:
     is_numeric = lambda x: isinstance(x, int)
@@ -72,18 +76,11 @@ else:
     def bytearray_to_bytestr(value):
         return bytes(value)
 
-    # returns encode_hex behaviour back to pre rlp-0.4.7 behaviour
-    # detect if this is necessary (i.e. what rlp version is running)
-    if isinstance(_encode_hex(b''), bytes):
-        encode_hex = _encode_hex
-    else:
-        # if using a newer version of rlp, wrap the encode so it
-        # returns a byte string
-        def encode_hex(b):
-            return _encode_hex(b).encode('utf-8')
+    def encode_int32(v):
+        return v.to_bytes(32, byteorder='big')
 
-
-isnumeric = is_numeric
+    def bytes_to_int(value):
+        return int.from_bytes(value, byteorder='big')
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
@@ -401,9 +398,6 @@ def encode_int(v):
 
 def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
-
-def encode_int32(v):
-    return zpad(int_to_big_endian(v), 32)
 
 
 def scan_bin(v):
