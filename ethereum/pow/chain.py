@@ -31,7 +31,7 @@ configure_logging(config_string=config_string)
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 new_head_cb=None, localtime=None, **kwargs):
+                 new_head_cb=None, reset_genesis=False, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
@@ -48,9 +48,11 @@ class Chain(object):
         elif "extraData" in genesis:
             self.state = state_from_genesis_declaration(
                 genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
@@ -64,6 +66,7 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+            reset_genesis = True
 
         assert self.env.db == self.state.db
 
@@ -71,18 +74,20 @@ class Chain(object):
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
-        self.genesis = Block(self.state.prev_headers[0], [], [])
-        self.db.put(b'block:0', self.genesis.header.hash)
-        self.db.put(b'state:' + self.genesis.header.hash, self.state.trie.root_hash)
-        self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-        self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
         assert self.state.block_number == self.state.prev_headers[0].number
-        self.db.put(b'score:' + self.genesis.header.hash, "0")
-        self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
-        self.db.put(self.head_hash, 'GENESIS')
-        self.db.put('state:'+self.head_hash, self.state.trie.root_hash)
-        self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
-        #self.db.commit()
+        if reset_genesis:
+            self.genesis = Block(self.state.prev_headers[0], [], [])
+            self.db.put('GENESIS_NUMBER', str(self.state.block_number))
+            self.db.put('GENESIS_HASH', str(self.genesis.header.hash))
+            self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
+            self.db.put('GENESIS_RLP', rlp.encode(self.genesis))
+            self.db.put(b'block:0', self.genesis.header.hash)
+            self.db.put(b'score:' + self.genesis.header.hash, "0")
+            self.db.put(b'state:' + self.genesis.header.hash, self.state.trie.root_hash)
+            self.db.put(self.head_hash, 'GENESIS')
+            self.db.commit()
+        else:
+            self.genesis = self.get_block_by_number(0)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
