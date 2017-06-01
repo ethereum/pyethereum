@@ -67,8 +67,8 @@ def mk_genesis_data(env, **kwargs):
     genesis_data = {
         "prevhash": kwargs.get('prevhash', encode_hex(env.config['GENESIS_PREVHASH'])),
         "coinbase": kwargs.get('coinbase', encode_hex(env.config['GENESIS_COINBASE'])),
-        "difficulty": kwargs.get('difficulty', encode_hex(env.config['GENESIS_DIFFICULTY'])),
-        "gas_limit": kwargs.get('gas_limit', encode_hex(env.config['GENESIS_GAS_LIMIT'])),
+        "difficulty": kwargs.get('difficulty', env.config['GENESIS_DIFFICULTY']),
+        "gas_limit": kwargs.get('gas_limit', env.config['GENESIS_GAS_LIMIT']),
         "timestamp": kwargs.get('timestamp', 0),
         "extra_data": kwargs.get('extra_data', encode_hex(env.config['GENESIS_EXTRA_DATA'])),
         "mixhash": kwargs.get('mixhash', encode_hex(env.config['GENESIS_MIXHASH'])),
