@@ -178,10 +178,6 @@ class Block(rlp.Serializable):
         except AttributeError:
             return getattr(self.header, name)
 
-    # TODO: remove chain_difficulty mock
-    def chain_difficulty(self):
-        return self.header.number + 1
-
     @property
     def transaction_count(self):
         return len(self.transactions)
