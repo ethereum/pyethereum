@@ -1,21 +1,18 @@
 import pytest
-import ethereum.processblock as processblock
+import ethereum.messages as messages
 import ethereum.transactions as transactions
-import ethereum.state_transition as state_transition
-import ethereum.parse_genesis_declaration
+import ethereum.meta as meta
 from ethereum.transaction_queue import TransactionQueue
 import rlp
-from rlp.utils import decode_hex
-from ethereum.utils import encode_hex
-import ethereum.ethpow as ethpow
-import ethereum.ethpow_utils as ethpow_utils
+from rlp.utils import decode_hex, encode_hex
+import ethereum.pow.ethpow as ethpow
 import ethereum.utils as utils
-from ethereum.chain import Chain
+from ethereum.pow.chain import Chain
 from ethereum.db import EphemDB
 from ethereum.tests.utils import new_db
 from ethereum.state import State
 from ethereum.block import Block
-from ethereum.block_creation import make_head_candidate
+from ethereum.consensus_strategy import get_consensus_strategy
 
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -35,10 +32,10 @@ alt_db = db
 
 @pytest.fixture(scope="module")
 def accounts():
-    k = sha3(b'cow')
-    v = privtoaddr(k)
-    k2 = sha3(b'horse')
-    v2 = privtoaddr(k2)
+    k = utils.sha3(b'cow')
+    v = utils.privtoaddr(k)
+    k2 = utils.sha3(b'horse')
+    v2 = utils.privtoaddr(k2)
     return k, v, k2, v2
 
 
@@ -57,7 +54,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
     for t in transactions:
         txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
-    hc = make_head_candidate(chain, txqueue, parent,
+    hc = meta.make_head_candidate(chain, txqueue, parent,
                              timestamp or parent_timestamp + 1, coinbase or '\x00'*20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
@@ -68,7 +65,6 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         if b:
             break
         nonce += rounds
-    assert ethpow_utils.ethereum1_check_header(b.header)
     assert chain.add_block(b)
     return b
 
@@ -92,7 +88,7 @@ def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
         nonce, gasprice, startgas=100000,
-        to=v2, value=denoms.finney * 10, data='').sign(k)
+        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
     return tx
 
 
@@ -106,14 +102,6 @@ def test_transfer(db):
     assert success
     assert chain.state.get_balance(v) == b_v - value
     assert chain.state.get_balance(v2) == b_v2 + value
-
-
-def test_alloc_too_big(db):
-    k, v, k2, v2 = accounts()
-    blk = None
-    with pytest.raises(ValueError):
-        blk = blocks.genesis(env(db), start_alloc={v: {"balance": 2 ** 256}})
-    assert blk is None
 
 
 def test_failing_transfer(db):
@@ -195,7 +183,7 @@ def test_transaction(db):
     blk = mine_next_block(chain)
     tx = get_transaction()
     assert tx not in blk.transactions
-    state_transition.apply_transaction(chain.state, tx)
+    messages.apply_transaction(chain.state, tx)
     assert chain.state.get_balance(v) == utils.denoms.finney * 990
     assert chain.state.get_balance(v2) == utils.denoms.finney * 10
 
@@ -221,9 +209,9 @@ def test_invalid_transaction(db):
 def test_prevhash(db):
     chain = Chain({}, difficulty=1, min_gasprice=0)
     L1 = mine_on_chain(chain)
-    assert chain.state.get_block_hash(0) != '\x00'*32
-    assert chain.state.get_block_hash(1) != '\x00'*32
-    assert chain.state.get_block_hash(2) == '\x00'*32
+    assert chain.state.get_block_hash(0) != b'\x00'*32
+    assert chain.state.get_block_hash(1) != b'\x00'*32
+    assert chain.state.get_block_hash(2) == b'\x00'*32
 
 
 def test_genesis_chain(db):

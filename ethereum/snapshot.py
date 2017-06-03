@@ -1,11 +1,12 @@
 import rlp
 from ethereum.block import BlockHeader, Block
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
-from ethereum import state_transition
+from ethereum import common
+from ethereum.pow import consensus
 from ethereum.state import State, Account
 from ethereum.securetrie import SecureTrie
 from ethereum.trie import BLANK_NODE, BLANK_ROOT
-from ethereum.pruning_trie import Trie
+from ethereum.experimental.pruning_trie import Trie
 
 
 class FakeHeader(object):
@@ -112,27 +113,27 @@ def load_snapshot(chain, snapshot):
     chain.env.db.commit()
 
     print "Start loading recent blocks from snapshot"
-    vbh = state_transition.validate_block_header
-    vus = state_transition.validate_uncles
+    vbh = common.validate_header
+    vus = consensus.validate_uncles
     def _vbh(state, header):
         return True
     def _vus(state, block):
         return True
-    state_transition.validate_block_header = _vbh
-    state_transition.validate_uncles = _vus
+    common.validate_header = _vbh
+    consensus.validate_uncles = _vus
     # add the first block
     first_block = rlp.decode(first_block_rlp, sedes=Block)
     chain.head_hash = first_block.header.prevhash
     chain.add_block(first_block)
     assert chain.head_hash == first_block.header.hash
-    state_transition.validate_block_header = vbh
+    common.validate_header = vbh
 
     count = 0
     for block_rlp in snapshot['blocks'][1:]:
         block_rlp = scan_bin(block_rlp)
         block = rlp.decode(block_rlp, Block)
         if count == chain.state.config['MAX_UNCLE_DEPTH']+2:
-            state_transition.validate_uncles = vus
+            consensus.validate_uncles = vus
         if not chain.add_block(block):
             print "Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8])
         else:

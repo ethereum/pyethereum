@@ -3,6 +3,7 @@ from rlp.utils import decode_hex
 from ethereum import utils
 from ethereum.db import BaseDB, EphemDB
 from ethereum.child_dao_list import L as child_dao_list
+import copy
 
 
 default_config = dict(
@@ -28,6 +29,8 @@ default_config = dict(
     GASLIMIT_ADJMAX_FACTOR=1024,
     BLKLIM_FACTOR_NOM=3,
     BLKLIM_FACTOR_DEN=2,
+    # Network ID
+    NETWORK_ID=1,
     # Block reward
     BLOCK_REWARD=5000 * utils.denoms.finney,
     NEPHEW_REWARD=5000 * utils.denoms.finney // 32,  # BLOCK_REWARD / 32
@@ -63,7 +66,7 @@ default_config = dict(
     DAO_FORK_BLKNUM=1920000,
     DAO_FORK_BLKHASH=decode_hex('4985f5ca3d2afbec36529aa96f74de3cc10a2a4a6c44f2157a57d2c6059a11bb'),
     DAO_FORK_BLKEXTRA=decode_hex('64616f2d686172642d666f726b'),
-    CHILD_DAO_LIST=map(utils.normalize_address, child_dao_list),
+    CHILD_DAO_LIST=list(map(utils.normalize_address, child_dao_list)),
     DAO_WITHDRAWER=utils.normalize_address('0xbf4ed7b27f1d666546e30d74d50d173d20bca754'),
     # Anti-DoS fork
     ANTI_DOS_FORK_BLKNUM = 2463000,
@@ -92,3 +95,27 @@ class Env(object):
         assert isinstance(self.db, BaseDB)
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
+
+config_homestead = copy.copy(default_config)
+config_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
+config_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99
+config_homestead["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
+config_homestead["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_tangerine = copy.copy(default_config)
+config_tangerine["HOMESTEAD_FORK_BLKNUM"] = 0
+config_tangerine["ANTI_DOS_FORK_BLKNUM"] = 0
+config_tangerine["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
+config_tangerine["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_spurious = copy.copy(default_config)
+config_spurious["HOMESTEAD_FORK_BLKNUM"] = 0
+config_spurious["ANTI_DOS_FORK_BLKNUM"] = 0
+config_spurious["SPURIOUS_DRAGON_FORK_BLKNUM"] = 0
+config_spurious["METROPOLIS_FORK_BLKNUM"] = 2**99
+
+config_metropolis = copy.copy(default_config)
+config_metropolis["HOMESTEAD_FORK_BLKNUM"] = 0
+config_metropolis["ANTI_DOS_FORK_BLKNUM"] = 0
+config_metropolis["SPURIOUS_DRAGON_FORK_BLKNUM"] = 0
+config_metropolis["METROPOLIS_FORK_BLKNUM"] = 0

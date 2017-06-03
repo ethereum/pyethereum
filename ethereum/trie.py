@@ -48,61 +48,6 @@ def nibbles_to_bin(nibbles):
 
 
 NIBBLE_TERMINATOR = 16
-RECORDING = 1
-NONE = 0
-VERIFYING = -1
-
-proving = False
-
-
-class ProofConstructor():
-
-    def __init__(self):
-        self.mode = []
-        self.nodes = []
-        self.exempt = []
-
-    def push(self, mode, nodes=[]):
-        global proving
-        proving = True
-        self.mode.append(mode)
-        self.exempt.append(set())
-        if mode == VERIFYING:
-            self.nodes.append(set([rlp_encode(x) for x in nodes]))
-        else:
-            self.nodes.append(set())
-
-    def pop(self):
-        global proving
-        self.mode.pop()
-        self.nodes.pop()
-        self.exempt.pop()
-        if not self.mode:
-            proving = False
-
-    def get_nodelist(self):
-        return list(map(rlp.decode, list(self.nodes[-1])))
-
-    def get_nodes(self):
-        return self.nodes[-1]
-
-    def add_node(self, node):
-        node = rlp_encode(node)
-        if node not in self.exempt[-1]:
-            self.nodes[-1].add(node)
-
-    def add_exempt(self, node):
-        self.exempt[-1].add(rlp_encode(node))
-
-    def get_mode(self):
-        return self.mode[-1]
-
-proof = ProofConstructor()
-
-
-class InvalidSPVProof(Exception):
-    pass
-
 
 def with_terminator(nibbles):
     nibbles = nibbles[:]
@@ -191,22 +136,16 @@ BLANK_NODE = b''
 BLANK_ROOT = utils.sha3rlp(b'')
 
 
-def transient_trie_exception(*args):
-    raise Exception("Transient trie")
-
 
 class Trie(object):
 
-    def __init__(self, db, root_hash=BLANK_ROOT, transient=False):
+    def __init__(self, db, root_hash=BLANK_ROOT):
         '''it also present a dictionary like interface
 
         :param db key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
         '''
         self.db = db  # Pass in a database object directly
-        self.transient = transient
-        if self.transient:
-            self.update = self.get = self.delete = transient_trie_exception
         self.set_root_hash(root_hash)
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
@@ -222,45 +161,20 @@ class Trie(object):
     # self.db = dbfile  # Pass in a database object directly
     #     self.set_root_hash(root_hash)
 
-    # For SPV proof production/verification purposes
-    def spv_grabbing(self, node):
-        global proving
-        if not proving:
-            pass
-        elif proof.get_mode() == RECORDING:
-            proof.add_node(copy.copy(node))
-            # print('recording %s' % encode_hex(utils.sha3(rlp_encode(node))))
-        elif proof.get_mode() == VERIFYING:
-            # print('verifying %s' % encode_hex(utils.sha3(rlp_encode(node))))
-            if rlp_encode(node) not in proof.get_nodes():
-                raise InvalidSPVProof("Proof invalid!")
-
-    def spv_storing(self, node):
-        global proving
-        if not proving:
-            pass
-        elif proof.get_mode() == RECORDING:
-            proof.add_exempt(copy.copy(node))
-        elif proof.get_mode() == VERIFYING:
-            proof.add_node(copy.copy(node))
-
     @property
     def root_hash(self):
         '''always empty or a 32 bytes string
         '''
-        return self.get_root_hash()
+        return self._root_hash
 
     def get_root_hash(self):
-        if self.transient:
-            return self.transient_root_hash
-        if self.root_node == BLANK_NODE:
-            return BLANK_ROOT
-        assert isinstance(self.root_node, list)
+        return self._root_hash
+
+    def _update_root_hash(self):
         val = rlp_encode(self.root_node)
         key = utils.sha3(val)
         self.db.put(key, val)
-        self.spv_grabbing(self.root_node)
-        return key
+        self._root_hash = key
 
     @root_hash.setter
     def root_hash(self, value):
@@ -269,13 +183,12 @@ class Trie(object):
     def set_root_hash(self, root_hash):
         assert is_string(root_hash)
         assert len(root_hash) in [0, 32]
-        if self.transient:
-            self.transient_root_hash = root_hash
-            return
         if root_hash == BLANK_ROOT:
             self.root_node = BLANK_NODE
+            self._root_hash = BLANK_ROOT
             return
         self.root_node = self._decode_to_node(root_hash)
+        self._root_hash = root_hash
 
     def clear(self):
         ''' clear all tree data
@@ -283,6 +196,7 @@ class Trie(object):
         self._delete_child_storage(self.root_node)
         self._delete_node_storage(self.root_node)
         self.root_node = BLANK_NODE
+        self._root_hash = BLANK_ROOT
 
     def _delete_child_storage(self, node):
         node_type = self._get_node_type(node)
@@ -295,14 +209,13 @@ class Trie(object):
     def _encode_node(self, node):
         if node == BLANK_NODE:
             return BLANK_NODE
-        assert isinstance(node, list)
+        # assert isinstance(node, list)
         rlpnode = rlp_encode(node)
         if len(rlpnode) < 32:
             return node
 
         hashkey = utils.sha3(rlpnode)
         self.db.put(hashkey, rlpnode)
-        self.spv_storing(node)
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -311,7 +224,6 @@ class Trie(object):
         if isinstance(encoded, list):
             return encoded
         o = rlp.decode(self.db.get(encoded))
-        self.spv_grabbing(o)
         return o
 
     def _get_node_type(self, node):
@@ -553,8 +465,8 @@ class Trie(object):
         return t1, t2
 
     def _merge(self, node1, node2):
-        assert isinstance(node1, list) or not node1
-        assert isinstance(node2, list) or not node2
+        # assert isinstance(node1, list) or not node1
+        # assert isinstance(node2, list) or not node2
         node_type1 = self._get_node_type(node1)
         node_type2 = self._get_node_type(node2)
         if not node1:
@@ -685,7 +597,7 @@ class Trie(object):
         '''
         if node == BLANK_NODE:
             return
-        assert isinstance(node, list)
+        # assert isinstance(node, list)
         encoded = self._encode_node(node)
         if len(encoded) < 32:
             return
@@ -799,7 +711,7 @@ class Trie(object):
         if new_sub_node == BLANK_NODE:
             return BLANK_NODE
 
-        assert isinstance(new_sub_node, list)
+        # assert isinstance(new_sub_node, list)
 
         # new sub node not blank, not value and has changed
         new_sub_node_type = self._get_node_type(new_sub_node)
@@ -829,7 +741,7 @@ class Trie(object):
         self.root_node = self._delete_and_delete_storage(
             self.root_node,
             bin_to_nibbles(to_string(key)))
-        self.get_root_hash()
+        self._update_root_hash()
 
     def _get_size(self, node):
         '''Get counts of (key, value) stored in this and the descendant nodes
@@ -992,38 +904,12 @@ class Trie(object):
             self.root_node,
             bin_to_nibbles(to_string(key)),
             to_string(value))
-        self.get_root_hash()
+        self._update_root_hash()
 
     def root_hash_valid(self):
         if self.root_hash == BLANK_ROOT:
             return True
         return self.root_hash in self.db
-
-    def produce_spv_proof(self, key):
-        proof.push(RECORDING)
-        self.get(key)
-        o = proof.get_nodelist()
-        proof.pop()
-        return o
-
-
-def verify_spv_proof(root, key, proof):
-    proof.push(VERIFYING, proof)
-    t = Trie(db.EphemDB())
-
-    for i, node in enumerate(proof):
-        R = rlp_encode(node)
-        H = utils.sha3(R)
-        t.db.put(H, R)
-    try:
-        t.root_hash = root
-        t.get(key)
-        proof.pop()
-        return True
-    except Exception as e:
-        print(e)
-        proof.pop()
-        return False
 
 
 if __name__ == "__main__":

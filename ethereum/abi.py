@@ -12,8 +12,9 @@ from ethereum.utils import encode_hex
 from ethereum import utils
 from ethereum.utils import (
     big_endian_to_int, ceil32, int_to_big_endian, encode_int, is_numeric, is_string,
-    rzpad, TT255, TT256, zpad,
+    rzpad, zpad, str_to_bytes
 )
+from ethereum.utils import TT256, TT255
 
 # The number of bytes is encoded as a uint256
 # Type used to encode a string/bytes length
@@ -259,7 +260,7 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         if not -2 ** bits <= i < 2 ** bits:
             raise ValueOutOfBounds(repr(arg))
 
-        value = i % 2 ** sub  # convert negative to "equivalent" positive
+        value = i % 2 ** 256  # convert negative to "equivalent" positive
         value_encoded = int_to_big_endian(value)
         return zpad(value_encoded, 32)
 
@@ -308,6 +309,11 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         fixed_point = int(float_point)
         value = fixed_point % 2 ** 256
         return zpad(int_to_big_endian(value), 32)
+
+    # Decimals
+    if base == 'decimal':
+        val_to_encode = int(arg * 10**int(sub))
+        return zpad(encode_int(val_to_encode % 2**256), 32)
 
     if base == 'string':
         if isinstance(arg, utils.unicode):
@@ -412,24 +418,25 @@ class ContractTranslator(object):
             if entry_type != 'fallback' and 'inputs' in description:
                 encode_types = [
                     element['type']
-                    for element in description.get('inputs')
+                    for element in description.get('inputs', [])
                 ]
 
                 signature = [
                     (element['type'], element['name'])
-                    for element in description.get('inputs')
+                    for element in description.get('inputs', [])
                 ]
 
             if entry_type == 'function':
                 normalized_name = normalize_name(description['name'])
+                prefix = method_id(normalized_name, encode_types)
 
                 decode_types = [
                     element['type']
-                    for element in description['outputs']
+                    for element in description.get('outputs', [])
                 ]
 
                 self.function_data[normalized_name] = {
-                    'prefix': method_id(normalized_name, encode_types),
+                    'prefix': prefix,
                     'encode_types': encode_types,
                     'decode_types': decode_types,
                     'is_constant': description.get('constant', False),
@@ -724,7 +731,7 @@ def encode_abi(types, args):
 def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
-        return encode_hex(data[12:])
+        return '0x' + encode_hex(data[12:])
     elif base == 'hash':
         return data[32 - int(sub):]
     elif base == 'string' or base == 'bytes':
@@ -746,8 +753,14 @@ def decode_single(typ, data):
         o = big_endian_to_int(data)
         i = (o - 2 ** (high + low)) if o >= 2 ** (high + low - 1) else o
         return (i * 1.0 // 2 ** low)
+    elif base == 'decimal':
+        o = big_endian_to_int(data)
+        i = (o - 2 ** 256 if o > 2 ** 255 else o)
+        return i / 10 ** int(sub)
     elif base == 'bool':
         return bool(int(encode_hex(data), 16))
+    else:
+        raise EncodingError("Unhandled type: %r %r" % (base, sub))
 
 
 # Decodes multiple arguments using the head/tail mechanism
@@ -799,7 +812,7 @@ def dec(typ, arg):
     # Dynamic-sized strings are encoded as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
         L = big_endian_to_int(arg[:32])
-        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object"
+        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object: expected %d actual %d" % (ceil32(L), len(arg[32:]))
         return arg[32:][:L]
     # Dynamic-sized arrays
     elif sz is None:

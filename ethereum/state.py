@@ -7,10 +7,11 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
-from ethereum.block import BlockHeader
+from ethereum.block import BlockHeader, FakeHeader
 from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
 from ethereum.db import BaseDB, EphemDB, OverlayDB
+from ethereum.specials import specials as default_specials
 import copy
 import sys
 if sys.version_info.major == 2:
@@ -23,16 +24,8 @@ ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
 ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
 BLANK_HASH = utils.sha3(b'')
 
+
 RIPEMD160_ADDR = utils.decode_hex(b'0000000000000000000000000000000000000003')
-
-
-@lru_cache(1024)
-def get_block(db, blockhash):
-    """
-    Assumption: blocks loaded from the db are not manipulated
-                -> can be cached including hash
-    """
-    return rlp.decode(rlp.descend(db.get(blockhash), 0), BlockHeader)
 
 
 def snapshot_form(val):
@@ -81,18 +74,11 @@ class State():
         return self.env.config
 
     def get_block_hash(self, n):
-        if self.is_METROPOLIS():
-            if self.block_number < n or n >= self.config['METROPOLIS_WRAPAROUND'] or n < 0:
-                o = b'\x00' * 32
-            sbytes = self.get_storage_bytes(utils.normalize_address(self.config["METROPOLIS_BLOCKHASH_STORE"]),
-                                            (self.block_number - n - 1) % self.config['METROPOLIS_WRAPAROUND'])
-            return sbytes or (b'\x00' * 32)
+        if self.block_number < n or n > 256 or n < 0:
+            o = b'\x00' * 32
         else:
-            if self.block_number < n or n > 256 or n < 0:
-                o = b'\x00' * 32
-            else:
-                o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
-            return o
+            o = self.prev_headers[n].hash if self.prev_headers[n] else b'\x00' * 32
+        return o
 
     def add_block_header(self, block_header):
         self.prev_headers = [block_header] + self.prev_headers
@@ -134,6 +120,12 @@ class State():
         l = getattr(self, k)
         self.journal.append((k, None, len(l), None))
         l.append(v)
+
+    def add_suicide(self, addr):
+        self.add_to_list('suicides', addr)
+
+    def add_receipt(self, receipt):
+        self.add_to_list('receipts', receipt)
 
     # It's unsafe because it passes through the cache
     def _get_account_unsafe(self, addr):
@@ -294,17 +286,13 @@ class State():
     # Returns a value x, where State.revert(x) at any later point will return
     # you to the point at which the snapshot was made (unless journal_reset was called).
     def snapshot(self):
-        return (self.trie.root_hash, len(self.journal))
+        return (self.trie.root_hash, len(self.journal), {k: copy.copy(getattr(self, k)) for k in STATE_DEFAULTS})
 
     # Reverts to the provided snapshot
     def revert(self, snapshot):
-        root, journal_length = snapshot
+        root, journal_length, auxvars = snapshot
         if root != self.trie.root_hash and journal_length != 0:
             raise Exception("Cannot return to this snapshot")
-        if root != self.trie.root_hash:
-            self.trie.root_hash = root
-            self.cache = {}
-            self.modified = {}
         while len(self.journal) > journal_length:
             addr, key, preval, premod = self.journal.pop()
             if addr in STATE_DEFAULTS:
@@ -318,6 +306,25 @@ class State():
                 # https://github.com/ethereum/go-ethereum/pull/3341/files#r89548312
                 if not premod and addr != RIPEMD160_ADDR:
                     del self.modified[addr]
+        if root != self.trie.root_hash:
+            self.trie.root_hash = root
+            self.cache = {}
+            self.modified = {}
+        for k in STATE_DEFAULTS:
+            setattr(self, k, copy.copy(auxvars[k]))
+
+    # Prints the state for a single account
+    def account_to_dict(self, address):
+        address = normalize_address(address)
+        acct = self._get_account_unsafe(address)
+        acct_trie = SecureTrie(Trie(self.db))
+        acct_trie.root_hash = acct.storage
+        odict = acct_trie.to_dict()
+        if address in self.cache:
+            for k, v in self.cache[address].items():
+                if k not in ACCOUNT_SPECIAL_PARAMS:
+                    odict[k] = v 
+        return {'0x'+encode_hex(key): '0x'+encode_hex(val) for key, val in odict.items()}
 
     # Converts the state tree to a dictionary
     def to_dict(self):
@@ -328,7 +335,7 @@ class State():
             acct_trie = SecureTrie(Trie(self.db))
             acct_trie.root_hash = acct.storage
             for key, v in acct_trie.to_dict().items():
-                storage_dump[encode_hex(key.lstrip('\x00') or '\x00')] = encode_hex(rlp.decode(v))
+                storage_dump['0x'+encode_hex(key.lstrip(b'\x00') or b'\x00')] = '0x'+encode_hex(rlp.decode(v))
             acct_dump = {"storage": storage_dump}
             for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                 acct_dump[c] = snapshot_form(getattr(acct, c))
@@ -341,11 +348,11 @@ class State():
                     state_dump[encode_hex(address)][c] = snapshot_form(getattr(blanky, c))
             acct_dump = state_dump[encode_hex(address)]
             for key, val in v.items():
-                if key in ACCOUNT_SPECIAL_PARAMS:
+                if key in ACCOUNT_SPECIAL_PARAMS and key != 'storage':
                     acct_dump[key] = snapshot_form(val)
                 else:
                     if val:
-                        acct_dump["storage"][encode_hex(key)] = encode_hex(val)
+                        acct_dump["storage"]['0x'+encode_hex(key)] = '0x'+encode_hex(val)
                     elif encode_hex(key) in acct_dump["storage"]:
                         del acct_dump["storage"][val]
         return state_dump
@@ -383,7 +390,7 @@ class State():
                 setattr(state, k, parse_as_bin(v) if k in snapshot_data else default)
             elif k == 'prev_headers':
                 if k in snapshot_data:
-                    headers = [rlp.decode(parse_as_bin(h), BlockHeader) for h in v]
+                    headers = [dict_to_prev_header(h) for h in v]
                 else:
                     headers = default
                 setattr(state, k, headers)
@@ -529,3 +536,12 @@ class Account(rlp.Serializable):
 
     def is_blank(self):
         return self.nonce == 0 and self.balance == 0 and self.code_hash == BLANK_HASH
+
+def dict_to_prev_header(h):
+    return FakeHeader(hash=parse_as_bin(h['hash']),
+                      number=parse_as_int(h['number']),
+                      timestamp=parse_as_int(h['timestamp']),
+                      difficulty=parse_as_int(h['difficulty']),
+                      gas_used=parse_as_int(h.get('gas_used', '0')),
+                      gas_limit=parse_as_int(h['gas_limit']),
+                      uncles_hash=parse_as_bin(h.get('uncles_hash', '0x'+encode_hex(BLANK_UNCLES_HASH))))

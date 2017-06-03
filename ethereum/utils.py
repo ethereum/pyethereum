@@ -8,7 +8,7 @@ from bitcoin import privtopub
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import decode_hex, encode_hex as _encode_hex, ascii_chr, str_to_bytes
+from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
 
 try:
@@ -46,7 +46,11 @@ if sys.version_info.major == 2:
     def bytearray_to_bytestr(value):
         return bytes(''.join(chr(c) for c in value))
 
-    encode_hex = _encode_hex
+    def encode_int32(v):
+        return zpad(int_to_big_endian(v), 32)
+
+    def bytes_to_int(value):
+        return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
 
 else:
     is_numeric = lambda x: isinstance(x, int)
@@ -72,18 +76,11 @@ else:
     def bytearray_to_bytestr(value):
         return bytes(value)
 
-    # returns encode_hex behaviour back to pre rlp-0.4.7 behaviour
-    # detect if this is necessary (i.e. what rlp version is running)
-    if isinstance(_encode_hex(b''), bytes):
-        encode_hex = _encode_hex
-    else:
-        # if using a newer version of rlp, wrap the encode so it
-        # returns a byte string
-        def encode_hex(b):
-            return _encode_hex(b).encode('utf-8')
+    def encode_int32(v):
+        return v.to_bytes(32, byteorder='big')
 
-
-isnumeric = is_numeric
+    def bytes_to_int(value):
+        return int.from_bytes(value, byteorder='big')
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
@@ -91,7 +88,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
         # Legendre symbol check; the secp256k1 library does not seem to do this
         pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
         xc = r * r * r + 7
-        assert pow(xc, (SECP256K1P - 1) / 2, SECP256K1P) == 1
+        assert pow(xc, (SECP256K1P - 1) // 2, SECP256K1P) == 1
         try:
             pk.public_key = pk.ecdsa_recover(
                 rawhash,
@@ -113,7 +110,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
 
 
 def ecsign(rawhash, key):
-    if secp256k1:
+    if secp256k1 and hasattr(secp256k1, 'PrivateKey'):
         pk = secp256k1.PrivateKey(key, raw=True)
         signature = pk.ecdsa_recoverable_serialize(
             pk.ecdsa_sign_recoverable(rawhash, raw=True)
@@ -177,29 +174,31 @@ def int_to_32bytearray(i):
         i >>= 8
     return o
 
-sha3_count = [0]
+# sha3_count = [0]
 
 
 def sha3(seed):
-    sha3_count[0] += 1
     return sha3_256(to_string(seed))
 
 assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def privtoaddr(x, extended=False):
+def privtoaddr(x):
     if len(x) > 32:
         x = decode_hex(x)
-    o = sha3(privtopub(x)[1:])[12:]
-    return add_checksum(o) if extended else o
+    return sha3(privtopub(x)[1:])[12:]
 
 
-def add_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    if len(x) == 24:
-        return x
-    return x + sha3(x)[:4]
+def checksum_encode(addr): # Takes a 20-byte binary address as input
+    addr = normalize_address(addr)
+    o = ''
+    v = big_endian_to_int(sha3(encode_hex(addr)))
+    for i, c in enumerate(encode_hex(addr)):
+        if c in '0123456789':
+            o += c
+        else:
+            o += c.upper() if (v & (2**(255 - 4*i))) else c.lower()
+    return '0x'+o
 
 
 def add_cool_checksum(addr):
@@ -219,13 +218,6 @@ def add_cool_checksum(addr):
         else:
             o += c.lower() if h[i] in '01234567' else c.upper()
     return '0x' + o
-
-
-def check_and_strip_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
-    return x[:20]
 
 
 def check_and_strip_cool_checksum(addr):
@@ -249,6 +241,20 @@ def normalize_address(x, allow_blank=False):
         raise Exception("Invalid address format: %r" % x)
     return x
 
+def normalize_key(key):
+    if is_numeric(key):
+        o = encode_int32(key)
+    elif len(key) == 32:
+        o = key
+    elif len(key) == 64:
+        o = decode_hex(key)
+    elif len(key) == 66 and key[:2] == '0x':
+        o = decode_hex(key[2:])
+    else:
+        raise Exception("Invalid key format: %r" % key)
+    if o == b'\x00' * 32:
+        raise Exception("Zero privkey invalid")
+    return o
 
 def zpad(x, l):
     """ Left zero pad value `x` at least to length `l`.
@@ -264,7 +270,6 @@ def zpad(x, l):
     """
     return b'\x00' * max(0, l - len(x)) + x
 
-
 def rzpad(value, total_length):
     """ Right zero pad value `x` at least to length `l`.
 
@@ -278,14 +283,6 @@ def rzpad(value, total_length):
     '\xca\xfe'
     """
     return value + b'\x00' * max(0, total_length - len(value))
-
-
-def zunpad(x):
-    i = 0
-    while i < len(x) and (x[i] == 0 or x[i] == b'\x00'):
-        i += 1
-    return x[i:]
-
 
 def int_to_addr(x):
     o = [b''] * 20
@@ -401,9 +398,6 @@ def encode_int(v):
 
 def encode_int256(v):
     return zpad(int_to_big_endian(v), 256)
-
-def encode_int32(v):
-    return zpad(int_to_big_endian(v), 32)
 
 
 def scan_bin(v):

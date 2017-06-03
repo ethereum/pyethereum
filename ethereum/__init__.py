@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # ############# version ##################
-from pkg_resources import get_distribution, DistributionNotFound
+try:
+    from pkg_resources import get_distribution, DistributionNotFound
+except:
+    DistributionNotFound = Exception
 import os.path
 import subprocess
 import re
