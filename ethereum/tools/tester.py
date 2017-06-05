@@ -119,9 +119,12 @@ def get_env(env):
 
 class Chain(object):
     def __init__(self, alloc=None, env=None):
-        self.chain = chain.Chain(mk_basic_state(base_alloc if alloc is None else alloc,
-                                                None,
-                                                get_env(env)))
+        self.chain = chain.Chain(
+            genesis=mk_basic_state(base_alloc if alloc is None else alloc,
+                                   None,
+                                   get_env(env)),
+            reset_genesis=True
+        )
         self.cs = get_consensus_strategy(self.chain.env.config)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
