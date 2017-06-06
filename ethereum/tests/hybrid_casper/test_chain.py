@@ -1,6 +1,6 @@
 import pytest
 from ethereum import utils
-from ethereum.tools import tester2
+from ethereum.tools import tester
 from ethereum.tests.utils import new_db
 from ethereum.db import EphemDB
 from ethereum.hybrid_casper import casper_utils
@@ -16,9 +16,9 @@ _db = new_db()
 
 EPOCH_LENGTH = 25
 SLASH_DELAY = 864
-ALLOC = {a: {'balance': 5*10**19} for a in tester2.accounts[:10]}
-k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = tester2.keys[:10]
-a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = tester2.accounts[:10]
+ALLOC = {a: {'balance': 5*10**19} for a in tester.accounts[:10]}
+k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = tester.keys[:10]
+a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 = tester.accounts[:10]
 
 
 @pytest.fixture(scope='function')
@@ -28,8 +28,8 @@ alt_db = db
 
 def init_chain_and_casper():
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
-    t = tester2.Chain(genesis=genesis)
-    casper = tester2.ABIContract(t, casper_utils.casper_abi, t.chain.env.config['CASPER_ADDRESS'])
+    t = tester.Chain(genesis=genesis)
+    casper = tester.ABIContract(t, casper_utils.casper_abi, t.chain.env.config['CASPER_ADDRESS'])
     casper.initiate()
     return t, casper
 
@@ -129,7 +129,7 @@ def test_head_change_for_more_commits(db):
     add
     Remote: R3_5, R5_2
     """
-    keys = tester2.keys[:5]
+    keys = tester.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
     epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
     epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
@@ -172,7 +172,7 @@ def test_head_change_for_more_commits_on_different_forks(db):
     add
     Remote Fork: R3_5, RF5_1
     """
-    keys = tester2.keys[:5]
+    keys = tester.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
     epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
     epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
@@ -221,7 +221,7 @@ def test_head_change_for_more_commits_on_parent_fork(db):
     add
     Chain3:                   7A_1      HEAD_CHANGE
     """
-    keys = tester2.keys[:5]
+    keys = tester.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
     epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
     epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)

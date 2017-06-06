@@ -8,7 +8,7 @@ from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
 from ethereum import transactions
 from ethereum.hybrid_casper import casper_utils
-from ethereum.tools import tester2
+from ethereum.tools import tester
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -140,7 +140,7 @@ class Chain(object):
 
     def get_checkpoint_score(self, blockhash, commits):
         state = self.mk_poststate_of_blockhash(blockhash)
-        casper = tester2.ABIContract(tester2.State(state), casper_utils.casper_abi, self.casper_address)
+        casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.casper_address)
         epoch = casper.get_current_epoch()
         curr_dynasty_deposits = 0
         prev_dynasty_deposits = 0
