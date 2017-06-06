@@ -26,15 +26,6 @@ def db():
     return EphemDB()
 alt_db = db
 
-
-@pytest.fixture(scope="module")
-def accounts():
-    k = utils.sha3(b'cow')
-    v = utils.privtoaddr(k)
-    k2 = utils.sha3(b'horse')
-    v2 = utils.privtoaddr(k2)
-    return k, v, k2, v2
-
 def init_chain_and_casper():
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
     t = tester2.Chain(genesis=genesis)
