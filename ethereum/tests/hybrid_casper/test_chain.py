@@ -136,7 +136,7 @@ def test_head_change_for_more_commits(db):
     """" [L & R are checkpoints. Ex: L3_5 is local chain, 5th epoch, with 4 stake weight]
     Local: L3_5, L4_1
     add
-    Remote: R3_5, R5_1, R6_1
+    Remote: R3_5, R5_2
     """
     keys = tester2.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
@@ -166,17 +166,9 @@ def test_head_change_for_more_commits(db):
         casper.prepare(mk_prepare(i, 5, epoch_blockhash(t, 5), epoch_3_anchash, 3, epoch_3_anchash, k))
         t.mine()
     casper.commit(mk_commit(1, 5, epoch_blockhash(t, 5), 3, keys[1]))
-    epoch_5_anchash = utils.sha3(epoch_blockhash(t, 5) + epoch_3_anchash)
     t.mine()
     assert t.chain.head_hash == L.hash
-    # R6_1: Prepare all except v0, commit 1 -- Head will change because of extra commit
-    mine_epochs(t, 1)
-    for i, k in enumerate(keys[1:], 1):
-        casper.prepare(mk_prepare(i, 6, epoch_blockhash(t, 6), epoch_5_anchash, 5, epoch_5_anchash, k))
-        t.mine()
-    assert t.chain.head_hash == L.hash
-    casper.commit(mk_commit(1, 6, epoch_blockhash(t, 6), 5, keys[1]))
-    t.mine()
+    casper.commit(mk_commit(2, 5, epoch_blockhash(t, 5), 3, keys[2]))
     R = t.mine()
     assert t.chain.head_hash == R.hash
     # The head switched to R becasue it has 7 commits as opposed to 6
