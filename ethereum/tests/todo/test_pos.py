@@ -54,7 +54,7 @@ vids = []
 
 # Create and sign a block
 def make_block(chain, key, randao, vchash, skips):
-    h = make_head_candidate(chain, TransactionQueue(), timestamp=get_timestamp(chain, skips))
+    h, _ = make_head_candidate(chain, TransactionQueue(), timestamp=get_timestamp(chain, skips))
     return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [vchash])), vchash, skips)
 
 next_validator = call_casper(s, 'getValidator', [0])

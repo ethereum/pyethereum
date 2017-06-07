@@ -66,4 +66,4 @@ def make_head_candidate(chain, txqueue=None,
     # Set state root, receipt root, etc
     set_execution_results(temp_state, blk)
     log.info('Created head candidate successfully')
-    return blk
+    return blk, temp_state
