@@ -92,10 +92,10 @@ class Transaction(rlp.Serializable):
 
     @property
     def network_id(self):
-        if self.r == 0 and self.s == 0:
-            return self.v
-        elif self.v in (27, 28):
+        if self.v in (0, 27, 28):
             return None
+        elif self.r == 0 and self.s == 0:
+            return self.v
         else:
             return ((self.v - 1) // 2) - 17
 
