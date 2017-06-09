@@ -151,11 +151,11 @@ class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
         if genesis:
             if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
-                self.chain = hybrid_casper_chain.Chain(genesis)
+                self.chain = hybrid_casper_chain.Chain(genesis, reset_genesis=True)
             else:
-                self.chain = pow_chain.Chain(genesis)
+                self.chain = pow_chain.Chain(genesis, reset_genesis=True)
         else:
-            self.chain = pow_chain.Chain(mk_basic_state(alloc, None, get_env(env)))
+            self.chain = pow_chain.Chain(mk_basic_state(alloc, None, get_env(env)), reset_genesis=True)
         self.cs = get_consensus_strategy(self.chain.env.config)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()

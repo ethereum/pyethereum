@@ -1,8 +1,9 @@
+import json
+import random
 import time
 import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
-from ethereum import genesis_helpers
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
@@ -13,29 +14,28 @@ import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
     BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure_logging
 from ethereum.config import Env
 from ethereum.new_state import State, dict_to_prev_header
-from ethereum.block import Block, BlockHeader, FakeHeader, BLANK_UNCLES_HASH
+from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
-from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration
-import random
-import json
-log = get_logger('eth.chain')
+from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
+        initialize_genesis_keys
 
-from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.chain:debug'
-config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+
+log = get_logger('eth.chain')
+config_string = ':info,eth.chain:debug'
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
-                 new_head_cb=None, localtime=None, **kwargs):
+                 new_head_cb=None, reset_genesis=False, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
-        if 'head_hash' in self.db:
+        if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
             print('Initializing chain from saved head, #%d (%s)' % \
                 (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
@@ -49,9 +49,11 @@ class Chain(object):
         elif "extraData" in genesis:
             self.state = state_from_genesis_declaration(
                 genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
+            reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
@@ -65,6 +67,7 @@ class Chain(object):
                 "hash": kwargs.get('prevhash', '00' * 32),
                 "uncles_hash": kwargs.get('uncles_hash', '0x' + encode_hex(BLANK_UNCLES_HASH))
             }, self.env)
+            reset_genesis = True
 
         assert self.env.db == self.state.db
 
@@ -74,15 +77,13 @@ class Chain(object):
         self.head_hash = self.state.prev_headers[0].hash
         self.checkpoint_head_hash = None
         self.casper_address = self.env.config['CASPER_ADDRESS']
-        self.db.put('slashed_validators', [])
-        self.genesis = Block(self.state.prev_headers[0], [], [])
-        self.db.put(b'state:' + self.head_hash, self.state.trie.root_hash)
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
-        self.db.put('GENESIS_HASH', self.state.prev_headers[0].hash)
         assert self.state.block_number == self.state.prev_headers[0].number
-        self.db.put(b'score:' + self.state.prev_headers[0].hash, "0")
-        self.db.put('GENESIS_STATE', json.dumps(self.state.to_snapshot()))
-        self.db.put(self.head_hash, 'GENESIS')
+        if reset_genesis:
+            self.genesis = Block(self.state.prev_headers[0], [], [])
+            initialize_genesis_keys(self.state, self.genesis)
+        else:
+            self.genesis = self.get_block_by_number(0)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
@@ -147,8 +148,6 @@ class Chain(object):
         # Calculate the current & previous dynasty scores
         for sig in commits:
             commit = self.get_decoded_commit(commits[sig])
-            if commit['validator_index'] in self.db.get('slashed_validators'):
-                continue
             epochcheck = casper.check_eligible_in_epoch(commit['validator_index'], epoch)
             if epochcheck >= 2:
                 curr_dynasty_deposits += casper.get_validators__deposit(commit['validator_index'])
@@ -212,14 +211,17 @@ class Chain(object):
         # We've compared the fork score to all head scores, and so return True
         return True
 
-    def mk_poststate_of_blockhash(self, blockhash):
+    def mk_poststate_of_blockhash(self, blockhash, convert=False):
         if blockhash not in self.db:
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
-        if self.db.get(blockhash) == 'GENESIS':
+
+        block_rlp = self.db.get(blockhash)
+        if block_rlp == 'GENESIS':
             return State.from_snapshot(json.loads(self.db.get('GENESIS_STATE')), self.env)
+        block = rlp.decode(block_rlp, Block)
+
         state = State(env=self.env)
-        state.trie.root_hash = self.db.get(b'state:' + blockhash)
-        block = rlp.decode(self.db.get(blockhash), Block)
+        state.trie.root_hash = block.header.state_root if convert else self.db.get(b'state:'+blockhash)
         update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
         state.txindex = len(block.transactions)
@@ -253,16 +255,19 @@ class Chain(object):
     def get_parent(self, block):
         if block.header.number == int(self.db.get('GENESIS_NUMBER')):
             return None
-        return rlp.decode(self.db.get(block.header.prevhash), Block)
+        return self.get_block(block.header.prevhash)
 
     def get_block(self, blockhash):
         try:
             block_rlp = self.db.get(blockhash)
             if block_rlp == 'GENESIS':
+                if not hasattr(self, 'genesis'):
+                    self.genesis = rlp.decode(self.db.get('GENESIS_RLP'), sedes=Block)
                 return self.genesis
             else:
                 return rlp.decode(block_rlp, Block)
-        except:
+        except Exception as e:
+            log.debug("Failed to get block", hash=blockhash, error=e)
             return None
 
     # Add a record allowing you to later look up the provided block's
@@ -301,7 +306,7 @@ class Chain(object):
     def get_children(self, block):
         if isinstance(block, Block):
             block = block.header.hash
-        if isinstance(block, (BlockHeader, FakeHeader)):
+        if isinstance(block, BlockHeader):
             block = block.hash
         return [self.get_block(h) for h in self.get_child_hashes(block)]
 
@@ -310,14 +315,21 @@ class Chain(object):
         if not block:
             return 0
         key = b'score:' + block.header.hash
-        if key not in self.db:
-            try:
-                parent_score = self.get_score(self.get_parent(block))
-                self.db.put(key, str(parent_score + block.difficulty +
-                                     random.randrange(block.difficulty // 10**6 + 1)))
-            except:
-                return int(self.db.get(b'score:' + block.prevhash))
-        return int(self.db.get(key))
+
+        fills = []
+        while key not in self.db:
+            fills.insert(0, (block.header.hash, block.difficulty))
+            key = b'score:' + block.header.prevhash
+            block = self.get_parent(block)
+            if block is None:
+                return 0
+        score = int(self.db.get(key))
+        for h, d in fills:
+            key = b'score:' + h
+            score = score + d + random.randrange(d // 10**6 + 1)
+            self.db.put(key, str(score))
+
+        return score
 
     # These two functions should be called periodically so as to
     # process blocks that were received but laid aside because
@@ -341,7 +353,7 @@ class Chain(object):
                 del self.parent_queue[parent_hash]
 
     # Call upon receiving a block
-    def add_block(self, block):  # TODO: Refactor this massive function
+    def add_block(self, block):
         now = self.localtime
         if block.header.timestamp > now:
             i = 0
@@ -374,6 +386,7 @@ class Chain(object):
                 return False
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
+            block_score = self.get_score(block)  # side effect: put 'score:' cache in db
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
@@ -435,7 +448,6 @@ class Chain(object):
             self.parent_queue[block.header.prevhash].append(block)
             log.info('No parent found. Delaying for now')
             return False
-        blk_txhashes = {tx.hash: True for tx in block.transactions}
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.header.hash, rlp.encode(block))
@@ -501,6 +513,24 @@ class Chain(object):
     @property
     def db(self):
         return self.env.db
+
+    def get_blockhashes_from_hash(self, hash, max):
+        try:
+            header = blocks.get_block_header(self.db, hash)
+        except KeyError:
+            return []
+
+        hashes = []
+        for i in xrange(max):
+            hash = header.prevhash
+            try:
+                header = blocks.get_block_header(self.db, hash)
+            except KeyError:
+                break
+            hashes.append(hash)
+            if header.number == 0:
+                break
+        return hashes
 
     @property
     def config(self):
