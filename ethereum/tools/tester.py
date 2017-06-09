@@ -162,7 +162,7 @@ class Chain(object):
         assert self.chain.add_block(self.block)
         assert self.head_state.trie.root_hash == self.chain.state.trie.root_hash
         for i in range(1, number_of_blocks):
-            b = make_head_candidate(self.chain, timestamp=self.chain.state.timestamp + 14)
+            b, _ = make_head_candidate(self.chain, timestamp=self.chain.state.timestamp + 14)
             b = Miner(b).mine(rounds=100, start_nonce=0)
             assert self.chain.add_block(b)
         self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 14)
