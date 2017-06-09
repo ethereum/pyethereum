@@ -602,14 +602,14 @@ def vm_execute(ext, msg, code):
                 elif ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, transfers_value=False, static=msg.static)
-                elif op == 'DELEGATECALL':
-                    return vm_exception('OPCODE INACTIVE')
+                elif ext.post_metropolis_hardfork() and op == 'STATICCALL':
+                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to, static=True)
+                elif op in ('DELEGATECALL', 'STATICCALL'):
+                    return vm_exception('OPCODE %s INACTIVE' % op)
                 elif op == 'CALLCODE':
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, static=msg.static)
-                elif op == 'STATICCALL':
-                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to, static=True)
                 else:
                     raise Exception("Lolwut")
                 # Get result

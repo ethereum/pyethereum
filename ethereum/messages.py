@@ -16,7 +16,7 @@ from ethereum.securetrie import SecureTrie
 from ethereum import opcodes
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
-from ethereum import vm
+from ethereum import new_vm as vm
 from ethereum.specials import specials as default_specials
 from ethereum.config import Env, default_config
 from ethereum.db import BaseDB, EphemDB
@@ -323,7 +323,8 @@ def _apply_msg(ext, msg, code):
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
                       gas=msg.gas, value=msg.value,
                       data=encode_hex(msg.data.extract_all()) if msg.data.size < 2500 else ("data<%d>" % msg.data.size),
-                      pre_storage=ext.log_storage(msg.to))
+                      pre_storage=ext.log_storage(msg.to),
+                      static=msg.static, depth=msg.depth)
 
     # Transfer value, instaquit if not enough
     snapshot = ext.snapshot()

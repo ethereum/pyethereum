@@ -4,12 +4,13 @@ try:
 except ImportError:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.keccak_256(x).digest()
-from bitcoin import privtopub
+from bitcoin import privtopub, ecdsa_raw_sign, ecdsa_raw_recover, encode_pubkey
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
+
 
 try:
     import secp256k1

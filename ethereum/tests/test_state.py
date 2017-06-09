@@ -17,7 +17,10 @@ place_to_check = 'GeneralStateTests'
 
 def test_state(filename, testname, testdata):
     logger.debug('running test:%r in %r' % (testname, filename))
-    checker(testdata)
+    try:
+        checker(testdata)
+    except new_statetest_utils.EnvNotFoundException:
+        pass
 
 
 def pytest_generate_tests(metafunc):
@@ -49,7 +52,10 @@ def main():
         for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print("Testing: %s %s" % (filename, testname))
-                checker(testdata)
+                try:
+                    checker(testdata)
+                except new_statetest_utils.EnvNotFoundException:
+                    pass
 
 
 if __name__ == '__main__':

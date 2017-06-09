@@ -135,8 +135,13 @@ def init_state(env, pre):
     # state.commit()
     return state
 
+class EnvNotFoundException(Exception):
+    pass
+
 def verify_state_test(test):
     print("Verifying state test")
+    if "env" not in test:
+        raise EnvNotFoundException("Env not found")
     _state = init_state(test["env"], test["pre"])
     for config_name, results in test["post"].items():
         # Old protocol versions may not be supported

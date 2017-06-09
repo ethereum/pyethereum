@@ -30,7 +30,7 @@ def proc_ecrecover(ext, msg):
         return 1, msg.gas - opcodes.GECRECOVER, []
     try:
         pub = utils.ecrecover_to_pub(message_hash, v, r, s)
-    except:
+    except Exception as e:
         return 1, msg.gas - gas_cost, []
     o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub)[-20:]]
     return 1, msg.gas - gas_cost, o
@@ -78,7 +78,13 @@ def proc_modexp(ext, msg):
     baselen = msg.data.extract32(0)
     explen = msg.data.extract32(32)
     modlen = msg.data.extract32(64)
-    gas_cost = (max(modlen, baselen) ** 2 * max(explen, 1)) // opcodes.GMODEXPQUADDIVISOR
+    first_exp_bytes = msg.data.extract32(96 + baselen)
+    bitlength = -1
+    while first_exp_bytes:
+        bitlength += 1
+        first_exp_bytes >>= 1
+    adjusted_explen = max(bitlength, 0) + 8 * max(explen - 32, 0)
+    gas_cost = (max(modlen, baselen) ** 2 * max(adjusted_explen, 1)) // opcodes.GMODEXPQUADDIVISOR
     print(baselen, explen, modlen, 'expected gas cost', gas_cost)
     if msg.gas < gas_cost:
         return 0, 0, []
