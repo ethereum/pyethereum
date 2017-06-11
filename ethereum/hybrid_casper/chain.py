@@ -355,6 +355,9 @@ class Chain(object):
     # Call upon receiving a block
     def add_block(self, block):
         now = self.localtime
+        # Make sure this block isn't already in our database
+        if block.header.hash in self.env.db:
+            return False
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -362,6 +365,7 @@ class Chain(object):
             self.time_queue.insert(i, block)
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
+            # TODO: Add logic which only adds blocks if we can trace it back to the full chain
             return False
 
         # Check what the current checkpoint head should be
