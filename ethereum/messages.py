@@ -248,7 +248,7 @@ def apply_transaction(state, tx):
     for s in suicides:
         state.set_balance(s, 0)
         state.del_account(s)
-    
+
     # Pre-Metropolis: commit state after every tx
     if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
