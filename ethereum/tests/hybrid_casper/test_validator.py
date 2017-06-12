@@ -82,8 +82,13 @@ def test_head_change_for_more_commits(db):
     casper.initiate()
     t.mine()
     validators = []
+    # Create 5 validators
     for i, k in enumerate(keys):
-        validators.append(validator.Validator(k, copy.deepcopy(genesis), network))
+        validators.append(validator.Validator(k, copy.deepcopy(genesis), network, mining=True if i == 0 else False))
+
+    network.broadcast(t.mine())
+    assert False
+    # Log all the validators in
     for v in validators:
         valcode_tx, deposit_tx = v.mk_deposit_transactions(3 * 10**18)
         valcode_success, o = apply_transaction(t.head_state, valcode_tx)
@@ -91,6 +96,9 @@ def test_head_change_for_more_commits(db):
         assert valcode_success and deposit_success
         t.block.transactions.append(valcode_tx)
         t.block.transactions.append(deposit_tx)
+        network.broadcast(t.mine())
+    # Fast forward to the first epoch, keeping all validators in sync
+    for i in range(EPOCH_LENGTH):
         network.broadcast(t.mine())
     assert False
     # t, casper = init_multi_validator_chain_and_casper(keys)
