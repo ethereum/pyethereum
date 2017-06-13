@@ -261,6 +261,10 @@ class State():
         self.journal.append(lambda: setattr(self, k, preval))
         setattr(self, k, v)
 
+    def is_SERENITY(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['SERENITY_FORK_BLKNUM']
+        else: return self.block_number >= self.config['SERENITY_FORK_BLKNUM']
+
     def is_HOMESTEAD(self, at_fork_height=False):
         if at_fork_height: return self.block_number == self.config['HOMESTEAD_FORK_BLKNUM']
         else: return self.block_number >= self.config['HOMESTEAD_FORK_BLKNUM']
