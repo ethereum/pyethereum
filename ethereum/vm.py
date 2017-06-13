@@ -91,10 +91,22 @@ class Compustate():
         self.steps = 0
         self.pc = 0
         self.gas = 0
-        self.prev_op = None
+
+        self.prev_memory = bytearray()
+        self.prev_stack = []
+        self.prev_pc = 0
+        self.prev_gas = 0
+        self.prev_prev_op = None
         self.last_returned = bytearray()
+
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
+
+    def reset_prev(self):
+        self.prev_memory = copy.copy(self.memory)
+        self.prev_stack = copy.copy(self.stack)
+        self.prev_pc = self.pc
+        self.prev_gas = self.gas
 
 
 # Preprocesses code, and determines which locations are in the middle
@@ -177,34 +189,35 @@ def revert(gas, data, **kargs):
 code_cache = {}
 
 
-def vm_trace(ext, msg, compustate, op_ary, tracer=log_vm_op):
+def vm_trace(ext, msg, compustate, prev_op_ary, tracer=log_vm_op):
     """
     This diverges from normal logging, as we use the logging namespace
     only to decide which features get logged in 'eth.vm.op'
     i.e. tracing can not be activated by activating a sub
     like 'eth.vm.op.stack'
     """
-    op, in_args, out_args, fee, opcode, pushval = op_ary
+    op, in_args, out_args, fee, opcode, pushval = prev_op_ary
 
     trace_data = {}
-    trace_data['stack'] = list(map(to_string, list(compustate.stack)))
-    if compustate.prev_op in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
+    trace_data['stack'] = list(map(to_string, list(compustate.prev_stack)))
+    if compustate.prev_prev_op in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
                    'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
                    'EXTCODECOPY'):
-        if len(compustate.memory) < 1024:
+        if len(compustate.prev_memory) < 1024:
             trace_data['memory'] = \
                 ''.join([encode_hex(ascii_chr(x)) for x
-                          in compustate.memory])
+                          in compustate.prev_memory])
         else:
             trace_data['sha3memory'] = \
                 encode_hex(utils.sha3(b''.join([ascii_chr(x) for
-                                      x in compustate.memory])))
-    if compustate.prev_op in ('SSTORE',) or compustate.steps == 0:
+                                      x in compustate.prev_memory])))
+    if compustate.prev_prev_op in ('SSTORE',) or compustate.steps == 0:
         trace_data['storage'] = ext.log_storage(msg.to)
-    trace_data['gas'] = to_string(compustate.gas + fee)
+    trace_data['gas'] = to_string(compustate.prev_gas)
+    trace_data['gas_cost'] = to_string(compustate.prev_gas - compustate.gas)
     trace_data['fee'] = fee
     trace_data['inst'] = opcode
-    trace_data['pc'] = to_string(compustate.pc - 1)
+    trace_data['pc'] = to_string(compustate.prev_pc)
     if compustate.steps == 0:
         trace_data['depth'] = msg.depth
         trace_data['address'] = msg.to
@@ -214,7 +227,7 @@ def vm_trace(ext, msg, compustate, op_ary, tracer=log_vm_op):
         trace_data['pushvalue'] = pushval
     tracer.trace('vm', op=op, **trace_data)
     compustate.steps += 1
-    compustate.prev_op = op
+    compustate.prev_prev_op = op
 
 
 def vm_execute(ext, msg, code):
@@ -255,11 +268,10 @@ def vm_execute(ext, msg, code):
                                 pre_height=to_string(len(compustate.stack)))
 
         # Apply operation
+        if trace_vm:
+            compustate.reset_prev()
         compustate.gas -= fee
         compustate.pc += 1
-
-        if trace_vm:
-            vm_trace(ext, msg, compustate, processed_code[compustate.pc-1])
 
         # Invalid operation
         if op == 'INVALID':
@@ -659,8 +671,11 @@ def vm_execute(ext, msg, code):
             log_msg.debug('SUICIDING', addr=utils.checksum_encode(msg.to), to=utils.checksum_encode(to), xferring=xfer)
             return 1, compustate.gas, []
 
-    compustate.pc += 1
+        if trace_vm:
+            vm_trace(ext, msg, compustate, processed_code[compustate.prev_pc])
+
     if trace_vm:
+        compustate.reset_prev()
         vm_trace(ext, msg, compustate, ['', 0, 0, 0, 0, 0])
     return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 

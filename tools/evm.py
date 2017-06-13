@@ -1,4 +1,5 @@
 import click
+import copy
 import json
 
 from ethereum import slogging
@@ -7,13 +8,13 @@ slogging.PRINT_FORMAT = '%(message)s'
 from ethereum import vm
 from ethereum.block import Block
 from ethereum.transactions import Transaction
-from ethereum.config import Env
+from ethereum.config import Env, default_config
 from ethereum.db import EphemDB
-from ethereum.genesis_helpers import initialize_genesis_keys, state_from_genesis_declaration
+from ethereum.genesis_helpers import initialize_genesis_keys, state_from_genesis_declaration, mk_genesis_data
 from ethereum.messages import VMExt, _apply_msg
 from ethereum.utils import bytearray_to_bytestr, normalize_address, encode_int256, encode_bin, scan_bin, zpad, encode_hex, decode_hex, big_endian_to_int, int_to_big_endian
 
-slogging.configure(':info,eth.vm:trace')
+slogging.configure(':info,eth.vm.op:trace')
 
 
 def scan_int(v):
@@ -49,19 +50,34 @@ def format_message(msg, kwargs, highlight, level):
     return '{"pc":%s,"op":%s,"gas":"%s","gasCost":"%s","memory":"%s","stack":[%s],"storage":{%s},"depth":%s}' % (
         kwargs['pc'],
         kwargs['inst'],
-        encode_int(kwargs['gas']),
-        encode_int(kwargs['fee']),
+        encode_int(int(kwargs['gas'])),
+        encode_int(kwargs['gas_cost']),
         vm.log_vm_op.memory,
-        ','.join([encode_int(v) for v in kwargs['stack']]),
+        ','.join(['"%s"' % encode_int(v) for v in kwargs['stack']]),
         vm.log_vm_op.storage,
         kwargs['depth']+1
     )
 vm.log_vm_op.format_message = format_message
 
 
+konfig = copy.copy(default_config)
+konfig['HOMESTEAD_FORK_BLKNUM'] = 0
+konfig['DAO_FORK_BLKNUM'] = 0
+konfig['ANTI_DOS_FORK_BLKNUM'] = 0
+konfig['SPURIOUS_DRAGON_FORK_BLKNUM'] = 0
+konfig['METROPOLIS_FORK_BLKNUM'] = 999999999
+
+
 class EVMRunner(object):
     def __init__(self, genesis):
-        env = Env(EphemDB())
+        env = Env(EphemDB(), konfig)
+        if not genesis:
+            genesis = mk_genesis_data(env)
+
+        if 'config' in genesis:
+            if 'homesteadBlock' in genesis['config']:
+                env.config['HOMESTEAD_FORK_BLKNUM'] = int(genesis['config']['homesteadBlock'])
+
         self.state = state_from_genesis_declaration(genesis, env)
         initialize_genesis_keys(self.state, Block(self.state.prev_headers[0], [], []))
 
@@ -85,7 +101,8 @@ class EVMRunner(object):
 @click.option('-r', '--receiver', type=str, help='Receiver of the transaction.')
 @click.option('--gas', type=str, help='Gas limit for the run.')
 def main(genesis, code, sender, receiver, gas):
-    genesis = json.load(genesis)
+    if genesis:
+        genesis = json.load(genesis)
     EVMRunner(genesis).run(
         sender=sender,
         to=receiver,
