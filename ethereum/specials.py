@@ -78,7 +78,7 @@ def proc_modexp(ext, msg):
     baselen = msg.data.extract32(0)
     explen = msg.data.extract32(32)
     modlen = msg.data.extract32(64)
-    first_exp_bytes = msg.data.extract32(96 + baselen)
+    first_exp_bytes = msg.data.extract32(96 + baselen) >> (8 * max(32 - explen, 0))
     bitlength = -1
     while first_exp_bytes:
         bitlength += 1

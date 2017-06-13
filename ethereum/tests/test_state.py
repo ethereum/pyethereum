@@ -52,10 +52,10 @@ def main():
         for testname, testdata in list(tests.items()):
             if len(sys.argv) < 3 or testname == sys.argv[2]:
                 print("Testing: %s %s" % (filename, testname))
-                try:
-                    checker(testdata)
-                except new_statetest_utils.EnvNotFoundException:
-                    pass
+                # try:
+                checker(testdata)
+                # except new_statetest_utils.EnvNotFoundException:
+                #     pass
 
 
 if __name__ == '__main__':
