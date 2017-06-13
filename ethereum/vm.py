@@ -88,8 +88,10 @@ class Compustate():
     def __init__(self, **kwargs):
         self.memory = bytearray()
         self.stack = []
+        self.steps = 0
         self.pc = 0
         self.gas = 0
+        self.prev_op = None
         self.last_returned = bytearray()
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
@@ -175,6 +177,46 @@ def revert(gas, data, **kargs):
 code_cache = {}
 
 
+def vm_trace(ext, msg, compustate, op_ary, tracer=log_vm_op):
+    """
+    This diverges from normal logging, as we use the logging namespace
+    only to decide which features get logged in 'eth.vm.op'
+    i.e. tracing can not be activated by activating a sub
+    like 'eth.vm.op.stack'
+    """
+    op, in_args, out_args, fee, opcode, pushval = op_ary
+
+    trace_data = {}
+    trace_data['stack'] = list(map(to_string, list(compustate.stack)))
+    if compustate.prev_op in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
+                   'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
+                   'EXTCODECOPY'):
+        if len(compustate.memory) < 1024:
+            trace_data['memory'] = \
+                ''.join([encode_hex(ascii_chr(x)) for x
+                          in compustate.memory])
+        else:
+            trace_data['sha3memory'] = \
+                encode_hex(utils.sha3(b''.join([ascii_chr(x) for
+                                      x in compustate.memory])))
+    if compustate.prev_op in ('SSTORE',) or compustate.steps == 0:
+        trace_data['storage'] = ext.log_storage(msg.to)
+    trace_data['gas'] = to_string(compustate.gas + fee)
+    trace_data['fee'] = fee
+    trace_data['inst'] = opcode
+    trace_data['pc'] = to_string(compustate.pc - 1)
+    if compustate.steps == 0:
+        trace_data['depth'] = msg.depth
+        trace_data['address'] = msg.to
+    trace_data['steps'] = compustate.steps
+    trace_data['depth'] = msg.depth
+    if op[:4] == 'PUSH':
+        trace_data['pushvalue'] = pushval
+    tracer.trace('vm', op=op, **trace_data)
+    compustate.steps += 1
+    compustate.prev_op = op
+
+
 def vm_execute(ext, msg, code):
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
@@ -188,8 +230,6 @@ def vm_execute(ext, msg, code):
     codelen = len(processed_code)
 
     op = None
-    steps = 0
-    _prevop = None  # for trace only
 
     while compustate.pc < codelen:
         # print('op: ', op, time.time() - s)
@@ -219,40 +259,7 @@ def vm_execute(ext, msg, code):
         compustate.pc += 1
 
         if trace_vm:
-            """
-            This diverges from normal logging, as we use the logging namespace
-            only to decide which features get logged in 'eth.vm.op'
-            i.e. tracing can not be activated by activating a sub
-            like 'eth.vm.op.stack'
-            """
-            trace_data = {}
-            trace_data['stack'] = list(map(to_string, list(compustate.stack)))
-            if _prevop in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
-                           'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
-                           'EXTCODECOPY'):
-                if len(compustate.memory) < 1024:
-                    trace_data['memory'] = \
-                        ''.join([encode_hex(ascii_chr(x)) for x
-                                  in compustate.memory])
-                else:
-                    trace_data['sha3memory'] = \
-                        encode_hex(utils.sha3(b''.join([ascii_chr(x) for
-                                              x in compustate.memory])))
-            if _prevop in ('SSTORE',) or steps == 0:
-                trace_data['storage'] = ext.log_storage(msg.to)
-            trace_data['gas'] = to_string(compustate.gas + fee)
-            trace_data['inst'] = opcode
-            trace_data['pc'] = to_string(compustate.pc - 1)
-            if steps == 0:
-                trace_data['depth'] = msg.depth
-                trace_data['address'] = msg.to
-            trace_data['steps'] = steps
-            trace_data['depth'] = msg.depth
-            if op[:4] == 'PUSH':
-                trace_data['pushvalue'] = pushval
-            log_vm_op.trace('vm', op=op, **trace_data)
-            steps += 1
-            _prevop = op
+            vm_trace(ext, msg, compustate, processed_code[compustate.pc-1])
 
         # Invalid operation
         if op == 'INVALID':
@@ -652,11 +659,9 @@ def vm_execute(ext, msg, code):
             log_msg.debug('SUICIDING', addr=utils.checksum_encode(msg.to), to=utils.checksum_encode(to), xferring=xfer)
             return 1, compustate.gas, []
 
-        # assert utils.is_numeric(compustate.gas)
-        # this is slow!
-        # for a in stk:
-        #     assert is_numeric(a), (op, stk)
-        #     assert a >= 0 and a < 2**256, (a, op, stk)
+    compustate.pc += 1
+    if trace_vm:
+        vm_trace(ext, msg, compustate, ['', 0, 0, 0, 0, 0])
     return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
 
