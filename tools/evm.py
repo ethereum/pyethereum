@@ -77,6 +77,9 @@ class EVMRunner(object):
         if 'config' in genesis:
             if 'homesteadBlock' in genesis['config']:
                 env.config['HOMESTEAD_FORK_BLKNUM'] = int(genesis['config']['homesteadBlock'])
+                env.config['DAO_FORK_BLKNUM'] = int(genesis['config']['homesteadBlock'])
+                env.config['ANTI_DOS_FORK_BLKNUM'] = int(genesis['config']['homesteadBlock'])
+                env.config['SPURIOUS_DRAGON_FORK_BLKNUM'] = int(genesis['config']['homesteadBlock'])
 
         self.state = state_from_genesis_declaration(genesis, env)
         initialize_genesis_keys(self.state, Block(self.state.prev_headers[0], [], []))
