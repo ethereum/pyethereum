@@ -254,7 +254,7 @@ class Chain(object):
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
                 log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
-            self.db.put(b'block:' + str(block.header.number), block.header.hash)
+            self.db.put(b'block:' + utils.to_string(str(block.header.number)), block.header.hash)
             self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
             block_score = self.get_score(block)  # side effect: put 'score:' cache in db
             self.head_hash = block.header.hash
