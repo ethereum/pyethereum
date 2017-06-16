@@ -1,4 +1,4 @@
-from ethereum.pow import ethash, ethash_utils, ethpow
+from ethereum.pow import ethpow
 from ethereum import utils
 from ethereum.common import update_block_env_variables, calc_difficulty
 from ethereum.exceptions import VerificationFailed
