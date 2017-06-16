@@ -43,6 +43,7 @@ class Chain(object):
             self.state = genesis
             self.env = self.state.env
             print('Initializing chain from provided state')
+            reset_genesis = True
         elif "extraData" in genesis:
             self.state = state_from_genesis_declaration(
                 genesis, self.env)
