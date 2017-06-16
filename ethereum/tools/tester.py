@@ -132,16 +132,21 @@ class Chain(object):
         self.last_sender = None
         self.last_tx = None
 
-    def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
-        sender_addr = privtoaddr(sender)
-        transaction = Transaction(self.head_state.get_nonce(sender_addr), gasprice, startgas,
-                                  to, value, data).sign(sender)
-        self.last_tx, self.last_sender = transaction, sender
+    def direct_tx(self, transaction):
+        self.last_tx, self.last_sender = transaction, None
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)
         if not success:
             raise TransactionFailed()
         return output
+
+    def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        sender_addr = privtoaddr(sender)
+        transaction = Transaction(self.head_state.get_nonce(sender_addr), gasprice, startgas,
+                                  to, value, data).sign(sender)
+        o = self.direct_tx(transaction)
+        self.last_sender = sender
+        return o
 
     def contract(self, sourcecode, args=[], sender=k0, value=0, language='evm', startgas=STARTGAS, gasprice=GASPRICE):
         if language == 'evm':

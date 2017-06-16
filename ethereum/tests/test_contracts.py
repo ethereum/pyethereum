@@ -1088,7 +1088,7 @@ def kall(a:arr, b, c:arr, d:str, e):
 def test_multiarg_code():
     c = tester.Chain()
     x = c.contract(multiarg_code, language='serpent')
-    o = x.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
+    o = x.kall([1, 2, 3], 4, [5, 6, 7], b"doge", 8)
     assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
 
 peano_code = """
@@ -1378,7 +1378,7 @@ def mcopy_test(foo:str, a, b, c):
 def test_mcopy():
     c = tester.Chain()
     x = c.contract(mcopy_code, language='serpent')
-    assert x.mcopy_test("123", 5, 6, 259) == \
+    assert x.mcopy_test(b"123", 5, 6, 259) == \
         b'\x00'*31+b'\x05'+b'\x00'*31+b'\x06'+b'\x00'*30+b'\x01\x03'+b'123'
 
 
@@ -1493,7 +1493,7 @@ def test_double_array():
     c = tester.Chain()
     x = c.contract(double_array_code, language='serpent')
     assert x.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
-    assert x.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
+    assert x.bar([1, 2, 3], b"moo", [4, 5, 6, 7]) == [123, 4567]
 
 
 abi_logging_code = """
@@ -1527,7 +1527,7 @@ def test_abi_logging():
     x.test_frog(5)
     assert o == [{"_event_type": b"frog", "y": 5}]
     o.pop()
-    x.test_moose(7, "nine", 11, [13, 15, 17])
+    x.test_moose(7, b"nine", 11, [13, 15, 17])
     assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
                  "c": 11, "d": [13, 15, 17]}]
     o.pop()
