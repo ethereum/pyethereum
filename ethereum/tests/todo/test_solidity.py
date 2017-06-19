@@ -126,16 +126,15 @@ def test_symbols():
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_interop():
-    serpent_contract = """\
-extern solidity: [sub2:[]:i]
-
-def main(a):
-    return(a.sub2() * 2)
-
-def sub1():
-    return(5)
-
-"""
+    serpent_contract = """
+    extern solidity: [sub2:[]:i]
+    
+    def main(a):
+        return(a.sub2() * 2)
+    
+    def sub1():
+        return(5)
+    """
 
     solidity_contract = """
     contract serpent { function sub1() returns (int256 y) {} }
@@ -169,7 +168,7 @@ def sub1():
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_constructor():
-    constructor_contract = '''
+    constructor_contract = """
     contract testme {
         uint value;
         function testme(uint a) {
@@ -179,7 +178,7 @@ def test_constructor():
             return value;
         }
     }
-    '''
+    """
 
     state = tester.state()
     contract = state.abi_contract(

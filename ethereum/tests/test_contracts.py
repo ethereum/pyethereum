@@ -12,10 +12,10 @@ from ethereum.utils import safe_ord, big_endian_to_int
 
 
 # Test EVM contracts
-serpent_code = '''
+serpent_code = """
 def main(a,b):
     return(a ^ b)
-'''
+"""
 
 
 def test_evm():
@@ -31,8 +31,7 @@ def test_evm():
 
 # Test serpent compilation of variables using _with_, doing a simple
 # arithmetic calculation 20 * 30 + 10 = 610
-sixten_code =\
-    '''
+sixten_code = """
 (with 'x 10
     (with 'y 20
         (with 'z 30
@@ -43,7 +42,7 @@ sixten_code =\
         )
     )
 )
-'''
+"""
 
 
 def test_sixten():
@@ -54,8 +53,7 @@ def test_sixten():
     assert utils.big_endian_to_int(o1) == 610
 
 
-with_code = \
-    """
+with_code = """
 def f1():
     o = array(4)
     with x = 5:
@@ -103,23 +101,21 @@ def test_with():
 
 # Test Serpent's import mechanism
 
-mul2_code = \
-    '''
+mul2_code = """
 def double(v):
     log(v)
     return(v*2)
-'''
+"""
 
 filename = "mul2_qwertyuioplkjhgfdsa.se"
 
-returnten_code = \
-    '''
+returnten_code = """
 extern mul2: [double:i]
 
 x = create("%s")
 log(x)
 return(x.double(5))
-''' % filename
+""" % filename
 
 
 def test_returnten():
@@ -133,25 +129,23 @@ def test_returnten():
 
 # Test inset
 
-inset_inner_code = \
-    '''
+inset_inner_code = """
 def g(n):
     return(n + 10)
 
 def f(n):
     return n*2
-'''
+"""
 
 filename2 = "inner_qwertyuioplkjhgfdsa.se"
 
-inset_outer_code = \
-    '''
+inset_outer_code = """
 inset("%s")
 
 def foo():
     res = self.g(12)
     return res
-''' % filename2
+""" % filename2
 
 
 def test_inset():
@@ -163,26 +157,23 @@ def test_inset():
 
 # Inset at the end instead
 
-inset_inner_code2 = \
-    '''
+inset_inner_code2 = """
 def g(n):
     return(n + 10)
 
 def f(n):
     return n*2
-'''
+"""
 
 filename25 = "inner_qwertyuioplkjhgfdsa.se"
 
-inset_outer_code2 = \
-    '''
-
+inset_outer_code2 = """
 def foo():
     res = self.g(12)
     return res
 
 inset("%s")
-''' % filename25
+""" % filename25
 
 
 def test_inset2():
@@ -195,15 +186,14 @@ def test_inset2():
 
 # Test a simple namecoin implementation
 
-namecoin_code =\
-    '''
+namecoin_code ="""
 def main(k, v):
     if !self.storage[k]:
         self.storage[k] = v
         return(1)
     else:
         return(0)
-'''
+"""
 
 
 def test_namecoin():
@@ -220,7 +210,7 @@ def test_namecoin():
 
 # Test a simple currency implementation
 
-currency_code = '''
+currency_code = """
 data balances[2^160]
 
 def init():
@@ -239,7 +229,7 @@ def send(to, value):
         return(1)
     else:
         return(0)
-'''
+"""
 
 
 def test_currency():
@@ -256,7 +246,7 @@ def test_currency():
 
 # Test a data feed
 
-data_feed_code = '''
+data_feed_code = """
 data creator
 data values[]
 
@@ -273,7 +263,7 @@ def set(k, v):
 
 def get(k):
     return(self.values[k])
-'''
+"""
 
 
 def test_data_feeds():
@@ -294,7 +284,7 @@ def test_data_feeds():
 # Test an example hedging contract, using the data feed. This tests
 # contracts calling other contracts
 
-hedge_code = '''
+hedge_code = """
 extern datafeed: [set:ii, get:i]
 
 data partyone
@@ -333,7 +323,7 @@ def main(datafeed, index):
             return(4)
         else:
             return(5)
-'''
+"""
 
 
 def test_hedge():
@@ -370,7 +360,7 @@ def test_hedge():
 
 
 # Test the LIFO nature of call
-arither_code = '''
+arither_code = """
 def init():
     self.storage[0] = 10
 
@@ -384,7 +374,7 @@ def f2():
 
 def f3():
     return(self.storage[0])
-'''
+"""
 
 
 def test_lifo():
@@ -395,7 +385,7 @@ def test_lifo():
 
 
 # Test suicides and suicide reverts
-suicider_code = '''
+suicider_code = """
 def mainloop(rounds):
     self.storage[15] = 40
     self.suicide()
@@ -416,7 +406,7 @@ def suicide():
 
 def ping_storage15():
     return(self.storage[15])
-'''
+"""
 
 
 def test_suicider():
@@ -442,7 +432,7 @@ def test_suicider():
 
 # Test reverts
 
-reverter_code = '''
+reverter_code = """
 def entry():
     self.non_recurse(gas=100000)
     self.recurse(gas=100000)
@@ -459,7 +449,7 @@ def recurse():
     self.recurse()
     while msg.gas > 0:
         self.storage["waste_some_gas"] = 0
-'''
+"""
 
 
 def test_reverter():
@@ -473,16 +463,14 @@ def test_reverter():
 
 # Test stateless contracts
 
-add1_code = \
-    '''
+add1_code = """
 def main(x):
     self.storage[1] += x
-'''
+"""
 
 filename3 = "stateless_qwertyuioplkjhgfdsa.se"
 
-callcode_test_code = \
-    '''
+callcode_test_code = """
 extern add1: [main:i]
 
 x = create("%s")
@@ -491,7 +479,7 @@ x.main(4, call=code)
 x.main(60, call=code)
 x.main(40)
 return(self.storage[1])
-''' % filename3
+""" % filename3
 
 
 def test_callcode():
@@ -505,12 +493,12 @@ def test_callcode():
 
 
 # https://github.com/ethereum/serpent/issues/8
-array_code = '''
+array_code = """
 def main():
     a = array(1)
     a[0] = 1
     return(a, items=1)
-'''
+"""
 
 
 def test_array():
@@ -518,13 +506,13 @@ def test_array():
     x = c.contract(array_code, language='serpent')
     assert x.main() == [1]
 
-array_code2 = '''
+array_code2 = """
 def main():
     a = array(1)
     something = 2
     a[0] = 1
     return(a, items=1)
-'''
+"""
 
 
 def test_array2():
@@ -1057,8 +1045,7 @@ def test_sort():
 
 filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
-sort_tester_code = \
-    '''
+sort_tester_code = """
 extern sorter: [sort:a]
 data sorter
 
@@ -1067,7 +1054,7 @@ def init():
 
 def test(args:arr):
     return(self.sorter.sort(args, outsz=len(args)):arr)
-''' % filename9
+""" % filename9
 
 
 @pytest.mark.timeout(100)

@@ -356,21 +356,21 @@ def sha3rlp(x):
 
 
 def decode_bin(v):
-    '''decodes a bytearray from serialization'''
+    """decodes a bytearray from serialization"""
     if not is_string(v):
         raise Exception("Value must be binary, not RLP array")
     return v
 
 
 def decode_addr(v):
-    '''decodes an address from serialization'''
+    """decodes an address from serialization"""
     if len(v) not in [0, 20]:
         raise Exception("Serialized addresses must be empty or 20 bytes long!")
     return encode_hex(v)
 
 
 def decode_int(v):
-    '''decodes and integer from serialization'''
+    """decodes and integer from serialization"""
     if len(v) > 0 and (v[0] == b'\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
@@ -381,17 +381,17 @@ def decode_int256(v):
 
 
 def encode_bin(v):
-    '''encodes a bytearray into serialization'''
+    """encodes a bytearray into serialization"""
     return v
 
 
 def encode_root(v):
-    '''encodes a trie root into serialization'''
+    """encodes a trie root into serialization"""
     return v
 
 
 def encode_int(v):
-    '''encodes an integer into serialization'''
+    """encodes an integer into serialization"""
     if not is_numeric(v) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
@@ -468,7 +468,7 @@ def parse_as_int(s):
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
-    ''' utility function to facilitate debug, it will print input args before
+    """ utility function to facilitate debug, it will print input args before
     function call, and print return value after function call
 
     usage:
@@ -479,7 +479,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
 
     :param ignore_first_arg: whether print the first arg or not.
     useful when ignore the `self` parameter of an object method call
-    '''
+    """
     from functools import wraps
 
     def display(x):

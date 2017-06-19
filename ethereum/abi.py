@@ -135,7 +135,7 @@ def event_id(name, encode_types):
 
 
 def decint(n, signed=False):  # pylint: disable=invalid-name,too-many-branches
-    ''' Decode an unsigned/signed integer. '''
+    """ Decode an unsigned/signed integer. """
 
     if isinstance(n, str):
         n = utils.to_string(n)
@@ -185,7 +185,7 @@ def decint(n, signed=False):  # pylint: disable=invalid-name,too-many-branches
 
 
 def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements,too-many-locals
-    ''' Encode `arg` as `typ`.
+    """ Encode `arg` as `typ`.
 
     `arg` will be encoded in a best effort manner, were necessary the function
     will try to correctly define the underlying binary representation (ie.
@@ -223,7 +223,7 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
     Note:
         This function don't work with array types, for that use the `enc`
         function.
-    '''
+    """
     base, sub, _ = typ
 
     if base == 'uint':
