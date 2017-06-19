@@ -329,8 +329,8 @@ class State():
     # Converts the state tree to a dictionary
     def to_dict(self):
         state_dump = {}
-        for address in self.trie.to_dict().keys():
-            acct = self._get_account_unsafe(address)
+        for addr in self.trie.to_dict().keys():
+            acct = self._get_account_unsafe(addr)
             storage_dump = {}
             acct_trie = SecureTrie(Trie(self.db))
             acct_trie.root_hash = acct.storage
@@ -339,14 +339,14 @@ class State():
             acct_dump = {"storage": storage_dump}
             for c in ACCOUNT_OUTPUTTABLE_PARAMS:
                 acct_dump[c] = snapshot_form(getattr(acct, c))
-            state_dump[encode_hex(address)] = acct_dump
-        for address, v in self.cache.items():
-            if encode_hex(address) not in state_dump:
-                state_dump[encode_hex(address)] = {"storage":{}}
+            state_dump[encode_hex(addr)] = acct_dump
+        for addr, v in self.cache.items():
+            if encode_hex(addr) not in state_dump:
+                state_dump[encode_hex(addr)] = {"storage":{}}
                 blanky = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
                 for c in ACCOUNT_OUTPUTTABLE_PARAMS:
-                    state_dump[encode_hex(address)][c] = snapshot_form(getattr(blanky, c))
-            acct_dump = state_dump[encode_hex(address)]
+                    state_dump[encode_hex(addr)][c] = snapshot_form(getattr(blanky, c))
+            acct_dump = state_dump[encode_hex(addr)]
             for key, val in v.items():
                 if key in ACCOUNT_SPECIAL_PARAMS and key != 'storage':
                     acct_dump[key] = snapshot_form(val)

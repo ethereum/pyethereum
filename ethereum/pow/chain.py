@@ -379,19 +379,19 @@ class Chain(object):
         return self.env.db
 
     def get_blockhashes_from_hash(self, hash, max):
-        try:
-            header = blocks.get_block_header(self.db, hash)
-        except KeyError:
+        block = self.get_block(hash)
+        if block is None:
             return []
 
+        header = block.header
         hashes = []
         for i in xrange(max):
             hash = header.prevhash
-            try:
-                header = blocks.get_block_header(self.db, hash)
-            except KeyError:
+            block = self.get_block(hash)
+            if block is None:
                 break
-            hashes.append(hash)
+            header = block.header
+            hashes.append(header.hash)
             if header.number == 0:
                 break
         return hashes

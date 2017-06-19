@@ -6,6 +6,7 @@ from ethereum.utils import encode_hex, str_to_bytes
 
 FILL = 1
 VERIFY = 2
+TIME = 3
 
 fixture_path = os.path.join(os.path.dirname(__file__), '../..', 'fixtures')
 
