@@ -1,6 +1,6 @@
 import rlp
 from ethereum.utils import normalize_address, hash32, trie_root, \
-    big_endian_int, address, int256, encode_hex, encode_int, sha3
+    big_endian_int, address, int256, encode_hex, decode_hex, encode_int, sha3
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie

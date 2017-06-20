@@ -321,9 +321,9 @@ class State():
         self.journal = []
 
     def to_dict(self):
-        for address in self.trie.to_dict().keys():
-            self.get_and_cache_account(address)
-        return {encode_hex(address): acct.to_dict() for address, acct in self.cache.items()}
+        for addr in self.trie.to_dict().keys():
+            self.get_and_cache_account(addr)
+        return {encode_hex(addr): acct.to_dict() for addr, acct in self.cache.items()}
 
     def del_account(self, address):
         self.set_balance(address, 0)

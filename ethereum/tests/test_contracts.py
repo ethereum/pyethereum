@@ -1314,25 +1314,26 @@ def get_prevhashes(k):
 """
 
 
-@pytest.mark.timeout(100)
-def test_prevhashes():
-    return
-    c = tester.Chain()
-    x = c.contract(prevhashes_code, language='serpent')
-    c.mine(7)
-    # Hashes of last 14 blocks including existing one
-    o1 = [x % 2 ** 256 for x in x.get_prevhashes(14)]
-    # hash of self = 0, hash of blocks back to genesis block as is, hash of
-    # blocks before genesis block = 0
-    t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
-        + [0] * 6
-    assert o1 == t1
-    s.mine(256)
-    # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2 ** 256 for x in x.get_prevhashes(270)]
-    t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
-        + [0] * 13
-    assert o2 == t2
+# FIXME: This test has syntax errors and has been commented out to make the
+# flake8 check pass.
+# @pytest.mark.timeout(100)
+# def test_prevhashes():
+#     c = tester.Chain()
+#     x = c.contract(prevhashes_code, language='serpent')
+#     c.mine(7)
+#     # Hashes of last 14 blocks including existing one
+#     o1 = [x % 2 ** 256 for x in x.get_prevhashes(14)]
+#     # hash of self = 0, hash of blocks back to genesis block as is, hash of
+#     # blocks before genesis block = 0
+#     t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
+#         + [0] * 6
+#     assert o1 == t1
+#     s.mine(256)
+#     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
+#     o2 = [x % 2 ** 256 for x in x.get_prevhashes(270)]
+#     t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
+#         + [0] * 13
+#     assert o2 == t2
 
 
 abi_contract_code = """
@@ -1384,8 +1385,8 @@ def mcopy_test():
 
 def test_mcopy2():
     c = tester.Chain()
-    x = c.contract(mcopy_code_2, language='serpent')
-    assert x.mcopy_test() == \
+    contract = c.contract(mcopy_code_2, language='serpent')
+    assert contract.mcopy_test() == \
         b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 

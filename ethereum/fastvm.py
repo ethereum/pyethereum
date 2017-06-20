@@ -231,7 +231,7 @@ def vm_execute(ext, msg, code):
 
       # Invalid operation; can only come at the end of a chunk
       if ops[-1][0] == 'INVALID':
-          return vm_exception('INVALID OP', opcode=opcode)
+          return vm_exception('INVALID OP', opcode=ops[-1][1])
 
       for op, opcode, pushval in ops:
 

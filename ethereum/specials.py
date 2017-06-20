@@ -146,7 +146,8 @@ def proc_ecmul(ext, msg):
     if p is False:
         return 0, 0, []
     o = py_pairing.normalize(py_pairing.multiply(p, m))
-    return 1, msg.gas - opcodes.GECMUL, [safe_ord(x) for x in (encode_int32(o[0].n) + encode_int32(o[1].n))]
+    return (1, msg.gas - opcodes.GECMUL,
+            [safe_ord(c) for c in (encode_int32(o[0].n) + encode_int32(o[1].n))])
 
 def proc_ecpairing(ext, msg):
     if not ext.post_metropolis_hardfork():

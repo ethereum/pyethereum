@@ -44,7 +44,7 @@ class TransactionQueue():
                 heapq.heappop(self.txs)
                 item.prio = item.tx.startgas
                 heapq.heappush(self.aside, item)
-            elif item.tx.gasprice >= min_gasprice or prio == PRIO_INFINITY:
+            elif item.tx.gasprice >= min_gasprice or item.prio == PRIO_INFINITY:
                 heapq.heappop(self.txs)
                 return item.tx
             else:
