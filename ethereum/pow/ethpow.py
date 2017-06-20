@@ -1,8 +1,12 @@
+from ethereum.pow import ethash
 from ethereum import utils
+import time
 import sys
+import warnings
 from collections import OrderedDict
+from ethereum import utils
 from ethereum.slogging import get_logger
-import pyethash
+import rlp
 
 log = get_logger('eth.pow')
 
@@ -11,10 +15,24 @@ if sys.version_info.major == 2:
 else:
     from functools import lru_cache
 
-mkcache = pyethash.mkcache_bytes
-EPOCH_LENGTH = 30000
-def hashimoto_light(s, c, h, n):
-    return pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
+try:
+    import pyethash
+    ETHASH_LIB = 'pyethash'  # the C++ based implementation
+except ImportError:
+    ETHASH_LIB = 'ethash'
+    warnings.warn('using pure python implementation', ImportWarning)
+
+if ETHASH_LIB == 'ethash':
+    mkcache = ethash.mkcache
+    EPOCH_LENGTH = 30000
+    hashimoto_light = ethash.hashimoto_light
+elif ETHASH_LIB == 'pyethash':
+    mkcache = pyethash.mkcache_bytes
+    EPOCH_LENGTH = 30000
+    hashimoto_light = lambda s, c, h, n: \
+        pyethash.hashimoto_light(s, c, h, utils.big_endian_to_int(n))
+else:
+    raise Exception("invalid ethash library set")
 
 TT64M1 = 2**64 - 1
 cache_seeds = ['\x00' * 32]
@@ -23,6 +41,7 @@ cache_by_seed.max_items = 10
 
 
 def get_cache(block_number):
+    import sha3
     while len(cache_seeds) <= block_number // EPOCH_LENGTH:
         cache_seeds.append(utils.sha3(cache_seeds[-1]))
     seed = cache_seeds[block_number // EPOCH_LENGTH]
@@ -105,3 +124,5 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
             assert len(o[b"mix digest"]) == 32
             return bin_nonce, o[b"mix digest"]
     return None, None
+
+
