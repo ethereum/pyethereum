@@ -45,6 +45,9 @@ lint-minimal:
 test:
 	py.test --tb=no ethereum/tests/
 
+test-minimal:
+	py.test ethereum/tests/test_abi.py ethereum/tests/test_bloom.py ethereum/tests/test_chain.py ethereum/tests/test_compress.py ethereum/tests/test_db.py ethereum/tests/test_difficulty.py ethereum/tests/test_opcodes.py ethereum/tests/test_trie_next_prev.py ethereum/tests/test_utils.py
+
 testnovm:
 	py.test --tb=no ethereum/tests/ --ignore=ethereum/tests/test_vm.py
 
