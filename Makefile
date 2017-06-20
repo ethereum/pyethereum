@@ -40,7 +40,7 @@ lint:
 	flake8 ethereum tests --ignore=E501
 
 lint-minimal:
-	python -m flake8 --ignore=F401,F841,F811 --select=F --exclude=todo,experimental ethereum
+	python -m flake8 --ignore=F401,F841,F811 --select=F --exclude=todo,experimental,ethash.py,ethash_utils.py ethereum
 
 test:
 	py.test --tb=no ethereum/tests/
