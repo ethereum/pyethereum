@@ -27,8 +27,11 @@ install:
   - travis_retry pip install tox
   - travis_retry pip install coverage
   - travis_retry pip install flake8
+  - travis_retry python setup.py install
+  - travis_retry pip install -r dev_requirements.txt
 script:
-  make lint-minimal
+  - make lint-minimal
+  - make test-minimal
   # XXX: For now we're only performing minimal CI checks as most tests are
   # broken. Tests will be individually added here as they're fixed.
   #- if [ -d .tox/$TOX_ENV/ ]; then cd .tox/$TOX_ENV && coverage erase; fi;
