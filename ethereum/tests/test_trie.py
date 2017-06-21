@@ -5,7 +5,7 @@ import ethereum.db as db
 import itertools
 from ethereum.slogging import get_logger
 from rlp.utils import decode_hex
-from ethereum.utils import encode_hex
+from ethereum.utils import encode_hex, to_string
 from ethereum.abi import is_string
 logger = get_logger()
 
@@ -53,15 +53,15 @@ def run_test(name, pairs):
         for k, v in permut:
             #logger.debug('updating with (%s, %s)' %(k, v))
             if v is not None:
-                t.update(k, v)
+                t.update(to_string(k), to_string(v))
             else:
-                t.delete(k)
+                t.delete(to_string(k))
         # make sure we have deletes at the end
         for k, v in deletes:
-            t.delete(k)
-        if pairs['root'] != b'0x' + encode_hex(t.root_hash):
+            t.delete(to_string(k))
+        if pairs['root'] != '0x' + encode_hex(t.root_hash):
             raise Exception("Mismatch: %r %r %r %r" % (
-                name, pairs['root'], b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
+                name, pairs['root'], '0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
 
 
 if __name__ == '__main__':
