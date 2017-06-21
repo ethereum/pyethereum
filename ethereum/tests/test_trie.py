@@ -1,5 +1,4 @@
 import os
-import ethereum.testutils as testutils
 import json
 import ethereum.trie as trie
 import ethereum.db as db
@@ -8,7 +7,6 @@ from ethereum.slogging import get_logger
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
 from ethereum.abi import is_string
-from ethereum.testutils import fixture_to_bytes
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -32,7 +30,7 @@ def load_tests():
         sub_fixture = json.load(open(os.path.join(testdir, f)))
         for k, v in sub_fixture.items():
             fixture[f + "_" + k] = v
-    return fixture_to_bytes(fixture)
+    return fixture
 
 
 def run_test(name, pairs):
