@@ -372,7 +372,7 @@ class Chain(object):
     def get_transaction(self, tx):
         print('Deprecated. Use get_tx_position')
         blknum, index = self.get_tx_position(tx)
-        blk = self.get_block_by_number(blknum) 
+        blk = self.get_block_by_number(blknum)
         return blk.transactions[index], blk, index
 
     # Get descendants of a block
@@ -397,7 +397,7 @@ class Chain(object):
 
         header = block.header
         hashes = []
-        for i in xrange(max):
+        for i in range(max):
             hash = header.prevhash
             block = self.get_block(hash)
             if block is None:
