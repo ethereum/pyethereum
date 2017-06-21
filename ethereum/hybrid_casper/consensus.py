@@ -1,3 +1,5 @@
+from ethereum import utils
+
 # Update block variables into the state
 def update_block_env_variables(state, block):
     state.timestamp = block.header.timestamp

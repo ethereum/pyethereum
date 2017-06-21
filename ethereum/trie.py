@@ -112,9 +112,9 @@ def unpack_to_nibbles(bindata):
 
 
 def starts_with(full, part):
-    ''' test whether the items in the part is
+    """ test whether the items in the part is
     the leading items of the full
-    '''
+    """
     if len(full) < len(part):
         return False
     return full[:len(part)] == part
@@ -140,20 +140,20 @@ BLANK_ROOT = utils.sha3rlp(b'')
 class Trie(object):
 
     def __init__(self, db, root_hash=BLANK_ROOT):
-        '''it also present a dictionary like interface
+        """it also present a dictionary like interface
 
         :param db key value database
         :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
-        '''
+        """
         self.db = db  # Pass in a database object directly
         self.set_root_hash(root_hash)
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
-    #     '''it also present a dictionary like interface
+    #     """it also present a dictionary like interface
 
     #     :param dbfile: key value database
     #     :root: blank or trie node in form of [key, value] or [v0,v1..v15,v]
-    #     '''
+    #     """
     #     if isinstance(dbfile, str):
     #         dbfile = os.path.abspath(dbfile)
     #         self.db = DB(dbfile)
@@ -163,8 +163,8 @@ class Trie(object):
 
     @property
     def root_hash(self):
-        '''always empty or a 32 bytes string
-        '''
+        """always empty or a 32 bytes string
+        """
         return self._root_hash
 
     def get_root_hash(self):
@@ -191,8 +191,8 @@ class Trie(object):
         self._root_hash = root_hash
 
     def clear(self):
-        ''' clear all tree data
-        '''
+        """ clear all tree data
+        """
         self._delete_child_storage(self.root_node)
         self._delete_node_storage(self.root_node)
         self.root_node = BLANK_NODE
@@ -227,11 +227,11 @@ class Trie(object):
         return o
 
     def _get_node_type(self, node):
-        ''' get node type and content
+        """ get node type and content
 
         :param node: node in form of list, or BLANK_NODE
         :return: node type
-        '''
+        """
         if node == BLANK_NODE:
             return NODE_TYPE_BLANK
 
@@ -592,9 +592,9 @@ class Trie(object):
         return nibbles_to_bin(without_terminator(o)) if o else None
 
     def _delete_node_storage(self, node):
-        '''delete storage
+        """delete storage
         :param node: node in form of list, or BLANK_NODE
-        '''
+        """
         if node == BLANK_NODE:
             return
         # assert isinstance(node, list)
@@ -631,8 +631,8 @@ class Trie(object):
             return self._delete_kv_node(node, key)
 
     def _normalize_branch_node(self, node):
-        '''node should have only one item changed
-        '''
+        """node should have only one item changed
+        """
         not_blank_items_count = sum(1 for x in range(17) if node[x])
         assert not_blank_items_count >= 1
 
@@ -729,9 +729,9 @@ class Trie(object):
         assert False
 
     def delete(self, key):
-        '''
+        """
         :param key: a string with length of [0, 32]
-        '''
+        """
         if not is_string(key):
             raise Exception("Key must be string")
 
@@ -744,10 +744,10 @@ class Trie(object):
         self._update_root_hash()
 
     def _get_size(self, node):
-        '''Get counts of (key, value) stored in this and the descendant nodes
+        """Get counts of (key, value) stored in this and the descendant nodes
 
         :param node: node in form of list, or BLANK_NODE
-        '''
+        """
         if node == BLANK_NODE:
             return 0
 
@@ -766,12 +766,12 @@ class Trie(object):
             return sum(sizes)
 
     def _iter_branch(self, node):
-        '''yield (key, value) stored in this and the descendant nodes
+        """yield (key, value) stored in this and the descendant nodes
         :param node: node in form of list, or BLANK_NODE
 
         .. note::
             Here key is in full form, rather than key of the individual node
-        '''
+        """
         if node == BLANK_NODE:
             raise StopIteration
 
@@ -809,7 +809,7 @@ class Trie(object):
             yield key, value
 
     def _to_dict(self, node):
-        '''convert (key, value) stored in this and the descendant nodes
+        """convert (key, value) stored in this and the descendant nodes
         to dict items.
 
         :param node: node in form of list, or BLANK_NODE
@@ -817,7 +817,7 @@ class Trie(object):
         .. note::
 
             Here key is in full form, rather than key of the individual node
-        '''
+        """
         if node == BLANK_NODE:
             return {}
 
@@ -885,10 +885,10 @@ class Trie(object):
         return self.get(key) != BLANK_NODE
 
     def update(self, key, value):
-        '''
+        """
         :param key: a string
         :value: a string
-        '''
+        """
         if not is_string(key):
             raise Exception("Key must be string")
 

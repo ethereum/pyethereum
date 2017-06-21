@@ -3,21 +3,19 @@ from ethereum import tester, block
 import pytest
 
 
-mul2_code = \
-    '''
+mul2_code = """
 def double(v):
     return(v*2)
-'''
+"""
 
 filename = "mul2_qwertyuioplkjhgfdsa.se"
 
-returnten_code = \
-    '''
+returnten_code = """
 extern mul2: [double:i]
 
 x = create("%s")
 return(x.double(5))
-''' % filename
+""" % filename
 
 
 @pytest.mark.skip()
