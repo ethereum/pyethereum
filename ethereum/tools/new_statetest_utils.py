@@ -40,7 +40,7 @@ configs = {
     #"Homestead": config_homestead,
     #"EIP150": config_tangerine,
     "EIP158": config_spurious,
-    "Metropolis": config_metropolis
+    #"Metropolis": config_metropolis
 }
 
 def mk_state_diff(prev, post):

@@ -23,6 +23,8 @@ else:
 BLANK_HASH = utils.sha3(b'')
 BLANK_ROOT = utils.sha3rlp(b'')
 
+THREE = b'\x00' * 19 + b'\x03'
+
 def snapshot_form(val):
     if is_numeric(val):
         return str(val)
@@ -246,6 +248,7 @@ class State():
 
     def revert(self, snapshot):
         h, L, auxvars = snapshot
+        three_touched = self.cache[THREE].touched if THREE in self.cache else False # Compatibility with weird geth+parity bug
         while len(self.journal) > L:
             lastitem = self.journal.pop()
             lastitem()
@@ -255,6 +258,8 @@ class State():
             self.cache = {}
         for k in STATE_DEFAULTS:
             setattr(self, k, copy.copy(auxvars[k]))
+        if three_touched and 2675000 < self.block_number < 2675200 : # Compatibility with weird geth+parity bug
+            self.delta_balance(THREE, 0)
 
     def set_param(self, k, v):
         preval = getattr(self, k)

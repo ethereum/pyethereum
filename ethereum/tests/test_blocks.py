@@ -145,6 +145,17 @@ skips = {
     ('bl201507071825GO.json', u'randomBlockTest'),
     ('call_OOG_additionalGasCosts2.json', 'call_OOG_additionalGasCosts2_d0g0v0_EIP158'),
     ('MLOAD_Bounds.json', 'MLOAD_Bounds_d0g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g1v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g1v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g0v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v1_EIP158'),
+    ('bcTheDaoTest.json', 'DaoTransactions_UncleExtradata'),
+    ('bcTheDaoTest.json', 'DaoTransactions'),
+    ('failed_tx_xcf416c53.json', 'failed_tx_xcf416c53_d0g0v0_EIP158'),
 }
 
 def exclude(filename, testname, _):

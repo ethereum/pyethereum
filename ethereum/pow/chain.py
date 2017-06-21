@@ -251,8 +251,8 @@ class Chain(object):
             try:
                 apply_block(self.state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
-                log.info('Block %s with parent %s invalid, reason: %s' %
-                         (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+                log.info('Block %d (%s) with parent %s invalid, reason: %s' %
+                         (block.number, encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
             self.db.put(b'block:%d' % block.header.number, block.header.hash)
             block_score = self.get_score(block)  # side effect: put 'score:' cache in db
