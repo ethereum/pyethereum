@@ -30,10 +30,10 @@ install:
   - travis_retry python setup.py install
   - travis_retry pip install -r dev_requirements.txt
 script:
-  - make lint-minimal
-  - make test-minimal
   # XXX: For now we're only performing minimal CI checks as most tests are
   # broken. Tests will be individually added here as they're fixed.
+  - make lint-minimal
+  - make test-passing
   #- if [ -d .tox/$TOX_ENV/ ]; then cd .tox/$TOX_ENV && coverage erase; fi;
   #- tox -e $TOX_ENV -- --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
   #- tox -e $TOX_ENV -- ethereum/tests/test_vm.py

@@ -1,6 +1,6 @@
 import json
 import sys
-import ethereum.testutils as testutils
+from ethereum.tools import testutils
 from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
@@ -11,7 +11,7 @@ if '--trace' in sys.argv:  # not default
 
 
 def test_vm(filename, testname, testdata):
-    testutils.check_vm_test(testutils.fixture_to_bytes(testdata))
+    testutils.check_vm_test(testdata)
 
 
 def pytest_generate_tests(metafunc):
