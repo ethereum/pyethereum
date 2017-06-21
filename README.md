@@ -163,6 +163,24 @@ Creates encrypted private key storaes
 * `decode_keystore_json(jsondata, password)` - returns the private key from an encrypted keystore object. NOTE: if you are loading from a file, the most convenient way to do this is `import json; key = decode_keystore_json(json.load(open('filename.json')), 'password')`
 * `make_keystore_json(key, pw, kdf='pbkdf2', cipher='aes-128-ctr')` - creates an encrypted keystore object for the key. Keeping `kdf` and `cipher` at their default values is recommended.
 
+### ethereum.abi
+
+Most compilers for HLLs (solidity, serpent, viper, etc) on top of Ethereum have the option to output an ABI declaration for a program. This is a json object that looks something like this:
+
+    [{"name": "ecrecover(uint256,uint256,uint256,uint256)", "type": "function", "constant": false,
+     "inputs": [{"name": "h", "type": "uint256"}, {"name": "v", "type": "uint256"}, {"name": "r", "type": "uint256"}, {"name": "s", "type": "uint256"}],
+     "outputs": [{"name": "out", "type": "int256[]"}]},
+     {"name": "PubkeyTripleLogEvent(uint256,uint256,uint256)", "type": "event",
+     "inputs": [{"name": "x", "type": "uint256", "indexed": false}, {"name": "y", "type": "uint256", "indexed": false}, {"name": "z", "type": "uint256", "indexed": false}]}]
+
+You can initialize an `abi.ContractTranslator` object to encode and decode data for contracts as follows:
+
+    true, false = True, False
+    ct = abi.ContractTranslator(<json here>)
+    txdata = ct.encode('function_name', [arg1, arg2, arg3])
+
+You can also call `ct.decode_event([topic1, topic2...], logdata)` to decode a log.
+
 ### RLP encoding and decoding
 
 For any transaction or block, you can simply do:
@@ -194,6 +212,29 @@ The pyethereum codebase is designed to be maximally friendly for use across many
     * `finalize(state, block)` - called in `apply_block` after transactions are processed
     * `get_uncle_candidates(chain, state)` - called in `mk_head_candidate` to include uncles in a block
 * Create a chain config with the `CONSENSUS_STRATEGY` set to whatever you named your new consensus strategy
+
+## Tester module
+
+See https://github.com/ethereum/pyethereum/wiki/Using-pyethereum.tester
+
+## Tests
+
+Run `python3.6 -m pytest ethereum/tests/<filename>` for any .py file in that directory. Currently all tests are passing except for a few Metropolis-specific state tests and block tests.
+
+To make your own state tests, use the tester module as follows:
+
+```python
+from ethereum.tools import tester as t
+import json
+c = t.Chain()
+x = c.contract(<code>, language=<language>)
+pre = t.mk_state_test_prefill(c)
+x.foo(<args>)
+post = t.mk_state_test_postfill(c, pre)
+open('output.json', 'w').write(json.dumps(post, indent=4))
+```
+
+To make a test filler file instead, do `post = t.mk_state_test_postfill(c, pre, True)`.
 
 ## Licence
 
