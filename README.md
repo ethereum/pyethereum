@@ -1,22 +1,9 @@
-===================================================
-Ethereum -- Next generation cryptocurrency network
-===================================================
-
-.. image:: https://badges.gitter.im/Join%20Chat.svg
-   :alt: Join the chat at https://gitter.im/ethereum/pyethereum
-   :target: https://gitter.im/ethereum/pyethereum?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
-
-Ethereum Core Library
-=====================
-
 This is the Python core library of the Ethereum project.
 
 For the python based command line client see:
 https://github.com/ethereum/pyethapp
 
-Installation:
-++++++++++++++
-
+## Installation:
 
 ``git clone https://github.com/ethereum/pyethereum/``
 
@@ -25,9 +12,7 @@ Installation:
 ``python setup.py install``
 
 
-
-Components
----------------
+## Components
 
 ### ethereum.pow.chain
 
@@ -208,28 +193,8 @@ The pyethereum codebase is designed to be maximally friendly for use across many
     * `initialize(state, block)` - called in `apply_block` before transactions are processed
     * `finalize(state, block)` - called in `apply_block` after transactions are processed
     * `get_uncle_candidates(chain, state)` - called in `mk_head_candidate` to include uncles in a block
-* Create a chain config with the CONSENSUS_STRATEGY set to whatever you named your new consensus strategy
+* Create a chain config with the `CONSENSUS_STRATEGY` set to whatever you named your new consensus strategy
 
-Licence
-========
+## Licence
+
 See LICENCE
-
-`Ethereum <https://ethereum.org/>`_ is based on a design by Vitalik Buterin.
-
-.. |Linux develop| image:: https://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20develop
-   :target: https://build.ethdev.com/builders/Linux%20PyEthereum%20develop/builds/-1
-.. |OSX develop| image:: https://build.ethdev.com/buildstatusimage?builder=OSX%20PyEthereum%20develop
-   :target: https://build.ethdev.com/builders/OSX%20PyEthereum%20develop/builds/-1
-.. |Linux master| image:: https://build.ethdev.com/buildstatusimage?builder=Linux%20PyEthereum%20master
-   :target: https://build.ethdev.com/builders/Linux%20PyEthereum%20master/builds/-1
-.. |OSX master| image:: https://build.ethdev.com/buildstatusimage?builder=OSX%20PyEthereum%20master
-   :target: https://build.ethdev.com/builders/OSX%20PyEthereum%20master/builds/-1
-
-.. |Travis develop| image:: https://travis-ci.org/ethereum/pyethereum.png?branch=develop
-   :target: https://travis-ci.org/ethereum/pyethereum
-.. |Travis master| image:: https://travis-ci.org/ethereum/pyethereum.png?branch=master
-   :target: https://travis-ci.org/ethereum/pyethereum
-.. |Coverage develop| image:: https://coveralls.io/repos/ethereum/pyethereum/badge.png?branch=develop
-   :target: https://coveralls.io/r/ethereum/pyethereum?branch=develop
-.. |Coverage master| image:: https://coveralls.io/repos/ethereum/pyethereum/badge.png?branch=master
-   :target: https://coveralls.io/r/ethereum/pyethereum?branch=master
