@@ -201,30 +201,8 @@ def checksum_encode(addr): # Takes a 20-byte binary address as input
             o += c.upper() if (v & (2**(255 - 4*i))) else c.lower()
     return '0x'+o
 
-
-def add_cool_checksum(addr):
-    addr = normalize_address(addr)
-    addr_hex = encode_hex(addr)
-
-    o = ''
-    h = encode_hex(sha3(addr_hex))
-    if not isinstance(addr_hex, str):
-        # py3 bytes sequence
-        addr_hex = list(chr(c) for c in addr_hex)
-        h = list(chr(c) for c in h)
-
-    for i, c in enumerate(addr_hex):
-        if c in '0123456789':
-            o += c
-        else:
-            o += c.lower() if h[i] in '01234567' else c.upper()
-    return '0x' + o
-
-
-def check_and_strip_cool_checksum(addr):
-    assert add_cool_checksum(addr.lower()) == addr
-    return normalize_address(addr)
-
+def check_checksum(addr):
+    return checksum_encode(normalize_address(addr)) == addr
 
 def normalize_address(x, allow_blank=False):
     if is_numeric(x):
@@ -531,10 +509,15 @@ class Denoms():
     def __init__(self):
         self.wei = 1
         self.babbage = 10 ** 3
+        self.ada = 10 ** 3
+        self.kwei = 10 ** 6
         self.lovelace = 10 ** 6
+        self.mwei = 10 ** 6
         self.shannon = 10 ** 9
+        self.gwei = 10 ** 9
         self.szabo = 10 ** 12
         self.finney = 10 ** 15
+        self.mether = 10 ** 15
         self.ether = 10 ** 18
         self.turing = 2 ** 256 - 1
 

@@ -1,4 +1,4 @@
-from ethereum.new_state import State
+from ethereum.state import State
 from ethereum.block import FakeHeader, Block
 from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
     remove_0x_head, encode_hex, big_endian_to_int

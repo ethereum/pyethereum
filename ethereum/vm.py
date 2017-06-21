@@ -34,7 +34,6 @@ TT255 = 2 ** 255
 
 MAX_DEPTH = 1024
 
-
 class CallData(object):
 
     def __init__(self, parent_memory, offset=0, size=None):
@@ -99,22 +98,19 @@ class Compustate():
 # of pushdata and thus invalid
 @lru_cache(128)
 def preprocess_code(code):
-    assert isinstance(code, bytes)
-    code = memoryview(code).tolist()
-    ops = []
+    o = 0
     i = 0
-    while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
-        ops.append(o)
-        if o[0][:4] == 'PUSH':
-            for j in range(int(o[0][4:])):
-                i += 1
-                byte = code[i] if i < len(code) else 0
-                o[-1] = (o[-1] << 8) + byte
-                if i < len(code):
-                    ops.append(['INVALID', 0, 0, 0, byte, 0])
-        i += 1
-    return ops
+    pushcache = {}
+    code = code + b'\x00' * 32
+    while i < len(code) - 32:
+        if code[i] == 0x5b:
+            o |= 1 << i
+        if 0x60 <= code[i] <= 0x7f:
+            pushcache[i] = utils.big_endian_to_int(code[i + 1: i + code[i] - 0x5e])
+            i += code[i] - 0x5e
+        else:
+            i += 1
+    return o, pushcache
 
 
 def mem_extend(mem, compustate, op, start, sz):
@@ -184,8 +180,9 @@ def vm_execute(ext, msg, code):
     stk = compustate.stack
     mem = compustate.memory
 
-    processed_code = preprocess_code(code)
-    codelen = len(processed_code)
+    jumpdest_mask, pushcache = preprocess_code(code)
+    codelen = len(code)
+    code += b'\x00' * 32
 
     op = None
     steps = 0
@@ -196,8 +193,13 @@ def vm_execute(ext, msg, code):
         # s = time.time()
         # stack size limit error
 
-        op, in_args, out_args, fee, opcode, pushval = \
-            processed_code[compustate.pc]
+        opcode = code[compustate.pc]
+
+        # Invalid operation
+        if opcode not in opcodes.opcodes:
+            return vm_exception('INVALID OP', opcode=opcode)
+
+        op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
         # out of gas error
         if fee > compustate.gas:
@@ -249,20 +251,16 @@ def vm_execute(ext, msg, code):
             trace_data['steps'] = steps
             trace_data['depth'] = msg.depth
             if op[:4] == 'PUSH':
-                trace_data['pushvalue'] = pushval
+                trace_data['pushvalue'] = pushcache[compustate.pc - 1]
             log_vm_op.trace('vm', op=op, **trace_data)
             steps += 1
             _prevop = op
 
-        # Invalid operation
-        if op == 'INVALID':
-            return vm_exception('INVALID OP', opcode=opcode)
-
         # Valid operations
         # Pushes first because they are very frequent
         if 0x60 <= opcode <= 0x7f:
+            stk.append(pushcache[compustate.pc - 1])
             compustate.pc += opcode - 0x5f # Move 1 byte forward for 0x60, up to 32 bytes for 0x7f
-            stk.append(pushval)
         elif opcode < 0x10:
             if op == 'STOP':
                 return peaceful_exit('STOP', compustate.gas, [])
@@ -380,7 +378,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 msg.data.extract_copy(mem, mstart, dstart, size)
             elif op == 'CODESIZE':
-                stk.append(len(processed_code))
+                stk.append(codelen)
             elif op == 'CODECOPY':
                 mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, mstart, size):
@@ -388,8 +386,8 @@ def vm_execute(ext, msg, code):
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
-                    if dstart + i < len(processed_code):
-                        mem[mstart + i] = processed_code[dstart + i][4]
+                    if dstart + i < codelen:
+                        mem[mstart + i] = code[dstart + i]
                     else:
                         mem[mstart + i] = 0
             elif op == 'RETURNDATACOPY':
@@ -485,17 +483,13 @@ def vm_execute(ext, msg, code):
                 ext.set_storage_data(msg.to, s0, s1)
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
-                opnew = processed_code[compustate.pc][0] if \
-                    compustate.pc < len(processed_code) else 'STOP'
-                if opnew != 'JUMPDEST':
+                if compustate.pc >= codelen or not ((1 << compustate.pc) & jumpdest_mask):
                     return vm_exception('BAD JUMPDEST')
             elif op == 'JUMPI':
                 s0, s1 = stk.pop(), stk.pop()
                 if s1:
                     compustate.pc = s0
-                    opnew = processed_code[compustate.pc][0] if \
-                        compustate.pc < len(processed_code) else 'STOP'
-                    if opnew != 'JUMPDEST':
+                    if compustate.pc >= codelen or not ((1 << compustate.pc) & jumpdest_mask):
                         return vm_exception('BAD JUMPDEST')
             elif op == 'PC':
                 stk.append(compustate.pc - 1)
@@ -566,7 +560,7 @@ def vm_execute(ext, msg, code):
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
                 value = 0
             # Static context prohibition
-            if msg.static and value > 0:
+            if msg.static and value > 0 and op == 'CALL':
                 return vm_exception('Cannot make a non-zero-value call inside a static context')
             # Expand memory
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \

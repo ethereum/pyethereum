@@ -343,7 +343,10 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
 
     if base == 'bytes':
         if not is_string(arg):
-            raise EncodingError('Expecting string: %r' % arg)
+            if isinstance(arg, str):
+                arg = bytes(arg, 'utf8')
+            else:
+                raise EncodingError('Expecting string: %r' % arg)
 
         arg = utils.to_string(arg)  # py2: force unicode into str
 

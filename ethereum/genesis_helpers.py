@@ -1,4 +1,4 @@
-from ethereum.new_state import State
+from ethereum.state import State
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int, normalize_address
