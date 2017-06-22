@@ -403,7 +403,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if dstart + i < codelen:
-                        mem[mstart + i] = code[dstart + i]
+                        mem[mstart + i] = safe_ord(code[dstart + i])
                     else:
                         mem[mstart + i] = 0
             elif op == 'RETURNDATACOPY':
@@ -439,7 +439,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s2 + i < len(extcode):
-                        mem[start + i] = utils.safe_ord(extcode[s2 + i])
+                        mem[start + i] = safe_ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
         # Block info
