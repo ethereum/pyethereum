@@ -43,6 +43,7 @@ configs = {
     #"Metropolis": config_metropolis
 }
 
+# Makes a diff between a prev and post state
 def mk_state_diff(prev, post):
     o = {}
     for k in prev.keys():
@@ -69,6 +70,7 @@ def mk_state_diff(prev, post):
             o[k] = ok
     return o
 
+# Compute a single unit of a state test
 def compute_state_test_unit(state, txdata, indices, konfig):
     state.env.config = konfig
     s = state.snapshot()
@@ -105,6 +107,7 @@ def compute_state_test_unit(state, txdata, indices, konfig):
     return output_decl
 
 
+# Initialize the state for state tests
 def init_state(env, pre):
     # Setup env
     state = State(
@@ -138,6 +141,7 @@ def init_state(env, pre):
 class EnvNotFoundException(Exception):
     pass
 
+# Verify a state test
 def verify_state_test(test):
     print("Verifying state test")
     if "env" not in test:

@@ -126,7 +126,6 @@ class Account(rlp.Serializable):
                             '0x'+encode_hex(rlp.decode(val)) for key, val in odict.items()} }
 
 #from ethereum.state import State
-#class Statu():
 class State():
 
     def __init__(self, root=b'', env=Env(), **kwargs):
