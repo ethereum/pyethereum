@@ -175,9 +175,9 @@ Most compilers for HLLs (solidity, serpent, viper, etc) on top of Ethereum have 
 
 You can initialize an `abi.ContractTranslator` object to encode and decode data for contracts as follows:
 
-    true, false = True, False
-    ct = abi.ContractTranslator(<json here>)
-    txdata = ct.encode('function_name', [arg1, arg2, arg3])
+    true, false = True, False  
+    ct = abi.ContractTranslator(<json here>)  
+    txdata = ct.encode('function_name', [arg1, arg2, arg3])  
 
 You can also call `ct.decode_event([topic1, topic2...], logdata)` to decode a log.
 
@@ -185,20 +185,20 @@ You can also call `ct.decode_event([topic1, topic2...], logdata)` to decode a lo
 
 For any transaction or block, you can simply do:
 
-    import rlp
-    bindata = rlp.encode(<tx or block>)
+    import rlp  
+    bindata = rlp.encode(<tx or block>)  
 
 To decode:
 
-    import rlp
-    from ethereum.transactions import Transaction
-    rlp.decode(blob, Transaction)
+    import rlp  
+    from ethereum.transactions import Transaction  
+    rlp.decode(blob, Transaction)  
 
 Or:
 
-    import rlp
-    from ethereum.blocks import Block
-    rlp.decode(blob, Block)
+    import rlp  
+    from ethereum.blocks import Block  
+    rlp.decode(blob, Block)  
 
 ### Consensus abstraction
 
@@ -223,15 +223,15 @@ Run `python3.6 -m pytest ethereum/tests/<filename>` for any .py file in that dir
 
 To make your own state tests, use the tester module as follows:
 
-```python
-from ethereum.tools import tester as t
-import json
-c = t.Chain()
-x = c.contract(<code>, language=<language>)
-pre = t.mk_state_test_prefill(c)
-x.foo(<args>)
-post = t.mk_state_test_postfill(c, pre)
-open('output.json', 'w').write(json.dumps(post, indent=4))
+```
+from ethereum.tools import tester as t  
+import json  
+c = t.Chain()  
+x = c.contract(<code>, language=<language>)  
+pre = t.mk_state_test_prefill(c)  
+x.foo(<args>)  
+post = t.mk_state_test_postfill(c, pre)  
+open('output.json', 'w').write(json.dumps(post, indent=4))  
 ```
 
 To make a test filler file instead, do `post = t.mk_state_test_postfill(c, pre, True)`.
