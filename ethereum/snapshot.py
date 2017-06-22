@@ -177,9 +177,9 @@ def load_state(env, alloc):
 
 def get_account(env, rlpdata):
     if rlpdata != BLANK_NODE:
-        return rlp.decode(rlpdata, Account, db=env.db)
+        return rlp.decode(rlpdata, Account, env=env)
     else:
-        return Account.blank_account(env.db, env.config['ACCOUNT_INITIAL_NONCE'])
+        return Account.blank_account(env, env.config['ACCOUNT_INITIAL_NONCE'])
 
 
 def snapshot_form(val):
