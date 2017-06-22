@@ -10,6 +10,10 @@ from ethereum import utils, abi
 from ethereum.tools import tester
 from ethereum.utils import safe_ord, big_endian_to_int
 
+# from ethereum.slogging import get_logger, configure_logging
+# logger = get_logger()
+# configure_logging(':trace')
+
 
 # Test EVM contracts
 serpent_code = """

@@ -13,7 +13,7 @@ from ethereum import utils
 from ethereum.abi import is_numeric
 from ethereum import opcodes
 from ethereum.slogging import get_logger
-from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr
+from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr, safe_ord
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -114,11 +114,12 @@ def preprocess_code(code):
     pushcache = {}
     code = code + b'\x00' * 32
     while i < len(code) - 32:
-        if code[i] == 0x5b:
+        codebyte = safe_ord(code[i])
+        if codebyte == 0x5b:
             o |= 1 << i
-        if 0x60 <= code[i] <= 0x7f:
-            pushcache[i] = utils.big_endian_to_int(code[i + 1: i + code[i] - 0x5e])
-            i += code[i] - 0x5e
+        if 0x60 <= codebyte <= 0x7f:
+            pushcache[i] = utils.big_endian_to_int(code[i + 1: i + codebyte - 0x5e])
+            i += codebyte - 0x5e
         else:
             i += 1
     return o, pushcache
@@ -203,7 +204,7 @@ def vm_execute(ext, msg, code):
 
     while compustate.pc < codelen:
 
-        opcode = code[compustate.pc]
+        opcode = safe_ord(code[compustate.pc])
 
         # Invalid operation
         if opcode not in opcodes.opcodes:
