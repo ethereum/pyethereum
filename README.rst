@@ -6,6 +6,8 @@ https://github.com/ethereum/pyethapp
 Installation:
 -------------
 
+``sudo apt-get install libssl-dev build-essential automake pkg-config libtool libffi-dev libgmp-dev``
+
 ``git clone https://github.com/ethereum/pyethereum/``
 
 ``cd pyethereum``
