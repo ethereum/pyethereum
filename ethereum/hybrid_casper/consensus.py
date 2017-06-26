@@ -1,8 +1,8 @@
 from ethereum import utils, transactions
-from ethereum.tools import tester
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
 from ethereum.hybrid_casper import casper_utils
+from ethereum.utils import sha3, privtoaddr, to_string
 
 # Block initialization state transition
 def initialize(state, block=None):
@@ -18,9 +18,10 @@ def initialize(state, block=None):
 
     # Initalize the next epoch in the Casper contract
     if state.block_number % state.env.config['EPOCH_LENGTH'] == 0 and state.block_number != 0:
+        key, account = sha3(to_string(999)), privtoaddr(sha3(to_string(999)))
         data = casper_utils.casper_translator.encode('initialize_epoch', [state.block_number // state.env.config['EPOCH_LENGTH']])
-        transaction = transactions.Transaction(state.get_nonce(tester.a0), 0, 3141592,
-                                               state.env.config['CASPER_ADDRESS'], 0, data).sign(tester.k0)
+        transaction = transactions.Transaction(state.get_nonce(account), 0, 3141592,
+                                               state.env.config['CASPER_ADDRESS'], 0, data).sign(key)
         success, output = apply_transaction(state, transaction)
         assert success
 
