@@ -29,7 +29,7 @@ configure_logging(config_string=config_string)
 class Chain(object):
 
     def __init__(self, genesis=None, env=None, \
-                 new_head_cb=None, reset_genesis=False, localtime=None, **kwargs):
+                 new_head_cb=None, reset_genesis=False, localtime=None, max_history=1000, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
@@ -82,6 +82,7 @@ class Chain(object):
         self.time_queue = []
         self.parent_queue = {}
         self.localtime = time.time() if localtime is None else localtime
+        self.max_history = max_history
 
     # Head (tip) of the chain
     @property
@@ -246,6 +247,7 @@ class Chain(object):
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
         # Is the block being added to the head?
+        self.state.deletes = []
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
@@ -260,6 +262,7 @@ class Chain(object):
             for i, tx in enumerate(block.transactions):
                 self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
             assert self.get_blockhash_by_number(block.header.number) == block.header.hash
+            deletes = self.state.deletes
         # Or is the block being added to a chain that is not currently the head?
         elif block.header.prevhash in self.env.db:
             log.info('Receiving block not on head, adding to secondary post state',
@@ -271,6 +274,7 @@ class Chain(object):
                 log.info('Block %s with parent %s invalid, reason: %s' %
                          (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
+            deletes = temp_state.deletes
             block_score = self.get_score(block)
             # If the block should be the new head, replace the head
             if block_score > self.get_score(self.head):
@@ -313,12 +317,28 @@ class Chain(object):
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
             self.parent_queue[block.header.prevhash].append(block)
-            log.info('No parent found. Delaying for now')
+            log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
+                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
             return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
-        self.db.put(block.header.hash, rlp.encode(block))
+        self.db.put(block.hash, rlp.encode(block))
+        self.db.put(b'deletes:'+block.hash, b''.join(deletes))
+        print('Saved %d trie node deletes for block %d (%s)' % (len(deletes), block.number, utils.encode_hex(block.hash)))
+        # Delete old junk data
+        old_block_hash = self.get_blockhash_by_number(block.number - self.max_history)
+        if old_block_hash:
+            try:
+                deletes = self.db.get(b'deletes:'+old_block_hash)
+                print('Deleting %d trie nodes' % (len(deletes) // 32))
+                for i in range(0, len(deletes), 32):
+                    self.db.delete(deletes[i: i+32])
+                self.db.delete(b'deletes:'+old_block_hash)
+            except KeyError as e:
+                print(e)
+                pass
         self.db.commit()
+        assert (b'deletes:'+block.hash) in self.db
         log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used))

@@ -10,6 +10,8 @@ from ethereum.exceptions import InsufficientBalance, BlockGasLimitReached, \
 from ethereum.messages import apply_transaction
 log = get_logger('eth.block')
 
+SKIP_RECEIPT_ROOT_VALIDATION = False
+
 # Gas limit adjustment algo
 def calc_gaslimit(parent, config=default_config):
     decay = parent.gas_limit // config['GASLIMIT_EMA_FACTOR']
@@ -143,7 +145,7 @@ def verify_execution_results(state, block):
     if block.header.state_root != state.trie.root_hash:
         raise ValueError("State root mismatch: header %s computed %s" %
                          (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
-    if block.header.receipts_root != mk_receipt_sha(state.receipts):
+    if block.header.receipts_root != mk_receipt_sha(state.receipts) and not SKIP_RECEIPT_ROOT_VALIDATION:
         raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
                          (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),
                          block.header.gas_used, state.gas_used, len(state.receipts)))

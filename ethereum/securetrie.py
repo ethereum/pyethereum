@@ -41,6 +41,14 @@ class SecureTrie(object):
     def root_hash(self, value):
         self.trie.root_hash = value
 
+    @property
+    def deletes(self):
+        return self.trie.deletes
+
+    @deletes.setter
+    def deletes(self, value):
+        self.trie.deletes = value
+
     def process_epoch(self, epoch):
         self.trie.process_epoch(epoch)
 

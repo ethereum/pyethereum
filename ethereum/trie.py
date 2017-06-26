@@ -139,7 +139,7 @@ BLANK_ROOT = utils.sha3rlp(b'')
 
 class Trie(object):
 
-    def __init__(self, db, root_hash=BLANK_ROOT):
+    def __init__(self, db, root_hash=BLANK_ROOT, prefix=b''):
         """it also present a dictionary like interface
 
         :param db key value database
@@ -147,6 +147,8 @@ class Trie(object):
         """
         self.db = db  # Pass in a database object directly
         self.set_root_hash(root_hash)
+        self.deletes = []
+        self.prefix = prefix
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
     #     """it also present a dictionary like interface
@@ -173,7 +175,7 @@ class Trie(object):
     def _update_root_hash(self):
         val = rlp_encode(self.root_node)
         key = utils.sha3(val)
-        self.db.put(key, val)
+        self.db.put(self.prefix+key, val)
         self._root_hash = key
 
     @root_hash.setter
@@ -215,7 +217,7 @@ class Trie(object):
             return node
 
         hashkey = utils.sha3(rlpnode)
-        self.db.put(hashkey, rlpnode)
+        self.db.put(self.prefix+hashkey, rlpnode)
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -223,7 +225,7 @@ class Trie(object):
             return BLANK_NODE
         if isinstance(encoded, list):
             return encoded
-        o = rlp.decode(self.db.get(encoded))
+        o = rlp.decode(self.db.get(self.prefix+encoded))
         return o
 
     def _get_node_type(self, node):
@@ -606,7 +608,7 @@ class Trie(object):
         in the current trie implementation two nodes can share identical subtrees
         thus we can not safely delete nodes for now
         """
-        # self.db.delete(encoded) # FIXME
+        self.deletes.append(encoded)
 
     def _delete(self, node, key):
         """ update item inside a node

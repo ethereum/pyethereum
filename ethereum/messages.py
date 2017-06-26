@@ -40,7 +40,6 @@ log_state = get_logger('eth.pb.msg.state')
 CREATE_CONTRACT_ADDRESS = b''
 
 # DEV OPTIONS
-SKIP_RECEIPT_ROOT_VALIDATION = False
 SKIP_MEDSTATES = False
 
 def rp(tx, what, actual, target):

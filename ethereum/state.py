@@ -58,12 +58,13 @@ class Account(rlp.Serializable):
         ('code_hash', hash32)
     ]
 
-    def __init__(self, nonce, balance, storage, code_hash, env):
+    def __init__(self, nonce, balance, storage, code_hash, env, address):
         assert isinstance(env.db, BaseDB)
         self.env = env
+        self.address = address
         super(Account, self).__init__(nonce, balance, storage, code_hash)
         self.storage_cache = {}
-        self.storage_trie = SecureTrie(Trie(self.env.db))
+        self.storage_trie = SecureTrie(Trie(self.env.db, prefix=address))
         self.storage_trie.root_hash = self.storage
         self.touched = False
         self.existent_at_start = True
@@ -102,9 +103,9 @@ class Account(rlp.Serializable):
         self.storage_cache[key] = value
 
     @classmethod
-    def blank_account(cls, env, initial_nonce=0):
+    def blank_account(cls, env, address, initial_nonce=0):
         env.db.put(BLANK_HASH, b'')
-        o = cls(initial_nonce, 0, trie.BLANK_ROOT, BLANK_HASH, env)
+        o = cls(initial_nonce, 0, trie.BLANK_ROOT, BLANK_HASH, env, address)
         o.existent_at_start = False
         return o
 
@@ -136,6 +137,7 @@ class State():
         self.journal = []
         self.cache = {}
         self.log_listeners = []
+        self.deletes = []
 
     @property
     def db(self):
@@ -160,9 +162,9 @@ class State():
             return self.cache[address]
         rlpdata = self.trie.get(address)
         if rlpdata != trie.BLANK_NODE:
-            o = rlp.decode(rlpdata, Account, env=self.env)
+            o = rlp.decode(rlpdata, Account, env=self.env, address=address)
         else:
-            o = Account.blank_account(self.env, self.config['ACCOUNT_INITIAL_NONCE'])
+            o = Account.blank_account(self.env, address, self.config['ACCOUNT_INITIAL_NONCE'])
         self.cache[address] = o
         o._mutable = True
         o._cached_rlp = None
@@ -315,12 +317,15 @@ class State():
         for addr, acct in self.cache.items():
             if acct.touched:
                 acct.commit()
+                self.deletes.extend(acct.storage_trie.deletes)
                 if acct.exists or allow_empties or (not self.is_SPURIOUS_DRAGON() and not acct.deleted):
                     # print('upd', encode_hex(addr))
                     self.trie.update(addr, rlp.encode(acct))
                 else:
                     # print('del', encode_hex(addr))
                     self.trie.delete(addr)
+        self.deletes.extend(self.trie.deletes)
+        self.trie.deletes = []
         self.cache = {}
         self.journal = []
 
