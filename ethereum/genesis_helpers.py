@@ -4,7 +4,7 @@ from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int, normalize_address
 from ethereum.config import Env
 from ethereum.consensus_strategy import get_consensus_strategy
-from ethereum.db import OverlayDB
+from ethereum.db import OverlayDB, RefcountDB
 import rlp
 import json
 
@@ -44,6 +44,10 @@ def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=
                 state.set_storage_data(addr, big_endian_to_int(parse_as_bin(k)), big_endian_to_int(parse_as_bin(v)))
     get_consensus_strategy(state.config).initialize(state, block)
     state.commit(allow_empties=allow_empties)
+    print('deleting %d' % len(state.deletes))
+    rdb = RefcountDB(state.db)
+    for delete in state.deletes:
+        rdb.delete(delete)
     block.header.state_root = state.trie.root_hash
     state.prev_headers=[block.header]
     return state

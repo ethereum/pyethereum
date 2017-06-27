@@ -139,7 +139,7 @@ BLANK_ROOT = utils.sha3rlp(b'')
 
 class Trie(object):
 
-    def __init__(self, db, root_hash=BLANK_ROOT, prefix=b''):
+    def __init__(self, db, root_hash=BLANK_ROOT):
         """it also present a dictionary like interface
 
         :param db key value database
@@ -148,7 +148,6 @@ class Trie(object):
         self.db = db  # Pass in a database object directly
         self.set_root_hash(root_hash)
         self.deletes = []
-        self.prefix = prefix
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
     #     """it also present a dictionary like interface
@@ -175,7 +174,7 @@ class Trie(object):
     def _update_root_hash(self):
         val = rlp_encode(self.root_node)
         key = utils.sha3(val)
-        self.db.put(self.prefix+key, val)
+        self.db.put(key, str_to_bytes(val))
         self._root_hash = key
 
     @root_hash.setter
@@ -208,7 +207,7 @@ class Trie(object):
         elif node_type == NODE_TYPE_EXTENSION:
             self._delete_child_storage(self._decode_to_node(node[1]))
 
-    def _encode_node(self, node):
+    def _encode_node(self, node, put_in_db=True):
         if node == BLANK_NODE:
             return BLANK_NODE
         # assert isinstance(node, list)
@@ -217,7 +216,8 @@ class Trie(object):
             return node
 
         hashkey = utils.sha3(rlpnode)
-        self.db.put(self.prefix+hashkey, rlpnode)
+        if put_in_db:
+            self.db.put(hashkey, str_to_bytes(rlpnode))
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -225,7 +225,7 @@ class Trie(object):
             return BLANK_NODE
         if isinstance(encoded, list):
             return encoded
-        o = rlp.decode(self.db.get(self.prefix+encoded))
+        o = rlp.decode(self.db.get(encoded))
         return o
 
     def _get_node_type(self, node):
@@ -600,7 +600,7 @@ class Trie(object):
         if node == BLANK_NODE:
             return
         # assert isinstance(node, list)
-        encoded = self._encode_node(node)
+        encoded = self._encode_node(node, put_in_db=False)
         if len(encoded) < 32:
             return
         """
@@ -609,6 +609,7 @@ class Trie(object):
         thus we can not safely delete nodes for now
         """
         self.deletes.append(encoded)
+        # print('del', encoded, self.db.get_refcount(encoded))
 
     def _delete(self, node, key):
         """ update item inside a node

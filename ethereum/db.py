@@ -1,6 +1,12 @@
 from ethereum import utils
 from ethereum.slogging import get_logger
 from rlp.utils import str_to_bytes
+import sys
+if sys.version_info.major == 2:
+    from repoze.lru import lru_cache
+else:
+    from functools import lru_cache
+
 log = get_logger('db')
 
 
@@ -40,25 +46,6 @@ class _EphemDB(BaseDB):
 
     def __hash__(self):
         return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
-
-    def inc_refcount(self, key, value):
-        self.put(key, value)
-
-    def dec_refcount(self, key):
-        pass
-
-    def revert_refcount_changes(self, epoch):
-        pass
-
-    def commit_refcount_changes(self, epoch):
-        pass
-
-    def cleanup(self, epoch):
-        pass
-
-    def put_temporarily(self, key, value):
-        self.inc_refcount(key, value)
-        self.dec_refcount(key)
 
 
 DB = EphemDB = _EphemDB
@@ -136,21 +123,62 @@ class OverlayDB(BaseDB):
     def __hash__(self):
         return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
-    def inc_refcount(self, key, value):
-        self.put(key, value)
+@lru_cache(128)
+def add1(b):
+    v = utils.big_endian_to_int(b)
+    return utils.zpad(utils.encode_int(v + 1), 4)
 
-    def dec_refcount(self, key):
+@lru_cache(128)
+def sub1(b):
+    v = utils.big_endian_to_int(b)
+    return utils.zpad(utils.encode_int(v - 1), 4)
+
+class RefcountDB(BaseDB):
+
+    def __init__(self, db):
+        self.db = db
+        self.kv = None
+
+    def get(self, key):
+        return self.db.get(key)[4:]
+
+    def get_refcount(self, key):
+        try:
+            return utils.big_endian_to_int(self.db.get(key)[:4])
+        except KeyError:
+            return 0
+
+    def put(self, key, value):
+        try:
+            existing = self.db.get(key)
+            assert existing[4:] == value
+            self.db.put(key, add1(existing[:4]) + value)
+            # print('putin', key, utils.big_endian_to_int(existing[:4]) + 1)
+        except KeyError:
+            self.db.put(key, b'\x00\x00\x00\x01' + value)
+            # print('putin', key, 1)
+
+    def delete(self, key):
+        existing = self.db.get(key)
+        if existing[:4] == b'\x00\x00\x00\x01':
+            # print('deletung')
+            self.db.delete(key)
+        else:
+            # print(repr(existing[:4]))
+            self.db.put(key, sub1(existing[:4]) + existing[4:])
+
+    def commit(self):
         pass
 
-    def revert_refcount_changes(self, epoch):
-        pass
+    def _has_key(self, key):
+        return key in self.db
 
-    def commit_refcount_changes(self, epoch):
-        pass
+    def __contains__(self, key):
+        return self._has_key(key)
 
-    def cleanup(self, epoch):
-        pass
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.db == other.db
 
-    def put_temporarily(self, key, value):
-        self.inc_refcount(key, value)
-        self.dec_refcount(key)
+    def __hash__(self):
+        return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
+

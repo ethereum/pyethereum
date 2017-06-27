@@ -18,6 +18,7 @@ from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
 from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
         initialize_genesis_keys
+from ethereum.db import RefcountDB
 
 
 log = get_logger('eth.chain')
@@ -330,9 +331,10 @@ class Chain(object):
         if old_block_hash:
             try:
                 deletes = self.db.get(b'deletes:'+old_block_hash)
-                print('Deleting %d trie nodes' % (len(deletes) // 32))
+                print('Deleting up to %d trie nodes' % (len(deletes) // 32))
+                rdb = RefcountDB(self.db)
                 for i in range(0, len(deletes), 32):
-                    self.db.delete(deletes[i: i+32])
+                    rdb.delete(deletes[i: i+32])
                 self.db.delete(b'deletes:'+old_block_hash)
             except KeyError as e:
                 print(e)

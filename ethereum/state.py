@@ -10,7 +10,7 @@ from ethereum.trie import Trie
 from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
 from ethereum.block import FakeHeader
-from ethereum.db import BaseDB, EphemDB, OverlayDB
+from ethereum.db import BaseDB, EphemDB, OverlayDB, RefcountDB
 from ethereum.specials import specials as default_specials
 import copy
 import sys
@@ -64,7 +64,7 @@ class Account(rlp.Serializable):
         self.address = address
         super(Account, self).__init__(nonce, balance, storage, code_hash)
         self.storage_cache = {}
-        self.storage_trie = SecureTrie(Trie(self.env.db, prefix=address))
+        self.storage_trie = SecureTrie(Trie(RefcountDB(self.env.db)))
         self.storage_trie.root_hash = self.storage
         self.touched = False
         self.existent_at_start = True
@@ -131,7 +131,7 @@ class State():
 
     def __init__(self, root=b'', env=Env(), **kwargs):
         self.env = env
-        self.trie = SecureTrie(Trie(self.db, root))
+        self.trie = SecureTrie(Trie(RefcountDB(self.db), root))
         for k, v in STATE_DEFAULTS.items():
             setattr(self, k, kwargs.get(k, copy.copy(v)))
         self.journal = []
