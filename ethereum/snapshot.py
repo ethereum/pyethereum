@@ -1,7 +1,7 @@
 import rlp
 from ethereum.block import BlockHeader, Block
 from ethereum.utils import is_numeric, is_string, encode_hex, decode_hex, zpad, scan_bin, big_endian_to_int
-from ethereum import common
+from ethereum import meta, common
 from ethereum.pow import consensus
 from ethereum.state import State, Account
 from ethereum.securetrie import SecureTrie
@@ -113,20 +113,20 @@ def load_snapshot(chain, snapshot):
     chain.env.db.commit()
 
     print "Start loading recent blocks from snapshot"
-    vbh = common.validate_header
+    vbh = meta.validate_header
     vus = consensus.validate_uncles
     def _vbh(state, header):
         return True
     def _vus(state, block):
         return True
-    common.validate_header = _vbh
+    meta.validate_header = _vbh
     consensus.validate_uncles = _vus
     # add the first block
     first_block = rlp.decode(first_block_rlp, sedes=Block)
     chain.head_hash = first_block.header.prevhash
     chain.add_block(first_block)
     assert chain.head_hash == first_block.header.hash
-    common.validate_header = vbh
+    meta.validate_header = vbh
 
     count = 0
     for block_rlp in snapshot['blocks'][1:]:
@@ -150,7 +150,7 @@ def load_state(env, alloc):
     for addr in alloc:
         print "[%d] loading account %s" % (count, addr)
         account = alloc[addr]
-        acct = Account.blank_account(db, env.config['ACCOUNT_INITIAL_NONCE'])
+        acct = Account.blank_account(env, env.config['ACCOUNT_INITIAL_NONCE'])
         if len(account['storage']) > 0:
             t = SecureTrie(Trie(db, BLANK_ROOT))
             c = 0
