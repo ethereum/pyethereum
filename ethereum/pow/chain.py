@@ -35,6 +35,7 @@ class Chain(object):
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
+            self.state.executing_on_head = True
             print('Initializing chain from saved head, #%d (%s)' % \
                 (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
@@ -47,11 +48,11 @@ class Chain(object):
             reset_genesis = True
         elif "extraData" in genesis:
             self.state = state_from_genesis_declaration(
-                genesis, self.env)
+                genesis, self.env, executing_on_head=True)
             reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
-            self.state = State.from_snapshot(genesis, self.env)
+            self.state = State.from_snapshot(genesis, self.env, executing_on_head=True)
             reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
@@ -248,9 +249,10 @@ class Chain(object):
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
         # Is the block being added to the head?
-        self.state.deletes = []
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
+            self.state.deletes = []
+            self.state.changed = {}
             try:
                 apply_block(self.state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
@@ -264,10 +266,11 @@ class Chain(object):
                 self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
             assert self.get_blockhash_by_number(block.header.number) == block.header.hash
             deletes = self.state.deletes
+            changed = self.state.changed
         # Or is the block being added to a chain that is not currently the head?
         elif block.header.prevhash in self.env.db:
-            log.info('Receiving block not on head, adding to secondary post state',
-                     prevhash=encode_hex(block.header.prevhash))
+            log.info('Receiving block not on head (%s), adding to secondary post state %s' %
+                     (encode_hex(self.head_hash), encode_hex(block.header.prevhash)))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
@@ -277,6 +280,7 @@ class Chain(object):
                 return False
             deletes = temp_state.deletes
             block_score = self.get_score(block)
+            changed = temp_state.changed
             # If the block should be the new head, replace the head
             if block_score > self.get_score(self.head):
                 b = block
@@ -291,7 +295,8 @@ class Chain(object):
                     if b.prevhash not in self.db or self.db.get(b.prevhash) == 'GENESIS':
                         break
                     b = self.get_parent(b)
-                # Replace block index and tx indices
+                # Replace block index and tx indices, and edit the state cache
+                changed_accts = {}
                 replace_from = b.header.number
                 for i in itertools.count(replace_from):
                     log.info('Rewriting height %d' % i)
@@ -300,19 +305,40 @@ class Chain(object):
                     if orig_at_height:
                         self.db.delete(key)
                         orig_block_at_height = self.get_block(orig_at_height)
+                        log.info('%s no longer in main chain' % encode_hex(orig_block_at_height.header.hash))
                         for tx in orig_block_at_height.transactions:
                             if b'txindex:' + tx.hash in self.db:
                                 self.db.delete(b'txindex:' + tx.hash)
+                        acct_list = self.db.get(b'changed:'+orig_block_at_height.hash)
+                        for j in range(0, len(acct_list), 20):
+                            changed_accts[acct_list[j: j+20]] = True
                     if i in new_chain:
                         new_block_at_height = new_chain[i]
+                        log.info('%s now in main chain' % encode_hex(new_block_at_height.header.hash))
                         self.db.put(key, new_block_at_height.header.hash)
                         for i, tx in enumerate(new_block_at_height.transactions):
                             self.db.put(b'txindex:' + tx.hash,
                                         rlp.encode([new_block_at_height.number, i]))
+                        if i < b.number:
+                            acct_list = self.db.get(b'changed:'+new_block_at_height.hash)
+                            for j in range(0, len(acct_list), 20):
+                                changed_accts[acct_list[j: j+20]] = True
                     if i not in new_chain and not orig_at_height:
                         break
+                for c in changed.keys():
+                    changed_accts[c] = True
+                for addr in changed_accts.keys():
+                    data = temp_state.trie.get(addr)
+                    if data:
+                        self.state.db.put(b'address:'+addr, data)
+                    else:
+                        try:
+                            self.state.db.delete(b'address:'+addr)
+                        except KeyError:
+                            pass
                 self.head_hash = block.header.hash
                 self.state = temp_state
+                self.state.executing_on_head = True
         # Block has no parent yet
         else:
             if block.header.prevhash not in self.parent_queue:
@@ -324,6 +350,8 @@ class Chain(object):
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.hash, rlp.encode(block))
+        self.db.put(b'changed:'+block.hash, b''.join(list(changed.keys())))
+        print('Saved %d address change logs' % len(changed.keys()))
         self.db.put(b'deletes:'+block.hash, b''.join(deletes))
         print('Saved %d trie node deletes for block %d (%s)' % (len(deletes), block.number, utils.encode_hex(block.hash)))
         # Delete old junk data
@@ -336,6 +364,7 @@ class Chain(object):
                 for i in range(0, len(deletes), 32):
                     rdb.delete(deletes[i: i+32])
                 self.db.delete(b'deletes:'+old_block_hash)
+                self.db.delete(b'changed:'+old_block_hash)
             except KeyError as e:
                 print(e)
                 pass

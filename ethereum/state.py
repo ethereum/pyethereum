@@ -128,7 +128,7 @@ class Account(rlp.Serializable):
 #from ethereum.state import State
 class State():
 
-    def __init__(self, root=b'', env=Env(), **kwargs):
+    def __init__(self, root=b'', env=Env(), executing_on_head=False, **kwargs):
         self.env = env
         self.trie = SecureTrie(Trie(RefcountDB(self.db), root))
         for k, v in STATE_DEFAULTS.items():
@@ -137,6 +137,8 @@ class State():
         self.cache = {}
         self.log_listeners = []
         self.deletes = []
+        self.changed = {}
+        self.executing_on_head = executing_on_head
 
     @property
     def db(self):
@@ -159,7 +161,13 @@ class State():
     def get_and_cache_account(self, address):
         if address in self.cache:
             return self.cache[address]
-        rlpdata = self.trie.get(address)
+        if self.executing_on_head:
+            try:
+                rlpdata = self.db.get(b'address:'+address)
+            except KeyError:
+                rlpdata = b''
+        else:
+            rlpdata = self.trie.get(address)
         if rlpdata != trie.BLANK_NODE:
             o = rlp.decode(rlpdata, Account, env=self.env, address=address)
         else:
@@ -319,13 +327,15 @@ class State():
             if acct.touched or acct.deleted:
                 acct.commit()
                 self.deletes.extend(acct.storage_trie.deletes)
+                self.changed[addr] = True
                 if self.account_exists(addr) or allow_empties:
                     self.trie.update(addr, rlp.encode(acct))
-                    #self.db.update(b'acct:'+addr, rlp.encode(acct))
+                    if self.executing_on_head:
+                        self.db.put(b'address:'+addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)
-                    # self.db.update(b'acct:'+addr, rlp.encode(acct))
-                    # self.trie.db.
+                    if self.executing_on_head:
+                        self.db.delete(b'address:'+addr)
         self.deletes.extend(self.trie.deletes)
         self.trie.deletes = []
         self.cache = {}
@@ -380,7 +390,7 @@ class State():
 
     # Creates a state from a snapshot
     @classmethod
-    def from_snapshot(cls, snapshot_data, env):
+    def from_snapshot(cls, snapshot_data, env, executing_on_head=False):
         state = State(env = env)
         if "alloc" in snapshot_data:
             for addr, data in snapshot_data["alloc"].items():
@@ -425,7 +435,10 @@ class State():
                 else:
                     uncles = default
                 setattr(state, k, uncles)
+        if executing_on_head:
+            state.executing_on_head = True
         state.commit()
+        state.changed = {}
         return state
 
 
