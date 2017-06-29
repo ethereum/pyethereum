@@ -2,7 +2,7 @@ from ethereum.state import State
 from ethereum.block import FakeHeader, Block
 from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
     remove_0x_head, encode_hex, big_endian_to_int
-from ethereum.config import default_config, config_homestead, config_tangerine, config_spurious, config_metropolis, Env
+from ethereum.config import default_config, config_frontier, config_homestead, config_tangerine, config_spurious, config_metropolis, Env
 from ethereum.exceptions import InvalidTransaction
 import ethereum.transactions as transactions
 from ethereum.messages import apply_transaction
@@ -37,8 +37,9 @@ basic_env = {
 
 
 configs = {
-    #"Homestead": config_homestead,
-    #"EIP150": config_tangerine,
+    "Frontier": config_frontier,
+    "Homestead": config_homestead,
+    "EIP150": config_tangerine,
     "EIP158": config_spurious,
     #"Metropolis": config_metropolis
 }

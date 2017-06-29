@@ -96,6 +96,12 @@ class Env(object):
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
 
+config_frontier = copy.copy(default_config)
+config_frontier["HOMESTEAD_FORK_BLKNUM"] = 2**99
+config_frontier["ANTI_DOS_FORK_BLKNUM"] = 2**99
+config_frontier["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
+config_frontier["METROPOLIS_FORK_BLKNUM"] = 2**99
+
 config_homestead = copy.copy(default_config)
 config_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
 config_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99

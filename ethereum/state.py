@@ -91,7 +91,6 @@ class Account(rlp.Serializable):
         # thing that fails to get garbage collected is when code disappears due
         # to a suicide
         self.env.db.put(self.code_hash, value)
-        # self.env.db.inc_refcount(self.code_hash, value)
 
     def get_storage_data(self, key):
         if key not in self.storage_cache:
@@ -115,7 +114,7 @@ class Account(rlp.Serializable):
     @property
     def exists(self):
         if self.is_blank():
-            return self.existent_at_start and not self.touched
+            return self.touched or (self.existent_at_start and not self.deleted)
         return True
 
     def to_dict(self):
@@ -296,10 +295,12 @@ class State():
             o = not self.get_and_cache_account(utils.normalize_address(address)).is_blank()
         else:
             a = self.get_and_cache_account(address)
+            if a.deleted and not a.touched:
+                return False
             if a.touched:
-                o = not a.deleted
+                return True
             else:
-                o = a.existent_at_start
+                return a.existent_at_start
         return o
 
     def transfer_value(self, from_addr, to_addr, value):
@@ -315,15 +316,16 @@ class State():
 
     def commit(self, allow_empties=False):
         for addr, acct in self.cache.items():
-            if acct.touched:
+            if acct.touched or acct.deleted:
                 acct.commit()
                 self.deletes.extend(acct.storage_trie.deletes)
-                if acct.exists or allow_empties or (not self.is_SPURIOUS_DRAGON() and not acct.deleted):
-                    # print('upd', encode_hex(addr))
+                if self.account_exists(addr) or allow_empties:
                     self.trie.update(addr, rlp.encode(acct))
+                    #self.db.update(b'acct:'+addr, rlp.encode(acct))
                 else:
-                    # print('del', encode_hex(addr))
                     self.trie.delete(addr)
+                    # self.db.update(b'acct:'+addr, rlp.encode(acct))
+                    # self.trie.db.
         self.deletes.extend(self.trie.deletes)
         self.trie.deletes = []
         self.cache = {}
@@ -340,6 +342,8 @@ class State():
         self.set_code(address, b'')
         self.reset_storage(address)
         self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'deleted', True)
+        self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'touched', False)
+        # self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'existent_at_start', False)
 
     def reset_storage(self, address):
         acct = self.get_and_cache_account(address)
@@ -434,7 +438,7 @@ class State():
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
         for acct in self.cache.values():
-            assert not acct.touched
+            assert not acct.touched or not acct.deleted
         s.journal = copy.copy(self.journal)
         s.cache = {}
         return s

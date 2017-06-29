@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
-import bitcoin
+from py_ecc.secp256k1 import privtopub, ecdsa_raw_recover, N as secp256k1n
+import hashlib
 from rlp.utils import ascii_chr
 
 from ethereum import utils, opcodes
@@ -26,7 +27,7 @@ def proc_ecrecover(ext, msg):
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)
 
-    if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
+    if r >= secp256k1n or s >= secp256k1n or v < 27 or v > 28:
         return 1, msg.gas - opcodes.GECRECOVER, []
     try:
         pub = utils.ecrecover_to_pub(message_hash, v, r, s)
@@ -44,7 +45,7 @@ def proc_sha256(ext, msg):
     if msg.gas < gas_cost:
         return 0, 0, []
     d = msg.data.extract_all()
-    o = [safe_ord(x) for x in bitcoin.bin_sha256(d)]
+    o = [safe_ord(x) for x in hashlib.sha256(d).digest()]
     return 1, msg.gas - gas_cost, o
 
 
@@ -56,7 +57,7 @@ def proc_ripemd160(ext, msg):
     if msg.gas < gas_cost:
         return 0, 0, []
     d = msg.data.extract_all()
-    o = [0] * 12 + [safe_ord(x) for x in bitcoin.ripemd.RIPEMD160(d).digest()]
+    o = [0] * 12 + [safe_ord(x) for x in hashlib.new('ripemd160', d).digest()]
     return 1, msg.gas - gas_cost, o
 
 
@@ -100,13 +101,13 @@ def proc_modexp(ext, msg):
     return 1, msg.gas - gas_cost, [safe_ord(x) for x in utils.zpad(utils.int_to_big_endian(o), modlen)]
 
 def validate_point(x, y):
-    import py_pairing
-    FQ = py_pairing.FQ
-    if x >= py_pairing.field_modulus or y >= py_pairing.field_modulus:
+    import py_ecc.optimized_bn128 as bn128
+    FQ = bn128.FQ
+    if x >= bn128.field_modulus or y >= bn128.field_modulus:
         return False
     if (x, y) != (0, 0):
         p1 = (FQ(x), FQ(y), FQ(1))
-        if not py_pairing.is_on_curve(p1, py_pairing.b):
+        if not bn128.is_on_curve(p1, bn128.b):
             return False
     else:
         p1 = (FQ(1), FQ(1), FQ(0))
@@ -115,8 +116,8 @@ def validate_point(x, y):
 def proc_ecadd(ext, msg):
     if not ext.post_metropolis_hardfork():
         return 1, msg.gas, []
-    import py_pairing
-    FQ = py_pairing.FQ
+    import py_ecc.optimized_bn128 as bn128
+    FQ = bn128.FQ
     print('ecadd proc', msg.gas)
     if msg.gas < opcodes.GECADD:
         return 0, 0, []
@@ -128,14 +129,14 @@ def proc_ecadd(ext, msg):
     p2 = validate_point(x2, y2)
     if p1 is False or p2 is False:
         return 0, 0, []
-    o = py_pairing.normalize(py_pairing.add(p1, p2))
+    o = bn128.normalize(bn128.add(p1, p2))
     return 1, msg.gas - opcodes.GECADD, [safe_ord(x) for x in (encode_int32(o[0].n) + encode_int32(o[1].n))]
 
 def proc_ecmul(ext, msg):
     if not ext.post_metropolis_hardfork():
         return 1, msg.gas, []
-    import py_pairing
-    FQ = py_pairing.FQ
+    import py_ecc.optimized_bn128 as bn128
+    FQ = bn128.FQ
     print('ecmul proc', msg.gas)
     if msg.gas < opcodes.GECMUL:
         return 0, 0, []
@@ -145,15 +146,15 @@ def proc_ecmul(ext, msg):
     p = validate_point(x, y)
     if p is False:
         return 0, 0, []
-    o = py_pairing.normalize(py_pairing.multiply(p, m))
+    o = bn128.normalize(bn128.multiply(p, m))
     return (1, msg.gas - opcodes.GECMUL,
             [safe_ord(c) for c in (encode_int32(o[0].n) + encode_int32(o[1].n))])
 
 def proc_ecpairing(ext, msg):
     if not ext.post_metropolis_hardfork():
         return 1, msg.gas, []
-    import py_pairing
-    FQ = py_pairing.FQ
+    import py_ecc.optimized_bn128 as bn128
+    FQ = bn128.FQ
     print('pairing proc', msg.gas)
     # Data must be an exact multiple of 192 byte
     if msg.data.size % 192:
@@ -161,8 +162,8 @@ def proc_ecpairing(ext, msg):
     gascost = opcodes.GPAIRINGBASE + msg.data.size // 192 * opcodes.GPAIRINGPERPOINT
     if msg.gas < gascost:
         return 0, 0, []
-    zero = (py_pairing.FQ2.one(), py_pairing.FQ2.one(), py_pairing.FQ2.zero())
-    exponent = py_pairing.FQ12.one()
+    zero = (bn128.FQ2.one(), bn128.FQ2.one(), bn128.FQ2.zero())
+    exponent = bn128.FQ12.one()
     for i in range(0, msg.data.size, 192):
         x1 = msg.data.extract32(i)
         y1 = msg.data.extract32(i + 32)
@@ -174,20 +175,20 @@ def proc_ecpairing(ext, msg):
         if p1 is False:
             return 0, 0, []
         for v in (x2_i, x2_r, y2_i, y2_r):
-            if v >= py_pairing.field_modulus:
+            if v >= bn128.field_modulus:
                 return 0, 0, []
-        fq2_x = py_pairing.FQ2([x2_r, x2_i])
-        fq2_y = py_pairing.FQ2([y2_r, y2_i])
-        if (fq2_x, fq2_y) != (py_pairing.FQ2.zero(), py_pairing.FQ2.zero()):
-            p2 = (fq2_x, fq2_y, py_pairing.FQ2.one())
-            if not py_pairing.is_on_curve(p2, py_pairing.b2):
+        fq2_x = bn128.FQ2([x2_r, x2_i])
+        fq2_y = bn128.FQ2([y2_r, y2_i])
+        if (fq2_x, fq2_y) != (bn128.FQ2.zero(), bn128.FQ2.zero()):
+            p2 = (fq2_x, fq2_y, bn128.FQ2.one())
+            if not bn128.is_on_curve(p2, bn128.b2):
                 return 0, 0, []
         else:
             p2 = zero
-        if py_pairing.multiply(p2, py_pairing.curve_order)[-1] != py_pairing.FQ2.zero():
+        if bn128.multiply(p2, bn128.curve_order)[-1] != bn128.FQ2.zero():
             return 0, 0, []
         exponent *= py_pairing.pairing(p2, p1, final_exponentiate=False)
-    result = py_pairing.final_exponentiate(exponent) == py_pairing.FQ12.one()
+    result = bn128.final_exponentiate(exponent) == bn128.FQ12.one()
     return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
 
 specials = {

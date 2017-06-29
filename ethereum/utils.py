@@ -4,7 +4,7 @@ try:
 except ImportError:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.keccak_256(x).digest()
-from bitcoin import privtopub, ecdsa_raw_sign, ecdsa_raw_recover, encode_pubkey
+from py_ecc.secp256k1 import privtopub, ecdsa_raw_sign, ecdsa_raw_recover
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
@@ -104,8 +104,8 @@ def ecrecover_to_pub(rawhash, v, r, s):
         except:
             pub = b"\x00" * 64
     else:
-        recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
-        pub = encode_pubkey(recovered_addr, 'bin_electrum')
+        x, y = ecdsa_raw_recover(rawhash, (v, r, s))
+        pub = encode_int32(x) + encode_int32(y)
     assert len(pub) == 64
     return pub
 
@@ -184,10 +184,10 @@ def sha3(seed):
 assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def privtoaddr(x):
-    if len(x) > 32:
-        x = decode_hex(x)
-    return sha3(privtopub(x)[1:])[12:]
+def privtoaddr(k):
+    k = normalize_key(k)
+    x, y  = privtopub(k)
+    return sha3(encode_int32(x) + encode_int32(y))[12:]
 
 
 def checksum_encode(addr): # Takes a 20-byte binary address as input

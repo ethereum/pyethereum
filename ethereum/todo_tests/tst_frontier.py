@@ -12,8 +12,8 @@ import sys
 import time
 import random
 
-# from ethereum.slogging import LogRecorder, configure_logging, set_level
-# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+from ethereum.slogging import LogRecorder, configure_logging, set_level
+config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 messages.SKIP_MEDSTATES = True
@@ -121,14 +121,19 @@ MANUAL_SNAPSHOTS = []
 # don't check pow
 BlockHeader.check_pow = lambda *args: True
 
+#print(block_rlps[116525].encode('hex'))
+#sys.exit()
+
 # process blocks
 st = time.time()
 num_blks = 0
 num_txs = 0
 gas_used = 0
-for block in block_rlps[1:50000]:
+for i, block in list(enumerate(block_rlps))[1:250000]:
     # print 'prevh:', s.prev_headers
     block = rlp.decode(block, Block)
+    #if i == 116525:
+    #    configure_logging(config_string=config_string)
     assert c.add_block(block)
     num_blks += 1
     num_txs += len(block.transactions)
