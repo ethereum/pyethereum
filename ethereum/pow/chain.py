@@ -257,7 +257,7 @@ class Chain(object):
                 apply_block(self.state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
                 log.info('Block %d (%s) with parent %s invalid, reason: %s' %
-                         (block.number, encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+                         (block.number, encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
                 return False
             self.db.put(b'block:%d' % block.header.number, block.header.hash)
             block_score = self.get_score(block)  # side effect: put 'score:' cache in db
@@ -269,14 +269,15 @@ class Chain(object):
             changed = self.state.changed
         # Or is the block being added to a chain that is not currently the head?
         elif block.header.prevhash in self.env.db:
-            log.info('Receiving block not on head (%s), adding to secondary post state %s' %
-                     (encode_hex(self.head_hash), encode_hex(block.header.prevhash)))
+            log.info('Receiving block %d (%s) not on head (%s), adding to secondary post state %s' %
+                     (block.number, encode_hex(block.header.hash[:4]),
+                      encode_hex(self.head_hash[:4]), encode_hex(block.header.prevhash[:4])))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
                 log.info('Block %s with parent %s invalid, reason: %s' %
-                         (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+                         (encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
                 return False
             deletes = temp_state.deletes
             block_score = self.get_score(block)
@@ -295,38 +296,52 @@ class Chain(object):
                     if b.prevhash not in self.db or self.db.get(b.prevhash) == 'GENESIS':
                         break
                     b = self.get_parent(b)
-                # Replace block index and tx indices, and edit the state cache
-                changed_accts = {}
                 replace_from = b.header.number
+                # Replace block index and tx indices, and edit the state cache
+
+                # Get a list of all accounts that have been edited along the old and
+                # new chains
+                changed_accts = {}
+                # Read: for i in range(common ancestor block number...new block number)
                 for i in itertools.count(replace_from):
                     log.info('Rewriting height %d' % i)
                     key = b'block:%d' % i
+                    # Delete data for old blocks
                     orig_at_height = self.db.get(key) if key in self.db else None
                     if orig_at_height:
-                        self.db.delete(key)
                         orig_block_at_height = self.get_block(orig_at_height)
                         log.info('%s no longer in main chain' % encode_hex(orig_block_at_height.header.hash))
+                        # Delete from block index
+                        self.db.delete(key)
+                        # Delete from txindex
                         for tx in orig_block_at_height.transactions:
                             if b'txindex:' + tx.hash in self.db:
                                 self.db.delete(b'txindex:' + tx.hash)
+                        # Add to changed list
                         acct_list = self.db.get(b'changed:'+orig_block_at_height.hash)
                         for j in range(0, len(acct_list), 20):
                             changed_accts[acct_list[j: j+20]] = True
+                    # Add data for new blocks
                     if i in new_chain:
                         new_block_at_height = new_chain[i]
                         log.info('%s now in main chain' % encode_hex(new_block_at_height.header.hash))
+                        # Add to block index
                         self.db.put(key, new_block_at_height.header.hash)
-                        for i, tx in enumerate(new_block_at_height.transactions):
+                        # Add to txindex
+                        for j, tx in enumerate(new_block_at_height.transactions):
                             self.db.put(b'txindex:' + tx.hash,
-                                        rlp.encode([new_block_at_height.number, i]))
+                                        rlp.encode([new_block_at_height.number, j]))
+                        # Add to changed list
                         if i < b.number:
                             acct_list = self.db.get(b'changed:'+new_block_at_height.hash)
                             for j in range(0, len(acct_list), 20):
                                 changed_accts[acct_list[j: j+20]] = True
                     if i not in new_chain and not orig_at_height:
                         break
+                # Add changed list from new head to changed list
                 for c in changed.keys():
                     changed_accts[c] = True
+                # Update the on-disk state cache
                 for addr in changed_accts.keys():
                     data = temp_state.trie.get(addr)
                     if data:
@@ -373,8 +388,11 @@ class Chain(object):
         log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used))
+        # Call optional callback
         if self.new_head_cb and block.header.number != 0:
             self.new_head_cb(block)
+        # Are there blocks that we received that were waiting for this block?
+        # If so, process them.
         if block.header.hash in self.parent_queue:
             for _blk in self.parent_queue[block.header.hash]:
                 self.add_block(_blk)

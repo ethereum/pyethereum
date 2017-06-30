@@ -161,7 +161,7 @@ class State():
     def get_and_cache_account(self, address):
         if address in self.cache:
             return self.cache[address]
-        if self.executing_on_head:
+        if self.executing_on_head and False:
             try:
                 rlpdata = self.db.get(b'address:'+address)
             except KeyError:
