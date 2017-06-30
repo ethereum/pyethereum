@@ -238,6 +238,6 @@ open('output.json', 'w').write(json.dumps(post, indent=4))
 
 To make a test filler file instead, do `post = t.mk_state_test_postfill(c, pre, True)`.
 
-## Licence
+## License
 
-See LICENCE
+See [LICENSE](LICENSE)
