@@ -365,7 +365,7 @@ To make your own state tests, use the tester module as follows:
 To make a test filler file instead, do
 ``post = t.mk_state_test_postfill(c, pre, True)``.
 
-Licence
+License
 -------
 
-See LICENCE
+See `LICENSE <LICENSE>`_
