@@ -186,7 +186,6 @@ class Chain(object):
         # TODO: Look for prepares
         # TODO: Update head_hash -- ie. self.head_hash = self.db.get('cp_head:' + fork_checkpoint_id)
         log.info('Update head to: %s' % str(fork_hash))
-        print('Update head to: %s' % str(fork_hash))
         self.checkpoint_head_hash = fork_hash
 
     def is_fork_commits_heavier_than_head(self, checkpoint_head_hash, fork_hash):
@@ -346,18 +345,18 @@ class Chain(object):
                 i += 1
 
     def process_parent_queue(self):
+        deletions = []
         for parent_hash, blocks in self.parent_queue.items():
             if parent_hash in self.db:
                 for block in blocks:
                     self.add_block(block)
-                del self.parent_queue[parent_hash]
+                deletions.append(parent_hash)
+        for parent_hash in deletions:
+            del self.parent_queue[parent_hash]
 
     # Call upon receiving a block
     def add_block(self, block):
         now = self.localtime
-        # Make sure this block isn't already in our database
-        if block.header.hash in self.env.db:
-            return False
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -369,7 +368,7 @@ class Chain(object):
             return False
 
         # Check what the current checkpoint head should be
-        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1:
+        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1 and block.header.prevhash in self.env.db:
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
@@ -413,7 +412,7 @@ class Chain(object):
                 fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
             # Replace the head only if the fork block is a child of the head checkpoint
             if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)) or block.hash == self.checkpoint_head_hash:
-                print('REPLACE HEAD')
+                log.info('Replacing head')
                 b = block
                 new_chain = {}
                 while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
