@@ -5,8 +5,8 @@ from ethereum.tools import tester
 from ethereum.tests.utils import new_db
 from ethereum.db import EphemDB
 from ethereum.hybrid_casper import casper_utils, validator
-from ethereum.slogging import get_logger
-logger = get_logger()
+from ethereum.slogging import get_logger, configure_logging
+log = get_logger('test.validator')
 
 _db = new_db()
 
@@ -37,13 +37,19 @@ def init_chain_and_casper():
 def mine_epochs(validator, number_of_epochs):
     distance_to_next_epoch = (EPOCH_LENGTH - validator.chain.state.block_number) % EPOCH_LENGTH
     number_of_blocks = distance_to_next_epoch + EPOCH_LENGTH*(number_of_epochs-1) + 2
-    return validator.mine_and_broadcast_blocks(number_of_blocks=number_of_blocks)
+    end_block = validator.chain.state.block_number + number_of_blocks
+    while validator.chain.state.block_number < end_block:
+        last_block = validator.mine_and_broadcast_blocks(1)
+    return last_block
 
 def test_validator(db):
     """"
-    TODO
+    Create 5 validators, mine 5 epochs, and make sure all of the prev_commit_epoch's are for the 5th epoch
     """
-    # keys = tester.keys[:5]
+    # Enable validator logging
+    config_string = 'eth.validator:info,eth.chain:info,test.validator:info'
+    configure_logging(config_string=config_string)
+    # Begin tests
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
     network = validator.Network()
     t = tester.Chain(genesis=genesis)
@@ -52,16 +58,23 @@ def test_validator(db):
     t.mine(26)
     init_val_addr = utils.privtoaddr(k0)
     init_val_valcode_addr = utils.mk_contract_address(init_val_addr, 2)
+
     validators = [validator.Validator(k0, copy.deepcopy(genesis), network, mining=True, valcode_addr=init_val_valcode_addr)]
-    # validators[0].mine_and_broadcast_blocks(1)
-    mine_epochs(validators[0], 1)
-    print('~~~ end ~~~')
-    for i in range(1, 100):
+    # Add four more validators
+    for i in range(1, 5):
+        log.info('Adding validator {}'.format(i))
+        validators.append(validator.Validator(tester.keys[i], copy.deepcopy(genesis), network))
+    # Submit deposits for new validators
+    for i in range(1, 5):
+        validators[i].broadcast_deposit()
+    mine_epochs(validators[0], 5)
+    for i in range(1, 10000):
         try:
             block = validators[0].chain.get_block_by_number(i)
-            print(block.hash)
-            print(block.transactions)
-        except Exception as e:
-            print(e)
+            if validators[0].chain.get_block_by_number(i).header.number % EPOCH_LENGTH == 0:
+                log.info('~~~ Epoch: {} ~~~'.format(i / EPOCH_LENGTH))
+            log.info('{} {}'.format(utils.encode_hex(block.hash), block.transactions))
+        except AttributeError:
             break
-    assert False
+    for v in validators:
+        assert v.prev_commit_epoch == 5
