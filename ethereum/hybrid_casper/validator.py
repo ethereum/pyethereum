@@ -96,6 +96,10 @@ class Validator(object):
         self.chain.process_parent_queue()
         if not self.chain.add_block(block):
             return
+        # Verify this block is a part of our head chain
+        if block != self.chain.get_block_by_number(block.header.number):
+            return
+        # Block is part of the head chain, so attempt to prepare & commit:
         # Create a poststate based on the blockhash we recieved
         post_state = self.chain.mk_poststate_of_blockhash(block.hash)
         # Generate prepare & commit messages and broadcast if possible
@@ -107,9 +111,6 @@ class Validator(object):
         if commit_msg:
             commit_tx = self.mk_commit_tx(commit_msg)
             self.broadcast_transaction(commit_tx)
-        if self.valcode_addr:
-            code = self.chain.state.get_code(self.valcode_addr)
-            log.info('Validator: {} - Code: {}'.format(utils.encode_hex(self.coinbase), code))
 
     def accept_transaction(self, tx):
         if self.mining:
@@ -126,7 +127,6 @@ class Validator(object):
         self.network.broadcast(block)
 
     def get_prepare_message(self, state):
-        # TODO: Only prepare on head fork
         state.gas_limit = 9999999999999
         epoch = state.block_number // self.epoch_length
         # Don't prepare if we have already or if we don't have EPOCH_LENGTH/3 or more blocks in this epoch
