@@ -103,5 +103,5 @@ def inject_casper_contracts(state, initial_validator, epoch_length, slash_delay)
                                                 .replace('0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6', utils.checksum_encode(k1_valcode_addr)) \
                                                 .replace('0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24', utils.checksum_encode(sighasher_address)) \
                                                 .replace('0xD7a3BD6C9eA32efF147d067f907AE6b22d436F91', utils.checksum_encode(purity_checker_address))
-    apply_tx(state, initial_validator, b'', 0, evmdata=viper.compile(casper_code), gas=4096181)
+    apply_tx(state, initial_validator, b'', 0, evmdata=viper.compile(casper_code), gas=4196181)
     print('Gas consumed to launch Casper', state.receipts[-1].gas_used - state.receipts[-2].gas_used)
