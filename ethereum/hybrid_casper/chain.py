@@ -76,6 +76,7 @@ class Chain(object):
 
         self.head_hash = self.state.prev_headers[0].hash
         self.checkpoint_head_hash = None
+        self.commit_logs = []
         self.casper_address = self.env.config['CASPER_ADDRESS']
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
         assert self.state.block_number == self.state.prev_headers[0].number
@@ -116,20 +117,30 @@ class Chain(object):
         if contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("prepare()")):
             log.info('Recieved prepare')
         elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
-            log.info('Recieved commit')
-            new_commit = self.get_decoded_commit(contract_log.data)
-            checkpoint_id = self.mk_checkpoint_id(new_commit['epoch'], new_commit['hash'])
-            try:
-                commits = self.db.get(b'cp_commits:' + checkpoint_id)
-            except KeyError:
-                commits = dict()
-            if new_commit['sig'] in commits:
+            self.commit_logs.append(contract_log.data)
+            # Wait until we have all three commit events before processing the commit
+            if len(self.commit_logs) != 3:
+                # If we don't have all three, return.
                 return
-            commits[new_commit['sig']] = contract_log.data
-            self.db.put(b'cp_commits:' + checkpoint_id, commits)
-            self.maybe_update_checkpoint_head_hash(new_commit['hash'])
-        else:
-            raise(Exception('Recieved unexpected topic!'))
+            log.info('Recieved commit')
+            # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
+            raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
+            commit = self.get_decoded_commit(raw_commit)
+            checkpoint_id = self.mk_checkpoint_id(commit['epoch'], commit['hash'])
+            # Store the total deposits for this checkpoint if we haven't already
+            if b'cp_total_deposits:' + checkpoint_id not in self.db:
+                self.db.put(b'cp_total_deposits:' + checkpoint_id, total_deposits)
+            # Store this validator's deposit for this checkpoint
+            try:
+                deposits = self.db.get(b'cp_deposits:' + checkpoint_id)
+            except KeyError:
+                deposits = dict()
+            if commit['validator_index'] in deposits:
+                log.info('Validator deposit already stored!')
+            deposits[commit['validator_index']] = validator_deposits
+            self.db.put(b'cp_deposits:' + checkpoint_id, deposits)
+            # Update the checkpoint_head_hash if needed
+            self.maybe_update_checkpoint_head_hash(commit['hash'])
 
     def get_decoded_commit(self, commit_rlp):
         commit_array = rlp.decode(commit_rlp)
@@ -138,22 +149,6 @@ class Chain(object):
             commit[field] = commit_array[i]
         commit['raw_rlp'] = commit_rlp
         return commit
-
-    def get_checkpoint_score(self, blockhash, commits):
-        state = self.mk_poststate_of_blockhash(blockhash)
-        casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.casper_address)
-        epoch = casper.get_current_epoch()
-        curr_dynasty_deposits = 0
-        prev_dynasty_deposits = 0
-        # Calculate the current & previous dynasty scores
-        for sig in commits:
-            commit = self.get_decoded_commit(commits[sig])
-            epochcheck = casper.check_eligible_in_epoch(commit['validator_index'], epoch)
-            if epochcheck >= 2:
-                curr_dynasty_deposits += casper.get_validators__deposit(commit['validator_index'])
-            if epochcheck % 2:
-                prev_dynasty_deposits += casper.get_validators__deposit(commit['validator_index'])
-        return min(curr_dynasty_deposits, prev_dynasty_deposits)
 
     def get_prev_checkpoint_block(self, block):
         epoch_length = self.env.config['EPOCH_LENGTH']
@@ -169,12 +164,6 @@ class Chain(object):
     def mk_checkpoint_id(self, epoch, blockhash):
         return utils.sha3(bytes(epoch) + blockhash)
 
-    def get_commits(self, checkpoint_id):
-        try:
-            return self.db.get(b'cp_commits:' + checkpoint_id)
-        except KeyError:
-            return {}
-
     def maybe_update_checkpoint_head_hash(self, fork_hash):
         # If we have not yet set a checkpoint head, just use the first one we are given
         if not self.checkpoint_head_hash:
@@ -183,7 +172,6 @@ class Chain(object):
         # Check that the fork is heavier than the head
         if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
             return
-        # TODO: Look for prepares
         # TODO: Update head_hash -- ie. self.head_hash = self.db.get('cp_head:' + fork_checkpoint_id)
         log.info('Update head to: %s' % str(fork_hash))
         self.checkpoint_head_hash = fork_hash
@@ -195,20 +183,33 @@ class Chain(object):
         fc = self.get_block(fork_hash)
         # Calculate the score for the fork checkpoint
         fork_checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(fc.header.number // epoch_length), fc.header.hash)
-        fork_score = self.get_checkpoint_score(fc.header.hash, self.get_commits(fork_checkpoint_id))
+        fork_score = self.get_checkpoint_score(fork_checkpoint_id)
         # Loop over the hc & fc until they are equal (we find a shared parent)
         while fc != hc:
             if fc.header.number > hc.header.number:
                 fc = self.get_prev_checkpoint_block(fc)
                 continue
             checkpoint_id = self.mk_checkpoint_id(utils.int_to_big_endian(hc.header.number // epoch_length), hc.header.hash)
-            head_score = self.get_checkpoint_score(hc.header.hash, self.get_commits(checkpoint_id))
+            head_score = self.get_checkpoint_score(checkpoint_id)
             # If the fork score is lower than the head at any point, return False
             if fork_score < head_score:
                 return False
             hc = self.get_prev_checkpoint_block(hc)
         # We've compared the fork score to all head scores, and so return True
         return True
+
+    def get_checkpoint_score(self, checkpoint_id):
+        total_deposits = self.db.get(b'cp_total_deposits:' + checkpoint_id)
+        prev_dyn_total_deposits, curr_dyn_total_deposits = utils.big_endian_to_int(total_deposits[:32]), utils.big_endian_to_int(total_deposits[32:])
+        deposits = self.db.get(b'cp_deposits:' + checkpoint_id)
+        prev_dyn_deposits = 0
+        curr_dyn_deposits = 0
+        for key, d in deposits.items():
+            prev_dyn_deposits += utils.big_endian_to_int(d[:32])
+            curr_dyn_deposits += utils.big_endian_to_int(d[32:])
+        prev_dyn_score = prev_dyn_deposits / prev_dyn_total_deposits if prev_dyn_total_deposits > 0 else 1
+        curr_dyn_score = curr_dyn_deposits / curr_dyn_total_deposits if curr_dyn_total_deposits > 0 else 1
+        return min(prev_dyn_score, curr_dyn_score)
 
     def mk_poststate_of_blockhash(self, blockhash, convert=False):
         if blockhash not in self.db:
