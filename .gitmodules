@@ -4,4 +4,4 @@
 	branch = develop
 [submodule "casper"]
 	path = casper
-	url = https://github.com/ethereum/casper.git
+	url = https://github.com/karlfloersch/casper.git
