@@ -60,7 +60,7 @@ class Chain(object):
             print('Initializing chain from new state based on alloc')
             self.state = mk_basic_state(genesis, {
                 "number": kwargs.get('number', 0),
-                "gas_limit": kwargs.get('gas_limit', 4712388),
+                "gas_limit": kwargs.get('gas_limit', self.env.config['BLOCK_GAS_LIMIT']),
                 "gas_used": kwargs.get('gas_used', 0),
                 "timestamp": kwargs.get('timestamp', 1467446877),
                 "difficulty": kwargs.get('difficulty', 2**25),
