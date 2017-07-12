@@ -27,6 +27,7 @@ default_config = dict(
     #                   (block.gas_used * 6 / 5) / 1024
     GASLIMIT_EMA_FACTOR=1024,
     GASLIMIT_ADJMAX_FACTOR=1024,
+    BLOCK_GAS_LIMIT=4712388,
     BLKLIM_FACTOR_NOM=3,
     BLKLIM_FACTOR_DEN=2,
     # Network ID
