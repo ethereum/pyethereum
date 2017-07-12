@@ -164,6 +164,64 @@ def test_head_change_for_more_commits(db):
     assert t.chain.head_hash == R.hash
     # The head switched to R becasue it has 7 commits as opposed to 6
 
+def test_head_change_to_longest_known_checkpoint_chain(db):
+    """"
+    Test that when we change to a new checkpoint, we use the longest chain known that
+    derives from that checkpoint
+
+    Chain0: 3A_5, 4A_1,                 HEAD_CHANGE
+    add
+    Chain1:             5B_2,           HEAD_CHANGE
+    add
+    Chain2:       4A_2,                 HEAD_CHANGE
+    """
+    keys = tester.keys[:5]
+    t, casper = init_multi_validator_chain_and_casper(keys)
+    epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
+    epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
+    # 3A_5: Prepare and commit all
+    for i, k in enumerate(keys):
+        casper.prepare(mk_prepare(i, 3, epoch_blockhash(t, 3), epoch_2_anchash, 2, epoch_2_anchash, k))
+        t.mine()
+    for i, k in enumerate(keys):
+        casper.commit(mk_commit(i, 3, epoch_blockhash(t, 3), 2 if i == 0 else 0, k))
+        t.mine()
+    epoch_3_anchash = utils.sha3(epoch_blockhash(t, 3) + epoch_2_anchash)
+    root_hash = t.mine().hash
+    # 4A_1: Prepare all, commit 1
+    mine_epochs(t, 1)
+    for i, k in enumerate(keys):
+        casper.prepare(mk_prepare(i, 4, epoch_blockhash(t, 4), epoch_3_anchash, 3, epoch_3_anchash, k))
+        t.mine()
+    casper.commit(mk_commit(0, 4, epoch_blockhash(t, 4), 3, keys[0]))
+    chain0_4A_1 = t.mine()
+    # Mine 5 more blocks to create a longer chain
+    chain0_4A_1_longest = t.mine(5)
+    assert t.chain.head_hash == chain0_4A_1_longest.hash
+    t.change_head(root_hash)
+    # 5B_2: Prepare all except v0, commit 2 -- Head will change
+    mine_epochs(t, 2)
+    for i, k in enumerate(keys[1:], 1):
+        casper.prepare(mk_prepare(i, 5, epoch_blockhash(t, 5), epoch_3_anchash, 3, epoch_3_anchash, k))
+        t.mine()
+    casper.commit(mk_commit(1, 5, epoch_blockhash(t, 5), 3, keys[1]))
+    t.mine()
+    assert t.chain.head_hash == chain0_4A_1_longest.hash
+    casper.commit(mk_commit(2, 5, epoch_blockhash(t, 5), 3, keys[2]))
+    chain1_5B_2 = t.mine()
+    # Make sure the head switches to chain1 becasue it has 7 commits as opposed to 6
+    assert t.chain.head_hash == chain1_5B_2.hash
+    # Now add a commit to chain0_4A_1, but make sure it's not the longest PoW chain
+    t.change_head(chain0_4A_1.hash)
+    casper.commit(mk_commit(3, 4, epoch_blockhash(t, 4), 3, keys[3]))
+    chain0_4A_2 = t.mine()
+    casper.commit(mk_commit(4, 4, epoch_blockhash(t, 4), 3, keys[4]))
+    chain0_4A_2 = t.mine()
+    # Check to see that the head is in fact the longest PoW chain, not this fork with the recent commit
+    assert t.chain.head_hash != chain0_4A_2.hash
+    assert t.chain.head_hash == chain0_4A_1_longest.hash
+
+
 def test_head_change_for_more_commits_on_different_forks(db):
     """" [L & R are checkpoints. Ex: L3_5 is local chain, 5th epoch, with 4 stake weight]
     Local: L3_5, L4_1
