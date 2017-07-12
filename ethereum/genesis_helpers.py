@@ -107,11 +107,12 @@ def mk_genesis_block(env, **kwargs):
 
 
 def mk_basic_state(alloc, header=None, env=None, executing_on_head=False):
-    state = State(env=env or Env(), executing_on_head=executing_on_head)
+    env = env or Env()
+    state = State(env=env, executing_on_head=executing_on_head)
     if not header:
         header = {
-            "number": 0, "gas_limit": 4712388, "gas_used": 0,
-            "timestamp": 1467446877, "difficulty": 1,
+            "number": 0, "gas_limit": env.config['BLOCK_GAS_LIMIT'],
+            "gas_used": 0, "timestamp": 1467446877, "difficulty": 1,
             "uncles_hash": '0x'+encode_hex(BLANK_UNCLES_HASH)
         }
     h = BlockHeader(number=parse_as_int(header['number']),
