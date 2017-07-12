@@ -75,7 +75,7 @@ class Chain(object):
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
-        self.checkpoint_head_hash = None
+        self.checkpoint_head_hash = b'\x00' * 32
         self.commit_logs = []
         self.casper_address = self.env.config['CASPER_ADDRESS']
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
@@ -161,22 +161,38 @@ class Chain(object):
             block = self.get_block(block.header.prevhash)
         return block
 
+    def is_parent_checkpoint(self, parent, child):
+        parent_block = self.get_block(parent)
+        child_block = self.get_block(child)
+        while parent_block.header.number > child_block.header.number:
+            parent_block = self.get_prev_checkpoint_block(parent_block)
+        if parent_block == child_block:
+            return True
+        else:
+            return False
+
     def maybe_update_checkpoint_head_hash(self, fork_hash):
-        # If we have not yet set a checkpoint head, just use the first one we are given
-        if not self.checkpoint_head_hash:
+        # If our checkpoint head is the initial head hash value, immediately use the fork hash
+        if self.checkpoint_head_hash == b'\x00' * 32:
             self.checkpoint_head_hash = fork_hash
+            return
+        # Check that the fork isn't a direct decendent of head
+        if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
             return
         # Check that the fork is heavier than the head
         if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
             return
-        log.info('Update head to: %s' % str(fork_hash))
         self.checkpoint_head_hash = fork_hash
         # Set the head_hash to equal the latest block known for our checkpoint
-        # self.head_hash = self.db.get('cp_head_hash:' + self.checkpoint_head_hash)
+        try:
+            self.head_hash = self.db.get(b'cp_head_hash:' + self.checkpoint_head_hash)
+        except KeyError:
+            self.head_hash = fork_hash
+        log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(fork_hash), utils.encode_hex(self.head_hash)))
 
-    def is_fork_commits_heavier_than_head(self, checkpoint_head_hash, fork_hash):
+    def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
         # Get the related blocks
-        hc = self.get_block(self.checkpoint_head_hash)
+        hc = self.get_block(head_hash)
         fc = self.get_block(fork_hash)
         # Calculate the score for the fork checkpoint
         fork_score = self.get_checkpoint_score(fc.header.hash)
@@ -194,7 +210,10 @@ class Chain(object):
         return True
 
     def get_checkpoint_score(self, checkpoint_hash):
-        total_deposits = self.db.get(b'cp_total_deposits:' + checkpoint_hash)
+        try:
+            total_deposits = self.db.get(b'cp_total_deposits:' + checkpoint_hash)
+        except KeyError:
+            return 0
         prev_dyn_total_deposits, curr_dyn_total_deposits = utils.big_endian_to_int(total_deposits[:32]), utils.big_endian_to_int(total_deposits[32:])
         deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
         prev_dyn_deposits = 0
@@ -403,7 +422,7 @@ class Chain(object):
             # Get the checkpoint in the fork with the same block number as our head checkpoint, if they are equal, the block is a child
             # TODO: Clean up this logic--it's super ugly
             fork_cp_block = self.get_prev_checkpoint_block(block)
-            head_cp_block = self.get_block(self.checkpoint_head_hash) if self.checkpoint_head_hash else fork_cp_block
+            head_cp_block = self.get_block(self.checkpoint_head_hash) if self.checkpoint_head_hash != b'\x00'*32 else fork_cp_block
             while(fork_cp_block.header.number > head_cp_block.header.number):
                 fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
             # Replace the head only if the fork block is a child of the head checkpoint
@@ -449,6 +468,7 @@ class Chain(object):
             return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
+        self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
         self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
         log.info('Added block %d (%s) with %d txs and %d gas' % \

@@ -132,7 +132,7 @@ class Validator(object):
         # Don't prepare if we have already or if we don't have EPOCH_LENGTH/3 or more blocks in this epoch
         if epoch in self.prepares or state.block_number % self.epoch_length < self.epoch_length // 3:
             return False
-        if self.chain.checkpoint_head_hash:
+        if self.chain.checkpoint_head_hash != b'\x00'*32:
             source_epoch = self.chain.get_block(self.chain.checkpoint_head_hash).header.number // self.epoch_length
         else:
             source_epoch = 0
