@@ -16,7 +16,7 @@ from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTran
     BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger, configure_logging
 from ethereum.config import Env
-from ethereum.new_state import State, dict_to_prev_header
+from ethereum.state import State, dict_to_prev_header
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
 from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
