@@ -105,9 +105,7 @@ class Chain(object):
             return None
 
     # Casper fork choice outline:
-    # 1. Each commit, store that commit for the checkpoint, then attempt to change the head
-    # 2. Each call to checkpoint score, make a poststate of the checkpoint block, and add up all desposits from *non-slashed* validators
-    # 3. Each slash, add the validator to the slashed validators list
+    # TODO
 
     def casper_log_handler(self, contract_log, fork_state, blockhash):
         # We only want logs from the Casper contract
