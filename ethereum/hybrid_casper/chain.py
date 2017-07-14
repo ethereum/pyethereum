@@ -377,7 +377,6 @@ class Chain(object):
             self.time_queue.insert(i, block)
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
-            # TODO: Add logic which only adds blocks if we can trace it back to the full chain
             return False
 
         # Check what the current checkpoint head should be
@@ -424,7 +423,7 @@ class Chain(object):
             while(fork_cp_block.header.number > head_cp_block.header.number):
                 fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
             # Replace the head only if the fork block is a child of the head checkpoint
-            if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)) or block.hash == self.checkpoint_head_hash:
+            if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)):
                 log.info('Replacing head')
                 b = block
                 new_chain = {}
