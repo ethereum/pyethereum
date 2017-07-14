@@ -115,7 +115,7 @@ def add_transactions(state, block, txqueue, min_gasprice=0):
             block.transactions.append(tx)
         except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
                 InvalidNonce, UnsignedTransaction) as e:
-            pass
+            log.error(e)
     log.info('Added %d transactions' % (len(block.transactions) - pre_txs))
 
 # Validate that the transaction list root is correct
