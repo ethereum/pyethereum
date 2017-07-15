@@ -3,6 +3,6 @@ PyYAML
 repoze.lru
 pbkdf2
 scrypt
-py_ecc
+https://github.com/ethereum/py_pairing/tarball/master
 rlp>=0.4.7
 https://github.com/ethereum/ethash/tarball/master
