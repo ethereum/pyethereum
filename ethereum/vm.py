@@ -637,7 +637,7 @@ def vm_execute(ext, msg, code):
                 # Get result
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
-                    stk.append(0)
+                    return vm_exception('Child Call Failed')
                 else:
                     stk.append(1)
                 # Set output memory
