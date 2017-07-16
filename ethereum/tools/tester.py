@@ -57,7 +57,7 @@ from ethereum.abi import ContractTranslator
 import types
 
 STARTGAS = 3141592
-GASPRICE = 1
+GASPRICE = 0
 
 from ethereum.slogging import configure_logging
 config_string = ':info'
