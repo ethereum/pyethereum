@@ -42,7 +42,7 @@ def apply_block(state, block):
 def make_head_candidate(chain, txqueue=None,
                         parent=None,
                         timestamp=None,
-                        coinbase='\x35'*20,
+                        coinbase=b'\x35'*20,
                         extra_data='moo ha ha says the laughing cow.',
                         min_gasprice=0):
     log.info('Creating head candidate')

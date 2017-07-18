@@ -56,7 +56,7 @@ def calc_difficulty(parent, timestamp, config=default_config):
     return o
 
 # Given a parent state, initialize a block with the given arguments
-def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase='\x35'*20, extra_data='moo ha ha says the laughing cow.'):
+def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase=b'\x35'*20, extra_data='moo ha ha says the laughing cow.'):
     state = state or chain.state
     blk = Block(BlockHeader())
     now = timestamp or chain.time()
