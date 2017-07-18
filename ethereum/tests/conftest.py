@@ -17,3 +17,13 @@ def pytest_runtest_call(item):
 
     if catchlog_handler and catchlog_handler in slogging.rootLogger.handlers:
         slogging.rootLogger.removeHandler(catchlog_handler)
+
+
+# Configuration file for adding commandline arguements in pytest
+def pytest_addoption(parser):
+    parser.addoption("--tracevm", action="store_true",
+        help="print vm trace")
+
+@pytest.fixture
+def tracevm(request):
+    return request.config.getoption("--tracevm")

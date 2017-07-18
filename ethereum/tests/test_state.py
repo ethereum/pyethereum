@@ -6,9 +6,9 @@ from ethereum.slogging import get_logger, configure_logging
 logger = get_logger()
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-if '--trace' in sys.argv:  # not default
+if '--tracevm' in sys.argv:  # not default
     configure_logging(':trace')
-    sys.argv.remove('--trace')
+    sys.argv.remove('--tracevm')
 
 
 def test_state(filename, testname, testdata):
