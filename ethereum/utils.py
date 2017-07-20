@@ -85,7 +85,7 @@ else:
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
-    if secp256k1:
+    if secp256k1 and hasattr(secp256k1, "PublicKey"):
         # Legendre symbol check; the secp256k1 library does not seem to do this
         pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
         xc = r * r * r + 7
