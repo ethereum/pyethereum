@@ -378,7 +378,6 @@ class Chain(object):
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
-
         # Check what the current checkpoint head should be
         if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1 and block.header.prevhash in self.env.db:
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
@@ -391,7 +390,6 @@ class Chain(object):
             # Check to see if we need to update the checkpoint_head
             for r in temp_state.receipts:
                 [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
-
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:

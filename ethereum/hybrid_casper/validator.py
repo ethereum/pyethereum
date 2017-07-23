@@ -18,7 +18,7 @@ class Network(object):
         self.nodes = []
         self.time = 0
 
-    # TODO: Add the concept of *time* or add block dependency handling
+    # TODO: Add the concept of time
     def broadcast(self, msg):
         for n in self.nodes:
             n.on_receive(msg)
@@ -37,6 +37,7 @@ class Validator(object):
         self.deposit_tx = None
         self.valcode_addr = valcode_addr
         self.prepares = dict()
+        self.prev_prepare_epoch = 0
         self.prev_commit_epoch = 0
         self.epoch_length = self.chain.env.config['EPOCH_LENGTH']
         # When the transaction_queue is modified, we must set
@@ -99,15 +100,19 @@ class Validator(object):
         # Verify this block is a part of our head chain
         if block != self.chain.get_block_by_number(block.header.number):
             return
+        # Verify this block is far enough in our epoch
+        if block.header.number % self.epoch_length < self.epoch_length // 3:
+            return
         # Block is part of the head chain, so attempt to prepare & commit:
         # Create a poststate based on the blockhash we recieved
         post_state = self.chain.mk_poststate_of_blockhash(block.hash)
+        post_state.gas_limit = 9999999999999
         # Generate prepare & commit messages and broadcast if possible
-        prepare_msg = self.get_prepare_message(post_state)
+        prepare_msg = self.generate_prepare_message(post_state)
         if prepare_msg:
             prepare_tx = self.mk_prepare_tx(prepare_msg)
             self.broadcast_transaction(prepare_tx)
-        commit_msg = self.get_commit_message(post_state)
+        commit_msg = self.generate_commit_message(post_state)
         if commit_msg:
             commit_tx = self.mk_commit_tx(commit_msg)
             self.broadcast_transaction(commit_tx)
@@ -126,19 +131,18 @@ class Validator(object):
         log.info('Broadcasting block with hash: %s and txs: %s' % (utils.encode_hex(block.hash), str(block.transactions)))
         self.network.broadcast(block)
 
-    def get_prepare_message(self, state):
-        state.gas_limit = 9999999999999
+    def generate_prepare_message(self, state):
         epoch = state.block_number // self.epoch_length
-        # Don't prepare if we have already or if we don't have EPOCH_LENGTH/3 or more blocks in this epoch
-        if epoch in self.prepares or state.block_number % self.epoch_length < self.epoch_length // 3:
-            return False
+        # NO_DBL_PREPARE: Don't prepare if we have already
+        if epoch in self.prepares:
+            return None
         if self.chain.checkpoint_head_hash != b'\x00'*32:
             source_epoch = self.chain.get_block(self.chain.checkpoint_head_hash).header.number // self.epoch_length
         else:
             source_epoch = 0
-        # Check for PREPARE_COMMIT_CONSISTENCY
+        # PREPARE_COMMIT_CONSISTENCY
         if source_epoch < self.prev_commit_epoch and self.prev_commit_epoch < epoch:
-            return False
+            return None
         # Create a Casper contract which we can use to get related values
         casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.chain.casper_address)
         # Get the ancestry hash and source ancestry hash
@@ -146,7 +150,7 @@ class Validator(object):
         ancestry_hash = self.get_ancestry_hash(state, epoch, source_epoch, source_ancestry_hash)
         prepare_msg = casper_utils.mk_prepare(self.get_validator_index(state), epoch, self.epoch_blockhash(state, epoch),
                                               ancestry_hash, source_epoch, source_ancestry_hash, self.key)
-        try:  # Attempt to submit the prepare, to make sure that it doesn't doesn't violate DBL_PREPARE & it is justified
+        try:  # Attempt to submit the prepare, to make sure that it is justified
             casper.prepare(prepare_msg)
         except tester.TransactionFailed:
             log.info('Prepare failed! Validator {} - hash justified {} - validator start {} - valcode addr {}'
@@ -154,19 +158,21 @@ class Validator(object):
                              casper.get_consensus_messages__ancestry_hash_justified(epoch, ancestry_hash),
                              casper.get_validators__dynasty_start(self.get_validator_index(state)),
                              utils.encode_hex(self.valcode_addr)))
-            return False
+            return None
         # Save the prepare message we generated
         self.prepares[epoch] = prepare_msg
+        # Save the highest source epoch we have referenced in our prepare's source epoch
+        if source_epoch > self.prev_prepare_epoch:
+            self.prev_prepare_epoch = epoch
         log.info('Prepare submitted: validator %d - epoch %d - prev_commit_epoch %d - hash %s' %
                  (self.get_validator_index(state), epoch, self.prev_commit_epoch, utils.encode_hex(self.epoch_blockhash(state, epoch))))
         return prepare_msg
 
-    def get_commit_message(self, state):
+    def generate_commit_message(self, state):
         epoch = state.block_number // self.epoch_length
-        # Don't commit if we have already or if we don't have EPOCH_LENGTH/2 or more blocks in this epoch
-        if state.block_number % self.epoch_length < self.epoch_length // 2:
-            return False
-        state.gas_limit = 9999999999999
+        # PREPARE_COMMIT_CONSISTENCY
+        if self.prev_prepare_epoch < self.prev_commit_epoch and self.prev_commit_epoch < epoch:
+            return None
         # Create a Casper contract which we can use to get related values
         casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.chain.casper_address)
         # Make the commit message
@@ -179,7 +185,7 @@ class Validator(object):
                      .format(self.get_validator_index(state),
                              self.epoch_blockhash(state, epoch),
                              utils.encode_hex(self.valcode_addr)))
-            return False
+            return None
         # Save the commit as now our last commit epoch
         log.info('Commit submitted: validator %d - epoch %d - prev_commit_epoch %d - hash %s' %
                  (self.get_validator_index(state), epoch, self.prev_commit_epoch, utils.encode_hex(self.epoch_blockhash(state, epoch))))
