@@ -148,7 +148,16 @@ class Chain(object):
         self.last_sender = sender
         return o
 
-    def contract(self, sourcecode, args=[], sender=k0, value=0, language='evm', startgas=STARTGAS, gasprice=GASPRICE):
+    def last_gas_used(self, with_tx=False):
+        if len(self.head_state.receipts) == 1:
+            diff = self.head_state.receipts[-1].gas_used
+        else:
+            diff = self.head_state.receipts[-1].gas_used - self.head_state.receipts[-2].gas_used
+        return diff - (not with_tx) * self.last_tx.intrinsic_gas_used
+
+    def contract(self, sourcecode, args=[], sender=k0, value=0, language=None, l=None, startgas=STARTGAS, gasprice=GASPRICE):
+        assert not (l and language)
+        language = l or language
         if language == 'evm':
             assert len(args) == 0
             return self.tx(sender=sender, to=b'', value=value, data=sourcecode, startgas=startgas, gasprice=gasprice)
