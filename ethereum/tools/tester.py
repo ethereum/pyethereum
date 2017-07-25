@@ -5,7 +5,7 @@ from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.config import config_homestead, config_tangerine, config_spurious, config_metropolis, default_config, Env
 from ethereum.pow.ethpow import Miner
-from ethereum.messages import apply_transaction
+from ethereum.messages import apply_transaction, apply_message
 from ethereum.common import verify_execution_results, mk_block_from_prevstate, set_execution_results
 from ethereum.meta import make_head_candidate
 from ethereum.abi import ContractTranslator
@@ -136,15 +136,11 @@ class State(object):
         return output
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
-        state = self.state
-        self.state = self.state.ephemeral_clone()
-        try:
-            output = self.tx(sender, to, value, data, startgas, gasprice)
-            self.state = state
-            return output
-        except Exception as e:
-            self.state = state
-            raise e
+        sender_addr = privtoaddr(sender)
+        result = apply_message(self.state.ephemeral_clone(), sender=sender_addr, to=to, value=value, data=data, gas=startgas)
+        if result is None:
+            raise TransactionFailed()
+        return result
 
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
@@ -176,14 +172,11 @@ class Chain(object):
         return output
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
-        snapshot = self.snapshot()
-        try:
-            output = self.tx(sender, to, value, data, startgas, gasprice)
-            self.revert(snapshot)
-            return output
-        except Exception as e:
-            self.revert(snapshot)
-            raise e
+        sender_addr = privtoaddr(sender)
+        result = apply_message(self.head_state.ephemeral_clone(), sender=sender_addr, to=to, value=value, data=data, gas=startgas)
+        if result is None:
+            raise TransactionFailed()
+        return result
 
     def contract(self, sourcecode, args=[], sender=k0, value=0, language='evm', startgas=STARTGAS, gasprice=GASPRICE):
         if language == 'evm':
