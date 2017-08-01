@@ -34,7 +34,7 @@ def test_abicontract_interface():
     abi_json = json.dumps(simple_data['abi']).encode('utf-8')
 
     abi = ABIContract(
-        _chain=tester_state,
+        _tester=tester_state,
         _abi=abi_json,
         address=simple_address,
     )
