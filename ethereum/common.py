@@ -134,7 +134,7 @@ def set_execution_results(state, block):
     block.header.state_root = state.trie.root_hash
     block.header.gas_used = state.gas_used
     block.header.bloom = state.bloom
-    log.info('Block pre-sealed, %d gas used' % state.gas_used)
+    log.debug('Block pre-sealed, %d gas used' % state.gas_used)
 
 # Verify state root, receipt root, etc
 def verify_execution_results(state, block):

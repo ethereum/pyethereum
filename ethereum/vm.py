@@ -245,7 +245,7 @@ def vm_execute(ext, msg, code):
             if _prevop in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
                            'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
                            'EXTCODECOPY'):
-                if len(compustate.memory) < 1024:
+                if len(compustate.memory) < 4096:
                     trace_data['memory'] = \
                         ''.join([encode_hex(ascii_chr(x)) for x
                                   in compustate.memory])

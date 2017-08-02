@@ -22,7 +22,7 @@ from ethereum.db import RefcountDB
 
 
 log = get_logger('eth.chain')
-config_string = ':info,eth.chain:debug'
+config_string = ':info'  #,eth.chain:debug'
 #config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 configure_logging(config_string=config_string)
 
@@ -250,7 +250,7 @@ class Chain(object):
             return False
         # Is the block being added to the head?
         if block.header.prevhash == self.head_hash:
-            log.info('Adding to head', head=encode_hex(block.header.prevhash))
+            log.info('Adding to head', head=encode_hex(block.header.prevhash[:4]))
             self.state.deletes = []
             self.state.changed = {}
             try:
@@ -366,15 +366,15 @@ class Chain(object):
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.hash, rlp.encode(block))
         self.db.put(b'changed:'+block.hash, b''.join(list(changed.keys())))
-        print('Saved %d address change logs' % len(changed.keys()))
+        log.debug('Saved %d address change logs' % len(changed.keys()))
         self.db.put(b'deletes:'+block.hash, b''.join(deletes))
-        print('Saved %d trie node deletes for block %d (%s)' % (len(deletes), block.number, utils.encode_hex(block.hash)))
+        log.debug('Saved %d trie node deletes for block %d (%s)' % (len(deletes), block.number, utils.encode_hex(block.hash)))
         # Delete old junk data
         old_block_hash = self.get_blockhash_by_number(block.number - self.max_history)
         if old_block_hash:
             try:
                 deletes = self.db.get(b'deletes:'+old_block_hash)
-                print('Deleting up to %d trie nodes' % (len(deletes) // 32))
+                log.debug('Deleting up to %d trie nodes' % (len(deletes) // 32))
                 rdb = RefcountDB(self.db)
                 for i in range(0, len(deletes), 32):
                     rdb.delete(deletes[i: i+32])
