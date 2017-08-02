@@ -155,6 +155,9 @@ class Transaction(rlp.Serializable):
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
 
+    def __lt__(self, other):
+        return isinstance(other, self.__class__) and self.hash < other.hash
+
     def __hash__(self):
         return utils.big_endian_to_int(self.hash)
 
