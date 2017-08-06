@@ -382,34 +382,32 @@ class Chain(object):
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
         try:
             apply_block(temp_state, block)
-        except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+        except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
             log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
             return False
         return True
 
     # Call upon receiving a block
     def add_block(self, block):
+        # Validate that the block should be added
         if not self.should_add_block(block):
             return False
-        # Check what the current checkpoint head should be
-        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1 and block.header.prevhash in self.env.db:
+        # Create a temp_state with the block applied
+        if block.header.prevhash == self.head_hash:
+            temp_state = self.state.ephemeral_clone()
+        else:
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
-            try:
-                apply_block(temp_state, block)
-            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
-                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
-                return False
-            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
+        apply_block(temp_state, block)
+        self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
+
+        # Check what the current checkpoint head should be
+        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1:
             # Check to see if we need to update the checkpoint_head
             for r in temp_state.receipts:
                 [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
         if block.header.prevhash == self.head_hash:
             log.info('Adding to head', head=encode_hex(block.header.prevhash))
-            try:
-                apply_block(self.state, block)
-            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
-                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
-                return False
+            apply_block(self.state, block)
             self.db.put('block:' + str(block.header.number), block.header.hash)
             self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
             block_score = self.get_score(block)  # side effect: put 'score:' cache in db
@@ -419,13 +417,6 @@ class Chain(object):
         else:
             log.info('Receiving block not on head, adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
-            temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
-            try:
-                apply_block(temp_state, block)
-            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
-                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
-                return False
-            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)
             # Get the checkpoint in the fork with the same block number as our head checkpoint, if they are equal, the block is a child
             # TODO: Clean up this logic--it's super ugly
