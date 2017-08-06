@@ -162,8 +162,9 @@ class Chain(object):
     def is_parent_checkpoint(self, parent, child):
         parent_block = self.get_block(parent)
         child_block = self.get_block(child)
-        while parent_block.header.number > child_block.header.number:
-            parent_block = self.get_prev_checkpoint_block(parent_block)
+        while parent_block.header.number < child_block.header.number:
+            log.info('child block num: {}'.format(child_block.header.number))
+            child_block = self.get_prev_checkpoint_block(child_block)
         if parent_block == child_block:
             return True
         else:
@@ -174,10 +175,11 @@ class Chain(object):
         if self.checkpoint_head_hash == b'\x00' * 32:
             self.checkpoint_head_hash = fork_hash
             return
-        # Check that the fork isn't a direct decendent of head
+        # If our checkpoint is a direct decendent of the head, set that as our new head checkpoint
         if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
+            self.checkpoint_head_hash = fork_hash
             return
-        # Check that the fork is heavier than the head
+        # If our fork checkpoint has fewer commits than the head, return
         if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
             return
         self.checkpoint_head_hash = fork_hash
@@ -189,23 +191,26 @@ class Chain(object):
         log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(fork_hash), utils.encode_hex(self.head_hash)))
 
     def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
-        # Get the related blocks
-        hc = self.get_block(head_hash)
-        fc = self.get_block(fork_hash)
-        # Calculate the score for the fork checkpoint
-        fork_score = self.get_checkpoint_score(fc.header.hash)
-        # Loop over the hc & fc until they are equal (we find a shared parent)
-        while fc != hc:
-            if fc.header.number > hc.header.number:
-                fc = self.get_prev_checkpoint_block(fc)
-                continue
-            head_score = self.get_checkpoint_score(hc.header.hash)
-            # If the fork score is lower than the head at any point, return False
-            if fork_score < head_score:
-                return False
-            hc = self.get_prev_checkpoint_block(hc)
-        # We've compared the fork score to all head scores, and so return True
-        return True
+        # Get the relevant blocks
+        head = self.get_block(head_hash)
+        fork = self.get_block(fork_hash)
+        # Store our fork's score
+        fork_score = self.get_checkpoint_score(fork.header.hash)
+        # Create max_head_score which will store the highest commit ration on the head chain
+        max_head_score = self.get_checkpoint_score(head.header.hash)
+        # Set max_head_score by looping over the head & fork until their previous checkpoints are the same
+        while self.get_prev_checkpoint_block(fork) != self.get_prev_checkpoint_block(head):
+            if head.header.number > fork.header.number:
+                head = self.get_prev_checkpoint_block(head)
+                if self.get_checkpoint_score(head.header.hash) > max_head_score:
+                    max_head_score = self.get_checkpoint_score(head.header.hash)
+            else:
+                fork = self.get_prev_checkpoint_block(fork)
+        # If the max_head_score is lower than the fork score, return True (choose the fork)
+        if max_head_score < fork_score:
+            return True
+        # Otherwise, return False (continue to use the head)
+        return False
 
     def get_checkpoint_score(self, checkpoint_hash):
         try:
