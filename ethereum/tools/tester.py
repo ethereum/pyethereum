@@ -156,7 +156,9 @@ class Chain(object):
         self.last_tx = None
 
     def direct_tx(self, transaction):
-        self.last_tx, self.last_sender = transaction, None
+        self.last_tx = transaction
+        if privtoaddr(self.last_sender) != transaction.sender:
+            self.last_sender = None
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)
         if not success:
@@ -165,10 +167,10 @@ class Chain(object):
 
     def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
+        self.last_sender = sender
         transaction = Transaction(self.head_state.get_nonce(sender_addr), gasprice, startgas,
                                   to, value, data).sign(sender)
         output = self.direct_tx(transaction)
-        self.last_sender = sender
         return output
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):

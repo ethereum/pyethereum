@@ -315,7 +315,7 @@ def configure(config_string=None, log_json=False, log_file=None):
             if config_string == ":{}".format(DEFAULT_LOGLEVEL):
                 logger.propagate = True
             else:
-                logger.propagate = False
+                logger.propagate = True
 
     for name_levels in config_string.split(','):
         name, _, level = name_levels.partition(':')

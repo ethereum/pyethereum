@@ -37,11 +37,11 @@ basic_env = {
 
 
 configs = {
-    "Frontier": config_frontier,
-    "Homestead": config_homestead,
-    "EIP150": config_tangerine,
+    #"Frontier": config_frontier,
+    #"Homestead": config_homestead,
+    #"EIP150": config_tangerine,
     "EIP158": config_spurious,
-    #"Metropolis": config_metropolis
+    "Metropolis": config_metropolis
 }
 
 # Makes a diff between a prev and post state

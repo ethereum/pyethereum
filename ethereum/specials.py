@@ -72,6 +72,11 @@ def proc_identity(ext, msg):
     msg.data.extract_copy(o, 0, 0, len(o))
     return 1, msg.gas - gas_cost, o
 
+def mult_complexity(x):
+    if x <= 64: return x ** 2
+    elif x <= 1024: return x ** 2 // 4 + 96 * x - 3072
+    else: return x ** 2 // 16 + 480 * x - 199680
+
 def proc_modexp(ext, msg):
     if not ext.post_metropolis_hardfork():
         return 1, msg.gas, []
@@ -85,7 +90,7 @@ def proc_modexp(ext, msg):
         bitlength += 1
         first_exp_bytes >>= 1
     adjusted_explen = max(bitlength, 0) + 8 * max(explen - 32, 0)
-    gas_cost = (max(modlen, baselen) ** 2 * max(adjusted_explen, 1)) // opcodes.GMODEXPQUADDIVISOR
+    gas_cost = (mult_complexity(max(modlen, baselen)) * max(adjusted_explen, 1)) // opcodes.GMODEXPQUADDIVISOR
     print(baselen, explen, modlen, 'expected gas cost', gas_cost)
     if msg.gas < gas_cost:
         return 0, 0, []
