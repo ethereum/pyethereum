@@ -356,8 +356,8 @@ class Chain(object):
             if len(self.time_queue) == pre_len:
                 i += 1
 
-    # Call upon receiving a block
-    def add_block(self, block):
+    def should_add_block(self, block):
+        # Check that the block wasn't recieved too early
         now = self.localtime
         if block.header.timestamp > now:
             i = 0
@@ -366,6 +366,30 @@ class Chain(object):
             self.time_queue.insert(i, block)
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
+            return False
+        # Check that the block's parent has already been added
+        if block.header.prevhash not in self.env.db:
+            if block.header.prevhash not in self.parent_queue:
+                self.parent_queue[block.header.prevhash] = []
+            self.parent_queue[block.header.prevhash].append(block)
+            log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
+                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
+            return False
+        # Check that the block doesn't throw an exception
+        if block.header.prevhash == self.head_hash:
+            temp_state = self.state.ephemeral_clone()
+        else:
+            temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+        try:
+            apply_block(temp_state, block)
+        except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+            log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+            return False
+        return True
+
+    # Call upon receiving a block
+    def add_block(self, block):
+        if not self.should_add_block(block):
             return False
         # Check what the current checkpoint head should be
         if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1 and block.header.prevhash in self.env.db:
@@ -392,7 +416,7 @@ class Chain(object):
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
-        elif block.header.prevhash in self.env.db:
+        else:
             log.info('Receiving block not on head, adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
@@ -444,13 +468,6 @@ class Chain(object):
                         break
                 self.head_hash = block.header.hash
                 self.state = temp_state
-        else:
-            if block.header.prevhash not in self.parent_queue:
-                self.parent_queue[block.header.prevhash] = []
-            self.parent_queue[block.header.prevhash].append(block)
-            log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
-                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
-            return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
