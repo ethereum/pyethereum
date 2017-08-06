@@ -6,39 +6,34 @@ from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
-from ethereum.messages import apply_transaction
-from ethereum import transactions
-from ethereum.hybrid_casper import casper_utils
-from ethereum.tools import tester
 import rlp
 from rlp.utils import encode_hex
-from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
-    BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.exceptions import InvalidTransaction, VerificationFailed
+from ethereum.slogging import get_logger
 from ethereum.config import Env
 from ethereum.new_state import State, dict_to_prev_header
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
-from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
-        initialize_genesis_keys
+from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, initialize_genesis_keys
 
 
 log = get_logger('eth.chain')
 config_string = ':info,eth.chain:debug'
+# from ethereum.slogging import configure_logging
 # config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 
 class Chain(object):
 
-    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
+    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20,
                  new_head_cb=None, reset_genesis=False, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
-            print('Initializing chain from saved head, #%d (%s)' % \
-                (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
+            print('Initializing chain from saved head, #%d (%s)' %
+                  (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
             raise Exception("Need genesis decl!")
         elif isinstance(genesis, State):
@@ -54,8 +49,8 @@ class Chain(object):
         elif "prev_headers" in genesis:
             self.state = State.from_snapshot(genesis, self.env)
             reset_genesis = True
-            print('Initializing chain from provided state snapshot, %d (%s)' % \
-                (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
+            print('Initializing chain from provided state snapshot, %d (%s)' %
+                  (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
         else:
             print('Initializing chain from new state based on alloc')
             self.state = mk_basic_state(genesis, {
@@ -348,10 +343,9 @@ class Chain(object):
 
         return score
 
-    # These two functions should be called periodically so as to
+    # This function should be called periodically so as to
     # process blocks that were received but laid aside because
-    # either the parent was missing or they were received
-    # too early
+    # they were received too early
     def process_time_queue(self, new_time=None):
         self.localtime = time.time() if new_time is None else new_time
         i = 0
@@ -361,16 +355,6 @@ class Chain(object):
             self.add_block(self.time_queue.pop(i))
             if len(self.time_queue) == pre_len:
                 i += 1
-
-    def process_parent_queue(self):
-        deletions = []
-        for parent_hash, blocks in self.parent_queue.items():
-            if parent_hash in self.db:
-                for block in blocks:
-                    self.add_block(block)
-                deletions.append(parent_hash)
-        for parent_hash in deletions:
-            del self.parent_queue[parent_hash]
 
     # Call upon receiving a block
     def add_block(self, block):
@@ -464,18 +448,25 @@ class Chain(object):
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
             self.parent_queue[block.header.prevhash].append(block)
-            log.info('No parent found. Delaying for now')
+            log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
+                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
             return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
         self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
-        log.info('Added block %d (%s) with %d txs and %d gas' % \
-            (block.header.number, encode_hex(block.header.hash)[:8],
-             len(block.transactions), block.header.gas_used))
+        log.info('Added block %d (%s) with %d txs and %d gas' %
+                 (block.header.number, encode_hex(block.header.hash)[:8],
+                  len(block.transactions), block.header.gas_used))
         if self.new_head_cb and block.header.number != 0:
             self.new_head_cb(block)
+        # Are there blocks that we received that were waiting for this block?
+        # If so, process them.
+        if block.header.hash in self.parent_queue:
+            for _blk in self.parent_queue[block.header.hash]:
+                self.add_block(_blk)
+            del self.parent_queue[block.header.hash]
         return True
 
     def __contains__(self, blk):
@@ -533,20 +524,21 @@ class Chain(object):
     def db(self):
         return self.env.db
 
+    # Get blockhashes starting from a hash and going backwards
     def get_blockhashes_from_hash(self, hash, max):
-        try:
-            header = blocks.get_block_header(self.db, hash)
-        except KeyError:
+        block = self.get_block(hash)
+        if block is None:
             return []
 
+        header = block.header
         hashes = []
         for i in xrange(max):
             hash = header.prevhash
-            try:
-                header = blocks.get_block_header(self.db, hash)
-            except KeyError:
+            block = self.get_block(hash)
+            if block is None:
                 break
-            hashes.append(hash)
+            header = block.header
+            hashes.append(header.hash)
             if header.number == 0:
                 break
         return hashes

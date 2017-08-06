@@ -94,7 +94,7 @@ class Validator(object):
             self.accept_transaction(msg)
 
     def accept_block(self, block):
-        self.chain.process_parent_queue()
+        self.chain.process_time_queue()
         if not self.chain.add_block(block):
             return
         # Verify this block is a part of our head chain
