@@ -104,9 +104,7 @@ class Chain(object):
         # We only want logs from the Casper contract
         if contract_log.address != self.casper_address:
             return
-        # Check to see if it is a prepare or a commit
-        if contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("prepare()")):
-            log.info('Recieved prepare')
+        # Check to see if it is a commit
         elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
             self.commit_logs.append(contract_log.data)
             # Wait until we have all three commit events before processing the commit
@@ -115,10 +113,13 @@ class Chain(object):
                 return
             log.info('Recieved commit')
             # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
-            self.store_commit(self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0))
+            raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
+            commit = self.get_decoded_commit(raw_commit)
+            self.store_commit(commit, total_deposits, validator_deposits)
+            # Update the checkpoint_head_hash if needed
+            self.maybe_update_checkpoint_head_hash(commit['hash'])
 
-    def store_commit(self, raw_commit, total_deposits, validator_deposits):
-        commit = self.get_decoded_commit(raw_commit)
+    def store_commit(self, commit, total_deposits, validator_deposits):
         checkpoint_hash = commit['hash']
         # Store the total deposits for this checkpoint if we haven't already
         if b'cp_total_deposits:' + checkpoint_hash not in self.db:
@@ -132,14 +133,8 @@ class Chain(object):
             log.info('Validator deposit already stored!')
         deposits[commit['validator_index']] = validator_deposits
         self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
-        # Update the checkpoint_head_hash if needed
-        self.maybe_update_checkpoint_head_hash(commit['hash'])
 
     def maybe_update_checkpoint_head_hash(self, fork_hash):
-        # If our checkpoint head is the initial head hash value, immediately use the fork hash
-        if self.checkpoint_head_hash == b'\x00' * 32:
-            self.checkpoint_head_hash = fork_hash
-            return
         # If our checkpoint is a decendent of the head, set that as our new head checkpoint
         # TODO: Make sure they aren't a super distant decendent to avoid something like a long range attack
         if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
@@ -344,6 +339,9 @@ class Chain(object):
         return block
 
     def is_parent_checkpoint(self, parent, child):
+        if parent == b'\x00' * 32:
+            # If the parent checkpoint is the genesis checkpoint, then the child must be a decedent
+            return True
         parent_block = self.get_block(parent)
         child_block = self.get_block(child)
         while parent_block.header.number < child_block.header.number:
