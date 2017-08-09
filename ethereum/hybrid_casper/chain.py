@@ -146,9 +146,10 @@ class Chain(object):
         self.checkpoint_head_hash = fork_hash
         # Set the head_hash to equal the latest block known for our checkpoint
         try:
-            self.head_hash = self.db.get(b'cp_head_hash:' + self.checkpoint_head_hash)
+            new_head_hash = self.db.get(b'cp_head_hash:' + self.checkpoint_head_hash)
         except KeyError:
-            self.head_hash = fork_hash
+            new_head_hash = fork_hash
+        self.change_head(self.get_block(new_head_hash))
         log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(fork_hash), utils.encode_hex(self.head_hash)))
 
     def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
