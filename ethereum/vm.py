@@ -565,11 +565,12 @@ def vm_execute(ext, msg, code):
                 if ext.post_anti_dos_hardfork():
                     ingas = all_but_1n(ingas, opcodes.CALL_CHILD_LIMIT_DENOM)
                 create_msg = Message(msg.to, b'', value, ingas, cd, msg.depth + 1)
-                o, gas, addr = ext.create(create_msg)
+                o, gas, data = ext.create(create_msg)
                 if o:
-                    stk.append(utils.coerce_to_int(addr))
+                    stk.append(utils.coerce_to_int(data))
                 else:
                     stk.append(0)
+                    compustate.last_returned = bytearray(data)
                 compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
