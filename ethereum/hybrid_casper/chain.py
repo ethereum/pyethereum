@@ -170,7 +170,8 @@ class Chain(object):
         if self.checkpoint_head_hash == b'\x00' * 32:
             self.checkpoint_head_hash = fork_hash
             return
-        # If our checkpoint is a direct decendent of the head, set that as our new head checkpoint
+        # If our checkpoint is a decendent of the head, set that as our new head checkpoint
+        # TODO: Make sure they aren't a super distant decendent to avoid something like a long range attack
         if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
             self.checkpoint_head_hash = fork_hash
             return
@@ -387,34 +388,41 @@ class Chain(object):
             return False
         return True
 
+    def add_block_to_head(self, block):
+        log.info('Adding to head', head=encode_hex(block.header.prevhash))
+        apply_block(self.state, block)
+        self.db.put('block:' + str(block.header.number), block.header.hash)
+        self.get_score(block)  # side effect: put 'score:' cache in db
+        self.head_hash = block.header.hash
+        for i, tx in enumerate(block.transactions):
+            self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
+
     # Call upon receiving a block
     def add_block(self, block):
+        # ~~~ Validate ~~~~ #
         # Validate that the block should be added
         if not self.should_add_block(block):
             return False
-        # Create a temp_state with the block applied
+        # ~~~ Store ~~~~ #
+        # Store the block
+        self.db.put(block.header.hash, rlp.encode(block))
+        self.add_child(block)
+        # Store the state root
         if block.header.prevhash == self.head_hash:
             temp_state = self.state.ephemeral_clone()
         else:
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
         apply_block(temp_state, block)
         self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
-
-        # Check what the current checkpoint head should be
-        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1:
-            # Check to see if we need to update the checkpoint_head
-            for r in temp_state.receipts:
-                [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
+        # ~~~ Finality Gadget Fork Choice ~~~~ #
+        for r in temp_state.receipts:
+            [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
+        # ~~~ PoW Fork Choice ~~~~ #
+        # If block is directly on top of the head, immediately make it our head
         if block.header.prevhash == self.head_hash:
-            log.info('Adding to head', head=encode_hex(block.header.prevhash))
-            apply_block(self.state, block)
-            self.db.put('block:' + str(block.header.number), block.header.hash)
-            self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
-            block_score = self.get_score(block)  # side effect: put 'score:' cache in db
-            self.head_hash = block.header.hash
-            for i, tx in enumerate(block.transactions):
-                self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
-        else:
+            self.add_block_to_head(block)
+        else:  # Otherwise, check if we should change our head
+            # Here we should run `is_fork_heavier_than_head` but modify it so it works for both PoW and Casper... ODEE great
             log.info('Receiving block not on head, adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
             block_score = self.get_score(block)
@@ -426,43 +434,9 @@ class Chain(object):
                 fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
             # Replace the head only if the fork block is a child of the head checkpoint
             if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)):
-                log.info('Replacing head')
-                b = block
-                new_chain = {}
-                while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
-                    new_chain[b.header.number] = b
-                    key = 'block:' + str(b.header.number)
-                    orig_at_height = self.db.get(key) if key in self.db else None
-                    if orig_at_height == b.header.hash:
-                        break
-                    if b.prevhash not in self.db or self.db.get(b.prevhash) == 'GENESIS':
-                        break
-                    b = self.get_parent(b)
-                replace_from = b.header.number
-                for i in itertools.count(replace_from):
-                    log.info('Rewriting height %d' % i)
-                    key = 'block:' + str(i)
-                    orig_at_height = self.db.get(key) if key in self.db else None
-                    if orig_at_height:
-                        self.db.delete(key)
-                        orig_block_at_height = self.get_block(orig_at_height)
-                        for tx in orig_block_at_height.transactions:
-                            if b'txindex:' + tx.hash in self.db:
-                                self.db.delete(b'txindex:' + tx.hash)
-                    if i in new_chain:
-                        new_block_at_height = new_chain[i]
-                        self.db.put(key, new_block_at_height.header.hash)
-                        for i, tx in enumerate(new_block_at_height.transactions):
-                            self.db.put(b'txindex:' + tx.hash,
-                                        rlp.encode([new_block_at_height.number, i]))
-                    if i not in new_chain and not orig_at_height:
-                        break
-                self.head_hash = block.header.hash
-                self.state = temp_state
-        self.add_child(block)
+                self.change_head(block)
         self.db.put('head_hash', self.head_hash)
         self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
-        self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
         log.info('Added block %d (%s) with %d txs and %d gas' %
                  (block.header.number, encode_hex(block.header.hash)[:8],
@@ -476,6 +450,41 @@ class Chain(object):
                 self.add_block(_blk)
             del self.parent_queue[block.header.hash]
         return True
+
+    def change_head(self, block):
+        log.info('Replacing head')
+        b = block
+        new_chain = {}
+        while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
+            new_chain[b.header.number] = b
+            key = 'block:' + str(b.header.number)
+            orig_at_height = self.db.get(key) if key in self.db else None
+            if orig_at_height == b.header.hash:
+                break
+            if b.prevhash not in self.db or self.db.get(b.prevhash) == 'GENESIS':
+                break
+            b = self.get_parent(b)
+        replace_from = b.header.number
+        for i in itertools.count(replace_from):
+            log.info('Rewriting height %d' % i)
+            key = 'block:' + str(i)
+            orig_at_height = self.db.get(key) if key in self.db else None
+            if orig_at_height:
+                self.db.delete(key)
+                orig_block_at_height = self.get_block(orig_at_height)
+                for tx in orig_block_at_height.transactions:
+                    if b'txindex:' + tx.hash in self.db:
+                        self.db.delete(b'txindex:' + tx.hash)
+            if i in new_chain:
+                new_block_at_height = new_chain[i]
+                self.db.put(key, new_block_at_height.header.hash)
+                for i, tx in enumerate(new_block_at_height.transactions):
+                    self.db.put(b'txindex:' + tx.hash,
+                                rlp.encode([new_block_at_height.number, i]))
+            if i not in new_chain and not orig_at_height:
+                break
+        self.head_hash = block.header.hash
+        self.state = self.mk_poststate_of_blockhash(block.hash)
 
     def __contains__(self, blk):
         if isinstance(blk, (str, bytes)):
