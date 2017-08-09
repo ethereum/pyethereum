@@ -65,7 +65,7 @@ def create_state_snapshot(chain, block):
     for addr, account_rlp in state.trie.iter_branch():
         alloc[encode_hex(addr)] = create_account_snapshot(env, account_rlp)
         count += 1
-        print "[%d] created account snapshot %s" % (count, encode_hex(addr))
+        print("[%d] created account snapshot %s" % (count, encode_hex(addr)))
     return alloc
 
 
@@ -112,7 +112,7 @@ def load_snapshot(chain, snapshot):
     chain.env.db.put('score:' + base_header.hash, snapshot['chainDifficulty'])
     chain.env.db.commit()
 
-    print "Start loading recent blocks from snapshot"
+    print("Start loading recent blocks from snapshot")
     vbh = common.validate_header
     vus = consensus.validate_uncles
     def _vbh(state, header):
@@ -135,20 +135,20 @@ def load_snapshot(chain, snapshot):
         if count == chain.state.config['MAX_UNCLE_DEPTH']+2:
             consensus.validate_uncles = vus
         if not chain.add_block(block):
-            print "Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8])
+            print("Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8]))
         else:
             count += 1
-            print "[%d] block #%d (%s) added" % (count, block.number, encode_hex(block.hash)[:8])
-    print "Snapshot loaded."
+            print("[%d] block #%d (%s) added" % (count, block.number, encode_hex(block.hash)[:8]))
+    print("Snapshot loaded.")
 
 
 def load_state(env, alloc):
     db = env.db
     state = SecureTrie(Trie(db, BLANK_ROOT))
     count = 0
-    print "Start loading state from snapshot"
+    print("Start loading state from snapshot")
     for addr in alloc:
-        print "[%d] loading account %s" % (count, addr)
+        print("[%d] loading account %s" % (count, addr))
         account = alloc[addr]
         acct = Account.blank_account(db, env.config['ACCOUNT_INITIAL_NONCE'])
         if len(account['storage']) > 0:
@@ -160,7 +160,7 @@ def load_state(env, alloc):
                 t.update(enckey, decode_hex(v))
                 c += 1
                 if c % 1000 and len(db.db_service.uncommitted) > 50000:
-                    print "%d uncommitted. committing..." % len(db.db_service.uncommitted)
+                    print("%d uncommitted. committing..." % len(db.db_service.uncommitted))
                     db.commit()
             acct.storage = t.root_hash
         if account['nonce']:
