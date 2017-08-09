@@ -100,7 +100,6 @@ class Chain(object):
             return None
 
     # ~~~~~~~~~~~~~~~~~~~~ CASPER ~~~~~~~~~~~~~~~~~~~~ #
-
     def casper_log_handler(self, contract_log, fork_state, blockhash):
         # We only want logs from the Casper contract
         if contract_log.address != self.casper_address:
@@ -116,23 +115,25 @@ class Chain(object):
                 return
             log.info('Recieved commit')
             # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
-            raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
-            commit = self.get_decoded_commit(raw_commit)
-            checkpoint_hash = commit['hash']
-            # Store the total deposits for this checkpoint if we haven't already
-            if b'cp_total_deposits:' + checkpoint_hash not in self.db:
-                self.db.put(b'cp_total_deposits:' + checkpoint_hash, total_deposits)
-            # Store this validator's deposit for this checkpoint
-            try:
-                deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
-            except KeyError:
-                deposits = dict()
-            if commit['validator_index'] in deposits:
-                log.info('Validator deposit already stored!')
-            deposits[commit['validator_index']] = validator_deposits
-            self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
-            # Update the checkpoint_head_hash if needed
-            self.maybe_update_checkpoint_head_hash(commit['hash'])
+            self.store_commit(self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0))
+
+    def store_commit(self, raw_commit, total_deposits, validator_deposits):
+        commit = self.get_decoded_commit(raw_commit)
+        checkpoint_hash = commit['hash']
+        # Store the total deposits for this checkpoint if we haven't already
+        if b'cp_total_deposits:' + checkpoint_hash not in self.db:
+            self.db.put(b'cp_total_deposits:' + checkpoint_hash, total_deposits)
+        # Store this validator's deposit for this checkpoint
+        try:
+            deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
+        except KeyError:
+            deposits = dict()
+        if commit['validator_index'] in deposits:
+            log.info('Validator deposit already stored!')
+        deposits[commit['validator_index']] = validator_deposits
+        self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
+        # Update the checkpoint_head_hash if needed
+        self.maybe_update_checkpoint_head_hash(commit['hash'])
 
     def maybe_update_checkpoint_head_hash(self, fork_hash):
         # If our checkpoint head is the initial head hash value, immediately use the fork hash
