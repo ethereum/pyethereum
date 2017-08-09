@@ -4,6 +4,7 @@ import textwrap
 from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, is_numeric
+import sys
 
 
 DEFAULT_LOGLEVEL = 'INFO'
@@ -296,7 +297,8 @@ def configure(config_string=None, log_json=False, log_file=None):
         log_format = PRINT_FORMAT
 
     if len(rootLogger.handlers) == 0:
-        handler = StreamHandler()
+        #handler = StreamHandler()
+        handler = StreamHandler(sys.stdout)
         formatter = Formatter(log_format)
         handler.setFormatter(formatter)
         rootLogger.addHandler(handler)
