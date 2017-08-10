@@ -334,7 +334,7 @@ class Chain(object):
         if checkpoint_distance == 0:
             checkpoint_distance = epoch_length
         for i in range(checkpoint_distance):
-            if block.header.prevhash == b'\x00' * 32:
+            if self.get_block(block.header.prevhash) is None:
                 return block
             block = self.get_block(block.header.prevhash)
         return block
