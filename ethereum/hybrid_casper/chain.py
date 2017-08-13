@@ -100,7 +100,7 @@ class Chain(object):
             return None
 
     # ~~~~~~~~~~~~~~~~~~~~ CASPER ~~~~~~~~~~~~~~~~~~~~ #
-    def casper_log_handler(self, contract_log, fork_state, blockhash):
+    def casper_log_handler(self, contract_log, blockhash):
         # We only want logs from the Casper contract
         if contract_log.address != self.casper_address:
             return
@@ -117,7 +117,7 @@ class Chain(object):
             commit = self.get_decoded_commit(raw_commit)
             self.store_commit(commit, total_deposits, validator_deposits)
             # Update the checkpoint_head_hash if needed
-            self.maybe_update_checkpoint_head_hash(commit['hash'])
+            self.recompute_head(self.get_block(commit['hash']))
 
     def store_commit(self, commit, total_deposits, validator_deposits):
         checkpoint_hash = commit['hash']
@@ -134,23 +134,67 @@ class Chain(object):
         deposits[commit['validator_index']] = validator_deposits
         self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
 
-    def maybe_update_checkpoint_head_hash(self, fork_hash):
-        # If our checkpoint is a decendent of the head, set that as our new head checkpoint
-        # TODO: Make sure they aren't a super distant decendent to avoid something like a long range attack
-        if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
-            self.checkpoint_head_hash = fork_hash
-            return
-        # If our fork checkpoint has fewer commits than the head, return
-        if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
-            return
-        self.checkpoint_head_hash = fork_hash
-        # Set the head_hash to equal the latest block known for our checkpoint
+    def get_score(self, block):
+        if self.is_checkpoint(block):
+            cp_score = self.get_checkpoint_score(block.hash) * 10000000000000000000
+        else:
+            cp_score = 0
+        difficulty_score = self.get_pow_difficulty(block)
+        return cp_score + difficulty_score
+
+    def is_checkpoint(self, block):
+        if block.header.number % self.config['EPOCH_LENGTH'] == 0:
+            return True
+        return False
+
+    def get_checkpoint_child(self, checkpoint_hash):
         try:
-            new_head_hash = self.db.get(b'cp_head_hash:' + self.checkpoint_head_hash)
+            checkpoint_child_hash = self.db.get(b'cp_child:' + checkpoint_hash)
         except KeyError:
-            new_head_hash = fork_hash
-        self.change_head(self.get_block(new_head_hash))
-        log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(fork_hash), utils.encode_hex(self.head_hash)))
+            checkpoint_child_hash = checkpoint_hash
+        return self.get_block(checkpoint_child_hash)
+
+    def recompute_cp_child(self, candidate):
+        parent_cp = self.get_prev_checkpoint_block(candidate)
+        current_cp_child = self.get_checkpoint_child(parent_cp.hash)
+        # If checkpoint has not yet set a child, set this as a child
+        if current_cp_child == parent_cp:
+            log.info('We found first pow block: {} {}'.format(candidate.header.number, utils.encode_hex(candidate.hash)))
+            self.db.put(b'cp_child:' + parent_cp.hash, candidate.hash)
+            return True
+        current_cp_child_score = self.get_score(current_cp_child)
+        candidate_cp_score = self.get_score(candidate)
+        if candidate_cp_score > current_cp_child_score:
+            self.db.put(b'cp_child:' + parent_cp.hash, candidate.hash)
+            return True
+        return False
+
+    def recompute_head(self, candidate):
+        # Attempt to update our candidate checkpoint parent's child_cp pointer
+        self.recompute_cp_child(candidate)
+        # Get the candidate checkpoint
+        if self.is_checkpoint(candidate):
+            candidate_checkpoint = candidate
+        else:
+            candidate_checkpoint = self.get_prev_checkpoint_block(candidate)
+        # Return False if the candidate checkpoint is not a child of our head or a heavier fork
+        if not (self.checkpoint_head_hash == candidate_checkpoint.hash or
+                self.is_parent_checkpoint(self.checkpoint_head_hash, candidate_checkpoint.hash) or
+                self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, candidate_checkpoint.hash)):
+            return False
+        log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(candidate.hash), utils.encode_hex(self.head_hash)))
+        child = self.get_checkpoint_child(candidate_checkpoint.hash)
+        # Find the longest known child chain
+        while self.is_checkpoint(child) and self.get_checkpoint_child(child.hash) != child:
+            child = self.get_checkpoint_child(child.hash)
+        if self.is_checkpoint(child):
+            self.checkpoint_head_hash = child.hash
+        else:
+            self.checkpoint_head_hash = self.get_prev_checkpoint_block(child).hash
+        # self.change_head(child)
+        log.info('Setting head: {}'.format(child.header.number))
+        self.set_head(child)
+        return True
 
     def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
         # Get the relevant blocks
@@ -224,10 +268,35 @@ class Chain(object):
         log.info('Adding to head', head=encode_hex(block.header.prevhash))
         apply_block(self.state, block)
         self.db.put('block:' + str(block.header.number), block.header.hash)
-        self.get_score(block)  # side effect: put 'score:' cache in db
+        self.get_pow_difficulty(block)  # side effect: put 'score:' cache in db
         self.head_hash = block.header.hash
         for i, tx in enumerate(block.transactions):
             self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
+
+    def set_head(self, block):
+        # ~~~ PoW Fork Choice ~~~~ #
+        # If block is directly on top of the head, immediately make it our head
+        if block.header.prevhash == self.head_hash:
+            self.add_block_to_head(block)
+        else:  # Otherwise, check if we should change our head
+            # Here we should run `is_fork_heavier_than_head` but modify it so it works for both PoW and Casper... ODEE great
+            log.info('Receiving block not on head, adding to secondary post state',
+                     prevhash=encode_hex(block.header.prevhash))
+            self.change_head(block)
+        self.db.put('head_hash', self.head_hash)
+        self.db.commit()
+        log.info('Added block %d (%s) with %d txs and %d gas' %
+                 (block.header.number, encode_hex(block.header.hash)[:8],
+                  len(block.transactions), block.header.gas_used))
+        if self.new_head_cb and block.header.number != 0:
+            self.new_head_cb(block)
+        # Are there blocks that we received that were waiting for this block?
+        # If so, process them.
+        if block.header.hash in self.parent_queue:
+            for _blk in self.parent_queue[block.header.hash]:
+                self.add_block(_blk)
+            del self.parent_queue[block.header.hash]
+        return True
 
     # Call upon receiving a block
     def add_block(self, block):
@@ -248,39 +317,9 @@ class Chain(object):
         self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
         # ~~~ Finality Gadget Fork Choice ~~~~ #
         for r in temp_state.receipts:
-            [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
-        # ~~~ PoW Fork Choice ~~~~ #
-        # If block is directly on top of the head, immediately make it our head
-        if block.header.prevhash == self.head_hash:
-            self.add_block_to_head(block)
-        else:  # Otherwise, check if we should change our head
-            # Here we should run `is_fork_heavier_than_head` but modify it so it works for both PoW and Casper... ODEE great
-            log.info('Receiving block not on head, adding to secondary post state',
-                     prevhash=encode_hex(block.header.prevhash))
-            block_score = self.get_score(block)
-            # Get the checkpoint in the fork with the same block number as our head checkpoint, if they are equal, the block is a child
-            # TODO: Clean up this logic--it's super ugly
-            fork_cp_block = self.get_prev_checkpoint_block(block)
-            head_cp_block = self.get_block(self.checkpoint_head_hash) if self.checkpoint_head_hash != b'\x00'*32 else fork_cp_block
-            while(fork_cp_block.header.number > head_cp_block.header.number):
-                fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
-            # Replace the head only if the fork block is a child of the head checkpoint
-            if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)):
-                self.change_head(block)
-        self.db.put('head_hash', self.head_hash)
-        self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
-        self.db.commit()
-        log.info('Added block %d (%s) with %d txs and %d gas' %
-                 (block.header.number, encode_hex(block.header.hash)[:8],
-                  len(block.transactions), block.header.gas_used))
-        if self.new_head_cb and block.header.number != 0:
-            self.new_head_cb(block)
-        # Are there blocks that we received that were waiting for this block?
-        # If so, process them.
-        if block.header.hash in self.parent_queue:
-            for _blk in self.parent_queue[block.header.hash]:
-                self.add_block(_blk)
-            del self.parent_queue[block.header.hash]
+            [self.casper_log_handler(l, block.header.hash) for l in r.logs]
+        # Try recomputing the head
+        self.recompute_head(block)
         return True
 
     def change_head(self, block):
@@ -335,7 +374,7 @@ class Chain(object):
             checkpoint_distance = epoch_length
         for i in range(checkpoint_distance):
             if self.get_block(block.header.prevhash) is None:
-                return block
+                return
             block = self.get_block(block.header.prevhash)
         return block
 
@@ -471,11 +510,10 @@ class Chain(object):
         return [self.get_block(h) for h in self.get_child_hashes(block)]
 
     # Get the score (AKA total difficulty in PoW) of a given block
-    def get_score(self, block):
+    def get_pow_difficulty(self, block):
         if not block:
             return 0
         key = b'score:' + block.header.hash
-
         fills = []
         while key not in self.db:
             fills.insert(0, (block.header.hash, block.difficulty))
@@ -488,7 +526,6 @@ class Chain(object):
             key = b'score:' + h
             score = score + d + random.randrange(d // 10**6 + 1)
             self.db.put(key, str(score))
-
         return score
 
     def has_block(self, block):
