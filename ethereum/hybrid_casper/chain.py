@@ -372,11 +372,17 @@ class Chain(object):
         checkpoint_distance = (block.header.number) % epoch_length
         if checkpoint_distance == 0:
             checkpoint_distance = epoch_length
+        b = block
         for i in range(checkpoint_distance):
-            if self.get_block(block.header.prevhash) is None:
+            if b'prev_cp' + b.hash in self.db:
+                prev_checkpoint = self.get_block(self.db.get(b'prev_cp' + b.hash))
+                self.db.put(b'prev_cp' + block.hash, prev_checkpoint.hash)
+                return prev_checkpoint
+            b = self.get_block(b.header.prevhash)
+            if b is None:
                 return
-            block = self.get_block(block.header.prevhash)
-        return block
+        self.db.put(b'prev_cp' + block.hash, b.hash)
+        return b
 
     def is_parent_checkpoint(self, parent, child):
         if parent == b'\x00' * 32:
