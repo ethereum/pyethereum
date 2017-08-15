@@ -15,8 +15,8 @@ import random
 try:
     import coincurve
 except ImportError:
-    import warning
-    warning.warn('could not import coincurve', ImportWarning)
+    import warnings
+    warnings.warn('could not import coincurve', ImportWarning)
     coincurve = None
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
