@@ -191,7 +191,7 @@ class Chain(object):
             self.checkpoint_head_hash = child.hash
         else:
             self.checkpoint_head_hash = self.get_prev_checkpoint_block(child).hash
-        # self.change_head(child)
+        # self.reorganize_head_to(child)
         log.info('Setting head: {}'.format(child.header.number))
         self.set_head(child)
         return True
@@ -282,7 +282,7 @@ class Chain(object):
             # Here we should run `is_fork_heavier_than_head` but modify it so it works for both PoW and Casper... ODEE great
             log.info('Receiving block not on head, adding to secondary post state',
                      prevhash=encode_hex(block.header.prevhash))
-            self.change_head(block)
+            self.reorganize_head_to(block)
         self.db.put('head_hash', self.head_hash)
         self.db.commit()
         log.info('Added block %d (%s) with %d txs and %d gas' %
@@ -322,7 +322,7 @@ class Chain(object):
         self.recompute_head(block)
         return True
 
-    def change_head(self, block):
+    def reorganize_head_to(self, block):
         log.info('Replacing head')
         b = block
         new_chain = {}
