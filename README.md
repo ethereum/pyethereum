@@ -160,7 +160,7 @@ Contains the Transaction class, with the following methods and values:
 
 ### ethereum.tools.keys
 
-Creates encrypted private key storaes
+Creates encrypted private key storages
 
 * `decode_keystore_json(jsondata, password)` - returns the private key from an encrypted keystore object. NOTE: if you are loading from a file, the most convenient way to do this is `import json; key = decode_keystore_json(json.load(open('filename.json')), 'password')`
 * `make_keystore_json(key, pw, kdf='pbkdf2', cipher='aes-128-ctr')` - creates an encrypted keystore object for the key. Keeping `kdf` and `cipher` at their default values is recommended.
