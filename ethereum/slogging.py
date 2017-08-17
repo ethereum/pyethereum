@@ -312,12 +312,16 @@ def configure(config_string=None, log_json=False, log_file=None):
         if hasattr(logger, 'setLevel'):
             # Guard against `logging.PlaceHolder` instances
             logger.setLevel(logging.NOTSET)
-            logger.propagate = True
+            if config_string == ":{}".format(DEFAULT_LOGLEVEL):
+                logger.propagate = True
+            else:
+                logger.propagate = True
 
     for name_levels in config_string.split(','):
         name, _, level = name_levels.partition(':')
         logger = getLogger(name)
         logger.setLevel(level.upper())
+        logger.propagate = True
 
 configure_logging = configure
 

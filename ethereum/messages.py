@@ -368,6 +368,11 @@ def create_contract(ext, msg):
         nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = utils.mk_contract_address(msg.sender, nonce)
 
+    if ext.post_metropolis_hardfork() and (ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
+        log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
+        return 0, 0, b''
+        
+
     b = ext.get_balance(msg.to)
     if b > 0:
         ext.set_balance(msg.to, b)
@@ -379,9 +384,6 @@ def create_contract(ext, msg):
     # assert not ext.get_code(msg.to)
     msg.data = vm.CallData([], 0, 0)
     snapshot = ext.snapshot()
-    if len(ext.get_code(msg.to)):
-        log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
-    #     return 0, 0, b''
 
     ext.set_nonce(msg.to, 1 if ext.post_spurious_dragon_hardfork() else 0)
     res, gas, dat = _apply_msg(ext, msg, code)
@@ -393,7 +395,7 @@ def create_contract(ext, msg):
             # ext.set_code(msg.to, b'')
             return 1, gas, msg.to
         gcost = len(dat) * opcodes.GCONTRACTBYTE
-        if gas >= gcost and (len(dat) <= 24576 or not ext.post_anti_dos_hardfork()):
+        if gas >= gcost and (len(dat) <= 24576 or not ext.post_spurious_dragon_hardfork()):
             gas -= gcost
         else:
             dat = []

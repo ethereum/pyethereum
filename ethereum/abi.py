@@ -705,6 +705,7 @@ def enc(typ, arg):
         else:
             subtyp = base, sub, arrlist[:-1]
             o = b''
+            assert len(arg) == arrlist[-1][0], "Incorrect array size"
             for x in arg:
                 o += enc(subtyp, x)
             return o

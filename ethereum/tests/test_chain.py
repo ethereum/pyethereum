@@ -55,7 +55,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
     hc, _ = meta.make_head_candidate(chain, txqueue, parent,
-                             timestamp or parent_timestamp + 1, coinbase or '\x00'*20)
+                             timestamp or parent_timestamp + 1, coinbase or b'\x00'*20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
     rounds = 100
