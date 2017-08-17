@@ -105,7 +105,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
 
 def ecsign(rawhash, key):
     if coincurve and hasattr(coincurve, 'PrivateKey'):
-        pk = coincurve.PrivateKey(priv)
+        pk = coincurve.PrivateKey(key)
         signature = pk.sign_recoverable(msghash, hasher=None)
         v = safe_ord(signature[64]) + 27
         r = big_endian_to_int(signature[0:32])
