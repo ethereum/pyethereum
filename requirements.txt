@@ -1,6 +1,7 @@
 pysha3>=1.0.1
 PyYAML
 repoze.lru
+numpy
 pbkdf2
 scrypt
 py_ecc
