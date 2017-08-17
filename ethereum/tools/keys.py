@@ -1,6 +1,6 @@
 import os
-import pbkdf2
 import sys
+from hashlib import pbkdf2_hmac
 
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
@@ -43,9 +43,8 @@ SCRYPT_CONSTANTS = {
 }
 
 PBKDF2_CONSTANTS = {
-    "prf": "hmac-sha256",
     "dklen": 32,
-    "c": 262144
+    "rounds": 262144
 }
 
 
@@ -96,9 +95,8 @@ def mk_pbkdf2_params():
 
 
 def pbkdf2_hash(val, params):
-    assert params["prf"] == "hmac-sha256"
-    return pbkdf2.PBKDF2(val, decode_hex(params["salt"]), params["c"],
-                         SHA256).read(params["dklen"])
+    return pbkdf2_hmac('sha256', val, decode_hex(params["salt"]),
+                       params["rounds"], params["dklen"])
 
 
 kdfs = {
