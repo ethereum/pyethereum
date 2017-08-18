@@ -273,7 +273,7 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
     return dunkle_txs
 
 
-def casper_setup_block(chain, state=None, timestamp=None, coinbase='\x35'*20, extra_data='moo ha ha says the laughing cow.'):
+def casper_setup_block(chain, state=None, timestamp=None, coinbase=b'\x35'*20, extra_data='moo ha ha says the laughing cow.'):
     state = state or chain.state
     blk = Block(BlockHeader())
     now = timestamp or chain.time()

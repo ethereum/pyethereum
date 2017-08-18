@@ -157,7 +157,7 @@ class Chain(object):
 
     def direct_tx(self, transaction):
         self.last_tx = transaction
-        if privtoaddr(self.last_sender) != transaction.sender:
+        if self.last_sender and privtoaddr(self.last_sender) != transaction.sender:
             self.last_sender = None
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)

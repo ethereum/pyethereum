@@ -94,6 +94,10 @@ def proc_modexp(ext, msg):
     print(baselen, explen, modlen, 'expected gas cost', gas_cost)
     if msg.gas < gas_cost:
         return 0, 0, []
+    if baselen == 0:
+        return 1, msg.gas - gas_cost, [0] * modlen
+    if modlen == 0:
+        return 1, msg.gas - gas_cost, []
     base = bytearray(baselen)
     msg.data.extract_copy(base, 0, 96, baselen)
     exp = bytearray(explen)
