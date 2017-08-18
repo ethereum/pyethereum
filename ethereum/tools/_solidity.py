@@ -165,6 +165,13 @@ def solidity_names(code):  # pylint: disable=too-many-branches
                 if result:
                     names.append(('contract', result.groups()[0]))
 
+            if char == 'i' and code[pos: pos + 9] == 'interface':
+                result = re.match('^interface[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+
+                if result:
+                    names.append(('contract', result.groups()[0]))
+
+
             if char == 'l' and code[pos: pos + 7] == 'library':
                 result = re.match('^library[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
 
