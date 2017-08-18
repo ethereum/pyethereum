@@ -81,7 +81,7 @@ class Log(rlp.Serializable):
 class Receipt(rlp.Serializable):
 
     fields = [
-        ('state_root', trie_root),
+        ('state_root', binary),
         ('gas_used', big_endian_int),
         ('bloom', int256),
         ('logs', CountableList(Log))
@@ -102,15 +102,16 @@ class Receipt(rlp.Serializable):
         bloomables = [x.bloomables() for x in self.logs]
         return bloom.bloom_from_list(utils.flatten(bloomables))
 
-def mk_receipt(state, logs):
-    # if state.is_METROPOLIS() or SKIP_RECEIPT_ROOT_VALIDATION:
-    #     return MetropolisReceipt(state.gas_used, logs)
-    return Receipt(state.trie.root_hash, state.gas_used, logs)
+def mk_receipt(state, success, logs):
+    if state.is_METROPOLIS():
+        return Receipt(ascii_chr(success), state.gas_used, logs)
+    else:
+        return Receipt(state.trie.root_hash, state.gas_used, logs)
 
 def config_fork_specific_validation(config, blknum, tx):
     # (1) The transaction signature is valid;
     _ = tx.sender
-    if blknum >= config['METROPOLIS_FORK_BLKNUM']:
+    if blknum >= config['CONSTANTINOPLE_FORK_BLKNUM']:
         tx.check_low_s_metropolis()
     else:
         if tx.sender == null_address:
@@ -254,7 +255,7 @@ def apply_transaction(state, tx):
         state.commit()
 
     # Construct a receipt
-    r = mk_receipt(state, state.logs)
+    r = mk_receipt(state, success, state.logs)
     _logs = list(state.logs)
     state.logs = []
     state.add_receipt(r)
@@ -301,6 +302,7 @@ class VMExt():
         self.account_exists = state.account_exists
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
+        self.post_constantinople_hardfork = lambda: state.is_CONSTANTINOPLE()
         self.post_serenity_hardfork = lambda: state.is_SERENITY()
         self.post_anti_dos_hardfork = lambda: state.is_ANTI_DOS()
         self.post_spurious_dragon_hardfork = lambda: state.is_SPURIOUS_DRAGON()
@@ -368,7 +370,7 @@ def create_contract(ext, msg):
         nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = utils.mk_contract_address(msg.sender, nonce)
 
-    if ext.post_metropolis_hardfork() and (ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
+    if ext.post_constantinople_hardfork() and (ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
         log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
         return 0, 0, b''
         

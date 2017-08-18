@@ -68,7 +68,7 @@ class TransactionQueue():
 def make_test_tx(s=100000, g=50, data='', nonce=0):
     from ethereum.transactions import Transaction
     return Transaction(nonce=nonce, startgas=s, gasprice=g,
-                       value=0, data=data, to='\x35' * 20)
+                       value=0, data=data, to=b'\x35' * 20)
 
 
 def test():

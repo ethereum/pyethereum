@@ -289,6 +289,10 @@ class State():
         if at_fork_height: return self.block_number == self.config['METROPOLIS_FORK_BLKNUM']
         else: return self.block_number >= self.config['METROPOLIS_FORK_BLKNUM']
 
+    def is_CONSTANTINOPLE(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['CONSTANTINOPLE_FORK_BLKNUM']
+        else: return self.block_number >= self.config['CONSTANTINOPLE_FORK_BLKNUM']
+
     def is_ANTI_DOS(self, at_fork_height=False):
         if at_fork_height: return self.block_number == self.config['ANTI_DOS_FORK_BLKNUM']
         else: return self.block_number >= self.config['ANTI_DOS_FORK_BLKNUM']
