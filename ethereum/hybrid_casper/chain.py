@@ -71,6 +71,7 @@ class Chain(object):
 
         self.head_hash = self.state.prev_headers[0].hash
         self.checkpoint_head_hash = b'\x00' * 32
+        self.db.put(b'cp_subtree_score' + b'\x00' * 32, 2/3.)
         self.commit_logs = []
         self.casper_address = self.config['CASPER_ADDRESS']
         self.db.put('GENESIS_NUMBER', str(self.state.block_number))
@@ -80,6 +81,7 @@ class Chain(object):
             initialize_genesis_keys(self.state, self.genesis)
         else:
             self.genesis = self.get_block_by_number(0)
+        self.db.put(b'cp_subtree_score' + self.genesis.hash, 2/3.)
         self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
         self.coinbase = coinbase
         self.extra_data = 'moo ha ha says the laughing cow.'
@@ -99,25 +101,57 @@ class Chain(object):
             log.error(e)
             return None
 
+    @property
+    def head_checkpoint(self):
+        checkpoint = self.get_block(self.checkpoint_head_hash)
+        if checkpoint is None:
+            return self.genesis
+        return checkpoint
+
     # ~~~~~~~~~~~~~~~~~~~~ CASPER ~~~~~~~~~~~~~~~~~~~~ #
     def casper_log_handler(self, contract_log, blockhash):
-        # We only want logs from the Casper contract
-        if contract_log.address != self.casper_address:
+        # Return if it's not a log from the Casper address or if it's not a commit log
+        if (contract_log.address != self.casper_address or
+                contract_log.topics[0] != utils.bytearray_to_int(utils.sha3("commit()"))):
             return
-        # Check to see if it is a commit
-        elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
-            self.commit_logs.append(contract_log.data)
-            # Wait until we have all three commit events before processing the commit
-            if len(self.commit_logs) != 3:
-                # If we don't have all three, return.
-                return
-            log.info('Recieved commit')
-            # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
-            raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
-            commit = self.get_decoded_commit(raw_commit)
-            self.store_commit(commit, total_deposits, validator_deposits)
-            # Update the checkpoint_head_hash if needed
-            self.recompute_head(self.get_block(commit['hash']))
+        self.commit_logs.append(contract_log.data)
+        # Wait until we have all three commit events before processing the commit
+        if len(self.commit_logs) != 3:
+            # If we don't have all three, return.
+            return
+        log.info('Recieved commit')
+        # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
+        raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
+        commit = self.get_decoded_commit(raw_commit)
+        self.store_commit(commit, total_deposits, validator_deposits)
+        # Update the checkpoint's `subtree_score` & `child_pointer` which are effected by the new commit score
+        self.update_subtree_scores_and_child_pointers(commit['hash'])
+        # Try to update the head, in case the new commit justifies a reorg
+        self.recompute_head_checkpoint(self.get_block(commit['hash']))
+
+    def update_subtree_scores_and_child_pointers(self, checkpoint_hash):
+        if b'cp_total_deposits:' + checkpoint_hash not in self.db:
+            raise Exception('No deposits found for chekcpoint hash: {}'.format(utils.encode_hex(checkpoint_hash)))
+        new_cp_score = self.get_checkpoint_score(checkpoint_hash)
+        if new_cp_score <= self.get_subtree_score(checkpoint_hash):
+            log.info('*** block num: {} - new cp score: {} - subtree score: {} '.format(self.get_block(checkpoint_hash).number, new_cp_score, self.get_subtree_score(checkpoint_hash)))
+            return
+        cp_iterator = checkpoint_hash
+        log.info('*** Updating subtree scores. cp_iterator num: {} - cp_iterator score: {}'.format(self.get_block(cp_iterator).number, self.get_subtree_score(cp_iterator)))
+        while cp_iterator is not None and self.get_subtree_score(cp_iterator) < new_cp_score:
+            log.info('*** cp_iterator: {}'.format(self.get_block(cp_iterator).number))
+            self.db.put(b'cp_subtree_score' + cp_iterator, new_cp_score)
+            parent_iterator = self.get_prev_checkpoint_hash(cp_iterator)
+            if self.get_child_cp(parent_iterator) is not None:
+                log.info('*** parent num: {} - parent score: {}'.format(self.get_child_cp(parent_iterator), self.get_subtree_score(self.get_child_cp(parent_iterator))))
+            if self.get_child_cp(parent_iterator) is None or self.get_subtree_score(self.get_child_cp(parent_iterator)) < new_cp_score:
+                log.info('***Putting child of block {} with block num: {}'.format(self.get_block(parent_iterator).number, self.get_block(cp_iterator).number))
+                self.db.put(b'cp_child' + parent_iterator, cp_iterator)
+            cp_iterator = parent_iterator
+        return True
+
+    def get_subtree_score(self, checkpoint_hash):
+        return self.db.get(b'cp_subtree_score' + checkpoint_hash)
 
     def store_commit(self, commit, total_deposits, validator_deposits):
         checkpoint_hash = commit['hash']
@@ -135,10 +169,10 @@ class Chain(object):
         self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
 
     def get_score(self, block):
-        if self.is_checkpoint(block):
-            cp_score = self.get_checkpoint_score(block.hash) * 10000000000000000000
-        else:
-            cp_score = 0
+        if not self.is_checkpoint(block):
+            raise Exception("Baaad")
+        cp_score = self.get_checkpoint_score(block.hash) * 10000000000000000000
+        block = self.get_pow_head(block.hash)
         difficulty_score = self.get_pow_difficulty(block)
         return cp_score + difficulty_score
 
@@ -147,76 +181,53 @@ class Chain(object):
             return True
         return False
 
-    def get_checkpoint_child(self, checkpoint_hash):
+    def get_pow_head(self, checkpoint_hash):
         try:
-            checkpoint_child_hash = self.db.get(b'cp_child:' + checkpoint_hash)
+            checkpoint_pow_head = self.db.get(b'cp_pow_head:' + checkpoint_hash)
         except KeyError:
-            checkpoint_child_hash = checkpoint_hash
-        return self.get_block(checkpoint_child_hash)
+            return None
+        return self.get_block(checkpoint_pow_head)
 
-    def recompute_cp_child(self, candidate):
-        parent_cp = self.get_prev_checkpoint_block(candidate)
-        current_cp_child = self.get_checkpoint_child(parent_cp.hash)
-        # If checkpoint has not yet set a child, set this as a child
-        if current_cp_child == parent_cp:
-            log.info('We found first pow block: {} {}'.format(candidate.header.number, utils.encode_hex(candidate.hash)))
-            self.db.put(b'cp_child:' + parent_cp.hash, candidate.hash)
-            return True
-        current_cp_child_score = self.get_score(current_cp_child)
-        candidate_cp_score = self.get_score(candidate)
-        if candidate_cp_score > current_cp_child_score:
-            self.db.put(b'cp_child:' + parent_cp.hash, candidate.hash)
-            return True
-        return False
+    def recompute_head_checkpoint(self, candidate):
+        assert self.is_checkpoint(candidate) and self.is_checkpoint(self.head_checkpoint)
+        root = self.get_shared_parent_cp(self.head, candidate)
+        log.info('Head: {} - Candidate: {} - Root: {}'.format(self.head_checkpoint.number, candidate.number, root.number))
+        cp_head_hash = self.choose_head_checkpoint(root.hash)
+        log.info('Checkpoint head number: {}'.format(self.get_block(cp_head_hash).number))
+        self.checkpoint_head_hash = cp_head_hash
 
-    def recompute_head(self, candidate):
-        # Attempt to update our candidate checkpoint parent's child_cp pointer
-        self.recompute_cp_child(candidate)
-        # Get the candidate checkpoint
-        if self.is_checkpoint(candidate):
-            candidate_checkpoint = candidate
-        else:
-            candidate_checkpoint = self.get_prev_checkpoint_block(candidate)
-        # Return False if the candidate checkpoint is not a child of our head or a heavier fork
-        if not (self.checkpoint_head_hash == candidate_checkpoint.hash or
-                self.is_parent_checkpoint(self.checkpoint_head_hash, candidate_checkpoint.hash) or
-                self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, candidate_checkpoint.hash)):
-            return False
-        log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(candidate.hash), utils.encode_hex(self.head_hash)))
-        child = self.get_checkpoint_child(candidate_checkpoint.hash)
-        # Find the longest known child chain
-        while self.is_checkpoint(child) and self.get_checkpoint_child(child.hash) != child:
-            child = self.get_checkpoint_child(child.hash)
-        if self.is_checkpoint(child):
-            self.checkpoint_head_hash = child.hash
-        else:
-            self.checkpoint_head_hash = self.get_prev_checkpoint_block(child).hash
-        # self.reorganize_head_to(child)
-        log.info('Setting head: {}'.format(child.header.number))
-        self.set_head(child)
-        return True
+    def find_heaviest_pow_block(self, root):
+        children = self.get_children(root)
+        maxchild, maxscore = root, self.get_pow_difficulty(root)
+        for c in children:
+            maxc, s = self.find_heaviest_pow_block(c)
+            if s > maxscore:
+                maxchild, maxscore = maxc, s
+        return maxchild, maxscore
 
-    def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
-        # Get the relevant blocks
-        head = self.get_block(head_hash)
-        fork = self.get_block(fork_hash)
-        # Store our fork's score
-        fork_score = self.get_checkpoint_score(fork.header.hash)
-        # Create max_head_score which will store the highest commit ration on the head chain
-        max_head_score = self.get_checkpoint_score(head.header.hash)
-        # Set max_head_score by looping over the head & fork until their previous checkpoints are the same
-        while self.get_prev_checkpoint_block(fork) != self.get_prev_checkpoint_block(head):
-            if head.header.number > fork.header.number:
-                head = self.get_prev_checkpoint_block(head)
-                if self.get_checkpoint_score(head.header.hash) > max_head_score:
-                    max_head_score = self.get_checkpoint_score(head.header.hash)
+    def get_shared_parent_cp(self, b1, b2):
+        while self.get_prev_checkpoint_block(b1) != self.get_prev_checkpoint_block(b2):
+            log.info('Getting shared parent. b1: {} - b2: {}'.format(b1.header.number, b2.header.number))
+            if b1.header.number > b2.header.number:
+                b1 = self.get_prev_checkpoint_block(b1)
             else:
-                fork = self.get_prev_checkpoint_block(fork)
-        # If the max_head_score is lower than the fork score, return True (choose the fork)
-        if max_head_score < fork_score:
-            return True
-        # Otherwise, return False (continue to use the head)
-        return False
+                b2 = self.get_prev_checkpoint_block(b2)
+        if self.get_prev_checkpoint_block(b1) is None:
+            return self.genesis
+        return self.get_prev_checkpoint_block(b1)
+
+    def choose_head_checkpoint(self, root_hash):
+        head = root_hash
+        while self.get_child_cp(head) is not None:
+            head = self.get_child_cp(head)
+            log.info('Getting child block num: {}'.format(self.get_block(head).number))
+        return head
+
+    def get_child_cp(self, checkpoint_hash):
+        try:
+            return self.db.get(b'cp_child' + checkpoint_hash)
+        except KeyError:
+            return None
 
     # ~~~~~~~~~~~~~~~~~~~~ ADD BLOCK ~~~~~~~~~~~~~~~~~~~~ #
 
@@ -285,17 +296,11 @@ class Chain(object):
             self.reorganize_head_to(block)
         self.db.put('head_hash', self.head_hash)
         self.db.commit()
-        log.info('Added block %d (%s) with %d txs and %d gas' %
+        log.info('Reorganizing chain to block %d (%s) with %d txs and %d gas' %
                  (block.header.number, encode_hex(block.header.hash)[:8],
                   len(block.transactions), block.header.gas_used))
         if self.new_head_cb and block.header.number != 0:
             self.new_head_cb(block)
-        # Are there blocks that we received that were waiting for this block?
-        # If so, process them.
-        if block.header.hash in self.parent_queue:
-            for _blk in self.parent_queue[block.header.hash]:
-                self.add_block(_blk)
-            del self.parent_queue[block.header.hash]
         return True
 
     # Call upon receiving a block
@@ -308,6 +313,8 @@ class Chain(object):
         # Store the block
         self.db.put(block.header.hash, rlp.encode(block))
         self.add_child(block)
+        if block.number % self.config['EPOCH_LENGTH'] == 0:
+            self.db.put(b'cp_subtree_score' + block.hash, 0)
         # Store the state root
         if block.header.prevhash == self.head_hash:
             temp_state = self.state.ephemeral_clone()
@@ -316,10 +323,34 @@ class Chain(object):
         apply_block(temp_state, block)
         self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
         # ~~~ Finality Gadget Fork Choice ~~~~ #
+        old_head_chekpoint = self.head_checkpoint
         for r in temp_state.receipts:
             [self.casper_log_handler(l, block.header.hash) for l in r.logs]
-        # Try recomputing the head
-        self.recompute_head(block)
+        # Store the block as its checkpoint child if is is heavier than the current child
+        cp = self.get_prev_checkpoint_block(block)
+        p_cp = cp
+        while cp is not self.genesis and self.get_checkpoint_score(cp.hash) == 0:
+            cp = self.get_prev_checkpoint_block(cp)
+        log.info('Recieved block. Block num: {} - Prev cp num: {} - Prev committed cp num: {} - P committed cp score: {}'.format(block.number, p_cp.number, cp.number, self.get_checkpoint_score(cp.hash)))
+        # Set a new head if required
+        log.info('Head cp num: {} - block prev cp num: {}'.format(self.head_checkpoint.number, cp.number))
+        if self.head_checkpoint == cp:
+            if self.head_checkpoint == old_head_chekpoint:
+                log.info('Head checkpoint == old head. CP Head Num: {} - Head diff: {} - Block diff: {}'.format(self.head_checkpoint.number, self.get_pow_difficulty(self.head), self.get_pow_difficulty(block)))
+                if self.get_pow_difficulty(self.head) < self.get_pow_difficulty(block):
+                    self.set_head(block)
+            else:
+                log.info('Head checkpoint changed to cp number: {}'.format(self.head_checkpoint.number))
+                new_head, _ = self.find_heaviest_pow_block(self.head_checkpoint)
+                self.set_head(new_head)
+        else:
+            log.info('Skipping block: Head checkpoint is not equal to cp!')
+        # Are there blocks that we received that were waiting for this block?
+        # If so, process them.
+        if block.header.hash in self.parent_queue:
+            for _blk in self.parent_queue[block.header.hash]:
+                self.add_block(_blk)
+            del self.parent_queue[block.header.hash]
         return True
 
     def reorganize_head_to(self, block):
@@ -368,21 +399,28 @@ class Chain(object):
         return commit
 
     def get_prev_checkpoint_block(self, block):
-        epoch_length = self.env.config['EPOCH_LENGTH']
-        checkpoint_distance = (block.header.number) % epoch_length
+        return self.get_block(self.get_prev_checkpoint_hash(block.hash))
+
+    def get_prev_checkpoint_hash(self, block_hash):
+        # Check if we already have the block in our cache
+        if b'prev_cp' + block_hash in self.db:
+            return self.db.get(b'prev_cp' + block_hash)
+        # Otherwise, compute the checkpoint
+        block = self.get_block(block_hash)
+        checkpoint_distance = (block.header.number) % self.config['EPOCH_LENGTH']
         if checkpoint_distance == 0:
-            checkpoint_distance = epoch_length
+            checkpoint_distance = self.config['EPOCH_LENGTH']
         b = block
         for i in range(checkpoint_distance):
             if b'prev_cp' + b.hash in self.db:
-                prev_checkpoint = self.get_block(self.db.get(b'prev_cp' + b.hash))
-                self.db.put(b'prev_cp' + block.hash, prev_checkpoint.hash)
-                return prev_checkpoint
+                prev_checkpoint_hash = self.db.get(b'prev_cp' + b.hash)
+                self.db.put(b'prev_cp' + block.hash, prev_checkpoint_hash)
+                return prev_checkpoint_hash
             b = self.get_block(b.header.prevhash)
             if b is None:
-                return
+                raise Exception('No prev checkpoint')
         self.db.put(b'prev_cp' + block.hash, b.hash)
-        return b
+        return b.hash
 
     def is_parent_checkpoint(self, parent, child):
         if parent == b'\x00' * 32:
@@ -412,7 +450,7 @@ class Chain(object):
             curr_dyn_deposits += utils.big_endian_to_int(d[32:])
         prev_dyn_score = prev_dyn_deposits / prev_dyn_total_deposits if prev_dyn_total_deposits > 0 else 1
         curr_dyn_score = curr_dyn_deposits / curr_dyn_total_deposits if curr_dyn_total_deposits > 0 else 1
-        return min(prev_dyn_score, curr_dyn_score)
+        return min(min(prev_dyn_score, curr_dyn_score), 2/3.)
 
     # ~~~~~~~~~~~~~~~~~~~~ BLOCK UTILS ~~~~~~~~~~~~~~~~~~~~ #
 
