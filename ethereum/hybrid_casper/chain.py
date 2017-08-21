@@ -11,7 +11,7 @@ from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger
 from ethereum.config import Env
-from ethereum.new_state import State, dict_to_prev_header
+from ethereum.state import State, dict_to_prev_header
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
 from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, initialize_genesis_keys
