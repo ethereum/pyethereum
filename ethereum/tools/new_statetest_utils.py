@@ -41,7 +41,7 @@ configs = {
     #"Homestead": config_homestead,
     #"EIP150": config_tangerine,
     "EIP158": config_spurious,
-    "Metropolis": config_metropolis
+    "Byzantium": config_metropolis
 }
 
 # Makes a diff between a prev and post state

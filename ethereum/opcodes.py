@@ -38,6 +38,8 @@ opcodes = {
     0x3a: ['GASPRICE', 0, 1, 2],
     0x3b: ['EXTCODESIZE', 1, 1, 20], # now 700
     0x3c: ['EXTCODECOPY', 4, 0, 20], # now 700
+    0x3d: ['RETURNDATASIZE', 0, 1, 2],
+    0x3e: ['RETURNDATACOPY', 3, 0, 3],
     0x40: ['BLOCKHASH', 1, 1, 20],
     0x41: ['COINBASE', 0, 1, 2],
     0x42: ['TIMESTAMP', 0, 1, 2],
@@ -74,6 +76,8 @@ opcodes = {
     0xfd: ['REVERT', 2, 0, 0],
     0xff: ['SUICIDE', 1, 0, 0], # 5000 now
 }
+
+opcodesMetropolis = { 0x3d, 0x3e, 0xfa, 0xfd }
 
 for i in range(1, 33):
     opcodes[0x5f + i] = ['PUSH' + str(i), 0, 1, 3]
