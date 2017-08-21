@@ -7,7 +7,7 @@ from ethereum.pow.ethpow import Miner
 from ethereum.tests.utils import new_db
 from ethereum.db import EphemDB
 from ethereum.hybrid_casper import casper_utils, validator
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.slogging import get_logger
 log = get_logger('test.validator')
 
 _db = new_db()
@@ -41,21 +41,29 @@ def init_multi_validator_casper(num_validators):
     """
     # Begin tests
     genesis = casper_utils.make_casper_genesis(k0, ALLOC, EPOCH_LENGTH, SLASH_DELAY)
-    network = validator.Network()
-    t = tester.Chain(genesis=genesis)
-    casper = tester.ABIContract(t, casper_utils.casper_abi, t.chain.env.config['CASPER_ADDRESS'])
-    casper.initiate()
-    t.mine(26)
+    # Get the val code addresses and network
     init_val_addr = utils.privtoaddr(k0)
     init_val_valcode_addr = utils.mk_contract_address(init_val_addr, 2)
-    if num_validators < 1:
-        return t, casper
+    network = validator.Network()
     # Initialize validators, starting with the first validator
     validators = [validator.Validator(k0, copy.deepcopy(genesis), network, valcode_addr=init_val_valcode_addr)]
     # Add four more validators
     for i in range(1, num_validators):
         log.info('Adding validator {}'.format(i))
         validators.append(validator.Validator(tester.keys[i], copy.deepcopy(genesis), network))
+    t = tester.Chain(genesis=genesis)
+    casper = tester.ABIContract(t, casper_utils.casper_abi, t.chain.env.config['CASPER_ADDRESS'])
+    casper.initiate()
+    validators[0].nonce += 1
+    t.mine(26)
+    # Pump the blocks into the validators
+    for i in range(1, 27):
+        block = t.chain.get_block_by_number(i)
+        log.info('Pumping block: {} {}'.format(utils.encode_hex(block.hash), block.transactions))
+        for v in validators:
+            v.chain.add_block(block)
+    if num_validators < 1:
+        return t, casper
     # Submit deposits for new validators
     for i in range(1, num_validators):
         validators[i].broadcast_deposit()
@@ -91,8 +99,6 @@ def test_validate_sequential_epochs(db):
     Create 3 validators, mine 4 epochs, and make sure everything went through properly
     """
     # Enable validator logging
-    config_string = 'eth.validator:info,eth.chain:info,test.validator:info'
-    configure_logging(config_string=config_string)
     t, casper, validators = init_multi_validator_casper(3)
     validators[0].mining = True
     # Mine enough epochs to log everyone in
@@ -120,8 +126,6 @@ def test_validate_epochs_skipping_one(db):
     Create 3 validators, validate an epoch, then skip one, and then mine the next one. Make sure the correct info was submitted
     """
     # Enable validator logging
-    config_string = 'eth.validator:info,eth.chain:info,test.validator:info'
-    configure_logging(config_string=config_string)
     t, casper, validators = init_multi_validator_casper(3)
     validators[0].mining = True
     # Mine enough epochs to log everyone in, and then mine one more where everyone is able to prepare & commit
@@ -157,8 +161,6 @@ def test_login_and_logout(db):
     Create 3 validators, log one out, and check that the logout was successful
     """
     # Enable validator logging
-    config_string = 'eth.validator:info,eth.chain:info,test.validator:info'
-    configure_logging(config_string=config_string)
     t, casper, validators = init_multi_validator_casper(3)
     validators[0].mining = True
     # Mine enough epochs to log everyone in, and then mine one more where everyone is able to prepare & commit

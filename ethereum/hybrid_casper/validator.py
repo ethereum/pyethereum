@@ -30,7 +30,7 @@ class Validator(object):
     def __init__(self, key, genesis, network, valcode_addr=None, mining=False):
         self.key = key
         self.coinbase = utils.privtoaddr(self.key)
-        self.chain = chain.Chain(genesis=genesis, coinbase=self.coinbase, new_head_cb=self._on_new_head)
+        self.chain = chain.Chain(genesis=genesis, reset_genesis=True, coinbase=self.coinbase, new_head_cb=self._on_new_head)
         self.mining = mining
         self.nonce = self.chain.state.get_nonce(self.coinbase)
         self.valcode_tx = None
