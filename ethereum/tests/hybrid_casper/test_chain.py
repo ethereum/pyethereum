@@ -34,17 +34,6 @@ def init_chain_and_casper():
     casper.initiate()
     return t, casper
 
-def log_chain(chain):
-    # Log the main chain up to 10000 blocks
-    for i in range(1, 10000):
-        try:
-            block = chain.get_block_by_number(i)
-            if chain.get_block_by_number(i).header.number % EPOCH_LENGTH == 0:
-                log.info('~~~ Epoch: {} ~~~'.format(i / EPOCH_LENGTH))
-            log.info('{} {}'.format(utils.encode_hex(block.hash), block.transactions))
-        except AttributeError:
-            break
-
 def init_multi_validator_chain_and_casper(validator_keys):
     t, casper = init_chain_and_casper()
     mine_epochs(t, 1)
@@ -291,9 +280,6 @@ def test_head_change_for_more_commits_on_parent_fork(db):
     add
     Chain3:                   7A_1      HEAD_CHANGE
     """
-    from ethereum.slogging import configure_logging
-    config_string = ':info,eth.chain:debug,test.chain:info'
-    configure_logging(config_string=config_string)
     keys = tester.keys[:5]
     t, casper = init_multi_validator_chain_and_casper(keys)
     epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
