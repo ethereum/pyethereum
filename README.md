@@ -5,14 +5,12 @@ https://github.com/ethereum/pyethapp
 
 ## Installation:
 
-``sudo apt-get install libssl-dev build-essential automake pkg-config libtool libffi-dev libgmp-dev``
-
-``git clone https://github.com/ethereum/pyethereum/``
-
-``cd pyethereum``
-
-``python setup.py install``
-
+```bash
+sudo apt-get install libssl-dev build-essential automake pkg-config libtool libffi-dev libgmp-dev
+git clone https://github.com/ethereum/pyethereum/
+cd pyethereum
+python setup.py install
+```
 
 ## Components
 
@@ -169,17 +167,21 @@ Creates encrypted private key storages
 
 Most compilers for HLLs (solidity, serpent, viper, etc) on top of Ethereum have the option to output an ABI declaration for a program. This is a json object that looks something like this:
 
-    [{"name": "ecrecover(uint256,uint256,uint256,uint256)", "type": "function", "constant": false,
-     "inputs": [{"name": "h", "type": "uint256"}, {"name": "v", "type": "uint256"}, {"name": "r", "type": "uint256"}, {"name": "s", "type": "uint256"}],
-     "outputs": [{"name": "out", "type": "int256[]"}]},
-     {"name": "PubkeyTripleLogEvent(uint256,uint256,uint256)", "type": "event",
-     "inputs": [{"name": "x", "type": "uint256", "indexed": false}, {"name": "y", "type": "uint256", "indexed": false}, {"name": "z", "type": "uint256", "indexed": false}]}]
+```json
+ [{"name": "ecrecover(uint256,uint256,uint256,uint256)", "type": "function", "constant": false,
+  "inputs": [{"name": "h", "type": "uint256"}, {"name": "v", "type": "uint256"}, {"name": "r", "type": "uint256"}, {"name": "s", "type": "uint256"}],
+  "outputs": [{"name": "out", "type": "int256[]"}]},
+  {"name": "PubkeyTripleLogEvent(uint256,uint256,uint256)", "type": "event",
+  "inputs": [{"name": "x", "type": "uint256", "indexed": false}, {"name": "y", "type": "uint256", "indexed": false}, {"name": "z", "type": "uint256", "indexed": false}]}]
+```
 
 You can initialize an `abi.ContractTranslator` object to encode and decode data for contracts as follows:
 
-    true, false = True, False  
-    ct = abi.ContractTranslator(<json here>)  
-    txdata = ct.encode('function_name', [arg1, arg2, arg3])  
+```python
+true, false = True, False  
+ct = abi.ContractTranslator(<json here>)  
+txdata = ct.encode('function_name', [arg1, arg2, arg3])  
+```
 
 You can also call `ct.decode_event([topic1, topic2...], logdata)` to decode a log.
 
@@ -187,20 +189,26 @@ You can also call `ct.decode_event([topic1, topic2...], logdata)` to decode a lo
 
 For any transaction or block, you can simply do:
 
-    import rlp  
-    bindata = rlp.encode(<tx or block>)  
+```python
+import rlp  
+bindata = rlp.encode(<tx or block>)  
+```
 
 To decode:
 
-    import rlp  
-    from ethereum.transactions import Transaction  
-    rlp.decode(blob, Transaction)  
+```python
+import rlp  
+from ethereum.transactions import Transaction  
+rlp.decode(blob, Transaction)  
+```
 
 Or:
 
-    import rlp  
-    from ethereum.blocks import Block  
-    rlp.decode(blob, Block)  
+```python
+import rlp  
+from ethereum.blocks import Block  
+rlp.decode(blob, Block)  
+```
 
 ### Consensus abstraction
 
@@ -225,7 +233,7 @@ Run `python3.6 -m pytest ethereum/tests/<filename>` for any .py file in that dir
 
 To make your own state tests, use the tester module as follows:
 
-```
+```python
 from ethereum.tools import tester as t  
 import json  
 c = t.Chain()  
