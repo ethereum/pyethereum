@@ -7,6 +7,9 @@ from ethereum.utils import parse_as_bin, big_endian_to_int
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
+from ethereum import transactions
+from ethereum.hybrid_casper import casper_utils
+from ethereum.tools import tester
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
@@ -18,24 +21,22 @@ from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.pow.consensus import initialize
 from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
         initialize_genesis_keys
-from ethereum.db import RefcountDB
 
 
 log = get_logger('eth.chain')
-config_string = ':info'  #,eth.chain:debug'
-#config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
+config_string = ':info,eth.chain:debug'
+# config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 # configure_logging(config_string=config_string)
 
 
 class Chain(object):
 
-    def __init__(self, genesis=None, env=None, \
-                 new_head_cb=None, reset_genesis=False, localtime=None, max_history=1000, **kwargs):
+    def __init__(self, genesis=None, env=None, coinbase=b'\x00' * 20, \
+                 new_head_cb=None, reset_genesis=False, localtime=None, **kwargs):
         self.env = env or Env()
         # Initialize the state
         if 'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(self.db.get('head_hash'))
-            self.state.executing_on_head = True
             print('Initializing chain from saved head, #%d (%s)' % \
                 (self.state.prev_headers[0].number, encode_hex(self.state.prev_headers[0].hash)))
         elif genesis is None:
@@ -45,22 +46,21 @@ class Chain(object):
             self.state = genesis
             self.env = self.state.env
             print('Initializing chain from provided state')
-            reset_genesis = True
         elif "extraData" in genesis:
             self.state = state_from_genesis_declaration(
-                genesis, self.env, executing_on_head=True)
+                genesis, self.env)
             reset_genesis = True
             print('Initializing chain from provided genesis declaration')
         elif "prev_headers" in genesis:
-            self.state = State.from_snapshot(genesis, self.env, executing_on_head=True)
+            self.state = State.from_snapshot(genesis, self.env)
             reset_genesis = True
             print('Initializing chain from provided state snapshot, %d (%s)' % \
                 (self.state.block_number, encode_hex(self.state.prev_headers[0].hash[:8])))
-        elif isinstance(genesis, dict):
+        else:
             print('Initializing chain from new state based on alloc')
             self.state = mk_basic_state(genesis, {
                 "number": kwargs.get('number', 0),
-                "gas_limit": kwargs.get('gas_limit', self.env.config['BLOCK_GAS_LIMIT']),
+                "gas_limit": kwargs.get('gas_limit', 4712388),
                 "gas_used": kwargs.get('gas_used', 0),
                 "timestamp": kwargs.get('timestamp', 1467446877),
                 "difficulty": kwargs.get('difficulty', 2**25),
@@ -75,18 +75,23 @@ class Chain(object):
         self.new_head_cb = new_head_cb
 
         self.head_hash = self.state.prev_headers[0].hash
+        self.checkpoint_head_hash = b'\x00' * 32
+        self.commit_logs = []
+        self.casper_address = self.env.config['CASPER_ADDRESS']
+        self.db.put('GENESIS_NUMBER', str(self.state.block_number))
         assert self.state.block_number == self.state.prev_headers[0].number
         if reset_genesis:
             self.genesis = Block(self.state.prev_headers[0], [], [])
             initialize_genesis_keys(self.state, self.genesis)
         else:
             self.genesis = self.get_block_by_number(0)
+        self.min_gasprice = kwargs.get('min_gasprice', 5 * 10**9)
+        self.coinbase = coinbase
+        self.extra_data = 'moo ha ha says the laughing cow.'
         self.time_queue = []
         self.parent_queue = {}
         self.localtime = time.time() if localtime is None else localtime
-        self.max_history = max_history
 
-    # Head (tip) of the chain
     @property
     def head(self):
         try:
@@ -99,8 +104,126 @@ class Chain(object):
             log.error(e)
             return None
 
-    # Returns the post-state of the block
-    def mk_poststate_of_blockhash(self, blockhash):
+    # Casper fork choice outline:
+    # TODO
+
+    def casper_log_handler(self, contract_log, fork_state, blockhash):
+        # We only want logs from the Casper contract
+        if contract_log.address != self.casper_address:
+            return
+        # Check to see if it is a prepare or a commit
+        if contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("prepare()")):
+            log.info('Recieved prepare')
+        elif contract_log.topics[0] == utils.bytearray_to_int(utils.sha3("commit()")):
+            self.commit_logs.append(contract_log.data)
+            # Wait until we have all three commit events before processing the commit
+            if len(self.commit_logs) != 3:
+                # If we don't have all three, return.
+                return
+            log.info('Recieved commit')
+            # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
+            raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
+            commit = self.get_decoded_commit(raw_commit)
+            checkpoint_hash = commit['hash']
+            # Store the total deposits for this checkpoint if we haven't already
+            if b'cp_total_deposits:' + checkpoint_hash not in self.db:
+                self.db.put(b'cp_total_deposits:' + checkpoint_hash, total_deposits)
+            # Store this validator's deposit for this checkpoint
+            try:
+                deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
+            except KeyError:
+                deposits = dict()
+            if commit['validator_index'] in deposits:
+                log.info('Validator deposit already stored!')
+            deposits[commit['validator_index']] = validator_deposits
+            self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
+            # Update the checkpoint_head_hash if needed
+            self.maybe_update_checkpoint_head_hash(commit['hash'])
+
+    def get_decoded_commit(self, commit_rlp):
+        commit_array = rlp.decode(commit_rlp)
+        commit = dict()
+        for i, field in enumerate(['validator_index', 'epoch', 'hash', 'prev_commit_epoch', 'sig']):
+            commit[field] = commit_array[i]
+        commit['raw_rlp'] = commit_rlp
+        return commit
+
+    def get_prev_checkpoint_block(self, block):
+        epoch_length = self.env.config['EPOCH_LENGTH']
+        checkpoint_distance = (block.header.number) % epoch_length
+        if checkpoint_distance == 0:
+            checkpoint_distance = epoch_length
+        for i in range(checkpoint_distance):
+            if block.header.prevhash == b'\x00' * 32:
+                return block
+            block = self.get_block(block.header.prevhash)
+        return block
+
+    def is_parent_checkpoint(self, parent, child):
+        parent_block = self.get_block(parent)
+        child_block = self.get_block(child)
+        while parent_block.header.number > child_block.header.number:
+            parent_block = self.get_prev_checkpoint_block(parent_block)
+        if parent_block == child_block:
+            return True
+        else:
+            return False
+
+    def maybe_update_checkpoint_head_hash(self, fork_hash):
+        # If our checkpoint head is the initial head hash value, immediately use the fork hash
+        if self.checkpoint_head_hash == b'\x00' * 32:
+            self.checkpoint_head_hash = fork_hash
+            return
+        # Check that the fork isn't a direct decendent of head
+        if self.is_parent_checkpoint(self.checkpoint_head_hash, fork_hash):
+            return
+        # Check that the fork is heavier than the head
+        if not self.is_fork_commits_heavier_than_head(self.checkpoint_head_hash, fork_hash):
+            return
+        self.checkpoint_head_hash = fork_hash
+        # Set the head_hash to equal the latest block known for our checkpoint
+        try:
+            self.head_hash = self.db.get(b'cp_head_hash:' + self.checkpoint_head_hash)
+        except KeyError:
+            self.head_hash = fork_hash
+        log.info('Update checkpoint to: {} - Update head to: {}'.format(utils.encode_hex(fork_hash), utils.encode_hex(self.head_hash)))
+
+    def is_fork_commits_heavier_than_head(self, head_hash, fork_hash):
+        # Get the related blocks
+        hc = self.get_block(head_hash)
+        fc = self.get_block(fork_hash)
+        # Calculate the score for the fork checkpoint
+        fork_score = self.get_checkpoint_score(fc.header.hash)
+        # Loop over the hc & fc until they are equal (we find a shared parent)
+        while fc != hc:
+            if fc.header.number > hc.header.number:
+                fc = self.get_prev_checkpoint_block(fc)
+                continue
+            head_score = self.get_checkpoint_score(hc.header.hash)
+            # If the fork score is lower than the head at any point, return False
+            if fork_score < head_score:
+                return False
+            hc = self.get_prev_checkpoint_block(hc)
+        # We've compared the fork score to all head scores, and so return True
+        return True
+
+    def get_checkpoint_score(self, checkpoint_hash):
+        try:
+            total_deposits = self.db.get(b'cp_total_deposits:' + checkpoint_hash)
+        except KeyError:
+            return 0
+        prev_dyn_total_deposits, curr_dyn_total_deposits = utils.big_endian_to_int(total_deposits[:32]), utils.big_endian_to_int(total_deposits[32:])
+        deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
+        prev_dyn_deposits = 0
+        curr_dyn_deposits = 0
+        for key, d in deposits.items():
+            prev_dyn_deposits += utils.big_endian_to_int(d[:32])
+            curr_dyn_deposits += utils.big_endian_to_int(d[32:])
+        prev_dyn_score = prev_dyn_deposits / prev_dyn_total_deposits if prev_dyn_total_deposits > 0 else 1
+        curr_dyn_score = curr_dyn_deposits / curr_dyn_total_deposits if curr_dyn_total_deposits > 0 else 1
+        return min(prev_dyn_score, curr_dyn_score)
+
+    def mk_poststate_of_blockhash(self, blockhash, convert=False):
         if blockhash not in self.db:
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
 
@@ -110,7 +233,7 @@ class Chain(object):
         block = rlp.decode(block_rlp, Block)
 
         state = State(env=self.env)
-        state.trie.root_hash = block.header.state_root
+        state.trie.root_hash = block.header.state_root if convert else self.db.get(b'state:'+blockhash)
         update_block_env_variables(state, block)
         state.gas_used = block.header.gas_used
         state.txindex = len(block.transactions)
@@ -141,13 +264,11 @@ class Chain(object):
         assert len(state.journal) == 0, state.journal
         return state
 
-    # Gets the parent block of a given block
     def get_parent(self, block):
         if block.header.number == int(self.db.get('GENESIS_NUMBER')):
             return None
         return self.get_block(block.header.prevhash)
 
-    # Gets the block with a given blockhash
     def get_block(self, blockhash):
         try:
             block_rlp = self.db.get(blockhash)
@@ -174,14 +295,12 @@ class Chain(object):
         if child.header.hash not in existing_hashes:
             self.db.put(b'child:' + child.header.prevhash, existing + child.header.hash)
 
-    # Gets the hash of the block with the given block number
     def get_blockhash_by_number(self, number):
         try:
-            return self.db.get(b'block:%d' % number)
+            return self.db.get('block:' + str(number))
         except:
             return None
 
-    # Gets the block with the given block number
     def get_block_by_number(self, number):
         return self.get_block(self.get_blockhash_by_number(number))
 
@@ -196,7 +315,6 @@ class Chain(object):
         except:
             return []
 
-    # Get the children of a block
     def get_children(self, block):
         if isinstance(block, Block):
             block = block.header.hash
@@ -215,17 +333,20 @@ class Chain(object):
             fills.insert(0, (block.header.hash, block.difficulty))
             key = b'score:' + block.header.prevhash
             block = self.get_parent(block)
+            if block is None:
+                return 0
         score = int(self.db.get(key))
-        for h,d in fills:
+        for h, d in fills:
             key = b'score:' + h
             score = score + d + random.randrange(d // 10**6 + 1)
             self.db.put(key, str(score))
 
         return score
 
-    # This function should be called periodically so as to
+    # These two functions should be called periodically so as to
     # process blocks that were received but laid aside because
-    # they were received too early
+    # either the parent was missing or they were received
+    # too early
     def process_time_queue(self, new_time=None):
         self.localtime = time.time() if new_time is None else new_time
         i = 0
@@ -236,10 +357,19 @@ class Chain(object):
             if len(self.time_queue) == pre_len:
                 i += 1
 
+    def process_parent_queue(self):
+        deletions = []
+        for parent_hash, blocks in self.parent_queue.items():
+            if parent_hash in self.db:
+                for block in blocks:
+                    self.add_block(block)
+                deletions.append(parent_hash)
+        for parent_hash in deletions:
+            del self.parent_queue[parent_hash]
+
     # Call upon receiving a block
     def add_block(self, block):
         now = self.localtime
-        # Are we receiving the block too early?
         if block.header.timestamp > now:
             i = 0
             while i < len(self.time_queue) and block.timestamp > self.time_queue[i].timestamp:
@@ -248,48 +378,56 @@ class Chain(object):
             log.info('Block received too early (%d vs %d). Delaying for %d seconds' %
                      (now, block.header.timestamp, block.header.timestamp - now))
             return False
-        # Is the block being added to the head?
+        # Check what the current checkpoint head should be
+        if block.header.number > int(self.db.get('GENESIS_NUMBER')) + 1 and block.header.prevhash in self.env.db:
+            temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
+            try:
+                apply_block(temp_state, block)
+            except (KeyError, ValueError) as e:  # FIXME add relevant exceptions here
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
+                return False
+            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
+            # Check to see if we need to update the checkpoint_head
+            for r in temp_state.receipts:
+                [self.casper_log_handler(l, temp_state, block.header.hash) for l in r.logs]
         if block.header.prevhash == self.head_hash:
-            log.info('Adding to head', head=encode_hex(block.header.prevhash[:4]))
-            self.state.deletes = []
-            self.state.changed = {}
+            log.info('Adding to head', head=encode_hex(block.header.prevhash))
             try:
                 apply_block(self.state, block)
-            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
-                log.info('Block %d (%s) with parent %s invalid, reason: %s' %
-                         (block.number, encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
-            self.db.put(b'block:%d' % block.header.number, block.header.hash)
+            self.db.put('block:' + str(block.header.number), block.header.hash)
+            self.db.put(b'state:' + block.header.hash, self.state.trie.root_hash)
             block_score = self.get_score(block)  # side effect: put 'score:' cache in db
             self.head_hash = block.header.hash
             for i, tx in enumerate(block.transactions):
                 self.db.put(b'txindex:' + tx.hash, rlp.encode([block.number, i]))
-            assert self.get_blockhash_by_number(block.header.number) == block.header.hash
-            deletes = self.state.deletes
-            changed = self.state.changed
-        # Or is the block being added to a chain that is not currently the head?
         elif block.header.prevhash in self.env.db:
-            log.info('Receiving block %d (%s) not on head (%s), adding to secondary post state %s' %
-                     (block.number, encode_hex(block.header.hash[:4]),
-                      encode_hex(self.head_hash[:4]), encode_hex(block.header.prevhash[:4])))
+            log.info('Receiving block not on head, adding to secondary post state',
+                     prevhash=encode_hex(block.header.prevhash))
             temp_state = self.mk_poststate_of_blockhash(block.header.prevhash)
             try:
                 apply_block(temp_state, block)
-            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
-                log.info('Block %s with parent %s invalid, reason: %s' %
-                         (encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
+            except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:  # FIXME add relevant exceptions here
+                log.info('Block %s with parent %s invalid, reason: %s' % (encode_hex(block.header.hash), encode_hex(block.header.prevhash), e))
                 return False
-            deletes = temp_state.deletes
+            self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
             block_score = self.get_score(block)
-            changed = temp_state.changed
-            # If the block should be the new head, replace the head
-            if block_score > self.get_score(self.head):
+            # Get the checkpoint in the fork with the same block number as our head checkpoint, if they are equal, the block is a child
+            # TODO: Clean up this logic--it's super ugly
+            fork_cp_block = self.get_prev_checkpoint_block(block)
+            head_cp_block = self.get_block(self.checkpoint_head_hash) if self.checkpoint_head_hash != b'\x00'*32 else fork_cp_block
+            while(fork_cp_block.header.number > head_cp_block.header.number):
+                fork_cp_block = self.get_prev_checkpoint_block(fork_cp_block)
+            # Replace the head only if the fork block is a child of the head checkpoint
+            if (head_cp_block.hash == fork_cp_block.hash and block_score > self.get_score(self.head)):
+                log.info('Replacing head')
                 b = block
                 new_chain = {}
-                # Find common ancestor
                 while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
                     new_chain[b.header.number] = b
-                    key = b'block:%d' % b.header.number
+                    key = 'block:' + str(b.header.number)
                     orig_at_height = self.db.get(key) if key in self.db else None
                     if orig_at_height == b.header.hash:
                         break
@@ -297,106 +435,42 @@ class Chain(object):
                         break
                     b = self.get_parent(b)
                 replace_from = b.header.number
-                # Replace block index and tx indices, and edit the state cache
-
-                # Get a list of all accounts that have been edited along the old and
-                # new chains
-                changed_accts = {}
-                # Read: for i in range(common ancestor block number...new block number)
                 for i in itertools.count(replace_from):
                     log.info('Rewriting height %d' % i)
-                    key = b'block:%d' % i
-                    # Delete data for old blocks
+                    key = 'block:' + str(i)
                     orig_at_height = self.db.get(key) if key in self.db else None
                     if orig_at_height:
-                        orig_block_at_height = self.get_block(orig_at_height)
-                        log.info('%s no longer in main chain' % encode_hex(orig_block_at_height.header.hash))
-                        # Delete from block index
                         self.db.delete(key)
-                        # Delete from txindex
+                        orig_block_at_height = self.get_block(orig_at_height)
                         for tx in orig_block_at_height.transactions:
                             if b'txindex:' + tx.hash in self.db:
                                 self.db.delete(b'txindex:' + tx.hash)
-                        # Add to changed list
-                        acct_list = self.db.get(b'changed:'+orig_block_at_height.hash)
-                        for j in range(0, len(acct_list), 20):
-                            changed_accts[acct_list[j: j+20]] = True
-                    # Add data for new blocks
                     if i in new_chain:
                         new_block_at_height = new_chain[i]
-                        log.info('%s now in main chain' % encode_hex(new_block_at_height.header.hash))
-                        # Add to block index
                         self.db.put(key, new_block_at_height.header.hash)
-                        # Add to txindex
-                        for j, tx in enumerate(new_block_at_height.transactions):
+                        for i, tx in enumerate(new_block_at_height.transactions):
                             self.db.put(b'txindex:' + tx.hash,
-                                        rlp.encode([new_block_at_height.number, j]))
-                        # Add to changed list
-                        if i < b.number:
-                            acct_list = self.db.get(b'changed:'+new_block_at_height.hash)
-                            for j in range(0, len(acct_list), 20):
-                                changed_accts[acct_list[j: j+20]] = True
+                                        rlp.encode([new_block_at_height.number, i]))
                     if i not in new_chain and not orig_at_height:
                         break
-                # Add changed list from new head to changed list
-                for c in changed.keys():
-                    changed_accts[c] = True
-                # Update the on-disk state cache
-                for addr in changed_accts.keys():
-                    data = temp_state.trie.get(addr)
-                    if data:
-                        self.state.db.put(b'address:'+addr, data)
-                    else:
-                        try:
-                            self.state.db.delete(b'address:'+addr)
-                        except KeyError:
-                            pass
                 self.head_hash = block.header.hash
                 self.state = temp_state
-                self.state.executing_on_head = True
-        # Block has no parent yet
         else:
             if block.header.prevhash not in self.parent_queue:
                 self.parent_queue[block.header.prevhash] = []
             self.parent_queue[block.header.prevhash].append(block)
-            log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
-                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
+            log.info('No parent found. Delaying for now')
             return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
-        self.db.put(block.hash, rlp.encode(block))
-        self.db.put(b'changed:'+block.hash, b''.join([k.encode() if isinstance(k, str) else k for k in list(changed.keys())]))
-        print('Saved %d address change logs' % len(changed.keys()))
-        self.db.put(b'deletes:'+block.hash, b''.join(deletes))
-        log.debug('Saved %d trie node deletes for block %d (%s)' % (len(deletes), block.number, utils.encode_hex(block.hash)))
-        # Delete old junk data
-        old_block_hash = self.get_blockhash_by_number(block.number - self.max_history)
-        if old_block_hash:
-            try:
-                deletes = self.db.get(b'deletes:'+old_block_hash)
-                log.debug('Deleting up to %d trie nodes' % (len(deletes) // 32))
-                rdb = RefcountDB(self.db)
-                for i in range(0, len(deletes), 32):
-                    rdb.delete(deletes[i: i+32])
-                self.db.delete(b'deletes:'+old_block_hash)
-                self.db.delete(b'changed:'+old_block_hash)
-            except KeyError as e:
-                print(e)
-                pass
+        self.db.put(b'cp_head_hash:' + self.checkpoint_head_hash, self.head_hash)
+        self.db.put(block.header.hash, rlp.encode(block))
         self.db.commit()
-        assert (b'deletes:'+block.hash) in self.db
         log.info('Added block %d (%s) with %d txs and %d gas' % \
             (block.header.number, encode_hex(block.header.hash)[:8],
              len(block.transactions), block.header.gas_used))
-        # Call optional callback
         if self.new_head_cb and block.header.number != 0:
             self.new_head_cb(block)
-        # Are there blocks that we received that were waiting for this block?
-        # If so, process them.
-        if block.header.hash in self.parent_queue:
-            for _blk in self.parent_queue[block.header.hash]:
-                self.add_block(_blk)
-            del self.parent_queue[block.header.hash]
         return True
 
     def __contains__(self, blk):
@@ -409,7 +483,7 @@ class Chain(object):
             o = self.get_block(self.get_blockhash_by_number(blk.number)).hash
             assert o == blk.hash
             return True
-        except Exception as e:
+        except:
             return False
 
     def has_block(self, block):
@@ -428,23 +502,19 @@ class Chain(object):
                 return chain
             chain.append(self.get_block(h))
 
-    # Get block number and transaction index
-    def get_tx_position(self, tx):
+    # Recover transaction and the block that contains it
+    def get_transaction(self, tx):
         if not isinstance(tx, (str, bytes)):
             tx = tx.hash
         if b'txindex:' + tx in self.db:
             data = rlp.decode(self.db.get(b'txindex:' + tx))
-            return big_endian_to_int(data[0]), big_endian_to_int(data[1])
+            blk, index = self.get_block_by_number(
+                big_endian_to_int(data[0])), big_endian_to_int(data[1])
+            tx = blk.transactions[index]
+            return tx, blk, index
         else:
             return None
 
-    def get_transaction(self, tx):
-        print('Deprecated. Use get_tx_position')
-        blknum, index = self.get_tx_position(tx)
-        blk = self.get_block_by_number(blknum) 
-        return blk.transactions[index], blk, index
-
-    # Get descendants of a block
     def get_descendants(self, block):
         output = []
         blocks = [block]
@@ -458,21 +528,20 @@ class Chain(object):
     def db(self):
         return self.env.db
 
-    # Get blockhashes starting from a hash and going backwards
     def get_blockhashes_from_hash(self, hash, max):
-        block = self.get_block(hash)
-        if block is None:
+        try:
+            header = blocks.get_block_header(self.db, hash)
+        except KeyError:
             return []
 
-        header = block.header
         hashes = []
         for i in xrange(max):
             hash = header.prevhash
-            block = self.get_block(hash)
-            if block is None:
+            try:
+                header = blocks.get_block_header(self.db, hash)
+            except KeyError:
                 break
-            header = block.header
-            hashes.append(header.hash)
+            hashes.append(hash)
             if header.number == 0:
                 break
         return hashes

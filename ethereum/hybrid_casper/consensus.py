@@ -1,13 +1,9 @@
-from ethereum import utils
+from ethereum import utils, transactions
+from ethereum.common import update_block_env_variables
+from ethereum.messages import apply_transaction
+from ethereum.hybrid_casper import casper_utils
+from ethereum.utils import sha3, privtoaddr, to_string
 
-# Update block variables into the state
-def update_block_env_variables(state, block):
-    state.timestamp = block.header.timestamp
-    state.gas_limit = block.header.gas_limit
-    state.block_number = block.header.number
-    state.recent_uncles[state.block_number] = [x.hash for x in block.uncles]
-    state.block_coinbase = block.header.coinbase
-    state.block_difficulty = block.header.difficulty
 
 # Block initialization state transition
 def initialize(state, block=None):
@@ -18,8 +14,17 @@ def initialize(state, block=None):
     state.bloom = 0
     state.receipts = []
 
-    if block != None:
+    if block is not None:
         update_block_env_variables(state, block)
+
+    # Initalize the next epoch in the Casper contract
+    if state.block_number % state.env.config['EPOCH_LENGTH'] == 0 and state.block_number != 0:
+        key, account = sha3(to_string(999)), privtoaddr(sha3(to_string(999)))
+        data = casper_utils.casper_ct.encode('initialize_epoch', [state.block_number // state.env.config['EPOCH_LENGTH']])
+        transaction = transactions.Transaction(state.get_nonce(account), 0, 3141592,
+                                               state.env.config['CASPER_ADDRESS'], 0, data).sign(key)
+        success, output = apply_transaction(state, transaction)
+        assert success
 
     if state.is_DAO(at_fork_height=True):
         for acct in state.config['CHILD_DAO_LIST']:
@@ -30,4 +35,3 @@ def initialize(state, block=None):
             config["METROPOLIS_STATEROOT_STORE"]), config["METROPOLIS_GETTER_CODE"])
         state.set_code(utils.normalize_address(
             config["METROPOLIS_BLOCKHASH_STORE"]), config["METROPOLIS_GETTER_CODE"])
-
