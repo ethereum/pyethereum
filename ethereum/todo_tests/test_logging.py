@@ -19,7 +19,8 @@ def teardown_function(function):
     slogging.configure(**function.snapshot)
 
 
-@pytest.mark.parametrize('level_name', ['critical', 'error', 'warning', 'info', 'debug', 'trace'])
+@pytest.mark.parametrize(
+    'level_name', ['critical', 'error', 'warning', 'info', 'debug', 'trace'])
 def test_basic(caplog, level_name):
     slogging.configure(":trace")
     log = slogging.get_logger()
@@ -49,7 +50,11 @@ def test_jsonconfig(caplog):
     slogging.configure(log_json=True)
     log = slogging.get_logger('prefix')
     log.warn('abc', a=1)
-    assert json.loads(caplog.records[0].msg) == dict(event='prefix.abc', a=1, level='WARNING')
+    assert json.loads(
+        caplog.records[0].msg) == dict(
+        event='prefix.abc',
+        a=1,
+        level='WARNING')
 
 
 def test_configuration():
@@ -74,7 +79,9 @@ def test_tracebacks(caplog):
             _ = a // b
             log.error('heres the stack', stack_info=True)
         except Exception as e:
-            log.error('an Exception trace should preceed this msg', exc_info=True)
+            log.error(
+                'an Exception trace should preceed this msg',
+                exc_info=True)
     div(1, 0)
     assert 'an Exception trace' in caplog.text
     assert 'Traceback' in caplog.text
@@ -98,7 +105,8 @@ def test_listeners(caplog):
     r = called.pop()
     assert r == dict(event='test listener', abc='thislistener')
 
-    log.trace('trace is usually filtered', abc='thislistener')  # this handler for function log_cb does not work
+    # this handler for function log_cb does not work
+    log.trace('trace is usually filtered', abc='thislistener')
     assert "trace is usually filtered" not in caplog.text
 
     # deactivate listener
@@ -148,13 +156,17 @@ def test_get_configuration():
     slogging.configure(config_string=config_string, log_json=log_json)
     config = slogging.get_configuration()
     assert config['log_json'] == log_json
-    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+    assert set(
+        config['config_string'].split(',')) == set(
+        config_string.split(','))
 
     log_json = True
     slogging.configure(config_string=config_string, log_json=log_json)
     config = slogging.get_configuration()
     assert config['log_json'] == log_json
-    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+    assert set(
+        config['config_string'].split(',')) == set(
+        config_string.split(','))
 
     # set config differntly
     slogging.configure(config_string=':TRACE', log_json=False)
@@ -164,7 +176,9 @@ def test_get_configuration():
     slogging.configure(**config)
     config = slogging.get_configuration()
     assert config['log_json'] == log_json
-    assert set(config['config_string'].split(',')) == set(config_string.split(','))
+    assert set(
+        config['config_string'].split(',')) == set(
+        config_string.split(','))
 
 
 def test_recorder(caplog):
@@ -216,7 +230,7 @@ def test_how_to_use_as_vm_logger():
     recorder = slogging.LogRecorder()
     try:
         run_vm(raise_error=True)
-    except:
+    except BaseException:
         log = slogging.get_logger('eth.vm')
         for x in recorder.pop_records():
             log.info(x.pop('event'), **x)

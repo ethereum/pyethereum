@@ -45,10 +45,10 @@ class FakeBlock(object):
 
 
 def create_snapshot(chain, recent=1024):
-    assert recent > chain.env.config['MAX_UNCLE_DEPTH']+2
+    assert recent > chain.env.config['MAX_UNCLE_DEPTH'] + 2
 
     head_block = chain.head
-    base_block = chain.get_block_by_number(max(head_block.number-recent, 0))
+    base_block = chain.get_block_by_number(max(head_block.number - recent, 0))
     return {
         'base': snapshot_form(rlp.encode(base_block.header)),
         'chainDifficulty': snapshot_form(chain.get_score(base_block)),
@@ -103,7 +103,7 @@ def load_snapshot(chain, snapshot):
     # first block is child of base block
     first_block_rlp = scan_bin(snapshot['blocks'][0])
     first_header_data = rlp.decode(first_block_rlp)[0]
-    head_block_rlp = scan_bin(snapshot['blocks'][limit-1])
+    head_block_rlp = scan_bin(snapshot['blocks'][limit - 1])
     head_header_data = rlp.decode(head_block_rlp)[0]
 
     trie = load_state(chain.env, snapshot['alloc'])
@@ -115,8 +115,10 @@ def load_snapshot(chain, snapshot):
     print "Start loading recent blocks from snapshot"
     vbh = common.validate_header
     vus = consensus.validate_uncles
+
     def _vbh(state, header):
         return True
+
     def _vus(state, block):
         return True
     common.validate_header = _vbh
@@ -132,7 +134,7 @@ def load_snapshot(chain, snapshot):
     for block_rlp in snapshot['blocks'][1:]:
         block_rlp = scan_bin(block_rlp)
         block = rlp.decode(block_rlp, Block)
-        if count == chain.state.config['MAX_UNCLE_DEPTH']+2:
+        if count == chain.state.config['MAX_UNCLE_DEPTH'] + 2:
             consensus.validate_uncles = vus
         if not chain.add_block(block):
             print "Failed to load block #%d (%s), abort." % (block.number, encode_hex(block.hash)[:8])

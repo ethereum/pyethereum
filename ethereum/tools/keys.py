@@ -27,7 +27,11 @@ import binascii
 import struct
 from math import ceil
 from Crypto.Hash import keccak
-sha3_256 = lambda x: keccak.new(digest_bits=256, data=x)
+
+
+def sha3_256(x): return keccak.new(digest_bits=256, data=x)
+
+
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Util import Counter
@@ -50,7 +54,7 @@ PBKDF2_CONSTANTS = {
 
 def aes_ctr_encrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
+    ctr = Counter.new(128, initial_value=iv, allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
@@ -58,7 +62,7 @@ def aes_ctr_encrypt(text, key, params):
 
 def aes_ctr_decrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
+    ctr = Counter.new(128, initial_value=iv, allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
@@ -214,8 +218,8 @@ def decode_keystore_json(jsondata, pw):
     return o
 
 
-# Utility functions (done separately from utils so as to make this a standalone file)
-
+# Utility functions (done separately from utils so as to make this a
+# standalone file)
 def sha3(seed):
     return sha3_256(seed).digest()
 

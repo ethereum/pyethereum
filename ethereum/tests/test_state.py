@@ -28,13 +28,17 @@ def pytest_generate_tests(metafunc):
         place_to_check,
         metafunc,
         exclude_func=lambda filename, _, __: (
-            'stQuadraticComplexityTest' in filename or # Takes too long
-            'stMemoryStressTest' in filename or # We run out of memory
-            'MLOAD_Bounds.json' in filename or # We run out of memory
-            'failed_tx_xcf416c53' in filename or # we know how to pass: force address 3 to get deleted. TODO confer with c++ best path foward.
-            'RevertDepthCreateAddressCollision.json' in filename or # we know how to pass: delete contract's code. Looks like c++ issue.
-            'pairingTest.json' in filename or # definitely a c++ issue
-            'createJS_ExampleContract' in filename # definitely a c++ issue
+            'stQuadraticComplexityTest' in filename or  # Takes too long
+            'stMemoryStressTest' in filename or  # We run out of memory
+            'MLOAD_Bounds.json' in filename or  # We run out of memory
+            # we know how to pass: force address 3 to get deleted. TODO confer
+            # with c++ best path foward.
+            'failed_tx_xcf416c53' in filename or
+            # we know how to pass: delete contract's code. Looks like c++
+            # issue.
+            'RevertDepthCreateAddressCollision.json' in filename or
+            'pairingTest.json' in filename or  # definitely a c++ issue
+            'createJS_ExampleContract' in filename  # definitely a c++ issue
         )
     )
 
@@ -48,7 +52,7 @@ def main():
         # load fixtures from specified file or dir
         try:
             fixtures = testutils.get_tests_from_file_or_dir(sys.argv[1])
-        except:
+        except BaseException:
             fixtures = {'stdin': json.loads(sys.argv[1])}
     for filename, tests in list(fixtures.items()):
         for testname, testdata in list(tests.items()):

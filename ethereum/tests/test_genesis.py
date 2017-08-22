@@ -19,7 +19,10 @@ def genesis_fixture():
     Read genesis block from fixtures.
     """
     genesis_fixture = None
-    fn = os.path.join(testutils.fixture_path, 'BasicTests', 'genesishashestest.json')
+    fn = os.path.join(
+        testutils.fixture_path,
+        'BasicTests',
+        'genesishashestest.json')
     with open(fn, 'r') as f:
         genesis_fixture = json.load(f)
     assert genesis_fixture is not None, "Could not read genesishashtest.json from fixtures. Make sure you did 'git submodule init'!"
@@ -32,7 +35,9 @@ def genesis_fixture():
 @pytest.mark.xfail  # code not in sync with genesis fixtures
 def test_genesis_state_root(genesis_fixture):
     genesis = blocks_genesis(new_env())
-    assert encode_hex(genesis.state_root) == utils.to_string(genesis_fixture['genesis_state_root'])
+    assert encode_hex(
+        genesis.state_root) == utils.to_string(
+        genesis_fixture['genesis_state_root'])
 
 
 def test_genesis_initial_alloc(genesis_fixture):
@@ -45,7 +50,8 @@ def test_genesis_initial_alloc(genesis_fixture):
 @pytest.mark.xfail  # code not in sync with genesis fixtures
 def test_genesis_hash(genesis_fixture):
     genesis = blocks_genesis(new_env())
-    assert genesis.hex_hash() == utils.to_string(genesis_fixture['genesis_hash'])
+    assert genesis.hex_hash() == utils.to_string(
+        genesis_fixture['genesis_hash'])
 
 
 if __name__ == '__main__':

@@ -18,7 +18,10 @@ def check_testdata(data_keys, expected_keys):
 
 def load_tests():
     try:
-        fn = os.path.join(testutils.fixture_path, 'TrieTests', 'trietestnextprev.json')
+        fn = os.path.join(
+            testutils.fixture_path,
+            'TrieTests',
+            'trietestnextprev.json')
         fixture = json.load(open(fn, 'r'))
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",

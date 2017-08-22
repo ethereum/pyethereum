@@ -10,6 +10,7 @@ from ethereum.state import State
 from ethereum.utils import sha3, encode_hex
 import rlp
 
+
 # Applies the block-level state transition function
 def apply_block(state, block):
     # Pre-processing and verification
@@ -42,18 +43,25 @@ def apply_block(state, block):
 def make_head_candidate(chain, txqueue=None,
                         parent=None,
                         timestamp=None,
-                        coinbase=b'\x35'*20,
+                        coinbase=b'\x35' * 20,
                         extra_data='moo ha ha says the laughing cow.',
                         min_gasprice=0):
     log.debug('Creating head candidate')
     if parent is None:
-        temp_state = State.from_snapshot(chain.state.to_snapshot(root_only=True), chain.env)
+        temp_state = State.from_snapshot(
+            chain.state.to_snapshot(
+                root_only=True), chain.env)
     else:
         temp_state = chain.mk_poststate_of_blockhash(parent.hash)
 
     cs = get_consensus_strategy(chain.env.config)
     # Initialize a block with the given parent and variables
-    blk = mk_block_from_prevstate(chain, temp_state, timestamp, coinbase, extra_data)
+    blk = mk_block_from_prevstate(
+        chain,
+        temp_state,
+        timestamp,
+        coinbase,
+        extra_data)
     # Find and set the uncles
     blk.uncles = cs.get_uncles(chain, temp_state)
     blk.header.uncles_hash = sha3(rlp.encode(blk.uncles))

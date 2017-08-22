@@ -46,11 +46,14 @@ if _file in os.listdir(os.path.join(os.getcwd(), _path)):
     c = chain.Chain(json.load(open(STATE_LOAD_FN)), Env())
     print('loaded.')
 elif 'genesis_frontier.json' not in os.listdir(os.getcwd()):
-    print('Please download genesis_frontier.json from ' + \
-        'http://vitalik.ca/files/genesis_frontier.json')
+    print('Please download genesis_frontier.json from ' +
+          'http://vitalik.ca/files/genesis_frontier.json')
     sys.exit()
 else:
-    c = chain.Chain(json.load(open('genesis_frontier.json')), Env(LevelDB(DB_DIR)))
+    c = chain.Chain(
+        json.load(
+            open('genesis_frontier.json')), Env(
+            LevelDB(DB_DIR)))
     assert c.state.trie.root_hash.encode('hex') == \
         'd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544'
     assert c.state.prev_headers[0].hash.encode('hex') == \
@@ -59,7 +62,7 @@ else:
 print('Attempting to open %s' % RLP_BLOCKS_FILE)
 _path, _file = os.path.split(RLP_BLOCKS_FILE)
 if not _path or _file not in os.listdir(_path):
-    print('Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp ' + \
+    print('Please download 200kblocks.rlp from http://vitalik.ca/files/200kblocks.rlp ' +
           'and put it in this directory to continue the test')
     sys.exit()
 
@@ -70,8 +73,9 @@ block_source_data = f.read()
 block_rlps = []
 while pos < len(block_source_data):
     _, l1, l2 = rlp.codec.consume_length_prefix(block_source_data, pos)
-    block_rlps.append(block_source_data[pos: l1+l2])
+    block_rlps.append(block_source_data[pos: l1 + l2])
     pos = l1 + l2
+
 
 def report(st, num_blks, num_txs, gas_used):
     now = time.time()
@@ -79,7 +83,8 @@ def report(st, num_blks, num_txs, gas_used):
     tps = num_txs / elapsed
     bps = num_blks / elapsed
     gps = gas_used / elapsed
-    print('%.2f >>> elapsed:%d blocks:%d txs:%d gas:%d bps:%d tps:%d gps:%d' % (now, elapsed, num_blks, num_txs, gas_used, bps, tps, gps))
+    print('%.2f >>> elapsed:%d blocks:%d txs:%d gas:%d bps:%d tps:%d gps:%d' %
+          (now, elapsed, num_blks, num_txs, gas_used, bps, tps, gps))
 
 
 def check_snapshot_consistency(snapshot, env=None):
@@ -111,6 +116,7 @@ def snapshot(c, num_blocks):
         fn = STATE_STORE_FN
     open(fn, 'w').write(json.dumps(snapshot, indent=4))
 
+
 REPORT_INTERVAL = 1000
 SAVE_INTERVAL = 999999
 SNAPSHOT_INTERVAL = 999999
@@ -121,8 +127,8 @@ MANUAL_SNAPSHOTS = []
 # don't check pow
 BlockHeader.check_pow = lambda *args: True
 
-#print(block_rlps[116525].encode('hex'))
-#sys.exit()
+# print(block_rlps[116525].encode('hex'))
+# sys.exit()
 
 # process blocks
 st = time.time()
@@ -132,7 +138,7 @@ gas_used = 0
 for i, block in list(enumerate(block_rlps))[1:250000]:
     # print 'prevh:', s.prev_headers
     block = rlp.decode(block, Block)
-    #if i == 116525:
+    # if i == 116525:
     #    configure_logging(config_string=config_string)
     assert c.add_block(block)
     num_blks += 1

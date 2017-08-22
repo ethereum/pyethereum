@@ -35,7 +35,8 @@ def bloom_insert(bloom, val):
 
 def bloom_bits(val):
     h = utils.sha3(val)
-    return [bits_in_number(1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047)) for i in range(0, BUCKETS_PER_VAL * 2, 2)]
+    return [bits_in_number(1 << ((safe_ord(h[i + 1]) + (safe_ord(h[i]) << 8)) & 2047))
+            for i in range(0, BUCKETS_PER_VAL * 2, 2)]
 
 
 def bits_in_number(val):

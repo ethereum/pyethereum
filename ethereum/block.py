@@ -100,11 +100,13 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def mining_hash(self):
-        return utils.sha3(rlp.encode(self, BlockHeader.exclude(['mixhash', 'nonce'])))
+        return utils.sha3(rlp.encode(
+            self, BlockHeader.exclude(['mixhash', 'nonce'])))
 
     @property
     def signing_hash(self):
-        return utils.sha3(rlp.encode(self, BlockHeader.exclude(['extra_data'])))
+        return utils.sha3(rlp.encode(
+            self, BlockHeader.exclude(['extra_data'])))
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
@@ -188,7 +190,8 @@ BLANK_UNCLES_HASH = sha3(rlp.encode([]))
 
 class FakeHeader():
 
-    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1, gas_limit=3141592, gas_used=0, uncles_hash=BLANK_UNCLES_HASH):
+    def __init__(self, hash='\x00' * 32, number=0, timestamp=0, difficulty=1,
+                 gas_limit=3141592, gas_used=0, uncles_hash=BLANK_UNCLES_HASH):
         self.hash = hash
         self.number = number
         self.timestamp = timestamp
