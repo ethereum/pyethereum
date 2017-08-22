@@ -2,10 +2,8 @@ import ethereum.transactions as transactions
 import ethereum.utils as utils
 import rlp
 from rlp.utils import decode_hex, encode_hex, str_to_bytes
-from ethereum.utils import encode_hex
-import ethereum.testutils as testutils
-from ethereum.testutils import fixture_to_bytes
-from ethereum.state_transition import config_fork_specific_validation
+from ethereum.tools import testutils
+from ethereum.messages import config_fork_specific_validation, null_address
 import ethereum.config as config
 import sys
 import json
@@ -19,11 +17,8 @@ logger = get_logger()
 # hint: use 'py.test' with the '-s' option to dump logs to the console
 # configure_logging(':trace')
 
-encode_hex('')
-
 
 def test_transaction(filename, testname, testdata):
-    testdata = fixture_to_bytes(testdata)
 
     try:
         rlpdata = decode_hex(testdata["rlp"][2:])
@@ -33,6 +28,9 @@ def test_transaction(filename, testname, testdata):
         #if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
         #    tx.check_low_s_homestead()
         assert config_fork_specific_validation(konfig, blknum, tx)
+        assert tx.startgas >= tx.intrinsic_gas_used
+        if tx.sender == null_address:
+            assert tx.value == 0 and tx.gasprice == 0 and tx.nonce == 0
         o["sender"] = tx.sender
         o["transaction"] = {
             "data": '0x' * (len(tx.data) > 0) + encode_hex(tx.data),
@@ -49,11 +47,12 @@ def test_transaction(filename, testname, testdata):
         tx = None
         sys.stderr.write(str(e))
     if 'transaction' not in testdata:  # expected to fail
+        # print(tx.to_dict(), testdata)
         assert tx is None
     else:
         assert set(o['transaction'].keys()) == set(testdata.get("transaction", dict()).keys())
         o.get("transaction", None) == testdata.get("transaction", None)
-        assert str_to_bytes(encode_hex(o.get("sender", ''))) == testdata.get("sender", '')
+        assert str_to_bytes(encode_hex(o.get("sender", ''))) == str_to_bytes(testdata.get("sender", ''))
 
 
 def pytest_generate_tests(metafunc):

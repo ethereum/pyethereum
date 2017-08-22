@@ -55,7 +55,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
     hc, _ = meta.make_head_candidate(chain, txqueue, parent,
-                             timestamp or parent_timestamp + 1, coinbase or '\x00'*20)
+                             timestamp or parent_timestamp + 1, coinbase or b'\x00'*20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
     rounds = 100
@@ -134,7 +134,7 @@ def test_mine_block(db):
 
 def test_block_serialization_with_transaction_empty_genesis(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({}, difficulty=1, min_gasprice=0)
+    chain = Chain({}, difficulty=1)
     tx = get_transaction(gasprice=10)  # must fail, as there is no balance
     a_blk2 = mine_next_block(chain, transactions=[tx])
     assert tx.hash not in [x.hash for x in a_blk2.transactions]
@@ -143,7 +143,7 @@ def test_block_serialization_with_transaction_empty_genesis(db):
 
 def test_mine_block_with_transaction(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx = get_transaction()
     blk = mine_next_block(chain, transactions=[tx])
     assert tx.hash in [x.hash for x in blk.transactions]
@@ -155,7 +155,7 @@ def test_mine_block_with_transaction(db):
 
 def test_mine_block_with_transaction2(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     genesis_hash = chain.state.prev_headers[0].hash
     tx = get_transaction()
     blk2 = mine_next_block(chain, coinbase=v, transactions=[tx])
@@ -169,7 +169,7 @@ def test_mine_block_with_transaction2(db):
 
 def test_mine_block_with_transaction3(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx = get_transaction()
     blk = mine_next_block(chain, transactions=[tx])
     assert tx in blk.transactions
@@ -179,7 +179,7 @@ def test_mine_block_with_transaction3(db):
 
 def test_transaction(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     blk = mine_next_block(chain)
     tx = get_transaction()
     assert tx not in blk.transactions
@@ -198,7 +198,7 @@ def test_transaction_serialization():
 
 def test_invalid_transaction(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v2: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v2: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx = get_transaction()
     blk = mine_next_block(chain, transactions=[tx])
     assert chain.state.get_balance(v) == 0
@@ -207,7 +207,7 @@ def test_invalid_transaction(db):
 
 
 def test_prevhash(db):
-    chain = Chain({}, difficulty=1, min_gasprice=0)
+    chain = Chain({}, difficulty=1)
     L1 = mine_on_chain(chain)
     assert chain.state.get_block_hash(0) != b'\x00'*32
     assert chain.state.get_block_hash(1) != b'\x00'*32
@@ -218,6 +218,7 @@ def test_genesis_chain(db):
     k, v, k2, v2 = accounts()
     chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     blk = mine_on_chain(chain)
+    print('blook', blk)
 
     assert chain.has_block(blk.hash)
     assert blk.hash in chain
@@ -232,7 +233,7 @@ def test_genesis_chain(db):
 
 def test_simple_chain(db):
     k, v, k2, v2 = accounts()
-    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chain = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx = get_transaction()
     blk2 = mine_next_block(chain, transactions=[tx])
     blk3 = mine_next_block(chain)
@@ -251,7 +252,7 @@ def test_simple_chain(db):
     assert chain.get_block_by_number(1) == blk2
     assert chain.get_block_by_number(2) == blk3
     assert not chain.get_block_by_number(3)
-    assert chain.get_transaction(tx.hash) == (tx, blk2, 0)
+    assert chain.get_tx_position(tx.hash) == (blk2.number, 0)
 
 
 def test_add_side_chain(db, alt_db):
@@ -262,13 +263,13 @@ def test_add_side_chain(db, alt_db):
     """
     k, v, k2, v2 = accounts()
     # Remote: mine one block
-    chainR = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chainR = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx0 = get_transaction(nonce=0)
     R1 = mine_next_block(chainR, transactions=[tx0])
     assert tx0.hash in [x.hash for x in R1.transactions]
 
     # Local: mine two blocks
-    chainL = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chainL = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(chainL, transactions=[tx0])
     tx1 = get_transaction(nonce=1)
@@ -291,14 +292,14 @@ def test_add_longer_side_chain(db, alt_db):
     """
     k, v, k2, v2 = accounts()
     # Remote: mine three blocks
-    chainR = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chainR = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     remote_blocks = []
     for i in range(3):
         tx = get_transaction(nonce=i)
         blk = mine_next_block(chainR, transactions=[tx])
         remote_blocks.append(blk)
     # Local: mine two blocks
-    chainL = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1, min_gasprice=0)
+    chainL = Chain({v: {"balance": utils.denoms.ether * 1}}, difficulty=1)
     tx0 = get_transaction(nonce=0)
     L1 = mine_next_block(chainL, transactions=[tx0])
     tx1 = get_transaction(nonce=1)
@@ -322,7 +323,7 @@ def test_reward_uncles(db):
     and also add uncle and nephew rewards
     """
     k, v, k2, v2 = accounts()
-    chain = Chain({}, difficulty=1, min_gasprice=0)
+    chain = Chain({}, difficulty=1)
     blk0 = mine_on_chain(chain, coinbase=decode_hex('0' * 40))
     local_coinbase = decode_hex('1' * 40)
     uncle_coinbase = decode_hex('2' * 40)

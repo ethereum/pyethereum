@@ -39,8 +39,17 @@ clean-test:
 lint:
 	flake8 ethereum tests --ignore=E501
 
+lint-minimal:
+	python -m flake8 --ignore=F401,F841,F811 --select=F --exclude=todo,experimental,ethash.py,ethash_utils.py ethereum
+
 test:
 	py.test --tb=no ethereum/tests/
+
+test-passing:
+	py.test ethereum/tests/test_abi.py ethereum/tests/test_bloom.py ethereum/tests/test_chain.py ethereum/tests/test_compress.py ethereum/tests/test_db.py ethereum/tests/test_difficulty.py ethereum/tests/test_opcodes.py ethereum/tests/test_trie_next_prev.py ethereum/tests/test_genesis.py ethereum/tests/test_serialization.py ethereum/tests/test_trie.py
+
+test-failing:
+	py.test ethereum/tests/test_blockstransactions.py ethereum/tests/test_transactions.py ethereum/tests/test_keys.py ethereum/tests/test_state.py ethereum/tests/test_contracts.py ethereum/tests/test_tester.py
 
 testnovm:
 	py.test --tb=no ethereum/tests/ --ignore=ethereum/tests/test_vm.py

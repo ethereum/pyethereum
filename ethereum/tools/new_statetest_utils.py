@@ -1,8 +1,8 @@
-from ethereum.new_state import State
+from ethereum.state import State
 from ethereum.block import FakeHeader, Block
 from ethereum.utils import decode_hex, parse_int_or_hex, sha3, to_string, \
     remove_0x_head, encode_hex, big_endian_to_int
-from ethereum.config import default_config, config_homestead, config_tangerine, config_spurious, config_metropolis, Env
+from ethereum.config import default_config, config_frontier, config_homestead, config_tangerine, config_spurious, config_metropolis, Env
 from ethereum.exceptions import InvalidTransaction
 import ethereum.transactions as transactions
 from ethereum.messages import apply_transaction
@@ -37,12 +37,14 @@ basic_env = {
 
 
 configs = {
+    #"Frontier": config_frontier,
     #"Homestead": config_homestead,
     #"EIP150": config_tangerine,
     "EIP158": config_spurious,
     "Metropolis": config_metropolis
 }
 
+# Makes a diff between a prev and post state
 def mk_state_diff(prev, post):
     o = {}
     for k in prev.keys():
@@ -69,6 +71,7 @@ def mk_state_diff(prev, post):
             o[k] = ok
     return o
 
+# Compute a single unit of a state test
 def compute_state_test_unit(state, txdata, indices, konfig):
     state.env.config = konfig
     s = state.snapshot()
@@ -105,6 +108,7 @@ def compute_state_test_unit(state, txdata, indices, konfig):
     return output_decl
 
 
+# Initialize the state for state tests
 def init_state(env, pre):
     # Setup env
     state = State(
@@ -135,8 +139,14 @@ def init_state(env, pre):
     # state.commit()
     return state
 
+class EnvNotFoundException(Exception):
+    pass
+
+# Verify a state test
 def verify_state_test(test):
     print("Verifying state test")
+    if "env" not in test:
+        raise EnvNotFoundException("Env not found")
     _state = init_state(test["env"], test["pre"])
     for config_name, results in test["post"].items():
         # Old protocol versions may not be supported

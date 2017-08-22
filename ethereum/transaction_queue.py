@@ -44,7 +44,7 @@ class TransactionQueue():
                 heapq.heappop(self.txs)
                 item.prio = item.tx.startgas
                 heapq.heappush(self.aside, item)
-            elif item.tx.gasprice >= min_gasprice or prio == PRIO_INFINITY:
+            elif item.tx.gasprice >= min_gasprice or item.prio == PRIO_INFINITY:
                 heapq.heappop(self.txs)
                 return item.tx
             else:
@@ -68,7 +68,7 @@ class TransactionQueue():
 def make_test_tx(s=100000, g=50, data='', nonce=0):
     from ethereum.transactions import Transaction
     return Transaction(nonce=nonce, startgas=s, gasprice=g,
-                       value=0, data=data, to='\x35' * 20)
+                       value=0, data=data, to=b'\x35' * 20)
 
 
 def test():

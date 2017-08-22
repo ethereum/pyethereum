@@ -1,10 +1,10 @@
-from ethereum.new_state import State
+from ethereum.state import State
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
 from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
     parse_as_bin, parse_as_int, normalize_address
 from ethereum.config import Env
 from ethereum.consensus_strategy import get_consensus_strategy
-from ethereum.db import OverlayDB
+from ethereum.db import OverlayDB, RefcountDB
 import rlp
 import json
 
@@ -21,7 +21,7 @@ def block_from_genesis_declaration(genesis_data, env):
                     gas_limit=parse_as_int(genesis_data["gasLimit"]))
     return Block(h, [], [])
 
-def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=False):
+def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=False, executing_on_head=False):
     if block:
         assert isinstance(block, Block)
     else:
@@ -43,8 +43,15 @@ def state_from_genesis_declaration(genesis_data, env, block=None, allow_empties=
             for k, v in data['storage'].items():
                 state.set_storage_data(addr, big_endian_to_int(parse_as_bin(k)), big_endian_to_int(parse_as_bin(v)))
     get_consensus_strategy(state.config).initialize(state, block)
+    if executing_on_head:
+        state.executing_on_head = True
     state.commit(allow_empties=allow_empties)
+    print('deleting %d' % len(state.deletes))
+    rdb = RefcountDB(state.db)
+    for delete in state.deletes:
+        rdb.delete(delete)
     block.header.state_root = state.trie.root_hash
+    state.changed = {}
     state.prev_headers=[block.header]
     return state
 
@@ -99,12 +106,13 @@ def mk_genesis_block(env, **kwargs):
     return block
 
 
-def mk_basic_state(alloc, header=None, env=None):
-    state = State(env=env or Env())
+def mk_basic_state(alloc, header=None, env=None, executing_on_head=False):
+    env = env or Env()
+    state = State(env=env, executing_on_head=executing_on_head)
     if not header:
         header = {
-            "number": 0, "gas_limit": 4712388, "gas_used": 0,
-            "timestamp": 1467446877, "difficulty": 1,
+            "number": 0, "gas_limit": env.config['BLOCK_GAS_LIMIT'],
+            "gas_used": 0, "timestamp": 1467446877, "difficulty": 1,
             "uncles_hash": '0x'+encode_hex(BLANK_UNCLES_HASH)
         }
     h = BlockHeader(number=parse_as_int(header['number']),

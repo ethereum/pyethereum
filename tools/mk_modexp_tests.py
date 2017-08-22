@@ -40,6 +40,7 @@ def mk_test(b, e, m, execgas):
         print("Succeeded %d %d %d sg %d" % (b, e, m, execgas))
     except tester.TransactionFailed:
         print('OOG %d %d %d sg %d' % (b, e, m, execgas))
+    print(c.last_sender)
     o = tester.mk_state_test_postfill(c, pre)
     o2 = tester.mk_state_test_postfill(c, pre, filler_mode=True)
     assert new_statetest_utils.verify_state_test(o)

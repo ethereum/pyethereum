@@ -13,7 +13,7 @@ from ethereum import utils
 from ethereum.abi import is_numeric
 from ethereum import opcodes
 from ethereum.slogging import get_logger
-from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr
+from ethereum.utils import to_string, encode_int, zpad, bytearray_to_bytestr, safe_ord
 
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache
@@ -34,7 +34,11 @@ TT255 = 2 ** 255
 
 MAX_DEPTH = 1024
 
-
+# Wrapper to store call data. This is needed because it is possible to
+# call a contract N times with N bytes of data with a gas cost of O(N);
+# if implemented naively this would require O(N**2) bytes of data
+# copying. Instead we just copy the reference to the parent memory
+# slice plus the start and end of the slice
 class CallData(object):
 
     def __init__(self, parent_memory, offset=0, size=None):
@@ -43,11 +47,13 @@ class CallData(object):
         self.size = len(self.data) if size is None else size
         self.rlimit = self.offset + self.size
 
+    # Convert calldata to bytes
     def extract_all(self):
         d = self.data[self.offset: self.offset + self.size]
         d.extend(bytearray(self.size - len(d)))
         return bytes(bytearray(d))
 
+    # Extract 32 bytes as integer
     def extract32(self, i):
         if i >= self.size:
             return 0
@@ -55,6 +61,7 @@ class CallData(object):
         o.extend(bytearray(32 - len(o)))
         return utils.bytearray_to_int(o)
 
+    # Extract a slice and copy it to memory
     def extract_copy(self, mem, memstart, datastart, size):
         for i in range(size):
             if datastart + i < self.size:
@@ -63,6 +70,8 @@ class CallData(object):
                 mem[memstart + i] = 0
 
 
+# Stores a message object, including context data like sender,
+# destination, gas, whether or not it is a STATICCALL, etc
 class Message(object):
 
     def __init__(self, sender, to, value=0, gas=1000000, data='', depth=0,
@@ -83,6 +92,7 @@ class Message(object):
         return '<Message(to:%s...)>' % self.to[:8]
 
 
+# Virtual machine state of the current EVM instance
 class Compustate():
 
     def __init__(self, **kwargs):
@@ -113,24 +123,23 @@ class Compustate():
 # of pushdata and thus invalid
 @lru_cache(128)
 def preprocess_code(code):
-    assert isinstance(code, bytes)
-    code = memoryview(code).tolist()
-    ops = []
+    o = 0
     i = 0
-    while i < len(code):
-        o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
-        ops.append(o)
-        if o[0][:4] == 'PUSH':
-            for j in range(int(o[0][4:])):
-                i += 1
-                byte = code[i] if i < len(code) else 0
-                o[-1] = (o[-1] << 8) + byte
-                if i < len(code):
-                    ops.append(['INVALID', 0, 0, 0, byte, 0])
-        i += 1
-    return ops
+    pushcache = {}
+    code = code + b'\x00' * 32
+    while i < len(code) - 32:
+        codebyte = safe_ord(code[i])
+        if codebyte == 0x5b:
+            o |= 1 << i
+        if 0x60 <= codebyte <= 0x7f:
+            pushcache[i] = utils.big_endian_to_int(code[i + 1: i + codebyte - 0x5e])
+            i += codebyte - 0x5e
+        else:
+            i += 1
+    return o, pushcache
 
 
+# Extends memory, and pays gas for it
 def mem_extend(mem, compustate, op, start, sz):
     if sz and start + sz > len(mem):
         oldsize = len(mem) // 32
@@ -149,16 +158,12 @@ def mem_extend(mem, compustate, op, start, sz):
     return True
 
 
+# Pays gas for copying data
 def data_copy(compustate, size):
-    if size:
-        copyfee = opcodes.GCOPY * utils.ceil32(size) // 32
-        if compustate.gas < copyfee:
-            compustate.gas = 0
-            return False
-        compustate.gas -= copyfee
-    return True
+    return eat_gas(compustate, opcodes.GCOPY * utils.ceil32(size) // 32)
 
 
+# Consumes a given amount of gas
 def eat_gas(compustate, amount):
     if compustate.gas < amount:
         compustate.gas = 0
@@ -168,42 +173,45 @@ def eat_gas(compustate, amount):
         return True
 
 
+# Used to compute maximum amount of gas for child calls
 def all_but_1n(x, n):
     return x - x // n
 
 
+# Throws a VM exception
 def vm_exception(error, **kargs):
     log_vm_exit.trace('EXCEPTION', cause=error, **kargs)
     return 0, 0, []
 
 
+# Peacefully exits the VM
 def peaceful_exit(cause, gas, data, **kargs):
     log_vm_exit.trace('EXIT', cause=cause, **kargs)
     return 1, gas, data
 
 
+# Exits with the REVERT opcode
 def revert(gas, data, **kargs):
     log_vm_exit.trace('REVERT', **kargs)
     return 0, gas, data
 
-code_cache = {}
 
-
-def vm_trace(ext, msg, compustate, prev_op_ary, tracer=log_vm_op):
+def vm_trace(ext, msg, compustate, opcode, pushcache, tracer=log_vm_op):
     """
     This diverges from normal logging, as we use the logging namespace
     only to decide which features get logged in 'eth.vm.op'
     i.e. tracing can not be activated by activating a sub
     like 'eth.vm.op.stack'
     """
-    op, in_args, out_args, fee, opcode, pushval = prev_op_ary
+
+    op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
     trace_data = {}
     trace_data['stack'] = list(map(to_string, list(compustate.prev_stack)))
     if compustate.prev_prev_op in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
                    'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
                    'EXTCODECOPY'):
-        if len(compustate.prev_memory) < 1024:
+        if len(compustate.prev_memory) < 4096:
             trace_data['memory'] = \
                 ''.join([encode_hex(ascii_chr(x)) for x
                           in compustate.prev_memory])
@@ -224,33 +232,40 @@ def vm_trace(ext, msg, compustate, prev_op_ary, tracer=log_vm_op):
     trace_data['steps'] = compustate.steps
     trace_data['depth'] = msg.depth
     if op[:4] == 'PUSH':
-        trace_data['pushvalue'] = pushval
+        print repr(pushcache)
+        trace_data['pushvalue'] = pushcache[compustate.prev_pc]
     tracer.trace('vm', op=op, **trace_data)
     compustate.steps += 1
     compustate.prev_prev_op = op
 
 
+# Main function
 def vm_execute(ext, msg, code):
     # precompute trace flag
     # if we trace vm, we're in slow mode anyway
     trace_vm = log_vm_op.is_active('trace')
 
+    # Initialize stack, memory, program counter, etc
     compustate = Compustate(gas=msg.gas)
     stk = compustate.stack
     mem = compustate.memory
 
-    processed_code = preprocess_code(code)
-    codelen = len(processed_code)
+    # Compute
+    jumpdest_mask, pushcache = preprocess_code(code)
+    codelen = len(code)
 
+    # For tracing purposes
     op = None
 
     while compustate.pc < codelen:
-        # print('op: ', op, time.time() - s)
-        # s = time.time()
-        # stack size limit error
 
-        op, in_args, out_args, fee, opcode, pushval = \
-            processed_code[compustate.pc]
+        opcode = safe_ord(code[compustate.pc])
+
+        # Invalid operation
+        if opcode not in opcodes.opcodes:
+            return vm_exception('INVALID OP', opcode=opcode)
+
+        op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
         # out of gas error
         if fee > compustate.gas:
@@ -262,6 +277,7 @@ def vm_execute(ext, msg, code):
                                 op=op, needed=to_string(in_args),
                                 available=to_string(len(compustate.stack)))
 
+        # overfull stack error
         if len(compustate.stack) - in_args + out_args > 1024:
             return vm_exception('STACK SIZE LIMIT EXCEEDED',
                                 op=op,
@@ -273,15 +289,12 @@ def vm_execute(ext, msg, code):
         compustate.gas -= fee
         compustate.pc += 1
 
-        # Invalid operation
-        if op == 'INVALID':
-            return vm_exception('INVALID OP', opcode=opcode)
-
         # Valid operations
         # Pushes first because they are very frequent
         if 0x60 <= opcode <= 0x7f:
+            stk.append(pushcache[compustate.pc - 1])
             compustate.pc += opcode - 0x5f # Move 1 byte forward for 0x60, up to 32 bytes for 0x7f
-            stk.append(pushval)
+        # Arithmetic
         elif opcode < 0x10:
             if op == 'STOP':
                 return peaceful_exit('STOP', compustate.gas, [])
@@ -334,6 +347,7 @@ def vm_execute(ext, msg, code):
                         stk.append(s1 & ((1 << testbit) - 1))
                 else:
                     stk.append(s1)
+        # Comparisons
         elif opcode < 0x20:
             if op == 'LT':
                 stk.append(1 if stk.pop() < stk.pop() else 0)
@@ -363,6 +377,7 @@ def vm_execute(ext, msg, code):
                     stk.append(0)
                 else:
                     stk.append((s1 // 256 ** (31 - s0)) % 256)
+        # SHA3 and environment info
         elif opcode < 0x40:
             if op == 'SHA3':
                 s0, s1 = stk.pop(), stk.pop()
@@ -399,7 +414,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 msg.data.extract_copy(mem, mstart, dstart, size)
             elif op == 'CODESIZE':
-                stk.append(len(processed_code))
+                stk.append(codelen)
             elif op == 'CODECOPY':
                 mstart, dstart, size = stk.pop(), stk.pop(), stk.pop()
                 if not mem_extend(mem, compustate, op, mstart, size):
@@ -407,8 +422,8 @@ def vm_execute(ext, msg, code):
                 if not data_copy(compustate, size):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
-                    if dstart + i < len(processed_code):
-                        mem[mstart + i] = processed_code[dstart + i][4]
+                    if dstart + i < codelen:
+                        mem[mstart + i] = safe_ord(code[dstart + i])
                     else:
                         mem[mstart + i] = 0
             elif op == 'RETURNDATACOPY':
@@ -444,9 +459,10 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 for i in range(size):
                     if s2 + i < len(extcode):
-                        mem[start + i] = utils.safe_ord(extcode[s2 + i])
+                        mem[start + i] = safe_ord(extcode[s2 + i])
                     else:
                         mem[start + i] = 0
+        # Block info
         elif opcode < 0x50:
             if op == 'BLOCKHASH':
                 if ext.post_metropolis_hardfork() and False:
@@ -464,6 +480,7 @@ def vm_execute(ext, msg, code):
                 stk.append(ext.block_difficulty)
             elif op == 'GASLIMIT':
                 stk.append(ext.block_gas_limit)
+        # VM state manipulations
         elif opcode < 0x60:
             if op == 'POP':
                 stk.pop()
@@ -504,17 +521,13 @@ def vm_execute(ext, msg, code):
                 ext.set_storage_data(msg.to, s0, s1)
             elif op == 'JUMP':
                 compustate.pc = stk.pop()
-                opnew = processed_code[compustate.pc][0] if \
-                    compustate.pc < len(processed_code) else 'STOP'
-                if opnew != 'JUMPDEST':
+                if compustate.pc >= codelen or not ((1 << compustate.pc) & jumpdest_mask):
                     return vm_exception('BAD JUMPDEST')
             elif op == 'JUMPI':
                 s0, s1 = stk.pop(), stk.pop()
                 if s1:
                     compustate.pc = s0
-                    opnew = processed_code[compustate.pc][0] if \
-                        compustate.pc < len(processed_code) else 'STOP'
-                    if opnew != 'JUMPDEST':
+                    if compustate.pc >= codelen or not ((1 << compustate.pc) & jumpdest_mask):
                         return vm_exception('BAD JUMPDEST')
             elif op == 'PC':
                 stk.append(compustate.pc - 1)
@@ -522,13 +535,15 @@ def vm_execute(ext, msg, code):
                 stk.append(len(mem))
             elif op == 'GAS':
                 stk.append(compustate.gas)  # AFTER subtracting cost 1
+        # DUPn (eg. DUP1: a b c -> a b c c, DUP3: a b c -> a b c a)
         elif op[:3] == 'DUP':
             stk.append(stk[0x7f - opcode]) # 0x7f - opcode is a negative number, -1 for 0x80 ... -16 for 0x8f
+        # SWAPn (eg. SWAP1: a b c d -> a b d c, SWAP3: a b c d -> d b c a)
         elif op[:4] == 'SWAP':
             temp = stk[0x8e - opcode] # 0x8e - opcode is a negative number, -2 for 0x90 ... -17 for 0x9f
             stk[0x8e - opcode] = stk[-1]
             stk[-1] = temp
-
+        # Logs (aka "events")
         elif op[:3] == 'LOG':
             """
             0xa0 ... 0xa4, 32/64/96/128/160 + len(data) gas
@@ -554,7 +569,7 @@ def vm_execute(ext, msg, code):
             ext.log(msg.to, topics, data)
             log_log.trace('LOG', to=msg.to, topics=topics, data=list(map(utils.safe_ord, data)))
             # print('LOG', msg.to, topics, list(map(ord, data)))
-
+        # Create a new contract
         elif op == 'CREATE':
             value, mstart, msz = stk.pop(), stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, mstart, msz):
@@ -575,6 +590,7 @@ def vm_execute(ext, msg, code):
                 compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
+        # Calls
         elif op in ('CALL', 'CALLCODE', 'DELEGATECALL', 'STATICCALL'):
             # Pull arguments from the stack
             if op in ('CALL', 'CALLCODE'):
@@ -585,17 +601,24 @@ def vm_execute(ext, msg, code):
                     stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
                 value = 0
             # Static context prohibition
-            if msg.static and value > 0:
+            if msg.static and value > 0 and op == 'CALL':
                 return vm_exception('Cannot make a non-zero-value call inside a static context')
             # Expand memory
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
             to = utils.int_to_addr(to)
-            # Extra gas costs based on hard fork-dependent factors
-            extra_gas = (not ext.account_exists(to)) * (op == 'CALL') * (value > 0 or not ext.post_spurious_dragon_hardfork()) * opcodes.GCALLNEWACCOUNT + \
-                (value > 0) * opcodes.GCALLVALUETRANSFER + \
-                ext.post_anti_dos_hardfork() * opcodes.CALL_SUPPLEMENTAL_GAS
+            # Extra gas costs based on various factors
+            extra_gas = 0
+            # Creating a new account
+            if op == 'CALL' and not ext.account_exists(to) and (value > 0 or not ext.post_spurious_dragon_hardfork()):
+                extra_gas += opcodes.GCALLNEWACCOUNT
+            # Value transfer
+            if value > 0:
+                extra_gas += opcodes.GCALLVALUETRANSFER
+            # Cost increased from 40 to 700 in Tangerine Whistle
+            if ext.post_anti_dos_hardfork():
+                extra_gas += opcodes.CALL_SUPPLEMENTAL_GAS
             # Compute child gas limit
             if ext.post_anti_dos_hardfork():
                 if compustate.gas < extra_gas:
@@ -621,14 +644,14 @@ def vm_execute(ext, msg, code):
                 elif ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, transfers_value=False, static=msg.static)
-                elif op == 'DELEGATECALL':
-                    return vm_exception('OPCODE INACTIVE')
+                elif ext.post_metropolis_hardfork() and op == 'STATICCALL':
+                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                       msg.depth + 1, code_address=to, static=True)
+                elif op in ('DELEGATECALL', 'STATICCALL'):
+                    return vm_exception('OPCODE %s INACTIVE' % op)
                 elif op == 'CALLCODE':
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
                                        msg.depth + 1, code_address=to, static=msg.static)
-                elif op == 'STATICCALL':
-                    call_msg = Message(msg.to, to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to, static=True)
                 else:
                     raise Exception("Lolwut")
                 # Get result
@@ -642,11 +665,13 @@ def vm_execute(ext, msg, code):
                     mem[memoutstart + i] = data[i]
                 compustate.gas += gas
                 compustate.last_returned = bytearray(data)
+        # Return opcode
         elif op == 'RETURN':
             s0, s1 = stk.pop(), stk.pop()
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
+        # Revert opcode (Metropolis)
         elif op == 'REVERT':
             if not ext.post_metropolis_hardfork():
                 return vm_exception('Opcode not yet enabled')
@@ -654,6 +679,7 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, s0, s1):
                 return vm_exception('OOG EXTENDING MEMORY')
             return revert(compustate.gas, mem[s0: s0 + s1])
+        # SUICIDE opcode (also called SELFDESTRUCT)
         elif op == 'SUICIDE':
             if msg.static:
                 return vm_exception('Cannot SUICIDE inside a static context')
@@ -669,17 +695,19 @@ def vm_execute(ext, msg, code):
             ext.set_balance(msg.to, 0)
             ext.add_suicide(msg.to)
             log_msg.debug('SUICIDING', addr=utils.checksum_encode(msg.to), to=utils.checksum_encode(to), xferring=xfer)
-            return 1, compustate.gas, []
+            return peaceful_exit('SUICIDED', compustate.gas, [])
 
         if trace_vm:
-            vm_trace(ext, msg, compustate, processed_code[compustate.prev_pc])
+            vm_trace(ext, msg, compustate, opcode, pushcache)
 
     if trace_vm:
         compustate.reset_prev()
-        vm_trace(ext, msg, compustate, ['', 0, 0, 0, 0, 0])
+        vm_trace(ext, msg, compustate, 0, None)
     return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
 
+# A stub that's mainly here to show what you would need to implement to
+# hook into the EVM
 class VmExtBase():
 
     def __init__(self):

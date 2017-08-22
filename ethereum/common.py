@@ -54,7 +54,7 @@ def calc_difficulty(parent, timestamp, config=default_config):
     return o
 
 # Given a parent state, initialize a block with the given arguments
-def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase='\x35'*20, extra_data='moo ha ha says the laughing cow.'):
+def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase=b'\x35'*20, extra_data='moo ha ha says the laughing cow.'):
     state = state or chain.state
     blk = Block(BlockHeader())
     now = timestamp or chain.time()
@@ -95,6 +95,8 @@ def validate_header(state, header):
             raise ValueError("Timestamp waaaaaaaaaaayy too large")
     if header.gas_limit >= 2**63:
         raise ValueError("Header gas limit too high")
+    if 0 <= header.number - state.config["DAO_FORK_BLKNUM"] < 10 and header.extra_data != state.config["DAO_FORK_BLKEXTRA"]:
+        raise ValueError("Missing extra data for block near DAO fork")
     return True
 
 # Add transactions

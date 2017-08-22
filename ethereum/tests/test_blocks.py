@@ -105,38 +105,40 @@ def run_block_test(params, config_overrides=None):
             assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 
-def get_config_overrides(filename, testname):
-    o = {}
-    if '/TestNetwork/' in filename:
-        o['HOMESTEAD_FORK_BLKNUM'] = 5
-        # o['DAO_FORK_BLKNUM'] = 8
-        o['ANTI_DOS_FORK_BLKNUM'] = 10
-        o['SPURIOUS_DRAGON_FORK_BLKNUM'] = 14
-        o['METROPOLIS_FORK_BLKNUM'] = 16
-    elif '/EIP150/' in filename or 'EIP150' in testname:
-        o['HOMESTEAD_FORK_BLKNUM'] = 0
-        o['DAO_FORK_BLKNUM'] = 2**99
-        o['ANTI_DOS_FORK_BLKNUM'] = 0
-    elif '/Homestead/' in filename or 'Homestead' in testname:
-        o['HOMESTEAD_FORK_BLKNUM'] = 0
-    elif 'EIP158' in testname:
-        o['HOMESTEAD_FORK_BLKNUM'] = 0
-        o['DAO_FORK_BLKNUM'] = 2**99
-        o['ANTI_DOS_FORK_BLKNUM'] = 0
-        o['SPURIOUS_DRAGON_FORK_BLKNUM'] = 0
-    elif 'Metropolis' in testname:
-        o['HOMESTEAD_FORK_BLKNUM'] = 0
-        o['DAO_FORK_BLKNUM'] = 2**99
-        o['ANTI_DOS_FORK_BLKNUM'] = 0
-        o['SPURIOUS_DRAGON_FORK_BLKNUM'] = 0
-        o['METROPOLIS_FORK_BLKNUM'] = 0
-    if 'bcTheDaoTest' in filename:
-        o['DAO_FORK_BLKNUM'] = 8
-    return o
+def get_config_overrides(network):
+    #            Home   DAO    Tang   Spur   Byz    Const
+    if network == 'Frontier':
+        values = 2**99, 2**99, 2**99, 2**99, 2**99, 2**99
+    elif network == 'Homestead':
+        values = 0    , 2**99, 2**99, 2**99, 2**99, 2**99
+    elif network == 'EIP150':
+        values = 0    , 2**99, 0    , 2**99, 2**99, 2**99
+    elif network == 'EIP158':
+        values = 0    , 2**99, 0    , 0    , 2**99, 2**99
+    elif network == 'Byzantium':
+        values = 0    , 2**99, 0    , 0    , 0    , 2**99
+    elif network == 'Constantinople':
+        values = 0    , 2**99, 0    , 0    , 0    , 0
+    elif network == 'FrontierToHomesteadAt5':
+        values = 5    , 2**99, 2**99, 2**99, 2**99, 2**99
+    elif network == 'HomesteadToEIP150At5':
+        values = 0    , 2**99, 5    , 2**99, 2**99, 2**99
+    elif network == 'HomesteadToDaoAt5':
+        values = 0    , 5    , 2**99, 2**99, 2**99, 2**99
+    elif network == 'EIP158ToByzantiumAt5':
+        values = 0    , 2**99, 0    , 0    , 5    , 2**99
+    return {
+        'HOMESTEAD_FORK_BLKNUM': values[0],
+        'DAO_FORK_BLKNUM': values[1],
+        'ANTI_DOS_FORK_BLKNUM': values[2],
+        'SPURIOUS_DRAGON_FORK_BLKNUM': values[3],
+        'METROPOLIS_FORK_BLKNUM': values[4],
+        'CONSTANTINOPLE_FORK_BLKNUM': values[5]
+    }
 
 
 def test_block(filename, testname, testdata):
-    run_block_test(testdata, get_config_overrides(filename, testname))
+    run_block_test(testdata, get_config_overrides(testdata["network"]))
 
 
 skips = {
@@ -145,12 +147,26 @@ skips = {
     ('bl201507071825GO.json', u'randomBlockTest'),
     ('call_OOG_additionalGasCosts2.json', 'call_OOG_additionalGasCosts2_d0g0v0_EIP158'),
     ('MLOAD_Bounds.json', 'MLOAD_Bounds_d0g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g1v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g1v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g0v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g0v1_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v0_EIP158'),
+    ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v1_EIP158'),
+    ('bcTheDaoTest.json', 'DaoTransactions_UncleExtradata'),
+    ('bcTheDaoTest.json', 'DaoTransactions'),
+    ('failed_tx_xcf416c53_d0g0v0.json', 'failed_tx_xcf416c53_d0g0v0_EIP158'),
+    ('createJS_ExampleContract_d0g0v0.json', 'createJS_ExampleContract_d0g0v0_EIP158'),
 }
 
 def exclude(filename, testname, _):
     if 'MemoryStressTest' in filename or 'QuadraticComplexityTest' in filename:
         return True
-    if 'Metropolis' in testname or 'Frontier' in testname or 'Homestead' in testname or 'EIP150' in testname:
+    if 'Byzantium' in testname or 'Constantinople' in testname:
+        return True
+    if 'Frontier' in testname or 'Homestead' in testname or 'EIP150' in testname:
         return True
     return False
 
@@ -171,14 +187,14 @@ def main():
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
-                    print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, get_config_overrides(filename, testname))
+                    print("Testing specified test: %s %s" % (filename, testname))
+                    run_block_test(testdata, get_config_overrides(testdata["network"]))
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
-                if (filename.split('/')[-1], testname) not in skips:
-                    print("Testing: %s %s" % (filename, testname))
-                    run_block_test(testdata, get_config_overrides(filename, testname))
+                if (filename.split('/')[-1], testname) not in skips and not exclude(filename, testname, None):
+                    print("Testing : %s %s" % (filename, testname))
+                    run_block_test(testdata, get_config_overrides(testdata["network"]))
 
 
 if __name__ == '__main__':

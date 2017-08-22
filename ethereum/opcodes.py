@@ -61,15 +61,16 @@ opcodes = {
     0xa2: ['LOG2', 4, 0, 1125],
     0xa3: ['LOG3', 5, 0, 1500],
     0xa4: ['LOG4', 6, 0, 1875],
-    0xe1: ['SLOADBYTES', 3, 0, 50], # to be discontinued
-    0xe2: ['SSTOREBYTES', 3, 0, 0], # to be discontinued
-    0xe3: ['SSIZE', 1, 1, 50], # to be discontinued
+    #0xe1: ['SLOADBYTES', 3, 0, 50], # to be discontinued
+    #0xe2: ['SSTOREBYTES', 3, 0, 0], # to be discontinued
+    #0xe3: ['SSIZE', 1, 1, 50], # to be discontinued
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40], # 700 now
     0xf2: ['CALLCODE', 7, 1, 40], # 700 now
     0xf3: ['RETURN', 2, 0, 0],
     0xf4: ['DELEGATECALL', 6, 1, 40], # 700 now
     0xf5: ['CALLBLACKBOX', 7, 1, 40],
+    0xfa: ['STATICCALL', 6, 1, 40],
     0xfd: ['REVERT', 2, 0, 0],
     0xff: ['SUICIDE', 1, 0, 0], # 5000 now
 }
@@ -125,7 +126,7 @@ GSTORAGEKILL = 5000
 GSTORAGEMOD = 5000
 GSTORAGEADD = 20000
 
-GMODEXPQUADDIVISOR = 20
+GMODEXPQUADDIVISOR = 100
 GECADD = 500
 GECMUL = 2000
 
@@ -142,4 +143,3 @@ BALANCE_SUPPLEMENTAL_GAS = 380
 CALL_CHILD_LIMIT_NUM = 63
 CALL_CHILD_LIMIT_DENOM = 64
 SUICIDE_SUPPLEMENTAL_GAS = 5000
-

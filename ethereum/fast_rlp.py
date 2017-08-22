@@ -67,6 +67,25 @@ def consume_length_prefix(rlp, start):
         l = big_endian_to_int(rlp[start + 1:start + 1 + ll])
         return (list, l, start + 1 + ll)
 
+def optimized_decode_single(x, pos):
+    z = safe_ord(x[pos])
+    if z < 128:
+        return x[pos: pos + 1], 1
+    elif z < 184:
+        return x[pos + 1: pos + z - 127], z - 127
+    else:
+        ll = big_endian_to_int(x[pos + 1: pos + z - 182])
+        return x[pos + z - 182: pos + z - 182 + ll], z - 182 + ll
+
+def optimized_decode_list(rlp):
+    o, pos = [], 0
+    _typ, _len, pos = consume_length_prefix(rlp, pos)
+    while pos < len(rlp):
+        x, inc = optimized_decode_single(rlp, pos)
+        pos += inc
+        o.append(x)
+    return o
+
 #
 if sys.version_info.major == 2:
     encode_optimized = _encode_optimized

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import rlp
-from bitcoin import encode_pubkey, N, encode_privkey
 from rlp.sedes import big_endian_int, binary
 from rlp.utils import str_to_bytes, ascii_chr
 from ethereum.utils import encode_hex
@@ -82,7 +81,7 @@ class Transaction(rlp.Serializable):
                     sighash = utils.sha3(rlpdata)
                 else:
                     raise InvalidTransaction("Invalid V value")
-                if self.r >= N or self.s >= N or self.r == 0 or self.s == 0:
+                if self.r >= secpk1n or self.s >= secpk1n or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 pub = ecrecover_to_pub(sighash, vee, self.r, self.s)
                 if pub == b"\x00" * 64:
@@ -156,6 +155,9 @@ class Transaction(rlp.Serializable):
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.hash == other.hash
 
+    def __lt__(self, other):
+        return isinstance(other, self.__class__) and self.hash < other.hash
+
     def __hash__(self):
         return utils.big_endian_to_int(self.hash)
 
@@ -172,11 +174,11 @@ class Transaction(rlp.Serializable):
     # The >= operator is replaced by > because the integer division N/2 always produces the value
     # which is by 0.5 less than the real N/2
     def check_low_s_metropolis(self):
-        if self.s > N // 2:
+        if self.s > secpk1n // 2:
             raise InvalidTransaction("Invalid signature S value!")
 
     def check_low_s_homestead(self):
-        if self.s > N // 2 or self.s == 0:
+        if self.s > secpk1n // 2 or self.s == 0:
             raise InvalidTransaction("Invalid signature S value!")
 
 

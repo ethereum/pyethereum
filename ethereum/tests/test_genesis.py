@@ -1,8 +1,7 @@
 import os
 import pytest
 import json
-import ethereum.testutils as testutils
-from ethereum.testutils import fixture_to_bytes
+from ethereum.tools import testutils
 import ethereum.utils as utils
 from ethereum.utils import encode_hex
 from ethereum.tests.utils import new_env
@@ -27,7 +26,7 @@ def genesis_fixture():
     # FIXME: assert that link is uptodate
     for k in ('genesis_rlp_hex', 'genesis_state_root', 'genesis_hash'):
         assert k in genesis_fixture
-    return fixture_to_bytes(genesis_fixture)
+    return genesis_fixture
 
 
 @pytest.mark.xfail  # code not in sync with genesis fixtures

@@ -27,6 +27,7 @@ default_config = dict(
     #                   (block.gas_used * 6 / 5) / 1024
     GASLIMIT_EMA_FACTOR=1024,
     GASLIMIT_ADJMAX_FACTOR=1024,
+    BLOCK_GAS_LIMIT=4712388,
     BLKLIM_FACTOR_NOM=3,
     BLKLIM_FACTOR_DEN=2,
     # Network ID
@@ -62,6 +63,8 @@ default_config = dict(
     METROPOLIS_WRAPAROUND=65536,
     METROPOLIS_GETTER_CODE=decode_hex('6000355460205260206020f3'),
     METROPOLIS_DIFF_ADJUSTMENT_CUTOFF=9,
+    # Constantinople fork
+    CONSTANTINOPLE_FORK_BLKNUM = 2**100,
     # DAO fork
     DAO_FORK_BLKNUM=1920000,
     DAO_FORK_BLKHASH=decode_hex('4985f5ca3d2afbec36529aa96f74de3cc10a2a4a6c44f2157a57d2c6059a11bb'),
@@ -96,26 +99,37 @@ class Env(object):
         self.config = config or dict(default_config)
         self.global_config = global_config or dict()
 
+config_frontier = copy.copy(default_config)
+config_frontier["HOMESTEAD_FORK_BLKNUM"] = 2**99
+config_frontier["ANTI_DOS_FORK_BLKNUM"] = 2**99
+config_frontier["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
+config_frontier["METROPOLIS_FORK_BLKNUM"] = 2**99
+config_frontier["CONSTANTINOPLE_FORK_BLKNUM"] = 2**99
+
 config_homestead = copy.copy(default_config)
 config_homestead["HOMESTEAD_FORK_BLKNUM"] = 0
 config_homestead["ANTI_DOS_FORK_BLKNUM"] = 2**99
 config_homestead["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
 config_homestead["METROPOLIS_FORK_BLKNUM"] = 2**99
+config_homestead["CONSTANTINOPLE_FORK_BLKNUM"] = 2**99
 
 config_tangerine = copy.copy(default_config)
 config_tangerine["HOMESTEAD_FORK_BLKNUM"] = 0
 config_tangerine["ANTI_DOS_FORK_BLKNUM"] = 0
 config_tangerine["SPURIOUS_DRAGON_FORK_BLKNUM"] = 2**99
 config_tangerine["METROPOLIS_FORK_BLKNUM"] = 2**99
+config_tangerine["CONSTANTINOPLE_FORK_BLKNUM"] = 2**99
 
 config_spurious = copy.copy(default_config)
 config_spurious["HOMESTEAD_FORK_BLKNUM"] = 0
 config_spurious["ANTI_DOS_FORK_BLKNUM"] = 0
 config_spurious["SPURIOUS_DRAGON_FORK_BLKNUM"] = 0
 config_spurious["METROPOLIS_FORK_BLKNUM"] = 2**99
+config_spurious["CONSTANTINOPLE_FORK_BLKNUM"] = 2**99
 
 config_metropolis = copy.copy(default_config)
 config_metropolis["HOMESTEAD_FORK_BLKNUM"] = 0
 config_metropolis["ANTI_DOS_FORK_BLKNUM"] = 0
 config_metropolis["SPURIOUS_DRAGON_FORK_BLKNUM"] = 0
 config_metropolis["METROPOLIS_FORK_BLKNUM"] = 0
+config_metropolis["CONSTANTINOPLE_FORK_BLKNUM"] = 2**99

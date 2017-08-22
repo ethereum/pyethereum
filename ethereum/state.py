@@ -7,10 +7,10 @@ from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
 from ethereum.trie import Trie
-from ethereum.block import BlockHeader, FakeHeader
 from ethereum.securetrie import SecureTrie
 from ethereum.config import default_config, Env
-from ethereum.db import BaseDB, EphemDB, OverlayDB
+from ethereum.block import FakeHeader
+from ethereum.db import BaseDB, EphemDB, OverlayDB, RefcountDB
 from ethereum.specials import specials as default_specials
 import copy
 import sys
@@ -20,13 +20,10 @@ else:
     from functools import lru_cache
 
 
-ACCOUNT_SPECIAL_PARAMS = ('nonce', 'balance', 'code', 'storage', 'deleted')
-ACCOUNT_OUTPUTTABLE_PARAMS = ('nonce', 'balance', 'code')
 BLANK_HASH = utils.sha3(b'')
+BLANK_ROOT = utils.sha3rlp(b'')
 
-
-RIPEMD160_ADDR = utils.decode_hex(b'0000000000000000000000000000000000000003')
-
+THREE = b'\x00' * 19 + b'\x03'
 
 def snapshot_form(val):
     if is_numeric(val):
@@ -52,18 +49,96 @@ STATE_DEFAULTS = {
     "refunds": 0,
 }
 
+class Account(rlp.Serializable):
 
+    fields = [
+        ('nonce', big_endian_int),
+        ('balance', big_endian_int),
+        ('storage', trie_root),
+        ('code_hash', hash32)
+    ]
+
+    def __init__(self, nonce, balance, storage, code_hash, env, address):
+        assert isinstance(env.db, BaseDB)
+        self.env = env
+        self.address = address
+        super(Account, self).__init__(nonce, balance, storage, code_hash)
+        self.storage_cache = {}
+        self.storage_trie = SecureTrie(Trie(RefcountDB(self.env.db)))
+        self.storage_trie.root_hash = self.storage
+        self.touched = False
+        self.existent_at_start = True
+        self._mutable = True
+        self.deleted = False
+
+    def commit(self):
+        for k, v in self.storage_cache.items():
+            if v:
+                self.storage_trie.update(utils.encode_int32(k), rlp.encode(v))
+            else:
+                self.storage_trie.delete(utils.encode_int32(k))
+        self.storage_cache = {}
+        self.storage = self.storage_trie.root_hash
+
+    @property
+    def code(self):
+        return self.env.db.get(self.code_hash)
+
+    @code.setter
+    def code(self, value):
+        self.code_hash = utils.sha3(value)
+        # Technically a db storage leak, but doesn't really matter; the only
+        # thing that fails to get garbage collected is when code disappears due
+        # to a suicide
+        self.env.db.put(self.code_hash, value)
+
+    def get_storage_data(self, key):
+        if key not in self.storage_cache:
+            v = self.storage_trie.get(utils.encode_int32(key))
+            self.storage_cache[key] = utils.big_endian_to_int(rlp.decode(v) if v else b'')
+        return self.storage_cache[key]
+
+    def set_storage_data(self, key, value):
+        self.storage_cache[key] = value
+
+    @classmethod
+    def blank_account(cls, env, address, initial_nonce=0):
+        env.db.put(BLANK_HASH, b'')
+        o = cls(initial_nonce, 0, trie.BLANK_ROOT, BLANK_HASH, env, address)
+        o.existent_at_start = False
+        return o
+
+    def is_blank(self):
+        return self.nonce == 0 and self.balance == 0 and self.code_hash == BLANK_HASH
+
+    @property
+    def exists(self):
+        if self.is_blank():
+            return self.touched or (self.existent_at_start and not self.deleted)
+        return True
+
+    def to_dict(self):
+        odict = self.storage_trie.to_dict()
+        for k, v in self.storage_cache.items():
+            odict[utils.encode_int(k)] = rlp.encode(utils.encode_int(v))
+        return {'balance': str(self.balance), 'nonce': str(self.nonce), 'code': '0x'+encode_hex(self.code),
+                'storage': {'0x'+encode_hex(key.lstrip(b'\x00') or b'\x00'):
+                            '0x'+encode_hex(rlp.decode(val)) for key, val in odict.items()} }
+
+#from ethereum.state import State
 class State():
 
-    def __init__(self, root=b'', env=Env(), **kwargs):
+    def __init__(self, root=b'', env=Env(), executing_on_head=False, **kwargs):
         self.env = env
-        self.trie = SecureTrie(Trie(self.db, root))
+        self.trie = SecureTrie(Trie(RefcountDB(self.db), root))
         for k, v in STATE_DEFAULTS.items():
             setattr(self, k, kwargs.get(k, copy.copy(v)))
         self.journal = []
         self.cache = {}
-        self.modified = {}
         self.log_listeners = []
+        self.deletes = []
+        self.changed = {}
+        self.executing_on_head = executing_on_head
 
     @property
     def db(self):
@@ -83,89 +158,165 @@ class State():
     def add_block_header(self, block_header):
         self.prev_headers = [block_header] + self.prev_headers
 
-    def typecheck_storage(self, k, v):
-        if k == 'nonce' or k == 'balance':
-            assert is_numeric(v)
-        elif k == 'code':
-            assert is_string(v)
-        elif k == 'storage':
-            assert is_string(v) and len(v) == 32
-        elif k == 'deleted':
-            assert isinstance(v, bool)
+    def get_and_cache_account(self, address):
+        if address in self.cache:
+            return self.cache[address]
+        if self.executing_on_head and False:
+            try:
+                rlpdata = self.db.get(b'address:'+address)
+            except KeyError:
+                rlpdata = b''
         else:
-            assert is_string(v)
-        return True
+            rlpdata = self.trie.get(address)
+        if rlpdata != trie.BLANK_NODE:
+            o = rlp.decode(rlpdata, Account, env=self.env, address=address)
+        else:
+            o = Account.blank_account(self.env, address, self.config['ACCOUNT_INITIAL_NONCE'])
+        self.cache[address] = o
+        o._mutable = True
+        o._cached_rlp = None
+        return o
 
-    def set_storage(self, addr, k, v):
-        if is_numeric(k):
-            k = zpad(encode_int(k), 32)
-        self.typecheck_storage(k, v)
-        addr = normalize_address(addr)
-        preval = self.get_storage(addr, k)
-        self.journal.append((addr, k, preval, addr in self.modified))
-        if self.cache[addr].get('deleted', False):
-            self.journal.append((addr, 'deleted', True, addr in self.modified))
-            self.cache[addr]['deleted'] = False
-        self.cache[addr][k] = v
-        assert self.get_storage(addr, k) == v
-        if addr not in self.modified:
-            self.modified[addr] = {}
-        self.modified[addr][k] = True
+    def get_balance(self, address):
+        return self.get_and_cache_account(utils.normalize_address(address)).balance
 
-    def set_param(self, k, v):
-        self.journal.append((k, None, getattr(self, k), None))
-        setattr(self, k, v)
+    def get_code(self, address):
+        return self.get_and_cache_account(utils.normalize_address(address)).code
 
-    def add_to_list(self, k, v):
-        l = getattr(self, k)
-        self.journal.append((k, None, len(l), None))
-        l.append(v)
+    def get_nonce(self, address):
+        return self.get_and_cache_account(utils.normalize_address(address)).nonce
 
-    def add_suicide(self, addr):
-        self.add_to_list('suicides', addr)
+    def set_and_journal(self, acct, param, val):
+        # self.journal.append((acct, param, getattr(acct, param)))
+        preval = getattr(acct, param)
+        self.journal.append(lambda: setattr(acct, param, preval))
+        setattr(acct, param, val)
+
+    def set_balance(self, address, value):
+        acct = self.get_and_cache_account(utils.normalize_address(address))
+        self.set_and_journal(acct, 'balance', value)
+        self.set_and_journal(acct, 'touched', True)
+
+    def set_code(self, address, value):
+        # assert is_string(value)
+        acct = self.get_and_cache_account(utils.normalize_address(address))
+        self.set_and_journal(acct, 'code', value)
+        self.set_and_journal(acct, 'touched', True)
+
+    def set_nonce(self, address, value):
+        acct = self.get_and_cache_account(utils.normalize_address(address))
+        self.set_and_journal(acct, 'nonce', value)
+        self.set_and_journal(acct, 'touched', True)
+
+    def delta_balance(self, address, value):
+        address = utils.normalize_address(address)
+        acct = self.get_and_cache_account(address)
+        newbal = acct.balance + value
+        self.set_and_journal(acct, 'balance', newbal)
+        self.set_and_journal(acct, 'touched', True)
+
+    def increment_nonce(self, address):
+        address = utils.normalize_address(address)
+        acct = self.get_and_cache_account(address)
+        newnonce = acct.nonce + 1
+        self.set_and_journal(acct, 'nonce', newnonce)
+        self.set_and_journal(acct, 'touched', True)
+        
+    def get_storage_data(self, address, key):
+        return self.get_and_cache_account(utils.normalize_address(address)).get_storage_data(key)
+
+    def set_storage_data(self, address, key, value):
+        acct = self.get_and_cache_account(utils.normalize_address(address))
+        preval = acct.get_storage_data(key)
+        acct.set_storage_data(key, value)
+        self.journal.append(lambda: acct.set_storage_data(key, preval))
+        self.set_and_journal(acct, 'touched', True)
+
+    def add_suicide(self, address):
+        self.suicides.append(address)
+        self.journal.append(lambda: self.suicides.pop())
+
+    def add_log(self, log):
+        for listener in self.log_listeners:
+            listener(log)
+        self.logs.append(log)
+        self.journal.append(lambda: self.logs.pop())
 
     def add_receipt(self, receipt):
-        self.add_to_list('receipts', receipt)
+        self.receipts.append(receipt)
+        self.journal.append(lambda: self.receipts.pop())
 
-    # It's unsafe because it passes through the cache
-    def _get_account_unsafe(self, addr):
-        rlpdata = self.trie.get(addr)
-        if rlpdata != trie.BLANK_NODE:
-            o = rlp.decode(rlpdata, Account, db=self.db)
-            o._mutable = True
-            return o
-        else:
-            return Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
+    def add_refund(self, value):
+        preval = self.refunds
+        self.refunds += value
+        self.journal.append(lambda: setattr(self.refunds, preval))
 
-    def get_storage(self, addr, k):
-        if is_numeric(k):
-            k = zpad(encode_int(k), 32)
-        addr = normalize_address(addr)
-        if addr not in self.cache:
-            self.cache[addr] = {}
-        elif k in self.cache[addr]:
-            return self.cache[addr][k]
-        acct = self._get_account_unsafe(addr)
-        if k in ACCOUNT_SPECIAL_PARAMS:
-            v = getattr(acct, k)
+    def snapshot(self):
+        return (self.trie.root_hash, len(self.journal), {k: copy.copy(getattr(self, k)) for k in STATE_DEFAULTS})
+
+    def revert(self, snapshot):
+        h, L, auxvars = snapshot
+        three_touched = self.cache[THREE].touched if THREE in self.cache else False # Compatibility with weird geth+parity bug
+        while len(self.journal) > L:
+            try:
+                lastitem = self.journal.pop()
+                lastitem()
+            except Exception as e:
+                print(e)
+        if h != self.trie.root_hash:
+            assert L == 0
+            self.trie.root_hash = h
+            self.cache = {}
+        for k in STATE_DEFAULTS:
+            setattr(self, k, copy.copy(auxvars[k]))
+        if three_touched and 2675000 < self.block_number < 2675200 : # Compatibility with weird geth+parity bug
+            self.delta_balance(THREE, 0)
+
+    def set_param(self, k, v):
+        preval = getattr(self, k)
+        self.journal.append(lambda: setattr(self, k, preval))
+        setattr(self, k, v)
+
+    def is_SERENITY(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['SERENITY_FORK_BLKNUM']
+        else: return self.block_number >= self.config['SERENITY_FORK_BLKNUM']
+
+    def is_HOMESTEAD(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['HOMESTEAD_FORK_BLKNUM']
+        else: return self.block_number >= self.config['HOMESTEAD_FORK_BLKNUM']
+
+    def is_METROPOLIS(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['METROPOLIS_FORK_BLKNUM']
+        else: return self.block_number >= self.config['METROPOLIS_FORK_BLKNUM']
+
+    def is_CONSTANTINOPLE(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['CONSTANTINOPLE_FORK_BLKNUM']
+        else: return self.block_number >= self.config['CONSTANTINOPLE_FORK_BLKNUM']
+
+    def is_ANTI_DOS(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['ANTI_DOS_FORK_BLKNUM']
+        else: return self.block_number >= self.config['ANTI_DOS_FORK_BLKNUM']
+
+    def is_SPURIOUS_DRAGON(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['SPURIOUS_DRAGON_FORK_BLKNUM']
+        else: return self.block_number >= self.config['SPURIOUS_DRAGON_FORK_BLKNUM']
+
+    def is_DAO(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['DAO_FORK_BLKNUM']
+        else: return self.block_number >= self.config['DAO_FORK_BLKNUM']
+
+    def account_exists(self, address):
+        if self.is_SPURIOUS_DRAGON():
+            o = not self.get_and_cache_account(utils.normalize_address(address)).is_blank()
         else:
-            t = SecureTrie(Trie(self.trie.db))
-            if 'storage' in self.cache[addr]:
-                t.root_hash = self.cache[addr]['storage']
+            a = self.get_and_cache_account(address)
+            if a.deleted and not a.touched:
+                return False
+            if a.touched:
+                return True
             else:
-                t.root_hash = acct.storage
-            v = t.get(k)
-            v = rlp.decode(v) if v else b''
-        self.cache[addr][k] = v
-        return v
-
-    get_balance = lambda self, addr: self.get_storage(addr, 'balance')
-
-    # set_balance = lambda self, addr, v: self.set_storage(addr, 'balance', v)
-    def set_balance( self, addr, v):
-        self.set_storage(addr, 'balance', v)
-
-    delta_balance = lambda self, addr, v: self.set_balance(addr, self.get_balance(addr) + v)
+                return a.existent_at_start
+        return o
 
     def transfer_value(self, from_addr, to_addr, value):
         assert value >= 0
@@ -175,191 +326,78 @@ class State():
             return True
         return False
 
-    get_nonce = lambda self, addr: self.get_storage(addr, 'nonce')
-    set_nonce = lambda self, addr, v: self.set_storage(addr, 'nonce', v)
-    increment_nonce = lambda self, addr: self.set_nonce(addr, self.get_nonce(addr) + 1)
-    get_code = lambda self, addr: self.get_storage(addr, 'code')
-    set_code = lambda self, addr, v: self.set_storage(addr, 'code', v)
-    get_storage_bytes = lambda self, addr, k: self.get_storage(addr, k)
-    set_storage_bytes = lambda self, addr, k, v: self.set_storage(addr, k, v)
+    def account_to_dict(self, address):
+        return self.get_and_cache_account(utils.normalize_address(address)).to_dict()
 
-    # get_storage_data = lambda self, addr, k: big_endian_to_int(self.get_storage(addr, k)[-32:])
-    def get_storage_data (self, addr, k):
-        o = big_endian_to_int(self.get_storage(addr, k)[-32:])
-        return o
-
-    # set_storage_data = lambda self, addr, k, v: self.set_storage(addr, k, encode_int(v) if isinstance(v, (int, long)) else v)
-    def set_storage_data (self, addr, k, v):
-        self.set_storage(addr, k, encode_int(v) if is_numeric(v) and k not in ACCOUNT_SPECIAL_PARAMS else v)
-
-    def account_exists(self, addr):
-        if self.is_SPURIOUS_DRAGON():
-            return self.get_nonce(addr) or self.get_balance(addr) or self.get_code(addr)
-        if addr not in self.modified:
-            o = self.trie.get(addr) != trie.BLANK_NODE
-        elif self.cache[addr].get('deleted', False):
-            o = False
-        else:
-            o = True
-        return o
-
-    def reset_storage(self, addr):
-        self.set_storage(addr, 'storage', trie.BLANK_ROOT)
-        if addr in self.cache:
-            for k in self.cache[addr]:
-                if k not in ACCOUNT_SPECIAL_PARAMS:
-                    self.set_storage(addr, k, b'')
-        t = SecureTrie(Trie(self.trie.db))
-        acct = self._get_account_unsafe(addr)
-        t.root_hash = acct.storage
-        for k in t.to_dict().keys():
-            self.set_storage(addr, k, b'')
-
-    # Commit the cache to the trie
     def commit(self, allow_empties=False):
-        rt = self.trie.root_hash
-        for addr, subcache in self.cache.items():
-            if addr not in self.modified:
-                continue
-            acct = self._get_account_unsafe(addr)
-            t = SecureTrie(Trie(self.trie.db))
-            t.root_hash = acct.storage
-            modified = False
-            for key, value in subcache.items():
-                if key in ACCOUNT_SPECIAL_PARAMS:
-                    if getattr(acct, key) != value:
-                        assert acct._mutable
-                        setattr(acct, key, value)
-                        modified = True
-                else:
-                    curval = t.get(key)
-                    curval = rlp.decode(curval) if curval else ''
-                    if key in self.modified.get(addr, {}) and value != curval:
-                        if value:
-                            t.update(utils.zpad(key, 32), rlp.encode(value))
-                        else:
-                            t.delete(utils.zpad(key, 32))
-                        modified = True
-            # print 'new account storage', repr(addr), t.to_dict()
-            # print 'new account storage 2', repr(addr), {k: t.get(k) for k in t.to_dict().keys()}
-            acct.storage = t.root_hash
-            if addr in self.modified or True:
-                if not acct.deleted:
-                    acct._cached_rlp = None
-                    if self.is_SPURIOUS_DRAGON() and acct.is_blank() and not allow_empties:
-                        self.trie.delete(addr)
-                    else:
-                        self.trie.update(addr, rlp.encode(acct))
+        for addr, acct in self.cache.items():
+            if acct.touched or acct.deleted:
+                acct.commit()
+                self.deletes.extend(acct.storage_trie.deletes)
+                self.changed[addr] = True
+                if self.account_exists(addr) or allow_empties:
+                    self.trie.update(addr, rlp.encode(acct))
+                    if self.executing_on_head:
+                        self.db.put(b'address:'+addr, rlp.encode(acct))
                 else:
                     self.trie.delete(addr)
+                    if self.executing_on_head:
+                        self.db.delete(b'address:'+addr)
+        self.deletes.extend(self.trie.deletes)
+        self.trie.deletes = []
         self.cache = {}
-        self.modified = {}
-        self.reset_journal()
-
-    def reset_journal(self):
-        "resets the journal. should be called after State.commit unless there is a better strategy"
         self.journal = []
 
+    def to_dict(self):
+        for addr in self.trie.to_dict().keys():
+            self.get_and_cache_account(addr)
+        return {encode_hex(addr): acct.to_dict() for addr, acct in self.cache.items()}
 
     def del_account(self, address):
-        """Delete an account.
-
-        :param address: the address of the account (binary or hex string)
-        """
-        if len(address) == 40:
-            address = decode_hex(address)
-        assert len(address) == 20
-        blank_acct = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
-        for param in ACCOUNT_OUTPUTTABLE_PARAMS:
-            self.set_storage(address, param, getattr(blank_acct, param))
-        self.reset_storage(address)
         self.set_balance(address, 0)
         self.set_nonce(address, 0)
         self.set_code(address, b'')
-        self.set_storage(address, 'deleted', True)
+        self.reset_storage(address)
+        self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'deleted', True)
+        self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'touched', False)
+        # self.set_and_journal(self.get_and_cache_account(utils.normalize_address(address)), 'existent_at_start', False)
 
-    def add_log(self, log):
-        for listener in self.log_listeners:
-            listener(log)
-        self.add_to_list('logs', log)
+    def reset_storage(self, address):
+        acct = self.get_and_cache_account(address)
+        pre_cache = acct.storage_cache
+        acct.storage_cache = {}
+        self.journal.append(lambda: setattr(acct, 'storage_cache', pre_cache))
+        pre_root = acct.storage_trie.root_hash
+        self.journal.append(lambda: setattr(acct.storage_trie, 'root_hash', pre_root))
+        acct.storage_trie.root_hash = BLANK_ROOT
 
-    # Returns a value x, where State.revert(x) at any later point will return
-    # you to the point at which the snapshot was made (unless journal_reset was called).
-    def snapshot(self):
-        return (self.trie.root_hash, len(self.journal), {k: copy.copy(getattr(self, k)) for k in STATE_DEFAULTS})
-
-    # Reverts to the provided snapshot
-    def revert(self, snapshot):
-        root, journal_length, auxvars = snapshot
-        if root != self.trie.root_hash and journal_length != 0:
-            raise Exception("Cannot return to this snapshot")
-        while len(self.journal) > journal_length:
-            addr, key, preval, premod = self.journal.pop()
-            if addr in STATE_DEFAULTS:
-                if isinstance(STATE_DEFAULTS[addr], list):
-                    setattr(self, addr, getattr(self, addr)[:preval])
-                else:
-                    setattr(self, addr, preval)
-            elif root == self.trie.root_hash:
-                self.cache[addr][key] = preval
-                # Sync up with Parity's EIP161 bug: keep ripemd160 modified so account cleaning will be triggered later
-                # https://github.com/ethereum/go-ethereum/pull/3341/files#r89548312
-                if not premod and addr != RIPEMD160_ADDR:
-                    del self.modified[addr]
-        if root != self.trie.root_hash:
-            self.trie.root_hash = root
-            self.cache = {}
-            self.modified = {}
-        for k in STATE_DEFAULTS:
-            setattr(self, k, copy.copy(auxvars[k]))
-
-    # Prints the state for a single account
-    def account_to_dict(self, address):
-        address = normalize_address(address)
-        acct = self._get_account_unsafe(address)
-        acct_trie = SecureTrie(Trie(self.db))
-        acct_trie.root_hash = acct.storage
-        odict = acct_trie.to_dict()
-        if address in self.cache:
-            for k, v in self.cache[address].items():
-                if k not in ACCOUNT_SPECIAL_PARAMS:
-                    odict[k] = v 
-        return {'0x'+encode_hex(key): '0x'+encode_hex(val) for key, val in odict.items()}
-
-    # Converts the state tree to a dictionary
-    def to_dict(self):
-        state_dump = {}
-        for address in self.trie.to_dict().keys():
-            acct = self._get_account_unsafe(address)
-            storage_dump = {}
-            acct_trie = SecureTrie(Trie(self.db))
-            acct_trie.root_hash = acct.storage
-            for key, v in acct_trie.to_dict().items():
-                storage_dump['0x'+encode_hex(key.lstrip(b'\x00') or b'\x00')] = '0x'+encode_hex(rlp.decode(v))
-            acct_dump = {"storage": storage_dump}
-            for c in ACCOUNT_OUTPUTTABLE_PARAMS:
-                acct_dump[c] = snapshot_form(getattr(acct, c))
-            state_dump[encode_hex(address)] = acct_dump
-        for address, v in self.cache.items():
-            if encode_hex(address) not in state_dump:
-                state_dump[encode_hex(address)] = {"storage":{}}
-                blanky = Account.blank_account(self.db, self.config['ACCOUNT_INITIAL_NONCE'])
-                for c in ACCOUNT_OUTPUTTABLE_PARAMS:
-                    state_dump[encode_hex(address)][c] = snapshot_form(getattr(blanky, c))
-            acct_dump = state_dump[encode_hex(address)]
-            for key, val in v.items():
-                if key in ACCOUNT_SPECIAL_PARAMS and key != 'storage':
-                    acct_dump[key] = snapshot_form(val)
-                else:
-                    if val:
-                        acct_dump["storage"]['0x'+encode_hex(key)] = '0x'+encode_hex(val)
-                    elif encode_hex(key) in acct_dump["storage"]:
-                        del acct_dump["storage"][val]
-        return state_dump
+    # Creates a snapshot from a state
+    def to_snapshot(self, root_only=False, no_prevblocks=False):
+        snapshot = {}
+        if root_only:
+            # Smaller snapshot format that only includes the state root
+            # (requires original DB to re-initialize)
+            snapshot["state_root"] = '0x'+encode_hex(self.trie.root_hash)
+        else:
+            # "Full" snapshot
+            snapshot["alloc"] = self.to_dict()
+        # Save non-state-root variables
+        for k, default in STATE_DEFAULTS.items():
+            default = copy.copy(default)
+            v = getattr(self, k)
+            if is_numeric(default):
+                snapshot[k] = str(v)
+            elif isinstance(default, (str, bytes)):
+                snapshot[k] = '0x'+encode_hex(v)
+            elif k == 'prev_headers' and not no_prevblocks:
+                snapshot[k] = [prev_header_to_dict(h) for h in v[:self.config['PREV_HEADER_DEPTH']]]
+            elif k == 'recent_uncles' and not no_prevblocks:
+                snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
+        return snapshot
 
     # Creates a state from a snapshot
     @classmethod
-    def from_snapshot(cls, snapshot_data, env):
+    def from_snapshot(cls, snapshot_data, env, executing_on_head=False):
         state = State(env = env)
         if "alloc" in snapshot_data:
             for addr, data in snapshot_data["alloc"].items():
@@ -404,32 +442,12 @@ class State():
                 else:
                     uncles = default
                 setattr(state, k, uncles)
+        if executing_on_head:
+            state.executing_on_head = True
         state.commit()
+        state.changed = {}
         return state
 
-    # Creates a snapshot from a state
-    def to_snapshot(self, root_only=False, no_prevblocks=False):
-        snapshot = {}
-        if root_only:
-            # Smaller snapshot format that only includes the state root
-            # (requires original DB to re-initialize)
-            snapshot["state_root"] = '0x'+encode_hex(self.trie.root_hash)
-        else:
-            # "Full" snapshot
-            snapshot["alloc"] = self.to_dict()
-        # Save non-state-root variables
-        for k, default in STATE_DEFAULTS.items():
-            default = copy.copy(default)
-            v = getattr(self, k)
-            if is_numeric(default):
-                snapshot[k] = str(v)
-            elif isinstance(default, (str, bytes)):
-                snapshot[k] = '0x'+encode_hex(v)
-            elif k == 'prev_headers' and not no_prevblocks:
-                snapshot[k] = ['0x' + encode_hex(rlp.encode(h)) for h in v[:self.config['PREV_HEADER_DEPTH']]]
-            elif k == 'recent_uncles' and not no_prevblocks:
-                snapshot[k] = {str(n): ['0x'+encode_hex(h) for h in headers] for n, headers in v.items()}
-        return snapshot
 
     def ephemeral_clone(self):
         snapshot = self.to_snapshot(root_only=True, no_prevblocks=True)
@@ -439,103 +457,26 @@ class State():
             setattr(s, param, getattr(self, param))
         s.recent_uncles = self.recent_uncles
         s.prev_headers = self.prev_headers
-        s.journal = copy.deepcopy(self.journal)
-        s.cache = copy.deepcopy(self.cache)
-        s.modified = copy.deepcopy(self.modified)
+        for acct in self.cache.values():
+            assert not acct.touched or not acct.deleted
+        s.journal = copy.copy(self.journal)
+        s.cache = {}
         return s
 
-    # forks
 
-    def _is_X_fork(self, name, at_fork_height=False):
-        height =  self.config[name + '_FORK_BLKNUM']
-        if self.block_number < height:
-            return False
-        elif at_fork_height and self.block_number > height:
-            return False
-        return True
-
-    def is_METROPOLIS(self, at_fork_height=False):
-        return self._is_X_fork('METROPOLIS', at_fork_height)
-
-    def is_HOMESTEAD(self, at_fork_height=False):
-        return self._is_X_fork('HOMESTEAD', at_fork_height)
-
-    def is_SERENITY(self, at_fork_height=False):
-        return self._is_X_fork('SERENITY', at_fork_height)
-
-    def is_ANTI_DOS(self, at_fork_height=False):
-        return self._is_X_fork('ANTI_DOS', at_fork_height)
-
-    def is_SPURIOUS_DRAGON(self, at_fork_height=False):
-        return self._is_X_fork('SPURIOUS_DRAGON', at_fork_height)
-
-    def is_DAO(self, at_fork_height=False):
-        return self._is_X_fork('DAO', at_fork_height)
+def prev_header_to_dict(h):
+    return {
+        "hash": '0x'+encode_hex(h.hash),
+        "number": str(h.number),
+        "timestamp": str(h.timestamp),
+        "difficulty": str(h.difficulty),
+        "gas_used": str(h.gas_used),
+        "gas_limit": str(h.gas_limit),
+        "uncles_hash": '0x'+encode_hex(h.uncles_hash)
+    }
 
 
 BLANK_UNCLES_HASH = sha3(rlp.encode([]))
-
-
-class Account(rlp.Serializable):
-
-    """An Ethereum account.
-
-    :ivar nonce: the account's nonce (the number of transactions sent by the
-                 account)
-    :ivar balance: the account's balance in wei
-    :ivar storage: the root of the account's storage trie
-    :ivar code_hash: the SHA3 hash of the code associated with the account
-    :ivar db: the database in which the account's code is stored
-    """
-
-    fields = [
-        ('nonce', big_endian_int),
-        ('balance', big_endian_int),
-        ('storage', trie_root),
-        ('code_hash', hash32)
-    ]
-
-    def __init__(self, nonce, balance, storage, code_hash, db):
-        assert isinstance(db, BaseDB)
-        self.db = db
-        self._mutable = True
-        self.deleted = False
-        super(Account, self).__init__(nonce, balance, storage, code_hash)
-
-    @property
-    def code(self):
-        """The EVM code of the account.
-
-        This property will be read from or written to the db at each access,
-        with :ivar:`code_hash` used as key.
-        """
-        return self.db.get(self.code_hash)
-
-    @code.setter
-    def code(self, value):
-        self.code_hash = utils.sha3(value)
-        # Technically a db storage leak, but doesn't really matter; the only
-        # thing that fails to get garbage collected is when code disappears due
-        # to a suicide
-        self.db.inc_refcount(self.code_hash, value)
-
-    @classmethod
-    def blank_account(cls, db, initial_nonce=0):
-        """Create a blank account
-
-        The returned account will have zero nonce and balance, a blank storage
-        trie and empty code.
-
-        :param db: the db in which the account will store its code.
-        """
-        code_hash = utils.sha3(b'')
-        db.put(code_hash, b'')
-        o = cls(initial_nonce, 0, trie.BLANK_ROOT, code_hash, db)
-        o._mutable = True
-        return o
-
-    def is_blank(self):
-        return self.nonce == 0 and self.balance == 0 and self.code_hash == BLANK_HASH
 
 def dict_to_prev_header(h):
     return FakeHeader(hash=parse_as_bin(h['hash']),

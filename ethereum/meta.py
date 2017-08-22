@@ -42,10 +42,10 @@ def apply_block(state, block):
 def make_head_candidate(chain, txqueue=None,
                         parent=None,
                         timestamp=None,
-                        coinbase='\x35'*20,
+                        coinbase=b'\x35'*20,
                         extra_data='moo ha ha says the laughing cow.',
                         min_gasprice=0):
-    log.info('Creating head candidate')
+    log.debug('Creating head candidate')
     if parent is None:
         temp_state = State.from_snapshot(chain.state.to_snapshot(root_only=True), chain.env)
     else:
@@ -65,5 +65,5 @@ def make_head_candidate(chain, txqueue=None,
     cs.finalize(temp_state, blk)
     # Set state root, receipt root, etc
     set_execution_results(temp_state, blk)
-    log.info('Created head candidate successfully')
+    log.debug('Created head candidate successfully')
     return blk, temp_state

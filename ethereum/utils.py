@@ -4,19 +4,20 @@ try:
 except ImportError:
     import sha3 as _sha3
     sha3_256 = lambda x: _sha3.keccak_256(x).digest()
-from bitcoin import privtopub
+from py_ecc.secp256k1 import privtopub, ecdsa_raw_sign, ecdsa_raw_recover
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
 from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
 import random
 
+
 try:
-    import secp256k1
+    import coincurve
 except ImportError:
     import warnings
-    warnings.warn('could not import secp256k1', ImportWarning)
-    secp256k1 = None
+    warnings.warn('could not import coincurve', ImportWarning)
+    coincurve = None
 
 big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
 int_to_big_endian = lambda x: big_endian_int.serialize(x)
@@ -84,38 +85,28 @@ else:
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
-    if secp256k1:
-        # Legendre symbol check; the secp256k1 library does not seem to do this
-        pk = secp256k1.PublicKey(flags=secp256k1.ALL_FLAGS)
-        xc = r * r * r + 7
-        assert pow(xc, (SECP256K1P - 1) // 2, SECP256K1P) == 1
+    if coincurve and hasattr(coincurve, "PublicKey"):
         try:
-            pk.public_key = pk.ecdsa_recover(
+            pk = coincurve.PublicKey.from_signature_and_message(
+                zpad(utils.bytearray_to_bytestr(int_to_32bytearray(r)), 32) + zpad(utils.bytearray_to_bytestr(int_to_32bytearray(s)), 32) +
+                utils.ascii_chr(v - 27),
                 rawhash,
-                pk.ecdsa_recoverable_deserialize(
-                    zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) +
-                    zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32),
-                    v - 27
-                ),
-                raw=True
+                hasher=None,
             )
-            pub = pk.serialize(compressed=False)[1:]
+            pub = pk.format(compressed=False)[1:]
         except:
             pub = b"\x00" * 64
     else:
-        recovered_addr = ecdsa_raw_recover(rawhash, (v, r, s))
-        pub = encode_pubkey(recovered_addr, 'bin_electrum')
+        x, y = ecdsa_raw_recover(rawhash, (v, r, s))
+        pub = encode_int32(x) + encode_int32(y)
     assert len(pub) == 64
     return pub
 
 
 def ecsign(rawhash, key):
-    if secp256k1 and hasattr(secp256k1, 'PrivateKey'):
-        pk = secp256k1.PrivateKey(key, raw=True)
-        signature = pk.ecdsa_recoverable_serialize(
-            pk.ecdsa_sign_recoverable(rawhash, raw=True)
-        )
-        signature = signature[0] + bytearray_to_bytestr([signature[1]])
+    if coincurve and hasattr(coincurve, 'PrivateKey'):
+        pk = coincurve.PrivateKey(key)
+        signature = pk.sign_recoverable(msghash, hasher=None)
         v = safe_ord(signature[64]) + 27
         r = big_endian_to_int(signature[0:32])
         s = big_endian_to_int(signature[32:64])
@@ -183,10 +174,10 @@ def sha3(seed):
 assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def privtoaddr(x):
-    if len(x) > 32:
-        x = decode_hex(x)
-    return sha3(privtopub(x)[1:])[12:]
+def privtoaddr(k):
+    k = normalize_key(k)
+    x, y  = privtopub(k)
+    return sha3(encode_int32(x) + encode_int32(y))[12:]
 
 
 def checksum_encode(addr): # Takes a 20-byte binary address as input
@@ -200,30 +191,8 @@ def checksum_encode(addr): # Takes a 20-byte binary address as input
             o += c.upper() if (v & (2**(255 - 4*i))) else c.lower()
     return '0x'+o
 
-
-def add_cool_checksum(addr):
-    addr = normalize_address(addr)
-    addr_hex = encode_hex(addr)
-
-    o = ''
-    h = encode_hex(sha3(addr_hex))
-    if not isinstance(addr_hex, str):
-        # py3 bytes sequence
-        addr_hex = list(chr(c) for c in addr_hex)
-        h = list(chr(c) for c in h)
-
-    for i, c in enumerate(addr_hex):
-        if c in '0123456789':
-            o += c
-        else:
-            o += c.lower() if h[i] in '01234567' else c.upper()
-    return '0x' + o
-
-
-def check_and_strip_cool_checksum(addr):
-    assert add_cool_checksum(addr.lower()) == addr
-    return normalize_address(addr)
-
+def check_checksum(addr):
+    return checksum_encode(normalize_address(addr)) == addr
 
 def normalize_address(x, allow_blank=False):
     if is_numeric(x):
@@ -355,21 +324,21 @@ def sha3rlp(x):
 
 
 def decode_bin(v):
-    '''decodes a bytearray from serialization'''
+    """decodes a bytearray from serialization"""
     if not is_string(v):
         raise Exception("Value must be binary, not RLP array")
     return v
 
 
 def decode_addr(v):
-    '''decodes an address from serialization'''
+    """decodes an address from serialization"""
     if len(v) not in [0, 20]:
         raise Exception("Serialized addresses must be empty or 20 bytes long!")
     return encode_hex(v)
 
 
 def decode_int(v):
-    '''decodes and integer from serialization'''
+    """decodes and integer from serialization"""
     if len(v) > 0 and (v[0] == b'\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
@@ -380,17 +349,17 @@ def decode_int256(v):
 
 
 def encode_bin(v):
-    '''encodes a bytearray into serialization'''
+    """encodes a bytearray into serialization"""
     return v
 
 
 def encode_root(v):
-    '''encodes a trie root into serialization'''
+    """encodes a trie root into serialization"""
     return v
 
 
 def encode_int(v):
-    '''encodes an integer into serialization'''
+    """encodes an integer into serialization"""
     if not is_numeric(v) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
@@ -467,7 +436,7 @@ def parse_as_int(s):
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
-    ''' utility function to facilitate debug, it will print input args before
+    """ utility function to facilitate debug, it will print input args before
     function call, and print return value after function call
 
     usage:
@@ -478,7 +447,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
 
     :param ignore_first_arg: whether print the first arg or not.
     useful when ignore the `self` parameter of an object method call
-    '''
+    """
     from functools import wraps
 
     def display(x):
@@ -530,10 +499,15 @@ class Denoms():
     def __init__(self):
         self.wei = 1
         self.babbage = 10 ** 3
+        self.ada = 10 ** 3
+        self.kwei = 10 ** 6
         self.lovelace = 10 ** 6
+        self.mwei = 10 ** 6
         self.shannon = 10 ** 9
+        self.gwei = 10 ** 9
         self.szabo = 10 ** 12
         self.finney = 10 ** 15
+        self.mether = 10 ** 15
         self.ether = 10 ** 18
         self.turing = 2 ** 256 - 1
 

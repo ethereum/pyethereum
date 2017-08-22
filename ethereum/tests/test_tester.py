@@ -4,8 +4,8 @@ from os import path
 
 import pytest
 
-from ethereum.tester import state, ABIContract
-from ethereum._solidity import (
+from ethereum.tools.tester import Chain, ABIContract
+from ethereum.tools._solidity import (
         get_solidity,
         compile_file,
         solidity_get_contract_data,
@@ -18,7 +18,7 @@ CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
 def test_abicontract_interface():
     """ Test for issue #370. """
-    tester_state = state()
+    tester_state = Chain()
 
     contract_path = path.join(CONTRACTS_DIR, 'simple_contract.sol')
     contract_name = 'Simple'
@@ -28,18 +28,15 @@ def test_abicontract_interface():
             contract_path,
             contract_name,
             )
-    simple_address = tester_state.evm(simple_data['bin'])
+    simple_address = tester_state.contract(simple_data['bin'])
 
     # ABIContract class must accept json_abi
     abi_json = json.dumps(simple_data['abi']).encode('utf-8')
 
     abi = ABIContract(
-        _state=tester_state,
+        _tester=tester_state,
         _abi=abi_json,
         address=simple_address,
-        listen=False,
-        log_listener=None,
-        default_key=None,
     )
 
     assert abi.test() == 1  # pylint: disable=no-member

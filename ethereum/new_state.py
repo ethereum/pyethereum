@@ -261,6 +261,10 @@ class State():
         self.journal.append(lambda: setattr(self, k, preval))
         setattr(self, k, v)
 
+    def is_SERENITY(self, at_fork_height=False):
+        if at_fork_height: return self.block_number == self.config['SERENITY_FORK_BLKNUM']
+        else: return self.block_number >= self.config['SERENITY_FORK_BLKNUM']
+
     def is_HOMESTEAD(self, at_fork_height=False):
         if at_fork_height: return self.block_number == self.config['HOMESTEAD_FORK_BLKNUM']
         else: return self.block_number >= self.config['HOMESTEAD_FORK_BLKNUM']
@@ -317,9 +321,9 @@ class State():
         self.journal = []
 
     def to_dict(self):
-        for address in self.trie.to_dict().keys():
-            self.get_and_cache_account(address)
-        return {encode_hex(address): acct.to_dict() for address, acct in self.cache.items()}
+        for addr in self.trie.to_dict().keys():
+            self.get_and_cache_account(addr)
+        return {encode_hex(addr): acct.to_dict() for addr, acct in self.cache.items()}
 
     def del_account(self, address):
         self.set_balance(address, 0)
