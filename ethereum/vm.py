@@ -215,22 +215,6 @@ def vm_execute(ext, msg, code):
 
         op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
-        # out of gas error
-        if fee > compustate.gas:
-            return vm_exception('OUT OF GAS')
-
-        # empty stack error
-        if in_args > len(compustate.stack):
-            return vm_exception('INSUFFICIENT STACK',
-                                op=op, needed=to_string(in_args),
-                                available=to_string(len(compustate.stack)))
-
-        # overfull stack error
-        if len(compustate.stack) - in_args + out_args > 1024:
-            return vm_exception('STACK SIZE LIMIT EXCEEDED',
-                                op=op,
-                                pre_height=to_string(len(compustate.stack)))
-
         # Apply operation
         compustate.gas -= fee
         compustate.pc += 1
@@ -271,6 +255,22 @@ def vm_execute(ext, msg, code):
             log_vm_op.trace('vm', op=op, **trace_data)
             steps += 1
             _prevop = op
+
+        # out of gas error
+        if compustate.gas < 0:
+            return vm_exception('OUT OF GAS')
+
+        # empty stack error
+        if in_args > len(compustate.stack):
+            return vm_exception('INSUFFICIENT STACK',
+                                op=op, needed=to_string(in_args),
+                                available=to_string(len(compustate.stack)))
+
+        # overfull stack error
+        if len(compustate.stack) - in_args + out_args > 1024:
+            return vm_exception('STACK SIZE LIMIT EXCEEDED',
+                                op=op,
+                                pre_height=to_string(len(compustate.stack)))
 
         # Valid operations
         # Pushes first because they are very frequent
