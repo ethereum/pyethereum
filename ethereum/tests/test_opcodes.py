@@ -9,8 +9,10 @@ def test_eip150_opcode_gascost():
     """Ensure gas prices specified in
     https://github.com/ethereum/eips/issues/150
     """
-    assert opcode_gas['EXTCODESIZE'] + opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS == 700
-    assert opcode_gas['EXTCODECOPY'] + opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS == 700
+    assert opcode_gas['EXTCODESIZE'] + \
+        opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS == 700
+    assert opcode_gas['EXTCODECOPY'] + \
+        opcodes.EXTCODELOAD_SUPPLEMENTAL_GAS == 700
     assert opcode_gas['BALANCE'] + opcodes.BALANCE_SUPPLEMENTAL_GAS == 400
     assert opcode_gas['SLOAD'] + opcodes.SLOAD_SUPPLEMENTAL_GAS == 200
 

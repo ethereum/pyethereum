@@ -18,6 +18,7 @@ def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
         "test data changed, please adjust tests"
 
+
 fixture_path = os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures')
 
 

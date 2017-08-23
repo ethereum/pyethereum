@@ -72,10 +72,15 @@ def proc_identity(ext, msg):
     msg.data.extract_copy(o, 0, 0, len(o))
     return 1, msg.gas - gas_cost, o
 
+
 def mult_complexity(x):
-    if x <= 64: return x ** 2
-    elif x <= 1024: return x ** 2 // 4 + 96 * x - 3072
-    else: return x ** 2 // 16 + 480 * x - 199680
+    if x <= 64:
+        return x ** 2
+    elif x <= 1024:
+        return x ** 2 // 4 + 96 * x - 3072
+    else:
+        return x ** 2 // 16 + 480 * x - 199680
+
 
 def proc_modexp(ext, msg):
     if not ext.post_metropolis_hardfork():
@@ -84,13 +89,15 @@ def proc_modexp(ext, msg):
     baselen = msg.data.extract32(0)
     explen = msg.data.extract32(32)
     modlen = msg.data.extract32(64)
-    first_exp_bytes = msg.data.extract32(96 + baselen) >> (8 * max(32 - explen, 0))
+    first_exp_bytes = msg.data.extract32(
+        96 + baselen) >> (8 * max(32 - explen, 0))
     bitlength = -1
     while first_exp_bytes:
         bitlength += 1
         first_exp_bytes >>= 1
     adjusted_explen = max(bitlength, 0) + 8 * max(explen - 32, 0)
-    gas_cost = (mult_complexity(max(modlen, baselen)) * max(adjusted_explen, 1)) // opcodes.GMODEXPQUADDIVISOR
+    gas_cost = (mult_complexity(max(modlen, baselen)) *
+                max(adjusted_explen, 1)) // opcodes.GMODEXPQUADDIVISOR
     print(baselen, explen, modlen, 'expected gas cost', gas_cost)
     if msg.gas < gas_cost:
         return 0, 0, []
@@ -106,8 +113,15 @@ def proc_modexp(ext, msg):
     msg.data.extract_copy(mod, 0, 96 + baselen + explen, modlen)
     if utils.big_endian_to_int(mod) == 0:
         return 1, msg.gas - gas_cost, [0] * modlen
-    o = pow(utils.big_endian_to_int(base), utils.big_endian_to_int(exp), utils.big_endian_to_int(mod))
-    return 1, msg.gas - gas_cost, [safe_ord(x) for x in utils.zpad(utils.int_to_big_endian(o), modlen)]
+    o = pow(
+        utils.big_endian_to_int(base),
+        utils.big_endian_to_int(exp),
+        utils.big_endian_to_int(mod))
+    return 1, msg.gas - \
+        gas_cost, [
+            safe_ord(x) for x in utils.zpad(
+                utils.int_to_big_endian(o), modlen)]
+
 
 def validate_point(x, y):
     import py_ecc.optimized_bn128 as bn128
@@ -121,6 +135,7 @@ def validate_point(x, y):
     else:
         p1 = (FQ(1), FQ(1), FQ(0))
     return p1
+
 
 def proc_ecadd(ext, msg):
     if not ext.post_metropolis_hardfork():
@@ -139,7 +154,10 @@ def proc_ecadd(ext, msg):
     if p1 is False or p2 is False:
         return 0, 0, []
     o = bn128.normalize(bn128.add(p1, p2))
-    return 1, msg.gas - opcodes.GECADD, [safe_ord(x) for x in (encode_int32(o[0].n) + encode_int32(o[1].n))]
+    return 1, msg.gas - \
+        opcodes.GECADD, [safe_ord(x) for x in (
+            encode_int32(o[0].n) + encode_int32(o[1].n))]
+
 
 def proc_ecmul(ext, msg):
     if not ext.post_metropolis_hardfork():
@@ -158,6 +176,7 @@ def proc_ecmul(ext, msg):
     o = bn128.normalize(bn128.multiply(p, m))
     return (1, msg.gas - opcodes.GECMUL,
             [safe_ord(c) for c in (encode_int32(o[0].n) + encode_int32(o[1].n))])
+
 
 def proc_ecpairing(ext, msg):
     if not ext.post_metropolis_hardfork():
@@ -199,6 +218,7 @@ def proc_ecpairing(ext, msg):
         exponent *= py_pairing.pairing(p2, p1, final_exponentiate=False)
     result = bn128.final_exponentiate(exponent) == bn128.FQ12.one()
     return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
+
 
 specials = {
     decode_hex(k): v for k, v in

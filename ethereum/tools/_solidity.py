@@ -36,7 +36,8 @@ def get_compiler_path():
         path = path.strip('"')
         executable_path = os.path.join(path, BINARY)
 
-        if os.path.isfile(executable_path) and os.access(executable_path, os.X_OK):
+        if os.path.isfile(executable_path) and os.access(
+                executable_path, os.X_OK):
             return executable_path
 
     return None
@@ -50,7 +51,8 @@ def get_solidity():
     return solc_wrapper
 
 
-def solc_arguments(libraries=None, combined='bin,abi', optimize=True, extra_args=None):
+def solc_arguments(libraries=None, combined='bin,abi',
+                   optimize=True, extra_args=None):
     """ Build the arguments to call the solc binary. """
     args = [
         '--combined-json', combined,
@@ -63,12 +65,13 @@ def solc_arguments(libraries=None, combined='bin,abi', optimize=True, extra_args
     if extra_args:
         try:
             args.extend(shlex.split(extra_args))
-        except:  # if not a parseable string then treat it as a list
+        except BaseException:  # if not a parseable string then treat it as a list
             args.extend(extra_args)
 
     if libraries is not None and len(libraries):
         addresses = [
-            '{name}:{address}'.format(name=name, address=address.decode('utf8'))
+            '{name}:{address}'.format(
+                name=name, address=address.decode('utf8'))
             for name, address in libraries.items()
         ]
         args.extend([
@@ -84,7 +87,8 @@ def solc_parse_output(compiler_output):
     # At the moment some solc output like --hashes or -- gas will not output
     # json at all so if used with those arguments the logic here will break.
     # Perhaps solidity will slowly switch to a json only output and this comment
-    # can eventually go away and we will not need to add more logic here at all.
+    # can eventually go away and we will not need to add more logic here at
+    # all.
     result = yaml.safe_load(compiler_output)['contracts']
 
     if 'bin' in tuple(result.values())[0]:
@@ -160,20 +164,22 @@ def solidity_names(code):  # pylint: disable=too-many-branches
                     comment = '/*'
 
             if char == 'c' and code[pos: pos + 8] == 'contract':
-                result = re.match('^contract[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+                result = re.match(
+                    '^contract[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
 
                 if result:
                     names.append(('contract', result.groups()[0]))
 
             if char == 'i' and code[pos: pos + 9] == 'interface':
-                result = re.match('^interface[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+                result = re.match(
+                    '^interface[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
 
                 if result:
                     names.append(('contract', result.groups()[0]))
 
-
             if char == 'l' and code[pos: pos + 7] == 'library':
-                result = re.match('^library[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
+                result = re.match(
+                    '^library[^_$a-zA-Z]+([_$a-zA-Z][_$a-zA-Z0-9]*)', code[pos:])
 
                 if result:
                     names.append(('library', result.groups()[0]))
@@ -214,7 +220,8 @@ def solidity_resolve_address(hex_code, library_symbol, library_address):
     try:
         decode_hex(library_address)
     except TypeError:
-        raise ValueError('library_address contains invalid characters, it must be hex encoded.')
+        raise ValueError(
+            'library_address contains invalid characters, it must be hex encoded.')
 
     if len(library_symbol) != 40 or len(library_address) != 40:
         raise ValueError('Address with wrong length')
@@ -248,7 +255,8 @@ def solidity_unresolved_symbols(hex_code):
     return set(re.findall(r"_.{39}", hex_code))
 
 
-def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
+def compile_file(filepath, libraries=None, combined='bin,abi',
+                 optimize=True, extra_args=None):
     """ Return the compile contract code.
 
     Args:
@@ -263,7 +271,11 @@ def compile_file(filepath, libraries=None, combined='bin,abi', optimize=True, ex
 
     workdir, filename = os.path.split(filepath)
 
-    args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize, extra_args=extra_args)
+    args = solc_arguments(
+        libraries=libraries,
+        combined=combined,
+        optimize=optimize,
+        extra_args=extra_args)
     args.insert(0, get_compiler_path())
     args.append(filename)
 
@@ -277,7 +289,7 @@ def solidity_get_contract_data(all_contracts, filepath, contract_name):
     of a solc --combined-json output"""
     try:
         contract_data = all_contracts[contract_name]
-    except:
+    except BaseException:
         if filepath is None:
             filename = '<stdin>'
         else:
@@ -300,7 +312,8 @@ def solidity_get_contract_key(all_contracts, filepath, contract_name):
         return contract_key if contract_key in all_contracts else None
 
 
-def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
+def compile_contract(filepath, contract_name, libraries=None,
+                     combined='bin,abi', optimize=True, extra_args=None):
     all_contracts = compile_file(
         filepath,
         libraries=libraries,
@@ -311,7 +324,8 @@ def compile_contract(filepath, contract_name, libraries=None, combined='bin,abi'
     return solidity_get_contract_data(all_contracts, filepath, contract_name)
 
 
-def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
+def compile_last_contract(filepath, libraries=None,
+                          combined='bin,abi', optimize=True, extra_args=None):
     with open(filepath) as handler:
         all_names = solidity_names(handler.read())
 
@@ -332,15 +346,25 @@ def compile_last_contract(filepath, libraries=None, combined='bin,abi', optimize
     )
 
 
-def compile_code(sourcecode, libraries=None, combined='bin,abi', optimize=True, extra_args=None):
-    args = solc_arguments(libraries=libraries, combined=combined, optimize=optimize, extra_args=extra_args)
+def compile_code(sourcecode, libraries=None, combined='bin,abi',
+                 optimize=True, extra_args=None):
+    args = solc_arguments(
+        libraries=libraries,
+        combined=combined,
+        optimize=optimize,
+        extra_args=extra_args)
     compiler = get_compiler_path()
     if compiler is None:
         raise SolcMissing("solc not found")
     args.insert(0, compiler)
 
-    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdoutdata, stderrdata = process.communicate(input=utils.to_string(sourcecode))
+    process = subprocess.Popen(
+        args,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = process.communicate(
+        input=utils.to_string(sourcecode))
 
     if process.returncode != 0:
         raise CompileError(stderrdata)
@@ -356,17 +380,21 @@ class Solc(object):
     compiler_version = staticmethod(compiler_version)
 
     @staticmethod
-    def _code_or_path(sourcecode, path, contract_name, libraries, combined, extra_args):
-        warnings.warn('solc_wrapper is deprecated, please use the functions compile_file or compile_code')
+    def _code_or_path(sourcecode, path, contract_name,
+                      libraries, combined, extra_args):
+        warnings.warn(
+            'solc_wrapper is deprecated, please use the functions compile_file or compile_code')
 
         if sourcecode and path:
             raise ValueError('sourcecode and path are mutually exclusive.')
 
         if path and contract_name:
-            return compile_contract(path, contract_name, libraries=libraries, combined=combined, extra_args=extra_args)
+            return compile_contract(
+                path, contract_name, libraries=libraries, combined=combined, extra_args=extra_args)
 
         if path:
-            return compile_last_contract(path, libraries=libraries, combined=combined, extra_args=extra_args)
+            return compile_last_contract(
+                path, libraries=libraries, combined=combined, extra_args=extra_args)
 
         all_names = solidity_names(sourcecode)
         all_contract_names = [
@@ -375,20 +403,38 @@ class Solc(object):
         ]
         last_contract = all_contract_names[-1]
 
-        result = compile_code(sourcecode, libraries=libraries, combined=combined, extra_args=extra_args)
+        result = compile_code(
+            sourcecode,
+            libraries=libraries,
+            combined=combined,
+            extra_args=extra_args)
         return solidity_get_contract_data(result, path, last_contract)
 
     @classmethod
-    def compile(cls, code, path=None, libraries=None, contract_name='', extra_args=None):
+    def compile(cls, code, path=None, libraries=None,
+                contract_name='', extra_args=None):
         """ Return the binary of last contract in code. """
-        result = cls._code_or_path(code, path, contract_name, libraries, 'bin', extra_args)
+        result = cls._code_or_path(
+            code,
+            path,
+            contract_name,
+            libraries,
+            'bin',
+            extra_args)
         return result['bin']
 
     @classmethod
-    def mk_full_signature(cls, code, path=None, libraries=None, contract_name='', extra_args=None):
+    def mk_full_signature(cls, code, path=None, libraries=None,
+                          contract_name='', extra_args=None):
         "returns signature of last contract in code"
 
-        result = cls._code_or_path(code, path, contract_name, libraries, 'abi', extra_args)
+        result = cls._code_or_path(
+            code,
+            path,
+            contract_name,
+            libraries,
+            'abi',
+            extra_args)
         return result['abi']
 
     @classmethod

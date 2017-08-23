@@ -10,12 +10,17 @@ from ethereum.exceptions import InsufficientBalance, BlockGasLimitReached, \
 from ethereum.messages import apply_transaction
 log = get_logger('eth.block')
 
+
 # Gas limit adjustment algo
 def calc_gaslimit(parent, config=default_config):
     decay = parent.gas_limit // config['GASLIMIT_EMA_FACTOR']
     new_contribution = ((parent.gas_used * config['BLKLIM_FACTOR_NOM']) //
                         config['BLKLIM_FACTOR_DEN'] // config['GASLIMIT_EMA_FACTOR'])
-    gl = max(parent.gas_limit - decay + new_contribution, config['MIN_GAS_LIMIT'])
+    gl = max(
+        parent.gas_limit -
+        decay +
+        new_contribution,
+        config['MIN_GAS_LIMIT'])
     if gl < config['GENESIS_GAS_LIMIT']:
         gl2 = parent.gas_limit + decay
         gl = min(config['GENESIS_GAS_LIMIT'], gl2)
@@ -30,6 +35,7 @@ def check_gaslimit(parent, gas_limit, config=default_config):
     b = bool(gas_limit >= config['MIN_GAS_LIMIT'])
     return a and b
 
+
 # Difficulty adjustment algo
 def calc_difficulty(parent, timestamp, config=default_config):
     # Special case for test chains
@@ -43,23 +49,29 @@ def calc_difficulty(parent, timestamp, config=default_config):
         sign = max(1 - ((timestamp - parent.timestamp) //
                         config['HOMESTEAD_DIFF_ADJUSTMENT_CUTOFF']), -99)
     else:
-        sign = 1 if timestamp - parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
+        sign = 1 if timestamp - \
+            parent.timestamp < config['DIFF_ADJUSTMENT_CUTOFF'] else -1
     # If we enter a special mode where the genesis difficulty starts off below
     # the minimal difficulty, we allow low-difficulty blocks (this will never
     # happen in the official protocol)
-    o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, config['MIN_DIFF'])))
+    o = int(max(parent.difficulty + offset * sign,
+                min(parent.difficulty, config['MIN_DIFF'])))
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
-        o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
+        o = max(o + 2**(period_count -
+                        config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
     return o
 
+
 # Given a parent state, initialize a block with the given arguments
-def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase=b'\x35'*20, extra_data='moo ha ha says the laughing cow.'):
+def mk_block_from_prevstate(chain, state=None, timestamp=None,
+                            coinbase=b'\x35' * 20, extra_data='moo ha ha says the laughing cow.'):
     state = state or chain.state
     blk = Block(BlockHeader())
     now = timestamp or chain.time()
     blk.header.number = state.block_number + 1
-    blk.header.difficulty = calc_difficulty(state.prev_headers[0], now, chain.config)
+    blk.header.difficulty = calc_difficulty(
+        state.prev_headers[0], now, chain.config)
     blk.header.gas_limit = calc_gaslimit(state.prev_headers[0], chain.config)
     blk.header.timestamp = max(now, state.prev_headers[0].timestamp + 1)
     blk.header.prevhash = state.prev_headers[0].hash
@@ -69,6 +81,7 @@ def mk_block_from_prevstate(chain, state=None, timestamp=None, coinbase=b'\x35'*
     blk.transactions = []
     return blk
 
+
 # Validate a block header
 def validate_header(state, header):
     parent = state.prev_headers[0]
@@ -77,10 +90,13 @@ def validate_header(state, header):
             raise ValueError("Block's prevhash and parent's hash do not match: block prevhash %s parent hash %s" %
                              (encode_hex(header.prevhash), encode_hex(parent.hash)))
         if header.number != parent.number + 1:
-            raise ValueError("Block's number is not the successor of its parent number")
+            raise ValueError(
+                "Block's number is not the successor of its parent number")
         if not check_gaslimit(parent, header.gas_limit, config=state.config):
-            raise ValueError("Block's gaslimit is inconsistent with its parent's gaslimit")
-        if header.difficulty != calc_difficulty(parent, header.timestamp, config=state.config):
+            raise ValueError(
+                "Block's gaslimit is inconsistent with its parent's gaslimit")
+        if header.difficulty != calc_difficulty(
+                parent, header.timestamp, config=state.config):
             raise ValueError("Block's difficulty is inconsistent with its parent's difficulty: parent %d expected %d actual %d. Time diff %d" %
                              (parent.difficulty, calc_difficulty(parent, header.timestamp, config=state.config), header.difficulty, header.timestamp - parent.timestamp))
         if header.gas_used > header.gas_limit:
@@ -95,17 +111,20 @@ def validate_header(state, header):
             raise ValueError("Timestamp waaaaaaaaaaayy too large")
     if header.gas_limit >= 2**63:
         raise ValueError("Header gas limit too high")
-    if 0 <= header.number - state.config["DAO_FORK_BLKNUM"] < 10 and header.extra_data != state.config["DAO_FORK_BLKEXTRA"]:
+    if 0 <= header.number - \
+            state.config["DAO_FORK_BLKNUM"] < 10 and header.extra_data != state.config["DAO_FORK_BLKEXTRA"]:
         raise ValueError("Missing extra data for block near DAO fork")
     return True
+
 
 # Add transactions
 def add_transactions(state, block, txqueue, min_gasprice=0):
     if not txqueue:
         return
     pre_txs = len(block.transactions)
-    log.info('Adding transactions, %d in txqueue, %d dunkles' % (len(txqueue.txs), pre_txs))
-    while 1:
+    log.info('Adding transactions, %d in txqueue, %d dunkles' %
+             (len(txqueue.txs), pre_txs))
+    while True:
         tx = txqueue.pop_transaction(max_gas=state.gas_limit - state.gas_used,
                                      min_gasprice=min_gasprice)
         if tx is None:
@@ -118,6 +137,7 @@ def add_transactions(state, block, txqueue, min_gasprice=0):
             pass
     log.info('Added %d transactions' % (len(block.transactions) - pre_txs))
 
+
 # Validate that the transaction list root is correct
 def validate_transaction_tree(state, block):
     if block.header.tx_list_root != mk_transaction_sha(block.transactions):
@@ -125,6 +145,7 @@ def validate_transaction_tree(state, block):
                          (encode_hex(block.header.tx_list_root), encode_hex(mk_transaction_sha(block.transactions)),
                           len(block.transactions)))
     return True
+
 
 # Set state root, receipt root, etc
 def set_execution_results(state, block):
@@ -135,6 +156,7 @@ def set_execution_results(state, block):
     block.header.gas_used = state.gas_used
     block.header.bloom = state.bloom
     log.info('Block pre-sealed, %d gas used' % state.gas_used)
+
 
 # Verify state root, receipt root, etc
 def verify_execution_results(state, block):
@@ -148,11 +170,12 @@ def verify_execution_results(state, block):
     if block.header.receipts_root != mk_receipt_sha(state.receipts):
         raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
                          (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),
-                         block.header.gas_used, state.gas_used, len(state.receipts)))
+                          block.header.gas_used, state.gas_used, len(state.receipts)))
     if block.header.gas_used != state.gas_used:
         raise ValueError("Gas used mismatch: header %d computed %d" %
                          (block.header.gas_used, state.gas_used))
     return True
+
 
 # Make the root of a receipt tree
 def mk_receipt_sha(receipts):
@@ -161,12 +184,15 @@ def mk_receipt_sha(receipts):
         t.update(rlp.encode(i), rlp.encode(receipt))
     return t.root_hash
 
+
 # Make the root of a transaction tree
 mk_transaction_sha = mk_receipt_sha
+
 
 # State changes after block finalized
 def post_finalize(state, block):
     state.add_block_header(block.header)
+
 
 # Update block variables into the state
 def update_block_env_variables(state, block):

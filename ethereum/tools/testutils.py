@@ -10,11 +10,16 @@ TIME = 3
 
 fixture_path = os.path.join(os.path.dirname(__file__), '../..', 'fixtures')
 
-fill_abi_test = lambda params: run_abi_test(params, FILL)
-check_abi_test = lambda params: run_abi_test(params, VERIFY)
+
+def fill_abi_test(params): return run_abi_test(params, FILL)
+
+
+def check_abi_test(params): return run_abi_test(params, VERIFY)
+
 
 def bytesify(li):
     return [str_to_bytes(x) if isinstance(x, str) else x for x in li]
+
 
 def run_abi_test(params, mode):
     types, args = params['types'], params['args']
@@ -35,7 +40,9 @@ def run_abi_test(params, mode):
             'decoding': time.time() - y
         }
 
-def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+
+def generate_test_params(testsource, metafunc,
+                         skip_func=None, exclude_func=None):
     import pytest
     if ['filename', 'testname', 'testdata'] != metafunc.fixturenames:
         return
@@ -78,6 +85,7 @@ def get_tests_from_file_or_dir(dname, json_only=False):
         o = {}
         for f in os.listdir(dname):
             fullpath = os.path.join(dname, f)
-            for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
+            for k, v in list(get_tests_from_file_or_dir(
+                    fullpath, True).items()):
                 o[k] = v
         return o

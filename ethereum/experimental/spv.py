@@ -38,9 +38,16 @@ def mk_independent_transaction_spv_proof(block, index):
     block.state_root = pre_med
     block.gas_used = pre_gas
     nodes = mk_transaction_spv_proof(block, tx)
-    nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index))))
+    nodes.extend(
+        block.transactions.produce_spv_proof(
+            rlp.encode(
+                utils.encode_int(index))))
     if index > 0:
-        nodes.extend(block.transactions.produce_spv_proof(rlp.encode(utils.encode_int(index - 1))))
+        nodes.extend(
+            block.transactions.produce_spv_proof(
+                rlp.encode(
+                    utils.encode_int(
+                        index - 1))))
     nodes = list(map(rlp.decode, list(set(map(rlp.encode, nodes)))))
     print(nodes)
     return rlp.encode([utils.encode_int(64), block.get_parent().list_header(),

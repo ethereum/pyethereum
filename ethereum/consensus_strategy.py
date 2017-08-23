@@ -5,8 +5,10 @@ class ConsensusStrategy(object):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 def get_consensus_strategy(config):
-    if config['CONSENSUS_STRATEGY'] in ('pow', 'ethpow', 'ethash', 'ethereum1'):
+    if config['CONSENSUS_STRATEGY'] in (
+            'pow', 'ethpow', 'ethash', 'ethereum1'):
         from ethereum.pow.consensus import check_pow, validate_uncles, \
             initialize, finalize, get_uncle_candidates
         return ConsensusStrategy(
@@ -27,5 +29,4 @@ def get_consensus_strategy(config):
             get_uncles=get_uncle_candidates,
         )
     else:
-       raise Exception("Please set a consensus strategy! (pow, casper)")
-
+        raise Exception("Please set a consensus strategy! (pow, casper)")

@@ -9,7 +9,9 @@ install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master': 'pyethash',
 }
-install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
+install_requires = [
+    install_requires_replacements.get(
+        r, r) for r in install_requires]
 
 # dev requirements
 tests_require = set(x.strip() for x in open('dev_requirements.txt'))
@@ -20,7 +22,8 @@ tests_require_replacements = {
 tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
-# see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
+# see:
+# https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
 version = '2.0.4'
 
 setup(
@@ -32,7 +35,7 @@ setup(
     install_requires=install_requires,
     tests_require=tests_require,
     setup_requires=[
-    #    'pytest-runner==2.7'
+        #    'pytest-runner==2.7'
     ],
     version=version,
     classifiers=[

@@ -5,7 +5,8 @@ import ast
 import re
 import warnings
 
-import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
+# use yaml instead of json to get non unicode (works with ascii only data)
+import yaml
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
 
@@ -230,7 +231,8 @@ def encode_single(typ, arg):  # pylint: disable=too-many-return-statements,too-m
         sub = int(sub)
 
         if not (0 < sub <= 256 and sub % 8 == 0):
-            raise ValueError('invalid unsigned integer bit length {}'.format(sub))
+            raise ValueError(
+                'invalid unsigned integer bit length {}'.format(sub))
 
         try:
             i = decint(arg, signed=False)
@@ -478,18 +480,23 @@ class ContractTranslator(object):
 
             elif entry_type == 'fallback':
                 if self.fallback_data is not None:
-                    raise ValueError('Only one fallback function is supported.')
+                    raise ValueError(
+                        'Only one fallback function is supported.')
                 self.fallback_data = {'payable': description['payable']}
 
             else:
                 raise ValueError('Unknown type {}'.format(description['type']))
 
     def encode(self, function_name, args):
-        warnings.warn('encode is deprecated, please use encode_function_call', DeprecationWarning)
+        warnings.warn(
+            'encode is deprecated, please use encode_function_call',
+            DeprecationWarning)
         return self.encode_function_call(function_name, args)
 
     def decode(self, function_name, data):
-        warnings.warn('decode is deprecated, please use decode_function_result', DeprecationWarning)
+        warnings.warn(
+            'decode is deprecated, please use decode_function_result',
+            DeprecationWarning)
         return self.decode_function_result(function_name, data)
 
     def encode_function_call(self, function_name, args):
@@ -534,7 +541,8 @@ class ContractTranslator(object):
     def encode_constructor_arguments(self, args):
         """ Return the encoded constructor call. """
         if self.constructor_data is None:
-            raise ValueError("The contract interface didn't have a constructor")
+            raise ValueError(
+                "The contract interface didn't have a constructor")
 
         return encode_abi(self.constructor_data['encode_types'], args)
 
@@ -575,7 +583,8 @@ class ContractTranslator(object):
         indexed_count = 1  # skip topics[0]
 
         result = {}
-        for name, type_, indexed in zip(event['names'], event['types'], event['indexed']):
+        for name, type_, indexed in zip(
+                event['names'], event['types'], event['indexed']):
             if indexed:
                 topic_bytes = utils.zpad(
                     utils.encode_int(log_topics[indexed_count]),
@@ -617,7 +626,8 @@ def process_type(typ):
     # Crazy reg expression to separate out base type component (eg. uint),
     # size (eg. 256, 128x128, none), array component (eg. [], [45], none)
     regexp = '([a-z]*)([0-9]*x?[0-9]*)((\[[0-9]*\])*)'
-    base, sub, arr, _ = re.match(regexp, utils.to_string_for_regexp(typ)).groups()
+    base, sub, arr, _ = re.match(
+        regexp, utils.to_string_for_regexp(typ)).groups()
     arrlist = re.findall('\[[0-9]*\]', arr)
     assert len(''.join(arrlist)) == len(arr), \
         "Unknown characters found in array declaration"
@@ -816,7 +826,8 @@ def dec(typ, arg):
     # Dynamic-sized strings are encoded as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
         L = big_endian_to_int(arg[:32])
-        assert len(arg[32:]) == ceil32(L), "Wrong data size for string/bytes object: expected %d actual %d" % (ceil32(L), len(arg[32:]))
+        assert len(arg[32:]) == ceil32(
+            L), "Wrong data size for string/bytes object: expected %d actual %d" % (ceil32(L), len(arg[32:]))
         return arg[32:][:L]
     # Dynamic-sized arrays
     elif sz is None:
