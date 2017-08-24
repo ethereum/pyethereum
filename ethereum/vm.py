@@ -213,6 +213,9 @@ def vm_execute(ext, msg, code):
         if opcode not in opcodes.opcodes:
             return vm_exception('INVALID OP', opcode=opcode)
 
+        if opcode in opcodes.opcodesMetropolis and not ext.post_metropolis_hardfork():
+            return vm_exception('INVALID OP (not yet enabled)', opcode=opcode)
+
         op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
         # Apply operation
