@@ -13,7 +13,7 @@ for i in range(9):
     alloc[utils.int_to_addr(i)] = {'balance': 1}
 alloc[t.a0] = {'balance': 10**22}
 alloc[t.a1] = {'balance': 10**22}
-genesis = casper_utils.make_casper_genesis(alloc, 5, 100, 0.02, 0.02)
+genesis = casper_utils.make_casper_genesis(alloc, 5, 100, 0.02, 0.002)
 c = t.Chain(genesis=genesis)
 t.languages['viper'] = compiler.Compiler()
 t.gas_limit = 9999999
