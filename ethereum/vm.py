@@ -445,7 +445,7 @@ def vm_execute(ext, msg, code):
         # Block info
         elif opcode < 0x50:
             if op == 'BLOCKHASH':
-                if ext.post_metropolis_hardfork() and False:
+                if ext.post_constantinople_hardfork() and False:
                     bh_addr = ext.blockhash_store
                     stk.append(ext.get_storage_data(bh_addr, stk.pop()))
                 else:
@@ -562,14 +562,17 @@ def vm_execute(ext, msg, code):
                 if ext.post_anti_dos_hardfork():
                     ingas = all_but_1n(ingas, opcodes.CALL_CHILD_LIMIT_DENOM)
                 create_msg = Message(msg.to, b'', value, ingas, cd, msg.depth + 1)
-                o, gas, addr = ext.create(create_msg)
+                o, gas, data = ext.create(create_msg)
                 if o:
-                    stk.append(utils.coerce_to_int(addr))
+                    stk.append(utils.coerce_to_int(data))
+                    compustate.last_returned = bytearray(b'')
                 else:
                     stk.append(0)
+                    compustate.last_returned = bytearray(data)
                 compustate.gas = compustate.gas - ingas + gas
             else:
                 stk.append(0)
+                compustate.last_returned = bytearray(b'')
         # Calls
         elif op in ('CALL', 'CALLCODE', 'DELEGATECALL', 'STATICCALL'):
             # Pull arguments from the stack
@@ -612,6 +615,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) < value or msg.depth >= MAX_DEPTH:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
+                compustate.last_returned = bytearray(b'')
             else:
                 # Subtract gas from parent
                 compustate.gas -= (gas + extra_gas)

@@ -35,6 +35,9 @@ default_config = dict(
     # Block reward
     BLOCK_REWARD=5000 * utils.denoms.finney,
     NEPHEW_REWARD=5000 * utils.denoms.finney // 32,  # BLOCK_REWARD / 32
+    # In Byzantium
+    BYZANTIUM_BLOCK_REWARD=3000 * utils.denoms.finney,
+    BYZANTIUM_NEPHEW_REWARD=3000 * utils.denoms.finney // 32,  # BLOCK_REWARD / 32
     # GHOST constants
     UNCLE_DEPTH_PENALTY_FACTOR=8,
     MAX_UNCLE_DEPTH=6,  # max (block.number - uncle.number)
@@ -50,6 +53,8 @@ default_config = dict(
     # Exponential difficulty timebomb period
     EXPDIFF_PERIOD=100000,
     EXPDIFF_FREE_PERIODS=2,
+    # Delay in Byzantium
+    METROPOLIS_DELAY_PERIODS=30,
     # Blank account initial nonce
     ACCOUNT_INITIAL_NONCE=0,
     # Homestead fork

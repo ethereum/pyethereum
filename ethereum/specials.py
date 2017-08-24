@@ -196,7 +196,7 @@ def proc_ecpairing(ext, msg):
             p2 = zero
         if bn128.multiply(p2, bn128.curve_order)[-1] != bn128.FQ2.zero():
             return 0, 0, []
-        exponent *= py_pairing.pairing(p2, p1, final_exponentiate=False)
+        exponent *= bn128.pairing(p2, p1, final_exponentiate=False)
     result = bn128.final_exponentiate(exponent) == bn128.FQ12.one()
     return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
 

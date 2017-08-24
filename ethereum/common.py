@@ -49,6 +49,8 @@ def calc_difficulty(parent, timestamp, config=default_config):
     # happen in the official protocol)
     o = int(max(parent.difficulty + offset * sign, min(parent.difficulty, config['MIN_DIFF'])))
     period_count = (parent.number + 1) // config['EXPDIFF_PERIOD']
+    if parent.number >= (config['METROPOLIS_FORK_BLKNUM'] - 1):
+        period_count -= config['METROPOLIS_DELAY_PERIODS']
     if period_count >= config['EXPDIFF_FREE_PERIODS']:
         o = max(o + 2**(period_count - config['EXPDIFF_FREE_PERIODS']), config['MIN_DIFF'])
     return o
@@ -145,6 +147,8 @@ def verify_execution_results(state, block):
     if block.header.state_root != state.trie.root_hash:
         raise ValueError("State root mismatch: header %s computed %s" %
                          (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
+    else:
+        print("State root match: %s" % encode_hex(block.header.state_root))
     if block.header.receipts_root != mk_receipt_sha(state.receipts):
         raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
                          (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),

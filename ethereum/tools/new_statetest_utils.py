@@ -40,8 +40,8 @@ configs = {
     #"Frontier": config_frontier,
     #"Homestead": config_homestead,
     #"EIP150": config_tangerine,
-    "EIP158": config_spurious,
-    "Metropolis": config_metropolis
+    #"EIP158": config_spurious,
+    "Byzantium": config_metropolis
 }
 
 # Makes a diff between a prev and post state
@@ -170,7 +170,7 @@ def verify_state_test(test):
                     print(k, computed["diff"][k])
                 raise Exception("Hash mismatch, computed: %s, supplied: %s" % (computed["hash"], result["hash"]))
             else:
-                # for k in computed["diff"]:
-                #     print(k, computed["diff"][k])
+                for k in computed["diff"]:
+                    print(k, computed["diff"][k])
                 print("Hash matched!: %s" % computed["hash"])
     return True

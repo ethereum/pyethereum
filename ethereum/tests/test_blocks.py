@@ -155,8 +155,9 @@ skips = {
     ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g0v1_EIP158'),
     ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v0_EIP158'),
     ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d1g1v1_EIP158'),
-    ('bcTheDaoTest.json', 'DaoTransactions_UncleExtradata'),
-    ('bcTheDaoTest.json', 'DaoTransactions'),
+    ('DaoTransactions_UncleExtradata.json', 'DaoTransactions_UncleExtradata'),
+    ('DaoTransactions.json', 'DaoTransactions'),
+    ('DaoTransactions_EmptyTransactionAndForkBlocksAhead.json', 'DaoTransactions_EmptyTransactionAndForkBlocksAhead'),
     ('failed_tx_xcf416c53_d0g0v0.json', 'failed_tx_xcf416c53_d0g0v0_EIP158'),
     ('createJS_ExampleContract_d0g0v0.json', 'createJS_ExampleContract_d0g0v0_EIP158'),
 }
@@ -164,9 +165,9 @@ skips = {
 def exclude(filename, testname, _):
     if 'MemoryStressTest' in filename or 'QuadraticComplexityTest' in filename:
         return True
-    if 'Byzantium' in testname or 'Constantinople' in testname:
+    if 'Constantinople' in testname:
         return True
-    if 'Frontier' in testname or 'Homestead' in testname or 'EIP150' in testname:
+    if 'Frontier' in testname or 'Homestead' in testname or 'EIP150' in testname or 'EIP158' in testname:
         return True
     return False
 

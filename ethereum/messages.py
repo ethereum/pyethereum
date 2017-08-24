@@ -104,7 +104,8 @@ class Receipt(rlp.Serializable):
 
 def mk_receipt(state, success, logs):
     if state.is_METROPOLIS():
-        return Receipt(ascii_chr(success), state.gas_used, logs)
+        o = Receipt(encode_int(success), state.gas_used, logs)
+        return o
     else:
         return Receipt(state.trie.root_hash, state.gas_used, logs)
 
@@ -363,7 +364,7 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext.increment_nonce(msg.sender)
 
-    if ext.post_metropolis_hardfork() and msg.sender == null_address:
+    if ext.post_constantinople_hardfork() and msg.sender == null_address:
         msg.to = utils.mk_contract_address(msg.sender, 0)
         # msg.to = sha3(msg.sender + code)[12:]
     else:

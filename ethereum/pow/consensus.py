@@ -96,10 +96,17 @@ def validate_uncles(state, block):
 # Block finalization state transition
 def finalize(state, block):
     """Apply rewards and commit."""
-    delta = int(state.config['BLOCK_REWARD'] + state.config['NEPHEW_REWARD'] * len(block.uncles))
+
+    if state.is_METROPOLIS() and False:
+        br = state.config['BYZANTIUM_BLOCK_REWARD']
+        nr = state.config['BYZANTIUM_NEPHEW_REWARD']
+    else:
+        br = state.config['BLOCK_REWARD']
+        nr = state.config['NEPHEW_REWARD']
+        
+    delta = int(br + nr * len(block.uncles))
     state.delta_balance(state.block_coinbase, delta)
 
-    br = state.config['BLOCK_REWARD']
     udpf = state.config['UNCLE_DEPTH_PENALTY_FACTOR']
 
     for uncle in block.uncles:
