@@ -25,7 +25,7 @@ TRACE_LVL_MAP = [
     'eth.vm.storage:trace,eth.vm.memory:trace'
 ]
 
-GAS_LIMIT = 90000
+GAS_LIMIT = 8000000
 GAS_PRICE = 20000000000
 
 # pylint: disable=invalid-name
