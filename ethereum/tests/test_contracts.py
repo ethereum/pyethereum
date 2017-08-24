@@ -105,6 +105,7 @@ def test_with():
 
 # Test Serpent's import mechanism
 
+
 mul2_code = """
 def double(v):
     log(v)
@@ -161,6 +162,7 @@ def test_inset():
 
 # Inset at the end instead
 
+
 inset_inner_code2 = """
 def g(n):
     return(n + 10)
@@ -190,7 +192,7 @@ def test_inset2():
 
 # Test a simple namecoin implementation
 
-namecoin_code ="""
+namecoin_code = """
 def main(k, v):
     if !self.storage[k]:
         self.storage[k] = v
@@ -213,6 +215,7 @@ def test_namecoin():
     assert c.head_state.to_dict()
 
 # Test a simple currency implementation
+
 
 currency_code = """
 data balances[2^160]
@@ -249,6 +252,7 @@ def test_currency():
     assert o4 == 200
 
 # Test a data feed
+
 
 data_feed_code = """
 data creator
@@ -287,6 +291,7 @@ def test_data_feeds():
 
 # Test an example hedging contract, using the data feed. This tests
 # contracts calling other contracts
+
 
 hedge_code = """
 extern datafeed: [set:ii, get:i]
@@ -467,6 +472,7 @@ def test_reverter():
 
 # Test stateless contracts
 
+
 add1_code = """
 def main(x):
     self.storage[1] += x
@@ -510,6 +516,7 @@ def test_array():
     x = c.contract(array_code, language='serpent')
     assert x.main() == [1]
 
+
 array_code2 = """
 def main():
     a = array(1)
@@ -523,6 +530,7 @@ def test_array2():
     c = tester.Chain()
     x = c.contract(array_code2, language='serpent')
     assert x.main() == [1]
+
 
 array_code3 = """
 def main():
@@ -643,8 +651,8 @@ def test_storage_objects():
     assert 0 == x.query_items(0, 2)
     assert 9 == x.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
-            557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == x.query_person()
+            557, 0, 0, 0, 558,
+            657, 0, 0, 0, 658] == x.query_person()
     assert [361, 441] == x.testping(19, 21)
 
 
@@ -710,8 +718,9 @@ def test_infinite_storage_objects():
     assert 0 == x.query_items(0, 2)
     assert 9 == x.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
-            557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == x.query_person()
+            557, 0, 0, 0, 558,
+            657, 0, 0, 0, 658] == x.query_person()
+
 
 fail1 = """
 data person(head, arms[2](elbow, fingers[5]), legs[2])
@@ -824,6 +833,7 @@ def test_returnarray_code():
     x = c.contract(working_returnarray_code, language='serpent')
     assert x.main() == [1, 2, 3]
 
+
 crowdfund_code = """
 data campaigns[2^80](recipient, goal, deadline, contrib_total, contrib_count, contribs[2^50](sender, value))
 
@@ -909,6 +919,7 @@ def test_crowdfund():
     assert mida1 + 1 == c.head_state.get_balance(tester.a1)
     assert mida3 + 59049 == c.head_state.get_balance(tester.a3)
 
+
 saveload_code = """
 
 data store[1000]
@@ -927,12 +938,18 @@ def test_saveload():
     c = tester.Chain()
     x = c.contract(saveload_code, language='serpent')
     o = x.kall()
-    assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
-    assert o[1] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[1], 16)
-    assert o[2] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[2], 16)
-    assert o[3] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[3], 16)
-    assert o[4] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[4], 16)
-    assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
+    assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(
+        o[0], 16)
+    assert o[1] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(
+        o[1], 16)
+    assert o[2] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(
+        o[2], 16)
+    assert o[3] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(
+        o[3], 16)
+    assert o[4] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(
+        o[4], 16)
+    assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(
+        o[5], 16)
 
 
 saveload_code2 = """
@@ -949,8 +966,10 @@ def test_saveload2():
     c = tester.Chain()
     x = c.contract(saveload_code2, language='serpent')
     c.tx(tester.k0, x.address, 0)
-    assert bitcoin.encode(c.head_state.get_storage_data(x.address, 0), 256) == b'01ab' + b'\x00' * 28
-    assert bitcoin.encode(c.head_state.get_storage_data(x.address, 1), 256) == b'01ab' + b'\x00' * 28
+    assert bitcoin.encode(c.head_state.get_storage_data(
+        x.address, 0), 256) == b'01ab' + b'\x00' * 28
+    assert bitcoin.encode(c.head_state.get_storage_data(
+        x.address, 1), 256) == b'01ab' + b'\x00' * 28
 
 
 sdiv_code = """
@@ -985,6 +1004,7 @@ def test_argcall():
     x = c.contract(basic_argcall_code, language='serpent')
     assert 375 == x.argcall([5, 7, 3])
     assert 376 == x.argkall([6, 7, 3])
+
 
 more_complex_argcall_code = """
 def argcall(args:arr):
@@ -1047,6 +1067,7 @@ def test_sort():
     assert x.sort([9, 3, 5]) == [3, 5, 9]
     assert x.sort([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
+
 filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
 sort_tester_code = """
@@ -1069,6 +1090,7 @@ def test_indirect_sort():
     os.remove(filename9)
     assert x.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
+
 multiarg_code = """
 def kall(a:arr, b, c:arr, d:str, e):
     x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
@@ -1081,6 +1103,7 @@ def test_multiarg_code():
     x = c.contract(multiarg_code, language='serpent')
     o = x.kall([1, 2, 3], 4, [5, 6, 7], b"doge", 8)
     assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
+
 
 peano_code = """
 macro padd($x, psuc($y)):
@@ -1197,7 +1220,12 @@ def test_ecrecover():
 
     assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
 
-    addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
+    addr = utils.big_endian_to_int(
+        utils.sha3(
+            bitcoin.encode_pubkey(
+                pub, 'bin')[
+                1:])[
+                    12:])
     assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
 
     result = x.test_ecrecover(utils.big_endian_to_int(msghash), V, R, S)
@@ -1258,6 +1286,7 @@ def test_sha3():
         0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256,
         0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256
     ]
+
 
 types_in_functions_code = """
 type fixedp: [a, b]
@@ -1371,7 +1400,8 @@ def test_mcopy():
     c = tester.Chain()
     x = c.contract(mcopy_code, language='serpent')
     assert x.mcopy_test(b"123", 5, 6, 259) == \
-        b'\x00'*31+b'\x05'+b'\x00'*31+b'\x06'+b'\x00'*30+b'\x01\x03'+b'123'
+        b'\x00' * 31 + b'\x05' + b'\x00' * 31 + \
+        b'\x06' + b'\x00' * 30 + b'\x01\x03' + b'123'
 
 
 mcopy_code_2 = """
@@ -1391,7 +1421,8 @@ def test_mcopy2():
     c = tester.Chain()
     contract = c.contract(mcopy_code_2, language='serpent')
     assert contract.mcopy_test() == \
-        b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
+        b''.join([utils.zpad(utils.int_to_big_endian(x), 32)
+                  for x in [99, 111, 119]])
 
 
 array_saveload_code = """
@@ -1512,7 +1543,8 @@ def test_abi_logging():
     c = tester.Chain()
     x = c.contract(abi_logging_code, language='serpent')
     o = []
-    c.head_state.log_listeners.append(lambda f: o.append(x.translator.listen(f)))
+    c.head_state.log_listeners.append(
+        lambda f: o.append(x.translator.listen(f)))
     x.test_rabbit(3)
     assert o == [{"_event_type": b"rabbit", "x": 3}]
     o.pop()
@@ -1521,11 +1553,11 @@ def test_abi_logging():
     o.pop()
     x.test_moose(7, b"nine", 11, [13, 15, 17])
     assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
-                 "c": 11, "d": [13, 15, 17]}]
+                  "c": 11, "d": [13, 15, 17]}]
     o.pop()
     x.test_chicken(tester.a0)
     assert o == [{"_event_type": b"chicken",
-                  "m": "0x"+utils.encode_hex(tester.a0)}]
+                  "m": "0x" + utils.encode_hex(tester.a0)}]
     o.pop()
 
 
@@ -1573,6 +1605,7 @@ def test_abi_address_output():
     assert x.get_address(123) == '0x1212121212121212121212121212121212121212'
     assert x.get_address(125) == '0x5656565656565656565656565656565656565656'
 
+
 filename5 = 'abi_output_tester_1264876521746198724124'
 
 abi_address_caller_code = """
@@ -1613,7 +1646,8 @@ def test_string_logging():
     c = tester.Chain()
     x = c.contract(string_logging_code, language='serpent')
     o = []
-    c.head_state.log_listeners.append(lambda f: o.append(x.translator.listen(f)))
+    c.head_state.log_listeners.append(
+        lambda f: o.append(x.translator.listen(f)))
     x.moo()
     assert o == [{
         "_event_type": b"foo",
@@ -1647,6 +1681,7 @@ def test_params_contract():
     x = c.contract(params_code % (4, "horse"), language='serpent')
     assert x.garble() == 4
     assert x.marble() == b'horse'
+
 
 prefix_types_in_functions_code = """
 type fixedp: fp_
@@ -1683,30 +1718,30 @@ def test_delegatecall():
     x1 = c.contract("""
 data v
 event Happy()
-    
+
 def foo():
     log(type=Happy)
     self.v += 1
     return(self.v)
     """, language='serpent')
-    
+
     x2 = c.contract("""
 extern c1: [foo:[]:int256]
 data v
 data callee
 event Happeh()
-    
+
 def set_callee(addr:address):
     self.callee = addr
-    
+
 def bar():
     log(type=Happeh)
     self.callee.foo(call=delegate)
-    
+
 def baz():
     return(self.v)
     """, language='serpent')
-    
+
     x2.set_callee(x1.address)
     assert x2.baz() == 0
     x2.bar()
@@ -1714,7 +1749,6 @@ def baz():
     x2.bar()
     x2.bar()
     assert x2.baz() == 3
-
 
 
 # test_evm = None

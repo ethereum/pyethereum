@@ -34,6 +34,7 @@ fixtures = testutils.get_tests_from_file_or_dir(
 def mk_test_func(filename, testname, testdata):
     return lambda: do_test_vm(filename, testname, testdata)
 
+
 collected = []
 for filename, tests in list(fixtures.items()):
     for testname, testdata in list(tests.items()):

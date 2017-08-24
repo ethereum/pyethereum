@@ -2,7 +2,7 @@
 # ############# version ##################
 try:
     from pkg_resources import get_distribution, DistributionNotFound
-except:
+except BaseException:
     DistributionNotFound = Exception
 import os.path
 import subprocess
@@ -11,7 +11,8 @@ import re
 from . import slogging  # noqa
 
 
-GIT_DESCRIBE_RE = re.compile('^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')
+GIT_DESCRIBE_RE = re.compile(
+    '^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')
 
 
 __version__ = None
@@ -33,8 +34,9 @@ if not __version__:
                                       stderr=subprocess.STDOUT)
         match = GIT_DESCRIBE_RE.match(rev)
         if match:
-            __version__ = "{}+git-{}".format(match.group("version"), match.group("git"))
-    except:  # FIXME!
+            __version__ = "{}+git-{}".format(
+                match.group("version"), match.group("git"))
+    except BaseException:  # FIXME!
         pass
 
 if not __version__:

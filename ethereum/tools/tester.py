@@ -50,8 +50,10 @@ try:
 except ImportError:
     pass
 
+
 class TransactionFailed(Exception):
     pass
+
 
 from ethereum.abi import ContractTranslator
 import types
@@ -110,6 +112,7 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
             return o[0] if len(o) == 1 else o
         return kall
 
+
 def get_env(env):
     d = {
         None: config_spurious,
@@ -126,7 +129,8 @@ class State(object):
     def __init__(self, genesis):
         self.state = genesis
 
-    def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+    def tx(self, sender=k0, to=b'\x00' * 20, value=0,
+           data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
         transaction = Transaction(self.state.get_nonce(sender_addr), gasprice, startgas,
                                   to, value, data).sign(sender)
@@ -135,21 +139,35 @@ class State(object):
             raise TransactionFailed()
         return output
 
-    def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+    def call(self, sender=k0, to=b'\x00' * 20, value=0,
+             data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
-        result = apply_message(self.state.ephemeral_clone(), sender=sender_addr, to=to, value=value, data=data, gas=startgas)
+        result = apply_message(
+            self.state.ephemeral_clone(),
+            sender=sender_addr,
+            to=to,
+            value=value,
+            data=data,
+            gas=startgas)
         if result is None:
             raise TransactionFailed()
         return result
+
 
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
         if genesis:
             self.chain = pow_chain.Chain(genesis, reset_genesis=True)
         else:
-            self.chain = pow_chain.Chain(mk_basic_state(alloc, None, get_env(env)), reset_genesis=True)
+            self.chain = pow_chain.Chain(
+                mk_basic_state(
+                    alloc,
+                    None,
+                    get_env(env)),
+                reset_genesis=True)
         self.cs = get_consensus_strategy(self.chain.env.config)
-        self.block = mk_block_from_prevstate(self.chain, timestamp=self.chain.state.timestamp + 1)
+        self.block = mk_block_from_prevstate(
+            self.chain, timestamp=self.chain.state.timestamp + 1)
         self.head_state = self.chain.state.ephemeral_clone()
         self.cs.initialize(self.head_state, self.block)
         self.last_sender = None
@@ -157,7 +175,8 @@ class Chain(object):
 
     def direct_tx(self, transaction):
         self.last_tx = transaction
-        if self.last_sender is not None and privtoaddr(self.last_sender) != transaction.sender:
+        if self.last_sender is not None and privtoaddr(
+                self.last_sender) != transaction.sender:
             self.last_sender = None
         success, output = apply_transaction(self.head_state, transaction)
         self.block.transactions.append(transaction)
@@ -165,7 +184,8 @@ class Chain(object):
             raise TransactionFailed()
         return output
 
-    def tx(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+    def tx(self, sender=k0, to=b'\x00' * 20, value=0,
+           data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
         self.last_sender = sender
         transaction = Transaction(self.head_state.get_nonce(sender_addr), gasprice, startgas,
@@ -173,9 +193,16 @@ class Chain(object):
         output = self.direct_tx(transaction)
         return output
 
-    def call(self, sender=k0, to=b'\x00' * 20, value=0, data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+    def call(self, sender=k0, to=b'\x00' * 20, value=0,
+             data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         sender_addr = privtoaddr(sender)
-        result = apply_message(self.head_state.ephemeral_clone(), sender=sender_addr, to=to, value=value, data=data, gas=startgas)
+        result = apply_message(
+            self.head_state.ephemeral_clone(),
+            sender=sender_addr,
+            to=to,
+            value=value,
+            data=data,
+            gas=startgas)
         if result is None:
             raise TransactionFailed()
         return result
@@ -184,21 +211,31 @@ class Chain(object):
         if len(self.head_state.receipts) == 1:
             diff = self.head_state.receipts[-1].gas_used
         else:
-            diff = self.head_state.receipts[-1].gas_used - self.head_state.receipts[-2].gas_used
+            diff = self.head_state.receipts[-1].gas_used - \
+                self.head_state.receipts[-2].gas_used
         return diff - (not with_tx) * self.last_tx.intrinsic_gas_used
 
-    def contract(self, sourcecode, args=[], sender=k0, value=0, language=None, l=None, startgas=STARTGAS, gasprice=GASPRICE):
+    def contract(self, sourcecode, args=[], sender=k0, value=0,
+                 language=None, l=None, startgas=STARTGAS, gasprice=GASPRICE):
         assert not (l and language)
         language = l or language
         if language == 'evm':
             assert len(args) == 0
-            return self.tx(sender=sender, to=b'', value=value, data=sourcecode, startgas=startgas, gasprice=gasprice)
+            return self.tx(sender=sender, to=b'', value=value,
+                           data=sourcecode, startgas=startgas, gasprice=gasprice)
         else:
             compiler = languages[language]
             interface = compiler.mk_full_signature(sourcecode)
             ct = ContractTranslator(interface)
-            code = compiler.compile(sourcecode) + (ct.encode_constructor_arguments(args) if args else b'')
-            addr = self.tx(sender=sender, to=b'', value=value, data=code, startgas=startgas, gasprice=gasprice)
+            code = compiler.compile(
+                sourcecode) + (ct.encode_constructor_arguments(args) if args else b'')
+            addr = self.tx(
+                sender=sender,
+                to=b'',
+                value=value,
+                data=code,
+                startgas=startgas,
+                gasprice=gasprice)
             return ABIContract(self, ct, addr)
 
     def mine(self, number_of_blocks=1, coinbase=a0):
@@ -208,26 +245,34 @@ class Chain(object):
         assert self.chain.add_block(self.block)
         b = self.block
         for i in range(1, number_of_blocks):
-            b, _ = make_head_candidate(self.chain, parent=b, timestamp=self.chain.state.timestamp + 14, coinbase=coinbase)
+            b, _ = make_head_candidate(
+                self.chain, parent=b, timestamp=self.chain.state.timestamp + 14, coinbase=coinbase)
             b = Miner(b).mine(rounds=100, start_nonce=0)
             assert self.chain.add_block(b)
         self.change_head(b.header.hash, coinbase)
         return b
 
     def change_head(self, parent, coinbase=a0):
-        self.head_state = self.chain.mk_poststate_of_blockhash(parent).ephemeral_clone()
-        self.block = mk_block_from_prevstate(self.chain, self.head_state, timestamp=self.chain.state.timestamp, coinbase=coinbase)
+        self.head_state = self.chain.mk_poststate_of_blockhash(
+            parent).ephemeral_clone()
+        self.block = mk_block_from_prevstate(
+            self.chain,
+            self.head_state,
+            timestamp=self.chain.state.timestamp,
+            coinbase=coinbase)
         self.cs.initialize(self.head_state, self.block)
 
     def snapshot(self):
         self.head_state.commit()
-        return self.head_state.snapshot(), len(self.block.transactions), self.block.number
+        return self.head_state.snapshot(), len(
+            self.block.transactions), self.block.number
 
     def revert(self, snapshot):
         state_snapshot, txcount, blknum = snapshot
         assert blknum == self.block.number, "Cannot revert beyond block boundaries!"
         self.block.transactions = self.block.transactions[:txcount]
         self.head_state.revert(state_snapshot)
+
 
 def int_to_0x_hex(v):
     o = encode_hex(int_to_big_endian(v))
@@ -244,21 +289,22 @@ def mk_state_test_prefill(c):
         "currentGasLimit": int_to_0x_hex(c.head_state.gas_limit),
         "currentNumber": int_to_0x_hex(c.head_state.block_number),
         "currentTimestamp": int_to_0x_hex(c.head_state.timestamp),
-        "previousHash": "0x"+encode_hex(c.head_state.prev_headers[0].hash),
+        "previousHash": "0x" + encode_hex(c.head_state.prev_headers[0].hash),
     }
     pre = c.head_state.to_dict()
     return {"env": env, "pre": pre}
 
+
 def mk_state_test_postfill(c, prefill, filler_mode=False):
     txdata = c.last_tx.to_dict()
     modified_tx_data = {
-        "data": [ txdata["data"] ],
-        "gasLimit": [ int_to_0x_hex(txdata["startgas"]) ],
+        "data": [txdata["data"]],
+        "gasLimit": [int_to_0x_hex(txdata["startgas"])],
         "gasPrice": int_to_0x_hex(txdata["gasprice"]),
         "nonce": int_to_0x_hex(txdata["nonce"]),
         "secretKey": '0x' + encode_hex(c.last_sender),
         "to": txdata["to"],
-        "value": [ int_to_0x_hex(txdata["value"]) ],
+        "value": [int_to_0x_hex(txdata["value"])],
     }
     c.head_state.commit()
     postStateHash = '0x' + encode_hex(c.head_state.trie.root_hash)
@@ -278,7 +324,9 @@ def mk_state_test_postfill(c, prefill, filler_mode=False):
         "transaction": modified_tx_data,
     }
     if not filler_mode:
-        o["post"] = {config: [ { "hash": postStateHash, "indexes": {"data": 0, "gas": 0, "value": 0} } ] }
+        o["post"] = {config: [{"hash": postStateHash,
+                               "indexes": {"data": 0, "gas": 0, "value": 0}}]}
     else:
-        o["expect"] = [ {"indexes": {"data": 0, "gas": 0, "value": 0}, "network": ["Metropolis"], "result": c.head_state.to_dict() } ]
+        o["expect"] = [{"indexes": {"data": 0, "gas": 0, "value": 0}, "network": [
+            "Metropolis"], "result": c.head_state.to_dict()}]
     return o

@@ -1,9 +1,11 @@
 try:
     from Crypto.Hash import keccak
-    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
+
+    def sha3_256(x): return keccak.new(digest_bits=256, data=x).digest()
 except ImportError:
     import sha3 as _sha3
-    sha3_256 = lambda x: _sha3.keccak_256(x).digest()
+
+    def sha3_256(x): return _sha3.keccak_256(x).digest()
 from py_ecc.secp256k1 import privtopub, ecdsa_raw_sign, ecdsa_raw_recover
 import sys
 import rlp
@@ -19,8 +21,12 @@ except ImportError:
     warnings.warn('could not import coincurve', ImportWarning)
     coincurve = None
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
-int_to_big_endian = lambda x: big_endian_int.serialize(x)
+
+def big_endian_to_int(x): return big_endian_int.deserialize(
+    str_to_bytes(x).lstrip(b'\x00'))
+
+
+def int_to_big_endian(x): return big_endian_int.serialize(x)
 
 
 TT256 = 2 ** 256
@@ -29,8 +35,9 @@ TT255 = 2 ** 255
 SECP256K1P = 2**256 - 4294968273
 
 if sys.version_info.major == 2:
-    is_numeric = lambda x: isinstance(x, (int, long))
-    is_string = lambda x: isinstance(x, (str, unicode))
+    def is_numeric(x): return isinstance(x, (int, long))
+
+    def is_string(x): return isinstance(x, (str, unicode))
 
     def to_string(value):
         return str(value)
@@ -54,8 +61,9 @@ if sys.version_info.major == 2:
         return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
 
 else:
-    is_numeric = lambda x: isinstance(x, int)
-    is_string = lambda x: isinstance(x, bytes)
+    def is_numeric(x): return isinstance(x, int)
+
+    def is_string(x): return isinstance(x, bytes)
 
     def to_string(value):
         if isinstance(value, bytes):
@@ -94,7 +102,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
                 hasher=None,
             )
             pub = pk.format(compressed=False)[1:]
-        except:
+        except BaseException:
             pub = b"\x00" * 64
     else:
         x, y = ecdsa_raw_recover(rawhash, (v, r, s))
@@ -171,16 +179,18 @@ def int_to_32bytearray(i):
 def sha3(seed):
     return sha3_256(to_string(seed))
 
-assert encode_hex(sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
+
+assert encode_hex(
+    sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
 def privtoaddr(k):
     k = normalize_key(k)
-    x, y  = privtopub(k)
+    x, y = privtopub(k)
     return sha3(encode_int32(x) + encode_int32(y))[12:]
 
 
-def checksum_encode(addr): # Takes a 20-byte binary address as input
+def checksum_encode(addr):  # Takes a 20-byte binary address as input
     addr = normalize_address(addr)
     o = ''
     v = big_endian_to_int(sha3(encode_hex(addr)))
@@ -188,11 +198,13 @@ def checksum_encode(addr): # Takes a 20-byte binary address as input
         if c in '0123456789':
             o += c
         else:
-            o += c.upper() if (v & (2**(255 - 4*i))) else c.lower()
-    return '0x'+o
+            o += c.upper() if (v & (2**(255 - 4 * i))) else c.lower()
+    return '0x' + o
+
 
 def check_checksum(addr):
     return checksum_encode(normalize_address(addr)) == addr
+
 
 def normalize_address(x, allow_blank=False):
     if is_numeric(x):
@@ -210,6 +222,7 @@ def normalize_address(x, allow_blank=False):
         raise Exception("Invalid address format: %r" % x)
     return x
 
+
 def normalize_key(key):
     if is_numeric(key):
         o = encode_int32(key)
@@ -225,6 +238,7 @@ def normalize_key(key):
         raise Exception("Zero privkey invalid")
     return o
 
+
 def zpad(x, l):
     """ Left zero pad value `x` at least to length `l`.
 
@@ -239,6 +253,7 @@ def zpad(x, l):
     """
     return b'\x00' * max(0, l - len(x)) + x
 
+
 def rzpad(value, total_length):
     """ Right zero pad value `x` at least to length `l`.
 
@@ -252,6 +267,7 @@ def rzpad(value, total_length):
     '\xca\xfe'
     """
     return value + b'\x00' * max(0, total_length - len(value))
+
 
 def int_to_addr(x):
     o = [b''] * 20
@@ -432,7 +448,8 @@ def parse_as_bin(s):
 
 
 def parse_as_int(s):
-    return s if is_numeric(s) else int('0' + s[2:], 16) if s[:2] == '0x' else int(s)
+    return s if is_numeric(s) else int(
+        '0' + s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
@@ -454,7 +471,7 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
         x = to_string(x)
         try:
             x.decode('ascii')
-        except:
+        except BaseException:
             return 'NON_PRINTABLE'
         return x
 

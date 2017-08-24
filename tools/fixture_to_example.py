@@ -29,8 +29,7 @@ def fixture_to_tables(fixture):
         rows = []
 
         # header(keyword) row
-        keys = content.keys()
-        keys.sort()
+        keys = sorted(content.keys())
         rows.append(tuple(keys))
 
         # item(value) row

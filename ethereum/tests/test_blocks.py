@@ -84,10 +84,13 @@ def run_block_test(params, config_overrides=None):
     # print(c.state.to_dict())
     # print(params["pre"])
     assert c.state.env == env
-    assert c.state.prev_headers[0].state_root == safe_decode(params["genesisBlockHeader"]["stateRoot"]), (encode_hex(c.state.prev_headers[0].state_root), params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.trie.root_hash == safe_decode(params["genesisBlockHeader"]["stateRoot"])
-    assert c.state.prev_headers[0].hash == safe_decode(params["genesisBlockHeader"]["hash"])
-
+    assert c.state.prev_headers[0].state_root == safe_decode(
+        params["genesisBlockHeader"]["stateRoot"]), (encode_hex(
+            c.state.prev_headers[0].state_root), params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.trie.root_hash == safe_decode(
+        params["genesisBlockHeader"]["stateRoot"])
+    assert c.state.prev_headers[0].hash == safe_decode(
+        params["genesisBlockHeader"]["hash"])
 
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:
@@ -96,7 +99,7 @@ def run_block_test(params, config_overrides=None):
                 rlpdata = safe_decode(blk["rlp"][2:])
                 success = c.add_block(rlp.decode(rlpdata, Block))
             except (ValueError, TypeError, AttributeError, VerificationFailed,
-                    DecodingError, DeserializationError, InvalidTransaction, 
+                    DecodingError, DeserializationError, InvalidTransaction,
                     InvalidNonce, KeyError) as e:
                 success = False
             assert not success
@@ -105,28 +108,29 @@ def run_block_test(params, config_overrides=None):
             assert c.add_block(rlp.decode(rlpdata, Block))
     env.config = old_config
 
+
 def get_config_overrides(network):
     #            Home   DAO    Tang   Spur   Byz    Const
     if network == 'Frontier':
         values = 2**99, 2**99, 2**99, 2**99, 2**99, 2**99
     elif network == 'Homestead':
-        values = 0    , 2**99, 2**99, 2**99, 2**99, 2**99
+        values = 0, 2**99, 2**99, 2**99, 2**99, 2**99
     elif network == 'EIP150':
-        values = 0    , 2**99, 0    , 2**99, 2**99, 2**99
+        values = 0, 2**99, 0, 2**99, 2**99, 2**99
     elif network == 'EIP158':
-        values = 0    , 2**99, 0    , 0    , 2**99, 2**99
+        values = 0, 2**99, 0, 0, 2**99, 2**99
     elif network == 'Byzantium':
-        values = 0    , 2**99, 0    , 0    , 0    , 2**99
+        values = 0, 2**99, 0, 0, 0, 2**99
     elif network == 'Constantinople':
-        values = 0    , 2**99, 0    , 0    , 0    , 0
+        values = 0, 2**99, 0, 0, 0, 0
     elif network == 'FrontierToHomesteadAt5':
-        values = 5    , 2**99, 2**99, 2**99, 2**99, 2**99
+        values = 5, 2**99, 2**99, 2**99, 2**99, 2**99
     elif network == 'HomesteadToEIP150At5':
-        values = 0    , 2**99, 5    , 2**99, 2**99, 2**99
+        values = 0, 2**99, 5, 2**99, 2**99, 2**99
     elif network == 'HomesteadToDaoAt5':
-        values = 0    , 5    , 2**99, 2**99, 2**99, 2**99
+        values = 0, 5, 2**99, 2**99, 2**99, 2**99
     elif network == 'EIP158ToByzantiumAt5':
-        values = 0    , 2**99, 0    , 0    , 5    , 2**99
+        values = 0, 2**99, 0, 0, 5, 2**99
     return {
         'HOMESTEAD_FORK_BLKNUM': values[0],
         'DAO_FORK_BLKNUM': values[1],
@@ -145,7 +149,8 @@ skips = {
     ('bcWalletTest.json', u'walletReorganizeOwners'),
     ('bl10251623GO.json', u'randomBlockTest'),
     ('bl201507071825GO.json', u'randomBlockTest'),
-    ('call_OOG_additionalGasCosts2.json', 'call_OOG_additionalGasCosts2_d0g0v0_EIP158'),
+    ('call_OOG_additionalGasCosts2.json',
+     'call_OOG_additionalGasCosts2_d0g0v0_EIP158'),
     ('MLOAD_Bounds.json', 'MLOAD_Bounds_d0g0v0_EIP158'),
     ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v0_EIP158'),
     ('RevertDepthCreateAddressCollision.json', 'RevertDepthCreateAddressCollision_d0g0v1_EIP158'),
@@ -159,8 +164,10 @@ skips = {
     ('DaoTransactions.json', 'DaoTransactions'),
     ('DaoTransactions_EmptyTransactionAndForkBlocksAhead.json', 'DaoTransactions_EmptyTransactionAndForkBlocksAhead'),
     ('failed_tx_xcf416c53_d0g0v0.json', 'failed_tx_xcf416c53_d0g0v0_EIP158'),
-    ('createJS_ExampleContract_d0g0v0.json', 'createJS_ExampleContract_d0g0v0_EIP158'),
+    ('createJS_ExampleContract_d0g0v0.json',
+     'createJS_ExampleContract_d0g0v0_EIP158'),
 }
+
 
 def exclude(filename, testname, _):
     if 'MemoryStressTest' in filename or 'QuadraticComplexityTest' in filename:
@@ -176,7 +183,8 @@ def pytest_generate_tests(metafunc):
     testutils.generate_test_params(
         'BlockchainTests',
         metafunc,
-        skip_func=lambda filename, testname, _: (filename.split('/')[-1], testname) in skips,
+        skip_func=lambda filename, testname, _: (
+            filename.split('/')[-1], testname) in skips,
         exclude_func=exclude,
     )
 
@@ -188,14 +196,21 @@ def main():
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
                 if testname == sys.argv[2]:
-                    print("Testing specified test: %s %s" % (filename, testname))
-                    run_block_test(testdata, get_config_overrides(testdata["network"]))
+                    print(
+                        "Testing specified test: %s %s" %
+                        (filename, testname))
+                    run_block_test(
+                        testdata, get_config_overrides(
+                            testdata["network"]))
     else:
         for filename, tests in list(fixtures.items()):
             for testname, testdata in list(tests.items()):
-                if (filename.split('/')[-1], testname) not in skips and not exclude(filename, testname, None):
+                if (filename.split(
+                        '/')[-1], testname) not in skips and not exclude(filename, testname, None):
                     print("Testing : %s %s" % (filename, testname))
-                    run_block_test(testdata, get_config_overrides(testdata["network"]))
+                    run_block_test(
+                        testdata, get_config_overrides(
+                            testdata["network"]))
 
 
 if __name__ == '__main__':

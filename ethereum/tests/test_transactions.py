@@ -25,7 +25,7 @@ def test_transaction(filename, testname, testdata):
         o = {}
         tx = rlp.decode(rlpdata, transactions.Transaction)
         blknum = int(testdata["blocknumber"])
-        #if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
+        # if blknum >= config.default_config["HOMESTEAD_FORK_BLKNUM"]:
         #    tx.check_low_s_homestead()
         assert config_fork_specific_validation(konfig, blknum, tx)
         assert tx.startgas >= tx.intrinsic_gas_used
@@ -50,9 +50,20 @@ def test_transaction(filename, testname, testdata):
         # print(tx.to_dict(), testdata)
         assert tx is None
     else:
-        assert set(o['transaction'].keys()) == set(testdata.get("transaction", dict()).keys())
+        assert set(
+            o['transaction'].keys()) == set(
+            testdata.get(
+                "transaction",
+                dict()).keys())
         o.get("transaction", None) == testdata.get("transaction", None)
-        assert str_to_bytes(encode_hex(o.get("sender", ''))) == str_to_bytes(testdata.get("sender", ''))
+        assert str_to_bytes(
+            encode_hex(
+                o.get(
+                    "sender",
+                    ''))) == str_to_bytes(
+            testdata.get(
+                "sender",
+                ''))
 
 
 def pytest_generate_tests(metafunc):

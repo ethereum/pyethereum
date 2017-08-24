@@ -34,7 +34,8 @@ randaos = [RandaoManager(utils.sha3(str(i))) for i in range(NUM_PARTICIPANTS)]
 deposit_sizes = [i * 500 + 500 for i in range(NUM_PARTICIPANTS)]
 vcodes = [generate_validation_code(a) for a in addrs]
 vchashes = [utils.sha3(c) for c in vcodes]
-assert len(privkeys) == len(addrs) == len(randaos) == len(deposit_sizes) == len(vcodes) == len(vchashes) == NUM_PARTICIPANTS
+assert len(privkeys) == len(addrs) == len(randaos) == len(
+    deposit_sizes) == len(vcodes) == len(vchashes) == NUM_PARTICIPANTS
 
 # Creating casper contract translator
 ct = get_casper_ct()
@@ -47,22 +48,30 @@ s = make_casper_genesis(validators=[(generate_validation_code(a), ds * 10**18, r
                         epoch_length=100)
 print('Genesis constructed successfully')
 chains = [Chain(s.to_snapshot(), env=s.env) for i in range(NUM_PARTICIPANTS)]
-withdrawal_time_1 = call_casper(chains[0].state, 'getLockDuration', [vchashes[0]])
+withdrawal_time_1 = call_casper(
+    chains[0].state, 'getLockDuration', [
+        vchashes[0]])
 
 # List of validator IDs that created each block
 vids = []
 
+
 # Create and sign a block
 def make_block(chain, key, randao, vchash, skips):
-    h, _ = make_head_candidate(chain, TransactionQueue(), timestamp=get_timestamp(chain, skips))
-    return sign_block(h, key, randao.get_parent(call_casper(chain.state, 'getRandao', [vchash])), vchash, skips)
+    h, _ = make_head_candidate(
+        chain, TransactionQueue(), timestamp=get_timestamp(
+            chain, skips))
+    return sign_block(h, key, randao.get_parent(call_casper(
+        chain.state, 'getRandao', [vchash])), vchash, skips)
+
 
 next_validator = call_casper(s, 'getValidator', [0])
 print('Next validator:', next_validator.encode('hex'))
 next_validator_id = vchashes.index(next_validator)
 print('Next validator index:', next_validator_id)
 
-skip_count, timestamp = get_skips_and_block_making_time(chains[0].state, next_validator)
+skip_count, timestamp = get_skips_and_block_making_time(
+    chains[0].state, next_validator)
 assert skip_count == 0
 b = make_block(chains[0], privkeys[next_validator_id],
                randaos[next_validator_id], vchashes[next_validator_id], skip_count)
@@ -78,7 +87,8 @@ print('Block added to chain')
 # Make another block
 next_validator = call_casper(chains[0].state, 'getValidator', [0])
 next_validator_id = vchashes.index(next_validator)
-skip_count, timestamp = get_skips_and_block_making_time(chains[0].state, next_validator)
+skip_count, timestamp = get_skips_and_block_making_time(
+    chains[0].state, next_validator)
 assert skip_count == 0
 b2 = make_block(chains[0], privkeys[next_validator_id],
                 randaos[next_validator_id], vchashes[next_validator_id], skip_count)
@@ -88,18 +98,35 @@ print('Second block added to chain')
 # Make a dunkle and include it in a transaction
 next_validator = call_casper(chains[1].state, 'getValidator', [1])
 next_validator_id = vchashes.index(next_validator)
-skip_count, timestamp = get_skips_and_block_making_time(chains[1].state, next_validator)
+skip_count, timestamp = get_skips_and_block_making_time(
+    chains[1].state, next_validator)
 assert skip_count == 1
 b3 = make_block(chains[1], privkeys[next_validator_id],
                 randaos[next_validator_id], vchashes[next_validator_id], skip_count)
 print('Dunkle produced')
-t = Transaction(0, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+t = Transaction(0,
+                0,
+                10**6,
+                casper_config['CASPER_ADDR'],
+                0,
+                ct.encode('includeDunkle',
+                          [rlp.encode(b3.header)])).sign(privkeys[0])
 apply_transaction(chains[0].state, t)
-assert call_casper(chains[0].state, 'isDunkleIncluded', [utils.sha3(rlp.encode(b3.header))])
+assert call_casper(
+    chains[0].state, 'isDunkleIncluded', [
+        utils.sha3(
+            rlp.encode(
+                b3.header))])
 print('Dunkle added successfully')
 # Try (and fail) to add the dunkle again
 x = chains[0].state.gas_used
-t = Transaction(1, 0, 10**6, casper_config['CASPER_ADDR'], 0, ct.encode('includeDunkle', [rlp.encode(b3.header)])).sign(privkeys[0])
+t = Transaction(1,
+                0,
+                10**6,
+                casper_config['CASPER_ADDR'],
+                0,
+                ct.encode('includeDunkle',
+                          [rlp.encode(b3.header)])).sign(privkeys[0])
 apply_transaction(chains[0].state, t)
 x2 = chains[0].state.gas_used
 assert x2 - x == t.startgas, (x2 - x, t.startgas)
@@ -129,7 +156,15 @@ assert 0 in vids
 # Remove a validator
 sigdata = make_withdrawal_signature(privkeys[0])
 txdata = ct.encode('startWithdrawal', [vchashes[0], sigdata])
-t3 = Transaction(chains[0].state.get_nonce(addrs[0]), 0, 1000000, casper_config['CASPER_ADDR'], 0, txdata).sign(privkeys[0])
+t3 = Transaction(
+    chains[0].state.get_nonce(
+        addrs[0]),
+    0,
+    1000000,
+    casper_config['CASPER_ADDR'],
+    0,
+    txdata).sign(
+    privkeys[0])
 apply_transaction(chains[0].state, t3)
 assert call_casper(chains[0].state, 'getEndEpoch', [vchashes[0]]) == 4
 chains[0].state.commit()
@@ -143,7 +178,8 @@ for i in range(200, 400):
     assert b.header.number == i
     assert chains[0].add_block(b)
     vids.append(next_validator_id)
-print('Created 200 blocks after the deposit, created by validators:', vids[-200:])
+print('Created 200 blocks after the deposit, created by validators:',
+      vids[-200:])
 assert len(vchashes) - 1 in vids
 assert 0 in vids
 for i in range(400, 400 + withdrawal_time_1 + 1):
@@ -153,19 +189,31 @@ for i in range(400, 400 + withdrawal_time_1 + 1):
                    vchashes[next_validator_id], 0)
     assert chains[0].add_block(b)
     vids.append(next_validator_id)
-print('Created %d blocks after the withdrawal, created by validators:' % (withdrawal_time_1 + 1), vids[-200:])
+print('Created %d blocks after the withdrawal, created by validators:' %
+      (withdrawal_time_1 + 1), vids[-200:])
 assert len(vchashes) - 1 in vids
 assert 0 not in vids[-200:]
 pre_bal = chains[0].state.get_balance(addrs[0])
 txdata = ct.encode('withdraw', [vchashes[0]])
-t4 = Transaction(chains[0].state.get_nonce(addrs[0]), 0, 1000000, casper_config['CASPER_ADDR'], 0, txdata).sign(privkeys[0])
+t4 = Transaction(
+    chains[0].state.get_nonce(
+        addrs[0]),
+    0,
+    1000000,
+    casper_config['CASPER_ADDR'],
+    0,
+    txdata).sign(
+    privkeys[0])
 apply_transaction(chains[0].state, t4)
 post_bal = chains[0].state.get_balance(addrs[0])
 print('Wei withdrawn:', post_bal - pre_bal)
 blocks_by_v0_in_stage1 = len([x for x in vids[:200] if x == 0])
-expected_revenue_in_stage1 = blocks_by_v0_in_stage1 * max(sum(deposit_sizes[:-1]), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
+expected_revenue_in_stage1 = blocks_by_v0_in_stage1 * \
+    max(sum(deposit_sizes[:-1]), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
 blocks_by_v0_in_stage2 = len([x for x in vids[200:400] if x == 0])
-expected_revenue_in_stage2 = blocks_by_v0_in_stage2 * max(sum(deposit_sizes), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
+expected_revenue_in_stage2 = blocks_by_v0_in_stage2 * \
+    max(sum(deposit_sizes), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
 
-assert post_bal - pre_bal == deposit_sizes[0] * 10**18 + expected_revenue_in_stage1 + expected_revenue_in_stage2
+assert post_bal - pre_bal == deposit_sizes[0] * 10**18 + \
+    expected_revenue_in_stage1 + expected_revenue_in_stage2
 print('PoS test fully passed')
