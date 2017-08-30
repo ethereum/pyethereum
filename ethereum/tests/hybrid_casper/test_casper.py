@@ -35,7 +35,7 @@ c.mine(1)
 print("Starting tests")
 # Initialize the first epoch
 c.mine(EPOCH_LENGTH - c.head_state.block_number)
-casper.initialize_epoch(1)
+# casper.initialize_epoch(1)
 assert casper.get_nextValidatorIndex() == 0
 assert casper.get_current_epoch() == 1
 print("Epoch initialized")
@@ -44,8 +44,8 @@ print("Epoch initialized")
 induct_validator(c, casper, t.k1, 200 * 10**18)
 # Mine two epochs
 c.mine(EPOCH_LENGTH * 3 - c.head_state.block_number)
-casper.initialize_epoch(2)
-casper.initialize_epoch(3)
+# casper.initialize_epoch(2)
+# casper.initialize_epoch(3)
 assert casper.get_total_curdyn_deposits() == 200 * 10**18
 assert casper.get_total_prevdyn_deposits() == 0
 
@@ -78,7 +78,7 @@ assert casper.get_main_hash_finalized()
 print("Commit message processed")
 # Initialize the fourth epoch
 c.mine(EPOCH_LENGTH * 4 - c.head_state.block_number)
-casper.initialize_epoch(4)
+# casper.initialize_epoch(4)
 # Check that the dynasty increased as expected
 assert casper.get_dynasty() == 4
 print(casper.get_total_prevdyn_deposits(), casper.get_total_curdyn_deposits())
@@ -99,7 +99,7 @@ print('post deposit', casper.get_deposit_size(0))
 assert casper.get_main_hash_finalized()
 # Initialize the fifth epoch
 c.mine(EPOCH_LENGTH * 5 - c.head_state.block_number)
-casper.initialize_epoch(5)
+# casper.initialize_epoch(5)
 print(casper.get_latest_npf(), casper.get_latest_ncf(), casper.get_latest_resize_factor())
 print('pre deposit', casper.get_deposit_size(0))
 assert casper.get_total_curdyn_deposits() == casper.get_deposit_size(0)
@@ -127,16 +127,16 @@ assert casper.get_main_hash_justified()
 assert casper.get_main_hash_finalized()
 ds_0_non_finalized = casper.get_deposit_size(0)
 c.mine(EPOCH_LENGTH * 6 - c.head_state.block_number)
-casper.initialize_epoch(6)
+# casper.initialize_epoch(6)
 ds_1_non_finalized = casper.get_deposit_size(0)
 print("Non-finalization losses (first epoch): %.4f" % (1 - ds_1_non_finalized / ds_0_non_finalized))
 assert ds_1_non_finalized < ds_0_non_finalized
 c.mine(EPOCH_LENGTH * 7 - c.head_state.block_number)
-casper.initialize_epoch(7)
+# casper.initialize_epoch(7)
 ds_2_non_finalized = casper.get_deposit_size(0)
 print("Non-finalization losses (second epoch): %.4f" % (1 - ds_2_non_finalized / ds_1_non_finalized))
 c.mine(EPOCH_LENGTH * 8 - c.head_state.block_number)
-casper.initialize_epoch(8)
+# casper.initialize_epoch(8)
 ds_3_non_finalized = casper.get_deposit_size(0)
 print("Non-finalization losses (third epoch): %.4f" % (1 - ds_3_non_finalized / ds_2_non_finalized))
 assert (ds_2_non_finalized - ds_3_non_finalized) > (ds_0_non_finalized - ds_1_non_finalized)
@@ -154,7 +154,7 @@ print(casper.get_deposit_size(0))
 p4 = mk_prepare(0, _e, _a, _se, _sa, t.k1)
 assert casper.get_main_hash_finalized()
 c.mine(EPOCH_LENGTH * 9 - c.head_state.block_number)
-casper.initialize_epoch(9)
+# casper.initialize_epoch(9)
 print(casper.get_latest_npf(), casper.get_latest_ncf(), casper.get_latest_resize_factor())
 print(casper.get_deposit_size(0), casper.get_current_penalty_factor())
 ds_after_finalize = casper.get_deposit_size(0)
@@ -175,7 +175,7 @@ casper.prepare(p4)
 c4 = mk_commit(0, _e, _a, 8, t.k1)
 casper.commit(c4)
 c.mine(EPOCH_LENGTH * 10 - c.head_state.block_number)
-casper.initialize_epoch(10)
+# casper.initialize_epoch(10)
 _e, _a, _se, _sa = \
     casper.get_current_epoch(), casper.get_recommended_ancestry_hash(), \
     casper.get_recommended_source_epoch(), casper.get_recommended_source_ancestry_hash()
@@ -184,7 +184,7 @@ casper.prepare(p4)
 c4 = mk_commit(0, _e, _a, 9, t.k1)
 casper.commit(c4)
 c.mine(EPOCH_LENGTH * 11 - c.head_state.block_number)
-casper.initialize_epoch(11)
+# casper.initialize_epoch(11)
 assert abs(sum(map(casper.get_deposit_size, range(5))) - casper.get_total_curdyn_deposits()) < 5
 print("Validator induction works")
 _e, _a, _se, _sa = \
@@ -201,7 +201,7 @@ print("Epoch 11 finalized with 4/5 prepares/commits")
 casper.logout(mk_logout(0, 11, t.k1))
 
 c.mine(EPOCH_LENGTH * 12 - c.head_state.block_number)
-casper.initialize_epoch(12)
+# casper.initialize_epoch(12)
 assert casper.get_deposit_size(4) < \
     casper.get_deposit_size(1) == casper.get_deposit_size(2) == casper.get_deposit_size(3)
 
@@ -218,7 +218,7 @@ assert casper.get_main_hash_finalized()
 
 print("Epoch 12 finalized with 4/5 prepares/commits")
 c.mine(EPOCH_LENGTH * 13 - c.head_state.block_number)
-casper.initialize_epoch(13)
+# casper.initialize_epoch(13)
 assert abs(sum(map(casper.get_deposit_size, range(1, 5))) - casper.get_total_curdyn_deposits()) < 5
 assert abs(sum(map(casper.get_deposit_size, range(5))) - casper.get_total_prevdyn_deposits()) < 5
 
@@ -235,14 +235,14 @@ assert casper.get_main_hash_finalized()
 print("Epoch 13 finalized with 4/5 prepares/commits")
 
 c.mine(EPOCH_LENGTH * 14 - c.head_state.block_number)
-casper.initialize_epoch(14)
+# casper.initialize_epoch(14)
 assert abs(sum(map(casper.get_deposit_size, range(1, 5))) - casper.get_total_curdyn_deposits()) < 5
 assert abs(sum(map(casper.get_deposit_size, range(1, 5))) - casper.get_total_prevdyn_deposits()) < 5
 
 print("Verified post-deposit logouts")
 for i in range(15, 100):
     c.mine(EPOCH_LENGTH * i - c.head_state.block_number)
-    casper.initialize_epoch(i)
+    # casper.initialize_epoch(i)
     _e, _a, _se, _sa = \
         casper.get_current_epoch(), casper.get_recommended_ancestry_hash(), \
         casper.get_recommended_source_epoch(), casper.get_recommended_source_ancestry_hash()

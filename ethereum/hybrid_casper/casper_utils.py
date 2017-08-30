@@ -4,7 +4,7 @@ import copy
 
 from ethereum import utils, abi, genesis_helpers, config
 from ethereum.hybrid_casper.casper_initiating_transactions import mk_initializers, purity_checker_address, purity_checker_abi
-# from ethereum.hybrid_casper import consensus
+from ethereum.hybrid_casper import consensus
 from ethereum.messages import apply_transaction
 from ethereum.tools.tester import a0
 from viper import compiler
@@ -32,8 +32,7 @@ def make_casper_genesis(alloc, epoch_length, withdrawal_delay, base_interest_fac
     casper_config['HOMESTEAD_FORK_BLKNUM'] = 0
     casper_config['ANTI_DOS_FORK_BLKNUM'] = 0
     casper_config['CLEARING_FORK_BLKNUM'] = 0
-    # casper_config['CONSENSUS_STRATEGY'] = 'hybrid_casper'
-    casper_config['CONSENSUS_STRATEGY'] = 'pow'
+    casper_config['CONSENSUS_STRATEGY'] = 'hybrid_casper'
     casper_config['NULL_SENDER'] = utils.sha3('NULL_SENDER')
     casper_config['EPOCH_LENGTH'] = epoch_length
     casper_config['WITHDRAWAL_DELAY'] = withdrawal_delay
@@ -52,7 +51,7 @@ def make_casper_genesis(alloc, epoch_length, withdrawal_delay, base_interest_fac
         assert success
         state.gas_used = 0
         state.set_balance(utils.privtoaddr(casper_config['NULL_SENDER']), 0)
-    # consensus.initialize(state)
+    consensus.initialize(state)
     state.commit()
     return state
 
