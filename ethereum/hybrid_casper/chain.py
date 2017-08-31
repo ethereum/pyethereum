@@ -4,8 +4,10 @@ import time
 import itertools
 from ethereum import utils
 from ethereum.utils import parse_as_bin, big_endian_to_int
+from ethereum.hybrid_casper import casper_utils
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
+from ethereum.tools import tester
 import rlp
 from rlp.utils import encode_hex
 from ethereum.exceptions import InvalidTransaction, VerificationFailed
@@ -109,28 +111,8 @@ class Chain(object):
         return checkpoint
 
     # ~~~~~~~~~~~~~~~~~~~~ CASPER ~~~~~~~~~~~~~~~~~~~~ #
-    def casper_log_handler(self, contract_log, blockhash):
-        # Return if it's not a log from the Casper address or if it's not a commit log
-        if (contract_log.address != self.casper_address or
-                contract_log.topics[0] != utils.bytearray_to_int(utils.sha3("commit()"))):
-            return
-        self.commit_logs.append(contract_log.data)
-        # Wait until we have all three commit events before processing the commit
-        if len(self.commit_logs) != 3:
-            # If we don't have all three, return.
-            return
-        log.info('Recieved commit')
-        # Extract the raw commit RLP, total deposits for the dynasty, and this validator's deposits
-        raw_commit, total_deposits, validator_deposits = self.commit_logs.pop(0), self.commit_logs.pop(0), self.commit_logs.pop(0)
-        commit = self.get_decoded_commit(raw_commit)
-        self.store_commit(commit, total_deposits, validator_deposits)
-        # Update the checkpoint's `subtree_score` & `child_pointer` which are effected by the new commit score
-        self.update_subtree_scores_and_child_pointers(commit['hash'])
-        # Try to update the head, in case the new commit justifies a reorg
-        self.recompute_head_checkpoint(self.get_block(commit['hash']))
-
     def update_subtree_scores_and_child_pointers(self, checkpoint_hash):
-        if b'cp_total_deposits:' + checkpoint_hash not in self.db:
+        if b'cp_score:' + checkpoint_hash not in self.db:
             raise Exception('No deposits found for chekcpoint hash: {}'.format(utils.encode_hex(checkpoint_hash)))
         new_cp_score = self.get_checkpoint_score(checkpoint_hash)
         if new_cp_score <= self.get_subtree_score(checkpoint_hash):
@@ -138,7 +120,7 @@ class Chain(object):
             return
         cp_iterator = checkpoint_hash
         log.info('*** Updating subtree scores. cp_iterator num: {} - cp_iterator score: {}'.format(self.get_block(cp_iterator).number, self.get_subtree_score(cp_iterator)))
-        while cp_iterator is not None and self.get_subtree_score(cp_iterator) < new_cp_score:
+        while cp_iterator != self.genesis.hash and self.get_subtree_score(cp_iterator) < new_cp_score:
             log.info('*** cp_iterator: {}'.format(self.get_block(cp_iterator).number))
             self.db.put(b'cp_subtree_score' + cp_iterator, new_cp_score)
             parent_iterator = self.get_prev_checkpoint_hash(cp_iterator)
@@ -152,21 +134,6 @@ class Chain(object):
 
     def get_subtree_score(self, checkpoint_hash):
         return self.db.get(b'cp_subtree_score' + checkpoint_hash)
-
-    def store_commit(self, commit, total_deposits, validator_deposits):
-        checkpoint_hash = commit['hash']
-        # Store the total deposits for this checkpoint if we haven't already
-        if b'cp_total_deposits:' + checkpoint_hash not in self.db:
-            self.db.put(b'cp_total_deposits:' + checkpoint_hash, total_deposits)
-        # Store this validator's deposit for this checkpoint
-        try:
-            deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
-        except KeyError:
-            deposits = dict()
-        if commit['validator_index'] in deposits:
-            log.info('Validator deposit already stored!')
-        deposits[commit['validator_index']] = validator_deposits
-        self.db.put(b'cp_deposits:' + checkpoint_hash, deposits)
 
     def get_score(self, block):
         if not self.is_checkpoint(block):
@@ -190,7 +157,10 @@ class Chain(object):
 
     def recompute_head_checkpoint(self, candidate):
         assert self.is_checkpoint(candidate) and self.is_checkpoint(self.head_checkpoint)
-        root = self.get_shared_parent_cp(self.head, candidate)
+        if self.head_checkpoint == self.genesis or candidate == self.genesis:
+            root = self.genesis
+        else:
+            root = self.get_shared_parent_cp(self.head_checkpoint, candidate)
         log.info('Head: {} - Candidate: {} - Root: {}'.format(self.head_checkpoint.number, candidate.number, root.number))
         cp_head_hash = self.choose_head_checkpoint(root.hash)
         log.info('Checkpoint head number: {}'.format(self.get_block(cp_head_hash).number))
@@ -324,10 +294,21 @@ class Chain(object):
         self.db.put(b'state:' + block.header.hash, temp_state.trie.root_hash)
         # ~~~ Finality Gadget Fork Choice ~~~~ #
         old_head_chekpoint = self.head_checkpoint
-        for r in temp_state.receipts:
-            [self.casper_log_handler(l, block.header.hash) for l in r.logs]
+        # Store the new score
+        cp_hash = self.get_prev_checkpoint_hash(block.hash)
+        casper = tester.ABIContract(tester.State(temp_state), casper_utils.casper_abi, self.config['CASPER_ADDRESS'])
+        try:
+            new_score = casper.get_main_hash_committed_frac()
+            log.info('Got new score! {}'.format(new_score))
+        except tester.TransactionFailed:
+            new_score = 0
+        if self.get_checkpoint_score(cp_hash) <= new_score:
+            self.db.put(b'cp_score:' + cp_hash, new_score)
+        # Update our view
+        self.update_subtree_scores_and_child_pointers(cp_hash)
+        cp = self.get_block(cp_hash)
+        self.recompute_head_checkpoint(cp)
         # Store the block as its checkpoint child if is is heavier than the current child
-        cp = self.get_prev_checkpoint_block(block)
         p_cp = cp
         while cp is not self.genesis and self.get_checkpoint_score(cp.hash) == 0:
             cp = self.get_prev_checkpoint_block(cp)
@@ -390,14 +371,6 @@ class Chain(object):
 
     # ~~~~~~~~~~~~~~~~~~~~ CASPER UTILS ~~~~~~~~~~~~~~~~~~~~ #
 
-    def get_decoded_commit(self, commit_rlp):
-        commit_array = rlp.decode(commit_rlp)
-        commit = dict()
-        for i, field in enumerate(['validator_index', 'epoch', 'hash', 'prev_commit_epoch', 'sig']):
-            commit[field] = commit_array[i]
-        commit['raw_rlp'] = commit_rlp
-        return commit
-
     def get_prev_checkpoint_block(self, block):
         return self.get_block(self.get_prev_checkpoint_hash(block.hash))
 
@@ -438,19 +411,10 @@ class Chain(object):
 
     def get_checkpoint_score(self, checkpoint_hash):
         try:
-            total_deposits = self.db.get(b'cp_total_deposits:' + checkpoint_hash)
+            score = self.db.get(b'cp_score:' + checkpoint_hash)
+            return score
         except KeyError:
             return 0
-        prev_dyn_total_deposits, curr_dyn_total_deposits = utils.big_endian_to_int(total_deposits[:32]), utils.big_endian_to_int(total_deposits[32:])
-        deposits = self.db.get(b'cp_deposits:' + checkpoint_hash)
-        prev_dyn_deposits = 0
-        curr_dyn_deposits = 0
-        for key, d in deposits.items():
-            prev_dyn_deposits += utils.big_endian_to_int(d[:32])
-            curr_dyn_deposits += utils.big_endian_to_int(d[32:])
-        prev_dyn_score = prev_dyn_deposits / prev_dyn_total_deposits if prev_dyn_total_deposits > 0 else 1
-        curr_dyn_score = curr_dyn_deposits / curr_dyn_total_deposits if curr_dyn_total_deposits > 0 else 1
-        return min(min(prev_dyn_score, curr_dyn_score), 2/3.)
 
     # ~~~~~~~~~~~~~~~~~~~~ BLOCK UTILS ~~~~~~~~~~~~~~~~~~~~ #
 

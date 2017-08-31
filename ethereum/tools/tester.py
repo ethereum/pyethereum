@@ -1,6 +1,5 @@
 from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int, checksum_encode, int_to_big_endian, encode_hex
 from ethereum.genesis_helpers import mk_basic_state
-from ethereum.pow import chain as pow_chain
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.config import config_homestead, config_tangerine, config_spurious, config_metropolis, default_config, Env
@@ -156,6 +155,8 @@ class State(object):
 
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
+        from ethereum.pow import chain as pow_chain
+        from ethereum.hybrid_casper import chain as hybrid_casper_chain
         if genesis:
             if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
                 self.chain = hybrid_casper_chain.Chain(genesis, reset_genesis=True)
