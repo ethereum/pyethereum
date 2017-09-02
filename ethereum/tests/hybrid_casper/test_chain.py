@@ -1,5 +1,4 @@
 import pytest
-from ethereum import utils
 from ethereum.tools import tester
 from ethereum.tests.utils import new_db
 from ethereum.db import EphemDB
@@ -273,73 +272,3 @@ def test_head_change_for_more_commits_on_different_forks(db):
     casper.commit(mk_commit(1, _e, _a, _pce[1], keys[1]))
     RF = t.mine(2)
     assert t.chain.head_hash == RF.hash
-
-def t2est_head_change_for_more_commits_on_parent_fork(db):
-    """"
-    Test that all commits from parent checkpoints are counted, even if they exist
-    on different forks.
-
-    Chain0: 3A_5, 4A_1, 5A_1            HEAD_CHANGE
-    add
-    Chain1:       4A_1                  NO_CHANGE
-    add
-    Chain2: 3A_5,             7A_2      NO_CHANGE
-    add
-    Chain3:                   7A_1      HEAD_CHANGE
-    """
-    keys = tester.keys[:5]
-    t, casper = init_multi_validator_chain_and_casper(keys)
-    epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
-    epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
-    # 3A_5: Prepare and commit all
-    for i, k in enumerate(keys):
-        casper.prepare(mk_prepare(i, 3, epoch_2_anchash, 2, epoch_2_anchash, k))
-        t.mine()
-    for i, k in enumerate(keys):
-        casper.commit(mk_commit(i, 3, epoch_blockhash(t, 3), 2 if i == 0 else 0, k))
-        t.mine()
-    epoch_3_anchash = utils.sha3(epoch_blockhash(t, 3) + epoch_2_anchash)
-    root_hash = t.mine().hash
-    # 4A_1: Prepare all, commit 1
-    mine_epochs(t, 1)
-    for i, k in enumerate(keys):
-        casper.prepare(mk_prepare(i, 4, epoch_3_anchash, 3, epoch_3_anchash, k))
-        t.mine()
-    casper.commit(mk_commit(0, 4, epoch_blockhash(t, 4), 3, keys[0]))
-    epoch_4_anchash = utils.sha3(epoch_blockhash(t, 4) + epoch_3_anchash)
-    chain0_4A = t.mine()
-    # 5A_1: Prepare all, commit 1
-    mine_epochs(t, 1)
-    for i, k in enumerate(keys):
-        casper.prepare(mk_prepare(i, 5, epoch_4_anchash, 4, epoch_4_anchash, k))
-        t.mine()
-    casper.commit(mk_commit(0, 5, epoch_blockhash(t, 5), 4, keys[0]))
-    chain0 = t.mine()
-    assert t.chain.head_hash == chain0.hash
-    # Chain1: On a different fork, add another commit for 4A
-    t.change_head(chain0_4A.hash)
-    casper.commit(mk_commit(1, 4, epoch_blockhash(t, 4), 3, keys[1]))
-    t.mine()
-    assert t.chain.head_hash == chain0.hash
-    # Chain2: Build a new fork which will eventually be chosen after recieving 3 commits
-    t.change_head(root_hash)
-    # 7A_2: Prepare all except v0, commit 2 -- Head will not change because of 4A_2
-    mine_epochs(t, 4)
-    for i, k in enumerate(keys[1:], 1):
-        casper.prepare(mk_prepare(i, 7, epoch_3_anchash, 3, epoch_3_anchash, k))
-        t.mine().hash
-    chain2_7A = t.mine()
-    casper.commit(mk_commit(1, 7, epoch_blockhash(t, 7), 3, keys[1]))
-    t.mine()
-    casper.commit(mk_commit(2, 7, epoch_blockhash(t, 7), 3, keys[2]))
-    chain2_longest = t.mine()
-    assert t.chain.head_hash == chain0.hash
-    # 7A_1: Add one more commit on a fork which will now be enough to change the head
-    t.change_head(chain2_7A.hash)
-    casper.commit(mk_commit(3, 7, epoch_blockhash(t, 7), 3, keys[3]))
-    t.mine(number_of_blocks=2)
-    # We now choose the longest chain considering all known commits, which happens to be chain2
-    assert t.chain.head_hash == chain2_longest.hash
-    chain3 = t.mine()
-    # We just mined one more block, and so we now switch to chain3
-    assert t.chain.head_hash == chain3.hash
