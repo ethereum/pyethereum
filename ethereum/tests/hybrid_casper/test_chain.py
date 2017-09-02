@@ -224,47 +224,53 @@ def test_head_change_to_longest_known_checkpoint_chain(db):
     assert t.chain.head_hash == chain0_4A_1_longest.hash
 
 
-def t2est_head_change_for_more_commits_on_different_forks(db):
+def test_head_change_for_more_commits_on_different_forks(db):
     """" [L & R are checkpoints. Ex: L3_5 is local chain, 5th epoch, with 4 stake weight]
     Local: L3_5, L4_1
     add
     Remote: R3_5, R5_1
     add
-    Remote Fork: R3_5, RF5_1
+    Remote Fork: R3_5, RF5_2
     """
     keys = tester.keys[:5]
+    validator_indexes = list(range(0, 5))
     t, casper = init_multi_validator_chain_and_casper(keys)
-    epoch_1_anchash = utils.sha3(epoch_blockhash(t, 1) + epoch_blockhash(t, 0))
-    epoch_2_anchash = utils.sha3(epoch_blockhash(t, 2) + epoch_1_anchash)
     # L3_5: Prepare and commit all
+    _e, _a, _se, _sa, _pce = get_recommended_casper_msg_contents(casper, validator_indexes)
     for i, k in enumerate(keys):
-        casper.prepare(mk_prepare(i, 3, epoch_2_anchash, 2, epoch_2_anchash, k))
+        casper.prepare(mk_prepare(i, _e, _a, _se, _sa, k))
         t.mine()
     for i, k in enumerate(keys):
-        casper.commit(mk_commit(i, 3, epoch_blockhash(t, 3), 2 if i == 0 else 0, k))
+        casper.commit(mk_commit(i, _e, _a, _pce[i], k))
         t.mine()
-    epoch_3_anchash = utils.sha3(epoch_blockhash(t, 3) + epoch_2_anchash)
     root_hash = t.mine().hash
     # L4_1: Prepare all, commit 1
     mine_epochs(t, 1)
+    _e, _a, _se, _sa, _pce = get_recommended_casper_msg_contents(casper, validator_indexes)
     for i, k in enumerate(keys):
-        casper.prepare(mk_prepare(i, 4, epoch_3_anchash, 3, epoch_3_anchash, k))
+        casper.prepare(mk_prepare(i, _e, _a, _se, _sa, k))
         t.mine()
-    casper.commit(mk_commit(0, 4, epoch_blockhash(t, 4), 3, keys[0]))
+    casper.commit(mk_commit(0, _e, _a, _pce[0], keys[0]))
+    casper.commit(mk_commit(1, _e, _a, _pce[1], keys[1]))
     L = t.mine()
     assert t.chain.head_hash == L.hash
     t.change_head(root_hash)
     # R5_1: Prepare all except v0, commit 1 -- Head will not change even with longer PoW chain
     mine_epochs(t, 2)
+    _e, _a, _se, _sa, _pce = get_recommended_casper_msg_contents(casper, validator_indexes)
     for i, k in enumerate(keys[1:], 1):
-        casper.prepare(mk_prepare(i, 5, epoch_3_anchash, 3, epoch_3_anchash, k))
+        casper.prepare(mk_prepare(i, _e, _a, _se, _sa, k))
         fork_hash = t.mine().hash
-    casper.commit(mk_commit(1, 5, epoch_blockhash(t, 5), 3, keys[1]))
+    casper.commit(mk_commit(1, _e, _a, _pce[1], keys[1]))
     t.mine()
     assert t.chain.head_hash == L.hash
-    # RF5_1: Commit 1 -- Head will change because of extra commit; however not all commits will be present in state
+    # RF5_1: Commit 2 -- Head will change because of the two commits
     t.change_head(fork_hash)
-    casper.commit(mk_commit(2, 5, epoch_blockhash(t, 5), 3, keys[2]))
+    _e, _a, _se, _sa, _pce = get_recommended_casper_msg_contents(casper, validator_indexes)
+    casper.commit(mk_commit(2, _e, _a, _pce[2], keys[2]))
+    t.mine()
+    assert t.chain.head_hash == L.hash
+    casper.commit(mk_commit(1, _e, _a, _pce[1], keys[1]))
     RF = t.mine(2)
     assert t.chain.head_hash == RF.hash
 
