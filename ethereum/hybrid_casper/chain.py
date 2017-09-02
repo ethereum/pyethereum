@@ -302,17 +302,20 @@ class Chain(object):
             log.info('Got new score! {}'.format(new_score))
         except tester.TransactionFailed:
             new_score = 0
-        if self.get_checkpoint_score(cp_hash) <= new_score:
+        if self.get_checkpoint_score(cp_hash) < new_score or self.get_checkpoint_score(cp_hash) == 0:
+            log.info('Updating checkpoint score. Block num: {} - New Score: {}'.format(self.get_block(cp_hash).number, new_score))
             self.db.put(b'cp_score:' + cp_hash, new_score)
         # Update our view
         self.update_subtree_scores_and_child_pointers(cp_hash)
         cp = self.get_block(cp_hash)
-        self.recompute_head_checkpoint(cp)
         # Store the block as its checkpoint child if is is heavier than the current child
         p_cp = cp
         while cp is not self.genesis and self.get_checkpoint_score(cp.hash) == 0:
             cp = self.get_prev_checkpoint_block(cp)
-        log.info('Recieved block. Block num: {} - Prev cp num: {} - Prev committed cp num: {} - P committed cp score: {}'.format(block.number, p_cp.number, cp.number, self.get_checkpoint_score(cp.hash)))
+        log.info('Recieved block. Block num: {} - Prev cp num: {} - Prev committed cp num: {} - Head cp num: {} - Prev committed cp score: {} - Current head cp score: {}'.format(block.number, p_cp.number, cp.number, self.head_checkpoint.number, self.get_checkpoint_score(cp.hash), self.get_checkpoint_score(self.checkpoint_head_hash)))
+        log.info('head cp hash: {} - block prev cp hash: {}'.format(utils.encode_hex(cp_hash), utils.encode_hex(self.checkpoint_head_hash)))
+        # Recompute head
+        self.recompute_head_checkpoint(cp)
         # Set a new head if required
         log.info('Head cp num: {} - block prev cp num: {}'.format(self.head_checkpoint.number, cp.number))
         if self.head_checkpoint == cp:
