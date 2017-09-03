@@ -69,18 +69,18 @@ class Validator(object):
             return b'\x00' * 32
         return state.prev_headers[epoch*self.epoch_length * -1 - 1].hash
 
-    def get_ancestry_hash(self, state, epoch, source_epoch, source_ancestry_hash):
-        if epoch == 0:
-            return source_ancestry_hash
-        ancestry_hash = source_ancestry_hash
-        for i in range(source_epoch, epoch):
-            ancestry_hash = utils.sha3(self.epoch_blockhash(state, i) + ancestry_hash)
-        return ancestry_hash
+    def get_recommended_casper_msg_contents(self, casper, validator_index):
+        return \
+            casper.get_current_epoch(), casper.get_recommended_ancestry_hash(), \
+            casper.get_recommended_source_epoch(), casper.get_recommended_source_ancestry_hash(), \
+            casper.get_validators__prev_commit_epoch(validator_index)
 
     def get_validator_index(self, state):
         t = tester.State(state.ephemeral_clone())
         t.state.gas_limit = 9999999999
         casper = tester.ABIContract(t, casper_utils.casper_abi, self.chain.casper_address)
+        if self.valcode_addr is None:
+            raise Exception('Valcode address not set')
         try:
             return casper.get_validator_indexes(self.valcode_addr)
         except tester.TransactionFailed:
@@ -136,33 +136,28 @@ class Validator(object):
         # NO_DBL_PREPARE: Don't prepare if we have already
         if epoch in self.prepares:
             return None
-        if self.chain.checkpoint_head_hash != b'\x00'*32:
-            source_epoch = self.chain.get_block(self.chain.checkpoint_head_hash).header.number // self.epoch_length
-        else:
-            source_epoch = 0
-        # PREPARE_COMMIT_CONSISTENCY
-        if source_epoch < self.prev_commit_epoch and self.prev_commit_epoch < epoch:
-            return None
         # Create a Casper contract which we can use to get related values
         casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.chain.casper_address)
         # Get the ancestry hash and source ancestry hash
-        source_ancestry_hash = casper.get_justified_ancestry_hashes(source_epoch)
-        ancestry_hash = self.get_ancestry_hash(state, epoch, source_epoch, source_ancestry_hash)
-        prepare_msg = casper_utils.mk_prepare(self.get_validator_index(state), epoch, self.epoch_blockhash(state, epoch),
-                                              ancestry_hash, source_epoch, source_ancestry_hash, self.key)
+        validator_index = self.get_validator_index(state)
+        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
+        # PREPARE_COMMIT_CONSISTENCY
+        if _se < self.prev_commit_epoch and self.prev_commit_epoch < epoch:
+            return None
+        prepare_msg = casper_utils.mk_prepare(validator_index, _e, _a, _se, _sa, self.key)
         try:  # Attempt to submit the prepare, to make sure that it is justified
             casper.prepare(prepare_msg)
         except tester.TransactionFailed:
             log.info('Prepare failed! Validator {} - hash justified {} - validator start {} - valcode addr {}'
                      .format(self.get_validator_index(state),
-                             casper.get_consensus_messages__ancestry_hash_justified(epoch, ancestry_hash),
-                             casper.get_validators__dynasty_start(self.get_validator_index(state)),
+                             casper.get_consensus_messages__ancestry_hash_justified(epoch, _a),
+                             casper.get_validators__dynasty_start(validator_index),
                              utils.encode_hex(self.valcode_addr)))
             return None
         # Save the prepare message we generated
         self.prepares[epoch] = prepare_msg
         # Save the highest source epoch we have referenced in our prepare's source epoch
-        if source_epoch > self.prev_prepare_epoch:
+        if epoch > self.prev_prepare_epoch:
             self.prev_prepare_epoch = epoch
         log.info('Prepare submitted: validator %d - epoch %d - prev_commit_epoch %d - hash %s' %
                  (self.get_validator_index(state), epoch, self.prev_commit_epoch, utils.encode_hex(self.epoch_blockhash(state, epoch))))
@@ -175,9 +170,10 @@ class Validator(object):
             return None
         # Create a Casper contract which we can use to get related values
         casper = tester.ABIContract(tester.State(state), casper_utils.casper_abi, self.chain.casper_address)
+        validator_index = self.get_validator_index(state)
+        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
         # Make the commit message
-        commit_msg = casper_utils.mk_commit(self.get_validator_index(state), epoch, self.epoch_blockhash(state, epoch),
-                                            self.prev_commit_epoch, self.key)
+        commit_msg = casper_utils.mk_commit(validator_index, _e, _a, _pce, self.key)
         try:  # Attempt to submit the commit, to make sure that it doesn't doesn't violate DBL_PREPARE & it is justified
             casper.commit(commit_msg)
         except tester.TransactionFailed:
