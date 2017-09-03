@@ -33,7 +33,7 @@ def init_multi_validator_casper(num_validators):
     Initialize Casper genesis, login an initial validator, and create num_validators validators
     """
     # Begin tests
-    genesis = casper_utils.make_casper_genesis(ALLOC, EPOCH_LENGTH, 100, 0.02, 0.002)
+    genesis = casper_utils.make_casper_genesis(ALLOC, EPOCH_LENGTH, 25, 0.02, 0.002)
     t = tester.Chain(genesis=genesis)
     casper = tester.ABIContract(t, casper_utils.casper_abi, t.chain.config['CASPER_ADDRESS'])
     # Get the val code addresses and network
@@ -146,7 +146,7 @@ def test_validate_epochs_skipping_one(db):
     # Log the first validator's chain
     log_chain(validators[0])
 
-def test_login_and_logout(db):
+def test_withdrawl(db):
     """"
     Create 3 validators, log one out, and check that the logout was successful
     """
@@ -155,19 +155,19 @@ def test_login_and_logout(db):
     validators[0].mining = True
     # Mine enough epochs to log everyone in, and then mine one more where everyone is able to prepare & commit
     mine_epochs(validators[0], 3)
-    # Submit a flick status tx which should logout our 3rd validator
-    validators[2].broadcast_flick_status(0)
+    # Submit a logout tx which should logout our 3rd validator
+    validators[2].broadcast_logout(0)
     # Mine the logout tx and finish the epoch
     mine_epochs(validators[0], 1)
     casper = mk_casper_tester(validators[0])
     log.info('Dynasty: {}'.format(casper.get_dynasty()))
     # Check that all three validators are logged in
-    assert 9 * 10**18 <= casper.get_total_deposits(3) < 10 * 10**18
+    assert 9 * 10**18 <= casper.get_total_curdyn_deposits() < 10 * 10**18
     # Mine & finalize enough epochs to logout the validator
     mine_epochs(validators[0], 2)
     casper = mk_casper_tester(validators[0])
     # Check that only two validators are logged in
-    assert 6 * 10**18 <= casper.get_total_deposits(5) < 7 * 10**18
+    assert 6 * 10**18 <= casper.get_total_curdyn_deposits() < 7 * 10**18
     # TODO: For bonus points, verify this works when an epoch is not finalized!
     # Log the first validator's chain
     log_chain(validators[0])

@@ -216,21 +216,20 @@ class Validator(object):
         self.broadcast_transaction(self.valcode_tx)
         self.broadcast_transaction(self.deposit_tx)
 
-    def broadcast_flick_status(self, login_logout_flag):
+    def broadcast_logout(self, login_logout_flag):
         epoch = self.chain.state.block_number // self.epoch_length
         # Generage the message
-        flick_status_msg = casper_utils.mk_status_flicker(self.get_validator_index(self.chain.state),
-                                                          epoch, login_logout_flag, self.key)
+        logout_msg = casper_utils.mk_logout(self.get_validator_index(self.chain.state), epoch, self.key)
         # Generate transactions
-        flick_status_tx = self.mk_flick_status_tx(flick_status_msg)
+        logout_tx = self.mk_logout(logout_msg)
         # Verify the transactions pass
         temp_state = self.chain.state.ephemeral_clone()
-        flick_status_success, o1 = apply_transaction(temp_state, flick_status_tx)
-        if not flick_status_success:
+        logout_success, o1 = apply_transaction(temp_state, logout_tx)
+        if not logout_success:
             self.nonce = self.chain.state.get_nonce(self.coinbase)
             raise Exception('Valcode tx or deposit tx failed')
-        log.info('Login/logout Tx generated: {}'.format(str(flick_status_tx)))
-        self.broadcast_transaction(flick_status_tx)
+        log.info('Login/logout Tx generated: {}'.format(str(logout_tx)))
+        self.broadcast_transaction(logout_tx)
 
     def mk_transaction(self, to=b'\x00' * 20, value=0, data=b'', gasprice=tester.GASPRICE, startgas=tester.STARTGAS):
         tx = transactions.Transaction(self.nonce, gasprice, startgas, to, value, data).sign(self.key)
@@ -247,11 +246,11 @@ class Validator(object):
         deposit_tx = self.mk_transaction(self.chain.casper_address, value, deposit_func)
         return deposit_tx
 
-    def mk_flick_status_tx(self, login_logout_msg):
+    def mk_logout(self, login_logout_msg):
         casper_ct = abi.ContractTranslator(casper_utils.casper_abi)
-        flick_status_func = casper_ct.encode('flick_status', [login_logout_msg])
-        flick_status_tx = self.mk_transaction(self.chain.casper_address, data=flick_status_func)
-        return flick_status_tx
+        logout_func = casper_ct.encode('logout', [login_logout_msg])
+        logout_tx = self.mk_transaction(self.chain.casper_address, data=logout_func)
+        return logout_tx
 
     def mk_prepare_tx(self, prepare_msg):
         casper_ct = abi.ContractTranslator(casper_utils.casper_abi)
