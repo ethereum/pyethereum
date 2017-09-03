@@ -137,11 +137,11 @@ def test_validate_epochs_skipping_one(db):
     for v in validators:
         assert v.prev_commit_epoch == 5
     # Make sure the hash for the epoch is justified and the epoch is committed
-    casper = mk_casper_tester(validators[0])
-    assert casper.get_consensus_messages__hash_justified(5, validators[0].epoch_blockhash(validators[0].chain.state, 5))
-    assert casper.get_consensus_messages__committed(5)
+    cp_hash = validators[0].chain.get_block_by_number(5*EPOCH_LENGTH).hash
+    assert validators[0].chain.get_checkpoint_score(cp_hash) >= 0.6
     # Make sure epoch 4 was not committed
-    assert not casper.get_consensus_messages__committed(4)
+    cp_4_hash = validators[0].chain.get_block_by_number(4*EPOCH_LENGTH).hash
+    assert validators[0].chain.get_checkpoint_score(cp_4_hash) == 0
     # TODO: Check that the ancestry hash is correct
     # Log the first validator's chain
     log_chain(validators[0])
