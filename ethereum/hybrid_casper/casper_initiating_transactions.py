@@ -33,7 +33,7 @@ def mk_initializers(config, sender_privkey, starting_nonce=0):
         o.append(tx)
         nonce += 1
     # Casper initialization transaction
-    casper_tx = Transaction(nonce, gasprice, 4500000, b'', 0, casper_bytecode).sign(sender_privkey)
+    casper_tx = Transaction(nonce, gasprice, 5000000, b'', 0, casper_bytecode).sign(sender_privkey)
     # Casper initiate call (separate from initialization to save gas)
     initiate_args = casper_ct.encode('initiate', [
         config["EPOCH_LENGTH"], config["WITHDRAWAL_DELAY"], config["OWNER"], sig_hasher_address,

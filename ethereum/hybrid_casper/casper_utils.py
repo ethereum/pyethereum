@@ -46,7 +46,7 @@ def make_casper_genesis(alloc, epoch_length, withdrawal_delay, base_interest_fac
     state = genesis_helpers.mk_basic_state(alloc, None, env=config.Env(config=casper_config))
     state.gas_limit = 10**8
     for tx in init_txs:
-        state.set_balance(utils.privtoaddr(casper_config['NULL_SENDER']), 10**18)
+        state.set_balance(utils.privtoaddr(casper_config['NULL_SENDER']), 15**18)
         success, output = apply_transaction(state, tx)
         assert success
         state.gas_used = 0
