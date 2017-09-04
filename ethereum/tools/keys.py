@@ -136,7 +136,10 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     # Compute the MAC
     mac = sha3(derivedkey[16:32] + c)
     # Make a UUID
-    u = encode_hex(os.urandom(16))
+    if sys.version_info.major == 2:
+        u = encode_hex(os.urandom(16))
+    else:
+        u = os.urandom(16)
     uuid = b'-'.join((u[:8], u[8:12], u[12:16], u[16:20], u[20:]))
     # Return the keystore json
     return {
