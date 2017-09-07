@@ -137,9 +137,9 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     mac = sha3(derivedkey[16:32] + c)
     # Make a UUID
     u = encode_hex(os.urandom(16))
-    uuid = b'-'.join((u[:8], u[8:12], u[12:16], u[16:20], u[20:]))
     if sys.version_info.major == 3:
-        uuid = encode_hex(uuid)
+        u = bytes(u, 'utf-8')
+    uuid = b'-'.join((u[:8], u[8:12], u[12:16], u[16:20], u[20:]))
     # Return the keystore json
     return {
         "crypto": {
