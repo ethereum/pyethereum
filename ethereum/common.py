@@ -169,8 +169,6 @@ def verify_execution_results(state, block):
     if block.header.state_root != state.trie.root_hash:
         raise ValueError("State root mismatch: header %s computed %s" %
                          (encode_hex(block.header.state_root), encode_hex(state.trie.root_hash)))
-    else:
-        print("State root match: %s" % encode_hex(block.header.state_root))
     if block.header.receipts_root != mk_receipt_sha(state.receipts):
         raise ValueError("Receipt root mismatch: header %s computed %s, gas used header %d computed %d, %d receipts" %
                          (encode_hex(block.header.receipts_root), encode_hex(mk_receipt_sha(state.receipts)),
