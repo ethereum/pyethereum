@@ -207,10 +207,10 @@ t4 = Transaction(
 apply_transaction(chains[0].state, t4)
 post_bal = chains[0].state.get_balance(addrs[0])
 print('Wei withdrawn:', post_bal - pre_bal)
-blocks_by_v0_in_stage1 = len([x for x in vids[:200] if x == 0])
+blocks_by_v0_in_stage1 = len([i for i in vids[:200] if i == 0])
 expected_revenue_in_stage1 = blocks_by_v0_in_stage1 * \
     max(sum(deposit_sizes[:-1]), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
-blocks_by_v0_in_stage2 = len([x for x in vids[200:400] if x == 0])
+blocks_by_v0_in_stage2 = len([i for i in vids[200:400] if i == 0])
 expected_revenue_in_stage2 = blocks_by_v0_in_stage2 * \
     max(sum(deposit_sizes), 1000000) * 10**18 * BLOCK_MAKING_PPB / 10**9
 
