@@ -399,7 +399,7 @@ class Chain(object):
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.hash, rlp.encode(block))
         self.db.put(b'changed:' + block.hash,
-                    b''.join([k.encode() if not isinstance(k, str) else k for k in list(changed.keys())]))
+                    b''.join([k.encode() if not isinstance(k, bytes) else k for k in list(changed.keys())]))
         print('Saved %d address change logs' % len(changed.keys()))
         self.db.put(b'deletes:' + block.hash, b''.join(deletes))
         log.debug('Saved %d trie node deletes for block %d (%s)' %
