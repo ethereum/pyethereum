@@ -15,6 +15,7 @@ class TestLangHybrid(object):
         self.t = tester.Chain(genesis=self.genesis)
         self.casper = tester.ABIContract(self.t, casper_utils.casper_abi, self.t.chain.env.config['CASPER_ADDRESS'])
         self.saved_blocks = dict()
+        self.last_validator_index = 0
         # Register token handlers
         self.handlers = dict()
         self.handlers['B'] = self.handle_B
@@ -34,7 +35,10 @@ class TestLangHybrid(object):
             self.t.mine(number)
 
     def handle_J(self, number):
+        if number != self.last_validator_index:
+            raise Exception('Validators must be joined in order. Expected index: {} - Actual index: {}'.format(self.last_validator_index, number))
         casper_utils.induct_validator(self.t, self.casper, tester.keys[number], 200 * 10**18)
+        self.last_validator_index += 1
 
     def handle_P(self, validator_index):
         _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(validator_index)
