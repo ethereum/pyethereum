@@ -108,7 +108,7 @@ class Receipt(rlp.Serializable):
 
 def mk_receipt(state, success, logs):
     if state.is_METROPOLIS():
-        o = Receipt(encode_int(success), state.gas_used, logs)
+        o = Receipt(b'\x01' if success else b'', state.gas_used, logs)
         return o
     else:
         return Receipt(state.trie.root_hash, state.gas_used, logs)
@@ -239,7 +239,6 @@ def apply_transaction(state, tx):
     if not result:
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
-        state.gas_used += tx.startgas
         state.delta_balance(tx.sender, tx.gasprice * gas_remained)
         state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
         output = b''
@@ -260,12 +259,13 @@ def apply_transaction(state, tx):
         # sell remaining gas
         state.delta_balance(tx.sender, tx.gasprice * gas_remained)
         state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
-        state.gas_used += gas_used
         if tx.to:
             output = bytearray_to_bytestr(data)
         else:
             output = data
         success = 1
+
+    state.gas_used += gas_used
 
     # Clear suicides
     suicides = state.suicides
@@ -396,7 +396,7 @@ def create_contract(ext, msg):
         nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = utils.mk_contract_address(msg.sender, nonce)
 
-    if ext.post_constantinople_hardfork() and (
+    if ext.post_metropolis_hardfork() and (
             ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
         log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
         return 0, 0, b''

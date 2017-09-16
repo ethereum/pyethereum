@@ -91,6 +91,7 @@ def run_block_test(params, config_overrides=None):
         params["genesisBlockHeader"]["stateRoot"])
     assert c.state.prev_headers[0].hash == safe_decode(
         params["genesisBlockHeader"]["hash"])
+    #print('std', c.state.to_dict())
 
     for blk in params["blocks"]:
         if 'blockHeader' not in blk:

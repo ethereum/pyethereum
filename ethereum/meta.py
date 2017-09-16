@@ -30,6 +30,7 @@ def apply_block(state, block):
         # Finalize (incl paying block rewards)
         cs.finalize(state, block)
         # Verify state root, tx list root, receipt root
+        #print('std', state.to_dict())
         assert verify_execution_results(state, block)
         # Post-finalize (ie. add the block header to the state for now)
         post_finalize(state, block)

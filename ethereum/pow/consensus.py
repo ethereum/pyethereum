@@ -110,7 +110,7 @@ def validate_uncles(state, block):
 def finalize(state, block):
     """Apply rewards and commit."""
 
-    if state.is_METROPOLIS() and False:
+    if state.is_METROPOLIS():
         br = state.config['BYZANTIUM_BLOCK_REWARD']
         nr = state.config['BYZANTIUM_NEPHEW_REWARD']
     else:
