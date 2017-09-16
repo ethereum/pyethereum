@@ -78,6 +78,8 @@ opcodes = {
     0xff: ['SUICIDE', 1, 0, 0],  # 5000 now
 }
 
+opcodesMetropolis = { 0x3d, 0x3e, 0xfa, 0xfd }
+
 for i in range(1, 33):
     opcodes[0x5f + i] = ['PUSH' + str(i), 0, 1, 3]
 
