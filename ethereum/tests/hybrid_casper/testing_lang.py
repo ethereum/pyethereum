@@ -1,9 +1,46 @@
 from ethereum.tools import tester
-from ethereum.utils import encode_hex
+from ethereum.utils import encode_hex, mk_contract_address, privtoaddr
 from ethereum.hybrid_casper import casper_utils
 import re
 
 ALLOC = {a: {'balance': 500*10**19} for a in tester.accounts[:10]}
+
+class Validator(object):
+    def __init__(self, valcode_addr, key):
+        self.valcode_addr = valcode_addr
+        self.key = key
+        self.prepare_map = {}  # {epoch: prepare in that epoch}
+        self.commit_incompatible_map = {}  # {epoch: commit incompatible with that epoch}
+        self.latest_commit_epoch = 0
+
+    def get_recommended_casper_msg_contents(self, casper, validator_index):
+        return \
+            casper.get_current_epoch(), casper.get_recommended_ancestry_hash(), \
+            casper.get_recommended_source_epoch(), casper.get_recommended_source_ancestry_hash(), \
+            casper.get_validators__prev_commit_epoch(validator_index)
+
+    def prepare(self, casper):
+        validator_index = self.get_validator_index(casper)
+        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
+        prepare_msg = casper_utils.mk_prepare(validator_index, _e, _a, _se, _sa, self.key)
+        self.prepare_map[_e] = prepare_msg
+        casper.prepare(prepare_msg)
+
+    def commit(self, casper):
+        validator_index = self.get_validator_index(casper)
+        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
+        commit_msg = casper_utils.mk_commit(validator_index, _e, _a, _pce, self.key)
+        if _e < self.latest_commit_epoch:
+            self.latest_commit_epoch = _e
+        casper.commit(commit_msg)
+
+    def get_validator_index(self, casper):
+        if self.valcode_addr is None:
+            raise Exception('Valcode address not set')
+        try:
+            return casper.get_validator_indexes(self.valcode_addr)
+        except tester.TransactionFailed:
+            return None
 
 class TestLangHybrid(object):
     # For a custom Casper parser, overload generic parser and construct your chain
@@ -15,18 +52,18 @@ class TestLangHybrid(object):
         self.t = tester.Chain(genesis=self.genesis)
         self.casper = tester.ABIContract(self.t, casper_utils.casper_abi, self.t.chain.env.config['CASPER_ADDRESS'])
         self.saved_blocks = dict()
-        self.last_validator_index = 0
+        self.validators = dict()
         # Register token handlers
         self.handlers = dict()
-        self.handlers['B'] = self.handle_B
-        self.handlers['J'] = self.handle_J
-        self.handlers['P'] = self.handle_P
-        self.handlers['C'] = self.handle_C
-        self.handlers['S'] = self.handle_S
-        self.handlers['R'] = self.handle_R
-        self.handlers['H'] = self.handle_H
+        self.handlers['B'] = self.mine_blocks
+        self.handlers['J'] = self.join
+        self.handlers['P'] = self.prepare
+        self.handlers['C'] = self.commit
+        self.handlers['S'] = self.save_block
+        self.handlers['R'] = self.revert_to_block
+        self.handlers['H'] = self.check_head_equals_block
 
-    def handle_B(self, number):
+    def mine_blocks(self, number):
         if number == '':
             print ("No number of blocks specified, Mining 1 epoch to curr HEAD")
             self.mine_epochs(number_of_epochs=1)
@@ -34,35 +71,32 @@ class TestLangHybrid(object):
             print ("Mining " + str(number) + " blocks to curr HEAD")
             self.t.mine(number)
 
-    def handle_J(self, number):
-        if number != self.last_validator_index:
-            raise Exception('Validators must be joined in order. Expected index: {} - Actual index: {}'.format(self.last_validator_index, number))
+    def join(self, number):
+        valcode_addr = mk_contract_address(privtoaddr(tester.keys[number]), self.t.head_state.get_nonce(privtoaddr(tester.keys[number])))
         casper_utils.induct_validator(self.t, self.casper, tester.keys[number], 200 * 10**18)
-        self.last_validator_index += 1
+        self.validators[number] = Validator(valcode_addr, tester.keys[number])
 
-    def handle_P(self, validator_index):
-        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(validator_index)
-        self.casper.prepare(casper_utils.mk_prepare(validator_index, _e, _a, _se, _sa, tester.keys[validator_index]))
+    def prepare(self, validator_index):
+        self.validators[validator_index].prepare(self.casper)
 
-    def handle_C(self, validator_index):
-        _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(validator_index)
-        self.casper.commit(casper_utils.mk_commit(validator_index, _e, _a, _pce, tester.keys[validator_index]))
+    def commit(self, validator_index):
+        self.validators[validator_index].commit(self.casper)
 
-    def handle_S(self, saved_block_id):
+    def save_block(self, saved_block_id):
         if saved_block_id in self.saved_blocks:
             raise Exception('Checkpoint {} already exists'.format(saved_block_id))
         blockhash = self.t.head_state.prev_headers[0].hash
         self.saved_blocks[saved_block_id] = blockhash
         print('Saving checkpoint with hash: {}'.format(encode_hex(self.saved_blocks[saved_block_id])))
 
-    def handle_R(self, saved_block_id):
+    def revert_to_block(self, saved_block_id):
         if saved_block_id not in self.saved_blocks:
             raise Exception('Checkpoint {} does not exist'.format(saved_block_id))
         blockhash = self.saved_blocks[saved_block_id]
         self.t.change_head(blockhash)
         print('Reverting to checkpoint with hash: {}'.format(encode_hex(self.saved_blocks[saved_block_id])))
 
-    def handle_H(self, saved_block_id):
+    def check_head_equals_block(self, saved_block_id):
         if saved_block_id not in self.saved_blocks:
             raise Exception('Checkpoint {} does not exist'.format(saved_block_id))
         blockhash = self.saved_blocks[saved_block_id]
@@ -78,12 +112,6 @@ class TestLangHybrid(object):
             if number != '':
                 number = int(number)
             self.handlers[letter](number)
-
-    def get_recommended_casper_msg_contents(self, validator_index):
-        return \
-            self.casper.get_current_epoch(), self.casper.get_recommended_ancestry_hash(), \
-            self.casper.get_recommended_source_epoch(), self.casper.get_recommended_source_ancestry_hash(), \
-            self.casper.get_validators__prev_commit_epoch(validator_index)
 
     # Mines blocks required for number_of_epochs epoch changes, plus an offset of 2 blocks
     def mine_epochs(self, number_of_epochs):
