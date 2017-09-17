@@ -124,3 +124,15 @@ def test_head_change_for_more_commits(db):
     test_string = 'B J0 J1 J2 J3 B B S0 B P0 P1 P2 P3 B1 C0 C1 B1 S1 R0 B B H1 P0 P1 P2 P3 B1 C0 C1 B1 H1 C2 B1 S2 H2'
     test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
     test.parse()
+
+def test_double_prepare_slash(db):
+    """ This tests that the chain does not change head unless there are more commits on the alternative fork """
+    test_string = 'B J0 B B S0 B P0 B1 C0 B1 R0 B P0 B1 C0 B1 X0 B J1 J2 B B P1 P2 B1 C1 C2 B P1 P2 B1 C1 C2 B1'
+    test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
+    test.parse()
+
+def test_commit_consistency_slash(db):
+    """ This tests that the chain does not change head unless there are more commits on the alternative fork """
+    test_string = 'B J0 B B S0 B P0 B1 C0 B1 R0 B B B P0 B1 C0 B1 X0 B1'
+    test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
+    test.parse()

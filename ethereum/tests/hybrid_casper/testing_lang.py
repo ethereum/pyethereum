@@ -10,7 +10,9 @@ class Validator(object):
         self.valcode_addr = valcode_addr
         self.key = key
         self.prepare_map = {}  # {epoch: prepare in that epoch}
-        self.commit_incompatible_map = {}  # {epoch: commit incompatible with that epoch}
+        self.commit_map = {}  # {epoch: commit incompatible with that epoch}
+        self.double_prepare_evidence = []
+        self.prepare_commit_consistency_evidence = []
         self.latest_commit_epoch = 0
 
     def get_recommended_casper_msg_contents(self, casper, validator_index):
@@ -23,6 +25,15 @@ class Validator(object):
         validator_index = self.get_validator_index(casper)
         _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
         prepare_msg = casper_utils.mk_prepare(validator_index, _e, _a, _se, _sa, self.key)
+        if _e in self.prepare_map and self.prepare_map[_e] != prepare_msg:
+            print('Found double prepare for validator:', encode_hex(self.valcode_addr))
+            self.double_prepare_evidence.append(self.prepare_map[_e])
+            self.double_prepare_evidence.append(prepare_msg)
+        for i in range(_se+1, _e-1):
+            if i in self.commit_map:
+                print('Found prepare commit consistency for validator:', encode_hex(self.valcode_addr))
+                self.prepare_commit_consistency_evidence.append(prepare_msg)
+                self.prepare_commit_consistency_evidence.append(self.commit_map[i])
         self.prepare_map[_e] = prepare_msg
         casper.prepare(prepare_msg)
 
@@ -30,9 +41,19 @@ class Validator(object):
         validator_index = self.get_validator_index(casper)
         _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
         commit_msg = casper_utils.mk_commit(validator_index, _e, _a, _pce, self.key)
-        if _e < self.latest_commit_epoch:
+        if _e > self.latest_commit_epoch:
             self.latest_commit_epoch = _e
+        self.commit_map[_e] = commit_msg
         casper.commit(commit_msg)
+
+    def slash(self, casper):
+        if len(self.double_prepare_evidence) > 0:
+            casper.double_prepare_slash(self.double_prepare_evidence[0], self.double_prepare_evidence[1])
+        elif len(self.prepare_commit_consistency_evidence) > 0:
+            casper.prepare_commit_inconsistency_slash(self.prepare_commit_consistency_evidence[0], self.prepare_commit_consistency_evidence[1])
+        else:
+            raise Exception('No slash evidence found')
+        print('Slashed validator:', encode_hex(self.valcode_addr))
 
     def get_validator_index(self, casper):
         if self.valcode_addr is None:
@@ -62,6 +83,7 @@ class TestLangHybrid(object):
         self.handlers['S'] = self.save_block
         self.handlers['R'] = self.revert_to_block
         self.handlers['H'] = self.check_head_equals_block
+        self.handlers['X'] = self.slash
 
     def mine_blocks(self, number):
         if number == '':
@@ -81,6 +103,9 @@ class TestLangHybrid(object):
 
     def commit(self, validator_index):
         self.validators[validator_index].commit(self.casper)
+
+    def slash(self, validator_index):
+        self.validators[validator_index].slash(self.casper)
 
     def save_block(self, saved_block_id):
         if saved_block_id in self.saved_blocks:
