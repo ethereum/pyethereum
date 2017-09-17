@@ -11,9 +11,9 @@ class Validator(object):
         self.key = key
         self.prepare_map = {}  # {epoch: prepare in that epoch}
         self.commit_map = {}  # {epoch: commit incompatible with that epoch}
+        self.uncommittable_epochs = {}
         self.double_prepare_evidence = []
         self.prepare_commit_consistency_evidence = []
-        self.latest_commit_epoch = 0
 
     def get_recommended_casper_msg_contents(self, casper, validator_index):
         return \
@@ -30,8 +30,9 @@ class Validator(object):
             self.double_prepare_evidence.append(self.prepare_map[_e])
             self.double_prepare_evidence.append(prepare_msg)
         for i in range(_se+1, _e-1):
+            self.uncommittable_epochs[i] = prepare_msg
             if i in self.commit_map:
-                print('Found prepare commit consistency for validator:', encode_hex(self.valcode_addr))
+                print('Found prepare commit consistency in prepare for validator:', encode_hex(self.valcode_addr))
                 self.prepare_commit_consistency_evidence.append(prepare_msg)
                 self.prepare_commit_consistency_evidence.append(self.commit_map[i])
         self.prepare_map[_e] = prepare_msg
@@ -41,9 +42,11 @@ class Validator(object):
         validator_index = self.get_validator_index(casper)
         _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
         commit_msg = casper_utils.mk_commit(validator_index, _e, _a, _pce, self.key)
-        if _e > self.latest_commit_epoch:
-            self.latest_commit_epoch = _e
         self.commit_map[_e] = commit_msg
+        if _e in self.uncommittable_epochs:
+                print('Found prepare commit consistency in commit for validator:', encode_hex(self.valcode_addr))
+                self.prepare_commit_consistency_evidence.append(self.uncommittable_epochs[_e])
+                self.prepare_commit_consistency_evidence.append(commit_msg)
         casper.commit(commit_msg)
 
     def slash(self, casper):
