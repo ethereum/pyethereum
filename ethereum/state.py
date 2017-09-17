@@ -370,7 +370,10 @@ class State():
                 else:
                     self.trie.delete(addr)
                     if self.executing_on_head:
-                        self.db.delete(b'address:' + addr)
+                        try:
+                            self.db.delete(b'address:' + addr)
+                        except KeyError:
+                            pass
         self.deletes.extend(self.trie.deletes)
         self.trie.deletes = []
         self.cache = {}
@@ -458,7 +461,9 @@ class State():
                 if 'storage' in data:
                     for k, v in data['storage'].items():
                         state.set_storage_data(
-                            addr, parse_as_bin(k), parse_as_bin(v))
+                            addr,
+                            big_endian_to_int(parse_as_bin(k)),
+                            big_endian_to_int(parse_as_bin(v)))
         elif "state_root" in snapshot_data:
             state.trie.root_hash = parse_as_bin(snapshot_data["state_root"])
         else:
