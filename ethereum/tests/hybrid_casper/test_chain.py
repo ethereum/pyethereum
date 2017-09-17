@@ -42,25 +42,11 @@ def init_multi_validator_chain_and_casper(validator_keys):
     assert casper.get_dynasty() == 3
     return t, casper
 
-# Helper function for gettting blockhashes by epoch, based on the current chain
-def epoch_blockhash(t, epoch):
-    if epoch == 0:
-        return b'\x00' * 32
-    return t.head_state.prev_headers[epoch*EPOCH_LENGTH * -1 - 1].hash
-
 # Mines blocks required for number_of_epochs epoch changes, plus an offset of 2 blocks
 def mine_epochs(t, number_of_epochs):
     distance_to_next_epoch = (EPOCH_LENGTH - t.head_state.block_number) % EPOCH_LENGTH
     number_of_blocks = distance_to_next_epoch + EPOCH_LENGTH*(number_of_epochs-1) + 2
     return t.mine(number_of_blocks=number_of_blocks)
-
-def get_recommended_casper_msg_contents(casper, validator_indexes):
-    prev_commit_epochs = dict()
-    for i in validator_indexes:
-        prev_commit_epochs[i] = casper.get_validators__prev_commit_epoch(i)
-    return \
-        casper.get_current_epoch(), casper.get_recommended_ancestry_hash(), \
-        casper.get_recommended_source_epoch(), casper.get_recommended_source_ancestry_hash(), prev_commit_epochs
 
 def test_mining(db):
     t, casper = init_chain_and_casper()
@@ -131,8 +117,20 @@ def test_double_prepare_slash(db):
     test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
     test.parse()
 
-def test_commit_consistency_slash(db):
+def test_commit_consistency_slash_with_violating_prepare(db):
     """ This tests that the chain does not change head unless there are more commits on the alternative fork """
     test_string = 'B J0 B B S0 B P0 B1 C0 B1 R0 B B B P0 B1 C0 B1 X0 B1'
+    test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
+    test.parse()
+
+def test_commit_consistency_slash_with_violating_commit(db):
+    """ This tests that the chain does not change head unless there are more commits on the alternative fork """
+    test_string = 'B J0 B B S0 B B B P0 B1 R0 B P0 B1 C0 B1 X0 B1'
+    test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
+    test.parse()
+
+def test_long_range_forks(db):
+    """ This tests that the chain is efficient even when forks are very long range """
+    test_string = 'B J0 J1 J2 B B S0 B B B B B B B B P0 P1 P2 B1 C0 B1 R0 B B B B B B B B B B P0 P1 P2 B1 C0 C1 C2 B P0 P1 P2 B1 C0 C1 B1 S1 H1'
     test = TestLangHybrid(test_string, 15, 100, 0.02, 0.002)
     test.parse()
