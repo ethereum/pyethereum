@@ -8,3 +8,4 @@ https://github.com/ethereum/ethash/tarball/master
 pycryptodome==3.4.6
 coincurve>=5.0.1
 https://github.com/ethereum/serpent/tarball/develop
+https://github.com/ethereum/viper/tarball/master

@@ -8,6 +8,8 @@ with open('README.rst') as readme_file:
 install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master': 'pyethash',
+    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent',
+    'https://github.com/ethereum/viper/tarball/master': 'viper'
 }
 install_requires = [
     install_requires_replacements.get(
@@ -15,11 +17,12 @@ install_requires = [
 
 # dev requirements
 tests_require = set(x.strip() for x in open('dev_requirements.txt'))
-tests_require_replacements = dict()
-tests_require_replacements = {
-    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent>=2.0.4'
-}
-tests_require = [tests_require_replacements.get(r, r) for r in tests_require]
+
+# dependency links
+dependency_links = []
+dependency_links.append('http://github.com/ethereum/serpent/tarball/develop#egg=ethereum-serpent-9.99.9')
+viper_ref = '12847483f571505cef72fcb725e6557db15bce29'  # 2017-09-12
+dependency_links.append('http://github.com/ethereum/viper/tarball/master/%s#egg=viper-9.99.9' % viper_ref)
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see:
@@ -34,6 +37,7 @@ setup(
     url='https://github.com/ethereum/pyethereum/',
     install_requires=install_requires,
     tests_require=tests_require,
+    dependency_links=dependency_links,
     setup_requires=[
         #    'pytest-runner==2.7'
     ],
