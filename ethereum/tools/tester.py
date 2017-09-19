@@ -47,7 +47,7 @@ if _solidity:
 try:
     from viper import compiler
     languages['viper'] = compiler
-except ImportError:
+except (ImportError, TypeError):
     pass
 
 
