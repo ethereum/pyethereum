@@ -105,8 +105,12 @@ def ecrecover_to_pub(rawhash, v, r, s):
         except BaseException:
             pub = b"\x00" * 64
     else:
-        x, y = ecdsa_raw_recover(rawhash, (v, r, s))
-        pub = encode_int32(x) + encode_int32(y)
+        result = ecdsa_raw_recover(rawhash, (v, r, s))
+        if result:
+            x, y = result
+            pub = encode_int32(x) + encode_int32(y)
+        else:
+            raise ValueError('Invalid VRS')
     assert len(pub) == 64
     return pub
 
