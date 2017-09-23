@@ -28,7 +28,7 @@ def test_evm():
                                         serpent_code))
     data = translator.encode('main', [2, 5])
     c = tester.Chain()
-    x = c.contract(evm_code)
+    x = c.contract(evm_code, l='evm')
     o = translator.decode('main', c.tx(tester.k0, x, 0, data))
     assert o == [32]
 

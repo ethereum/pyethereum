@@ -346,7 +346,7 @@ def _apply_msg(ext, msg, code):
     trace_msg = log_msg.is_active('trace')
     if trace_msg:
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
-                      gas=msg.gas, value=msg.value,
+                      gas=msg.gas, value=msg.value, codelen=len(code),
                       data=encode_hex(
             msg.data.extract_all()) if msg.data.size < 2500 else (
             "data<%d>" %

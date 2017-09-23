@@ -3,7 +3,7 @@ import random
 import time
 import itertools
 from ethereum import utils
-from ethereum.utils import parse_as_bin, big_endian_to_int
+from ethereum.utils import parse_as_bin, big_endian_to_int, is_string
 from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
@@ -394,7 +394,7 @@ class Chain(object):
         self.db.put('head_hash', self.head_hash)
         self.db.put(block.hash, rlp.encode(block))
         self.db.put(b'changed:' + block.hash,
-                    b''.join([k.encode() if not isinstance(k, str) else k for k in list(changed.keys())]))
+                    b''.join([k.encode() if not is_string(k) else k for k in list(changed.keys())]))
         print('Saved %d address change logs' % len(changed.keys()))
         self.db.put(b'deletes:' + block.hash, b''.join(deletes))
         log.debug('Saved %d trie node deletes for block %d (%s)' %

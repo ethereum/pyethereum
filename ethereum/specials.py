@@ -142,7 +142,7 @@ def proc_ecadd(ext, msg):
         return 1, msg.gas, []
     import py_ecc.optimized_bn128 as bn128
     FQ = bn128.FQ
-    print('ecadd proc', msg.gas)
+    print('ecadd proc:', msg.gas)
     if msg.gas < opcodes.GECADD:
         return 0, 0, []
     x1 = msg.data.extract32(0)

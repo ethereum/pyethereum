@@ -115,7 +115,7 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
 
 def get_env(env):
     d = {
-        None: config_spurious,
+        None: config_metropolis,
         'mainnet': default_config,
         'homestead': config_homestead,
         'tangerine': config_tangerine,
@@ -141,11 +141,13 @@ class State(object):
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0,
              data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        self.state.commit()
         sender_addr = privtoaddr(sender)
         result = apply_message(
             self.state.ephemeral_clone(),
             sender=sender_addr,
             to=to,
+            code_address=to,
             value=value,
             data=data,
             gas=startgas)
@@ -195,11 +197,13 @@ class Chain(object):
 
     def call(self, sender=k0, to=b'\x00' * 20, value=0,
              data=b'', startgas=STARTGAS, gasprice=GASPRICE):
+        self.head_state.commit()
         sender_addr = privtoaddr(sender)
         result = apply_message(
             self.head_state.ephemeral_clone(),
             sender=sender_addr,
             to=to,
+            code_address=to,
             value=value,
             data=data,
             gas=startgas)
