@@ -1,3 +1,4 @@
+from __future__ import print_function
 import json
 import random
 import time
@@ -98,7 +99,7 @@ class Chain(object):
     def head(self):
         try:
             block_rlp = self.db.get(self.head_hash)
-            if block_rlp == 'GENESIS':
+            if block_rlp in ('GENESIS', b'GENESIS'):
                 return self.genesis
             else:
                 return rlp.decode(block_rlp, Block)
@@ -112,7 +113,7 @@ class Chain(object):
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
 
         block_rlp = self.db.get(blockhash)
-        if block_rlp == 'GENESIS':
+        if block_rlp in ('GENESIS', b'GENESIS'):
             return State.from_snapshot(json.loads(
                 self.db.get('GENESIS_STATE')), self.env)
         block = rlp.decode(block_rlp, Block)
