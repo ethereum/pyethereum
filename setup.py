@@ -27,7 +27,7 @@ dependency_links.append('http://github.com/ethereum/viper/tarball/master/%s#egg=
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see:
 # https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '2.0.4'
+version = '2.0.5'
 
 setup(
     name="ethereum",
