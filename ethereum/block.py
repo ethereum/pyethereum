@@ -199,3 +199,13 @@ class FakeHeader():
         self.gas_limit = gas_limit
         self.gas_used = gas_used
         self.uncles_hash = uncles_hash
+
+    def to_block_header(self):
+        return BlockHeader(
+            difficulty=self.difficulty,
+            number=self.number,
+            timestamp=self.timestamp,
+            gas_used=self.gas_used,
+            gas_limit=self.gas_limit,
+            uncles_hash=self.uncles_hash
+        )

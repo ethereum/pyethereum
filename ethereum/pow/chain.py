@@ -14,7 +14,7 @@ from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTran
 from ethereum.slogging import get_logger, configure_logging
 from ethereum.config import Env
 from ethereum.state import State, dict_to_prev_header
-from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
+from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH, FakeHeader
 from ethereum.pow.consensus import initialize
 from ethereum.genesis_helpers import mk_basic_state, state_from_genesis_declaration, \
     initialize_genesis_keys
@@ -76,13 +76,18 @@ class Chain(object):
         initialize(self.state)
         self.new_head_cb = new_head_cb
 
-        self.head_hash = self.state.prev_headers[0].hash
         assert self.state.block_number == self.state.prev_headers[0].number
         if reset_genesis:
-            self.genesis = Block(self.state.prev_headers[0], [], [])
+            if isinstance(self.state.prev_headers[0], FakeHeader):
+                header = self.state.prev_headers[0].to_block_header()
+            else:
+                header = self.state.prev_headers[0]
+            self.genesis = Block(header)
+            self.state.prev_headers[0] = header
             initialize_genesis_keys(self.state, self.genesis)
         else:
             self.genesis = self.get_block_by_number(0)
+        self.head_hash = self.state.prev_headers[0].hash
         self.time_queue = []
         self.parent_queue = {}
         self.localtime = time.time() if localtime is None else localtime
@@ -268,7 +273,7 @@ class Chain(object):
                 apply_block(self.state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
                 log.info('Block %d (%s) with parent %s invalid, reason: %s' %
-                         (block.number, encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
+                         (block.number, encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), str(e)))
                 return False
             self.db.put(b'block:%d' % block.header.number, block.header.hash)
             # side effect: put 'score:' cache in db
@@ -292,7 +297,7 @@ class Chain(object):
                 apply_block(temp_state, block)
             except (AssertionError, KeyError, ValueError, InvalidTransaction, VerificationFailed) as e:
                 log.info('Block %s with parent %s invalid, reason: %s' %
-                         (encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), e))
+                    (encode_hex(block.header.hash[:4]), encode_hex(block.header.prevhash[:4]), str(e)))
                 return False
             deletes = temp_state.deletes
             block_score = self.get_score(block)
@@ -388,7 +393,7 @@ class Chain(object):
                 self.parent_queue[block.header.prevhash] = []
             self.parent_queue[block.header.prevhash].append(block)
             log.info('Got block %d (%s) with prevhash %s, parent not found. Delaying for now' %
-                     (block.number, encode_hex(block.hash), encode_hex(block.prevhash)))
+                     (block.number, encode_hex(block.hash[:4]), encode_hex(block.prevhash[:4])))
             return False
         self.add_child(block)
         self.db.put('head_hash', self.head_hash)
