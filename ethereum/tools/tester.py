@@ -94,7 +94,8 @@ class ABIContract(object):  # pylint: disable=too-few-public-methods
                 to=self.address,
                 value=kwargs.get('value', 0),
                 data=self.translator.encode(function_name, args),
-                startgas=kwargs.get('startgas', STARTGAS)
+                startgas=kwargs.get('startgas', STARTGAS),
+                gasprice=kwargs.get('gasprice', GASPRICE)
             )
 
             if result is False:
