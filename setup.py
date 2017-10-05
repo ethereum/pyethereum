@@ -19,13 +19,10 @@ tests_require = set(x.strip() for x in open('dev_requirements.txt'))
 # dependency links
 dependency_links = []
 
-# *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
-# see:
-# https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '2.0.5'
+version = '2.1.4'
 
 setup(
-    name="ethereum",
+    name="ethereum-augur-temp",
     packages=find_packages("."),
     description='Next generation cryptocurrency network',
     long_description=readme,
