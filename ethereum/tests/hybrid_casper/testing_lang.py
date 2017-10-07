@@ -1,13 +1,13 @@
 from ethereum.tools import tester
-from ethereum.utils import encode_hex, mk_contract_address, privtoaddr
+from ethereum.utils import encode_hex, privtoaddr
 from ethereum.hybrid_casper import casper_utils
 import re
 
 ALLOC = {a: {'balance': 500*10**19} for a in tester.accounts[:10]}
 
 class Validator(object):
-    def __init__(self, valcode_addr, key):
-        self.valcode_addr = valcode_addr
+    def __init__(self, withdrawal_addr, key):
+        self.withdrawal_addr = withdrawal_addr
         self.key = key
         self.prepare_map = {}  # {epoch: prepare in that epoch}
         self.commit_map = {}  # {epoch: commit incompatible with that epoch}
@@ -26,13 +26,13 @@ class Validator(object):
         _e, _a, _se, _sa, _pce = self.get_recommended_casper_msg_contents(casper, validator_index)
         prepare_msg = casper_utils.mk_prepare(validator_index, _e, _a, _se, _sa, self.key)
         if _e in self.prepare_map and self.prepare_map[_e] != prepare_msg:
-            print('Found double prepare for validator:', encode_hex(self.valcode_addr))
+            print('Found double prepare for validator:', encode_hex(self.withdrawal_addr))
             self.double_prepare_evidence.append(self.prepare_map[_e])
             self.double_prepare_evidence.append(prepare_msg)
         for i in range(_se+1, _e-1):
             self.uncommittable_epochs[i] = prepare_msg
             if i in self.commit_map:
-                print('Found prepare commit consistency in prepare for validator:', encode_hex(self.valcode_addr))
+                print('Found prepare commit consistency in prepare for validator:', encode_hex(self.withdrawal_addr))
                 self.prepare_commit_consistency_evidence.append(prepare_msg)
                 self.prepare_commit_consistency_evidence.append(self.commit_map[i])
         self.prepare_map[_e] = prepare_msg
@@ -44,7 +44,7 @@ class Validator(object):
         commit_msg = casper_utils.mk_commit(validator_index, _e, _a, _pce, self.key)
         self.commit_map[_e] = commit_msg
         if _e in self.uncommittable_epochs:
-                print('Found prepare commit consistency in commit for validator:', encode_hex(self.valcode_addr))
+                print('Found prepare commit consistency in commit for validator:', encode_hex(self.withdrawal_addr))
                 self.prepare_commit_consistency_evidence.append(self.uncommittable_epochs[_e])
                 self.prepare_commit_consistency_evidence.append(commit_msg)
         casper.commit(commit_msg)
@@ -56,13 +56,13 @@ class Validator(object):
             casper.prepare_commit_inconsistency_slash(self.prepare_commit_consistency_evidence[0], self.prepare_commit_consistency_evidence[1])
         else:
             raise Exception('No slash evidence found')
-        print('Slashed validator:', encode_hex(self.valcode_addr))
+        print('Slashed validator:', encode_hex(self.withdrawal_addr))
 
     def get_validator_index(self, casper):
-        if self.valcode_addr is None:
+        if self.withdrawal_addr is None:
             raise Exception('Valcode address not set')
         try:
-            return casper.get_validator_indexes(self.valcode_addr)
+            return casper.get_validator_indexes(self.withdrawal_addr)
         except tester.TransactionFailed:
             return None
 
@@ -97,9 +97,9 @@ class TestLangHybrid(object):
             self.t.mine(number)
 
     def join(self, number):
-        valcode_addr = mk_contract_address(privtoaddr(tester.keys[number]), self.t.head_state.get_nonce(privtoaddr(tester.keys[number])))
+        withdrawal_addr = privtoaddr(tester.keys[number])
         casper_utils.induct_validator(self.t, self.casper, tester.keys[number], 200 * 10**18)
-        self.validators[number] = Validator(valcode_addr, tester.keys[number])
+        self.validators[number] = Validator(withdrawal_addr, tester.keys[number])
 
     def prepare(self, validator_index):
         self.validators[validator_index].prepare(self.casper)

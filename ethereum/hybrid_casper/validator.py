@@ -82,7 +82,7 @@ class Validator(object):
         if self.valcode_addr is None:
             raise Exception('Valcode address not set')
         try:
-            return casper.get_validator_indexes(self.valcode_addr)
+            return casper.get_validator_indexes(self.coinbase)
         except tester.TransactionFailed:
             return None
 
