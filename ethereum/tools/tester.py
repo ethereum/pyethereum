@@ -242,13 +242,12 @@ class Chain(object):
                 gasprice=gasprice)
             return ABIContract(self, ct, addr)
 
-    def mine(self, number_of_blocks=1, timestamp=14, coinbase=a0):
+    def mine(self, number_of_blocks=1, coinbase=a0):
         self.cs.finalize(self.head_state, self.block)
         set_execution_results(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
         assert self.chain.add_block(self.block)
         b = self.block
-        self.chain.state.timestamp += timestamp
         for i in range(1, number_of_blocks):
             b, _ = make_head_candidate(
                 self.chain, parent=b, timestamp=self.chain.state.timestamp + 14, coinbase=coinbase)
