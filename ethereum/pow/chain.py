@@ -25,7 +25,7 @@ from ethereum.db import RefcountDB
 log = get_logger('eth.chain')
 config_string = ':info'  # ,eth.chain:debug'
 #config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
-configure_logging(config_string=config_string)
+# configure_logging(config_string=config_string)
 
 
 class Chain(object):
@@ -76,8 +76,12 @@ class Chain(object):
 
         initialize(self.state)
         self.new_head_cb = new_head_cb
-
-        assert self.state.block_number == self.state.prev_headers[0].number
+        
+        if self.state.block_number == 0:
+            assert self.state.block_number == self.state.prev_headers[0].number
+        else:
+            assert self.state.block_number - 1 == self.state.prev_headers[0].number
+            
         if reset_genesis:
             if isinstance(self.state.prev_headers[0], FakeHeader):
                 header = self.state.prev_headers[0].to_block_header()
