@@ -76,8 +76,12 @@ class Chain(object):
 
         initialize(self.state)
         self.new_head_cb = new_head_cb
-
-        assert self.state.block_number == self.state.prev_headers[0].number
+        
+        if self.state.block_number == 0:
+            assert self.state.block_number == self.state.prev_headers[0].number
+        else:
+            assert self.state.block_number - 1 == self.state.prev_headers[0].number
+            
         if reset_genesis:
             if isinstance(self.state.prev_headers[0], FakeHeader):
                 header = self.state.prev_headers[0].to_block_header()
