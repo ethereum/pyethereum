@@ -19,7 +19,7 @@ tests_require = set(x.strip() for x in open('dev_requirements.txt'))
 # dependency links
 dependency_links = []
 
-version = '2.1.5'
+version = '2.1.6'
 
 setup(
     name="ethereum-augur-temp",
