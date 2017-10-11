@@ -158,9 +158,9 @@ class State(object):
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
         from ethereum.pow import chain as pow_chain
-        from ethereum.hybrid_casper import chain as hybrid_casper_chain
         if genesis:
             if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+                from ethereum.hybrid_casper import chain as hybrid_casper_chain
                 self.chain = hybrid_casper_chain.Chain(genesis, reset_genesis=True)
             else:
                 self.chain = pow_chain.Chain(genesis, reset_genesis=True)
