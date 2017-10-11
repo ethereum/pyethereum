@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ethereum/pyethereum.svg?branch=develop)](https://travis-ci.org/ethereum/pyethereum)
+
 This is the Python core library of the Ethereum project.
 
 For the python based command line client see:
