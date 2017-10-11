@@ -422,7 +422,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 if dstart + size > len(compustate.last_returned):
                     return vm_exception('RETURNDATACOPY out of range')
-                mem[mstart: mstart + size] = compustate.last_returned
+                mem[mstart: mstart + size] = compustate.last_returned[dstart: dstart + size]
             elif op == 'RETURNDATASIZE':
                 stk.append(len(compustate.last_returned))
             elif op == 'GASPRICE':
