@@ -158,9 +158,9 @@ class State(object):
 class Chain(object):
     def __init__(self, alloc=base_alloc, env=None, genesis=None):
         from ethereum.pow import chain as pow_chain
-        from ethereum.hybrid_casper import chain as hybrid_casper_chain
         if genesis:
-            if genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+            if type(genesis)!=dict and genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
+                from ethereum.hybrid_casper import chain as hybrid_casper_chain
                 self.chain = hybrid_casper_chain.Chain(genesis, reset_genesis=True)
             else:
                 self.chain = pow_chain.Chain(genesis, reset_genesis=True)
@@ -241,7 +241,7 @@ class Chain(object):
                 gasprice=gasprice)
             return ABIContract(self, ct, addr)
 
-    def mine(self, number_of_blocks=1, coinbase=a0):
+    def mine(self, number_of_blocks=1, timestamp=14, coinbase=a0):
         self.cs.finalize(self.head_state, self.block)
         set_execution_results(self.head_state, self.block)
         self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
@@ -249,7 +249,7 @@ class Chain(object):
         b = self.block
         for i in range(1, number_of_blocks):
             b, _ = make_head_candidate(
-                self.chain, parent=b, timestamp=self.chain.state.timestamp + 14, coinbase=coinbase)
+                self.chain, parent=b, timestamp=self.chain.state.timestamp + timestamp, coinbase=coinbase)
             b = Miner(b).mine(rounds=100, start_nonce=0)
             assert self.chain.add_block(b)
         self.change_head(b.header.hash, coinbase)
