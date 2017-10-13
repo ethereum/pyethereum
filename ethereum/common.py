@@ -71,7 +71,7 @@ def mk_block_from_prevstate(chain, state=None, timestamp=None,
     state = state or chain.state
     blk = Block(BlockHeader())
     now = timestamp or chain.time()
-    blk.header.number = state.block_number + 1
+    blk.header.number = state.prev_headers[0].number + 1
     blk.header.difficulty = calc_difficulty(
         state.prev_headers[0], now, chain.config)
     blk.header.gas_limit = calc_gaslimit(state.prev_headers[0], chain.config)
