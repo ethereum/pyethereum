@@ -49,6 +49,7 @@ def nibbles_to_bin(nibbles):
 
 NIBBLE_TERMINATOR = 16
 
+
 def with_terminator(nibbles):
     nibbles = nibbles[:]
     if not nibbles or nibbles[-1] != NIBBLE_TERMINATOR:
@@ -132,9 +133,9 @@ def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF,
                          NODE_TYPE_EXTENSION]
 
+
 BLANK_NODE = b''
 BLANK_ROOT = utils.sha3rlp(b'')
-
 
 
 class Trie(object):
@@ -147,6 +148,7 @@ class Trie(object):
         """
         self.db = db  # Pass in a database object directly
         self.set_root_hash(root_hash)
+        self.deletes = []
 
     # def __init__(self, dbfile, root_hash=BLANK_ROOT):
     #     """it also present a dictionary like interface
@@ -173,7 +175,7 @@ class Trie(object):
     def _update_root_hash(self):
         val = rlp_encode(self.root_node)
         key = utils.sha3(val)
-        self.db.put(key, val)
+        self.db.put(key, str_to_bytes(val))
         self._root_hash = key
 
     @root_hash.setter
@@ -206,7 +208,7 @@ class Trie(object):
         elif node_type == NODE_TYPE_EXTENSION:
             self._delete_child_storage(self._decode_to_node(node[1]))
 
-    def _encode_node(self, node):
+    def _encode_node(self, node, put_in_db=True):
         if node == BLANK_NODE:
             return BLANK_NODE
         # assert isinstance(node, list)
@@ -215,7 +217,8 @@ class Trie(object):
             return node
 
         hashkey = utils.sha3(rlpnode)
-        self.db.put(hashkey, rlpnode)
+        if put_in_db:
+            self.db.put(hashkey, str_to_bytes(rlpnode))
         return hashkey
 
     def _decode_to_node(self, encoded):
@@ -385,7 +388,11 @@ class Trie(object):
             if reverse:
                 scan_range.reverse()
             for i in scan_range:
-                o = self._getany(self._decode_to_node(node[i]), reverse=reverse, path=path + [i])
+                o = self._getany(
+                    self._decode_to_node(
+                        node[i]),
+                    reverse=reverse,
+                    path=path + [i])
                 if o is not None:
                     # print('found@', [i] + o, path)
                     return [i] + o
@@ -401,7 +408,8 @@ class Trie(object):
         if node_type == NODE_TYPE_EXTENSION:
             curr_key = without_terminator(unpack_to_nibbles(node[0]))
             sub_node = self._decode_to_node(node[1])
-            return curr_key + self._getany(sub_node, reverse=reverse, path=path + curr_key)
+            return curr_key + \
+                self._getany(sub_node, reverse=reverse, path=path + curr_key)
 
     def _split(self, node, key):
         node_type = self._get_node_type(node)
@@ -412,7 +420,7 @@ class Trie(object):
         elif node_type == NODE_TYPE_BRANCH:
             b1 = node[:key[0]]
             b1 += [''] * (17 - len(b1))
-            b2 = node[key[0]+1:]
+            b2 = node[key[0] + 1:]
             b2 = [''] * (17 - len(b2)) + b2
             b1[16], b2[16] = b2[16], b1[16]
             sub = self._decode_to_node(node[key[0]])
@@ -420,7 +428,8 @@ class Trie(object):
             b1[key[0]] = self._encode_node(sub1) if sub1 else ''
             b2[key[0]] = self._encode_node(sub2) if sub2 else ''
             return self._normalize_branch_node(b1) if len([x for x in b1 if x]) else BLANK_NODE, \
-                 self._normalize_branch_node(b2) if len([x for x in b2 if x]) else BLANK_NODE
+                self._normalize_branch_node(b2) if len(
+                    [x for x in b2 if x]) else BLANK_NODE
 
         descend_key = without_terminator(unpack_to_nibbles(node[0]))
         if node_type == NODE_TYPE_LEAF:
@@ -438,17 +447,21 @@ class Trie(object):
                 if not sub1:
                     o1 = BLANK_NODE
                 elif subtype1 in (NODE_TYPE_LEAF, NODE_TYPE_EXTENSION):
-                    new_key = key[:len(descend_key)] + unpack_to_nibbles(sub1[0])
+                    new_key = key[:len(descend_key)] + \
+                        unpack_to_nibbles(sub1[0])
                     o1 = [pack_nibbles(new_key), sub1[1]]
                 else:
-                    o1 = [pack_nibbles(key[:len(descend_key)]), self._encode_node(sub1)]
+                    o1 = [pack_nibbles(key[:len(descend_key)]),
+                          self._encode_node(sub1)]
                 if not sub2:
                     o2 = BLANK_NODE
                 elif subtype2 in (NODE_TYPE_LEAF, NODE_TYPE_EXTENSION):
-                    new_key = key[:len(descend_key)] + unpack_to_nibbles(sub2[0])
+                    new_key = key[:len(descend_key)] + \
+                        unpack_to_nibbles(sub2[0])
                     o2 = [pack_nibbles(new_key), sub2[1]]
                 else:
-                    o2 = [pack_nibbles(key[:len(descend_key)]), self._encode_node(sub2)]
+                    o2 = [pack_nibbles(key[:len(descend_key)]),
+                          self._encode_node(sub2)]
                 return o1, o2
             elif descend_key < key[:len(descend_key)]:
                 return node, BLANK_NODE
@@ -483,12 +496,14 @@ class Trie(object):
                     break
                 prefix_length = i + 1
             if prefix_length:
-                sub1 = self._decode_to_node(node1[1]) if node_type1 == NODE_TYPE_EXTENSION else node1[1]
+                sub1 = self._decode_to_node(
+                    node1[1]) if node_type1 == NODE_TYPE_EXTENSION else node1[1]
                 new_sub1 = [
                     pack_nibbles(descend_key1[prefix_length:]),
                     sub1
                 ] if descend_key1[prefix_length:] else sub1
-                sub2 = self._decode_to_node(node2[1]) if node_type2 == NODE_TYPE_EXTENSION else node2[1]
+                sub2 = self._decode_to_node(
+                    node2[1]) if node_type2 == NODE_TYPE_EXTENSION else node2[1]
                 new_sub2 = [
                     pack_nibbles(descend_key2[prefix_length:]),
                     sub2
@@ -508,7 +523,12 @@ class Trie(object):
                 node[0] = new_node
         node1, node2 = nodes[0][0], nodes[1][0]
         assert len([i for i in range(17) if node1[i] and node2[i]]) <= 1
-        new_node = [self._encode_node(self._merge(self._decode_to_node(node1[i]), self._decode_to_node(node2[i]))) if node1[i] and node2[i] else node1[i] or node2[i] for i in range(17)]
+        new_node = [
+            self._encode_node(
+                self._merge(
+                    self._decode_to_node(
+                        node1[i]), self._decode_to_node(
+                        node2[i]))) if node1[i] and node2[i] else node1[i] or node2[i] for i in range(17)]
         return new_node
 
     @classmethod
@@ -598,7 +618,7 @@ class Trie(object):
         if node == BLANK_NODE:
             return
         # assert isinstance(node, list)
-        encoded = self._encode_node(node)
+        encoded = self._encode_node(node, put_in_db=False)
         if len(encoded) < 32:
             return
         """
@@ -606,7 +626,8 @@ class Trie(object):
         in the current trie implementation two nodes can share identical subtrees
         thus we can not safely delete nodes for now
         """
-        # self.db.delete(encoded) # FIXME
+        self.deletes.append(encoded)
+        # print('del', encoded, self.db.get_refcount(encoded))
 
     def _delete(self, node, key):
         """ update item inside a node
@@ -794,7 +815,11 @@ class Trie(object):
             for i in range(16):
                 sub_tree = self._iter_branch(self._decode_to_node(node[i]))
                 for sub_key, sub_value in sub_tree:
-                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
+                    full_key = (
+                        str_to_bytes(
+                            str(i)) +
+                        b'+' +
+                        sub_key).strip(b'+')
                     yield (full_key, sub_value)
             if node[16]:
                 yield (to_string(NIBBLE_TERMINATOR), node[-1])
@@ -844,7 +869,11 @@ class Trie(object):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
                 for sub_key, sub_value in sub_dict.items():
-                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
+                    full_key = (
+                        str_to_bytes(
+                            str(i)) +
+                        b'+' +
+                        sub_key).strip(b'+')
                     res[full_key] = sub_value
 
             if node[16]:

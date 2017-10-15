@@ -22,7 +22,8 @@ def check_db_tightness(trees, db):
         for k, v in db.kv.items():
             if rlp.decode(rlp.decode(v)[1]) not in all_nodes:
                 print(utils.encode_hex(k[2:]), rlp.decode(rlp.decode(v)[1]))
-        raise Exception("unpruned key leak: %d %d" % (len(db.kv), len(all_nodes)))
+        raise Exception("unpruned key leak: %d %d" %
+                        (len(db.kv), len(all_nodes)))
 
 
 def test_basic_pruning():
@@ -146,7 +147,8 @@ def test_two_trees():
         db.commit_refcount_changes(NODES + i)
         db.cleanup(NODES + i)
         check_db_tightness([t1, t2], db)
-    assert t2.to_dict() == {to_string(i): to_string(i) for i in range(NODES // 2)}
+    assert t2.to_dict() == {to_string(i): to_string(i)
+                            for i in range(NODES // 2)}
     for i in range(NODES // 2):
         t2.delete(to_string(i))
         db.commit_refcount_changes(NODES * 2 + i)
@@ -169,7 +171,8 @@ def test_two_trees_with_clear():
         db.cleanup(i)
     t1.clear_all()
     db.cleanup(NODES)
-    assert t2.to_dict() == {to_string(i): to_string(i) for i in range(NODES // 2)}
+    assert t2.to_dict() == {to_string(i): to_string(i)
+                            for i in range(NODES // 2)}
     for i in range(NODES // 2):
         t2.delete(to_string(i))
         db.commit_refcount_changes(NODES + i)
@@ -343,7 +346,8 @@ def test_deep_inner_branch_deletion():
 def test_block_18315_changes():
     pre = {}
     toadd = [
-        ['0x0000000000000000000000000000000000000000000000000000000000000000', '0xf9e88bc2b3203e764fe67b4d0f4171b7756117c8'],
+        ['0x0000000000000000000000000000000000000000000000000000000000000000',
+            '0xf9e88bc2b3203e764fe67b4d0f4171b7756117c8'],
         ['0x0000000000000000000000000000000000000000000000000000000000000001', '0x'],
         ['0x0000000000000000000000000000000000000000000000000000000000000002', '0x'],
     ]
@@ -396,8 +400,11 @@ def load_tests():
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
                       "Make sure you did 'git submodule init'")
-    expected_keys = set(['jeff', 'emptyValues', 'branchingTests', 'insert-middle-leaf'])
-    assert set(fixture.keys()) == expected_keys, ("test data changed!", list(fixture.keys()))
+    expected_keys = set(
+        ['jeff', 'emptyValues', 'branchingTests', 'insert-middle-leaf'])
+    assert set(
+        fixture.keys()) == expected_keys, ("test data changed!", list(
+            fixture.keys()))
     return fixture_to_bytes(fixture)
 
 
@@ -435,7 +442,8 @@ def run_test(name):
         db.commit_refcount_changes(1)
         db.cleanup(1)
         assert len(db.kv) == 0
-        assert pairs['root'] == b'0x' + utils.encode_hex(t.root_hash), (i, list(permut) + deletes)
+        assert pairs['root'] == b'0x' + \
+            utils.encode_hex(t.root_hash), (i, list(permut) + deletes)
 
 
 def test_emptyValues():
@@ -444,7 +452,6 @@ def test_emptyValues():
 
 def test_jeff():
     run_test('jeff')
-
 
 
 # test_basic_pruning = None

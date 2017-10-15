@@ -5,6 +5,7 @@ import textwrap
 from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
 from ethereum.utils import bcolors, is_numeric
+import sys
 
 
 DEFAULT_LOGLEVEL = 'INFO'
@@ -151,10 +152,13 @@ class BoundLogger(object):
     trace = lambda self, *args, **kwargs: self._proxy('trace', *args, **kwargs)
     debug = lambda self, *args, **kwargs: self._proxy('debug', *args, **kwargs)
     info = lambda self, *args, **kwargs: self._proxy('info', *args, **kwargs)
-    warn = warning = lambda self, *args, **kwargs: self._proxy('warning', *args, **kwargs)
+    warn = warning = lambda self, * \
+        args, **kwargs: self._proxy('warning', *args, **kwargs)
     error = lambda self, *args, **kwargs: self._proxy('error', *args, **kwargs)
-    exception = lambda self, *args, **kwargs: self._proxy('exception', *args, **kwargs)
-    fatal = critical = lambda self, *args, **kwargs: self._proxy('critical', *args, **kwargs)
+    exception = lambda self, * \
+        args, **kwargs: self._proxy('exception', *args, **kwargs)
+    fatal = critical = lambda self, * \
+        args, **kwargs: self._proxy('critical', *args, **kwargs)
 
 
 class _LogJSONEncoder(JSONEncoder):
@@ -178,7 +182,8 @@ class SLogger(logging.Logger):
     def format_message(self, msg, kwargs, highlight, level):
         if getattr(self, 'log_json', False):
             message = dict()
-            message['event'] = '{}.{}'.format(self.name, msg.lower().replace(' ', '_'))
+            message['event'] = '{}.{}'.format(
+                self.name, msg.lower().replace(' ', '_'))
             message['level'] = logging.getLevelName(level)
             try:
                 message.update(kwargs)
@@ -251,6 +256,7 @@ class SManager(logging.Manager):
         logging.setLoggerClass(SLogger)
         return super(SManager, self).getLogger(name)
 
+
 rootLogger = RootLogger(DEFAULT_LOGLEVEL)
 SLogger.root = rootLogger
 SLogger.manager = SManager(SLogger.root)
@@ -301,12 +307,14 @@ def configure(config_string=None, log_json=False, log_file=None):
         log_format = PRINT_FORMAT
 
     if len(rootLogger.handlers) == 0:
-        handler = StreamHandler()
+        #handler = StreamHandler()
+        handler = StreamHandler(sys.stdout)
         formatter = Formatter(log_format)
         handler.setFormatter(formatter)
         rootLogger.addHandler(handler)
     if log_file:
-        if not any(isinstance(hndlr, FileHandler) for hndlr in rootLogger.handlers):
+        if not any(isinstance(hndlr, FileHandler)
+                   for hndlr in rootLogger.handlers):
             handler = FileHandler(log_file)
             formatter = Formatter("{} {}".format(FILE_PREFIX, log_format))
             handler.setFormatter(formatter)
@@ -317,12 +325,17 @@ def configure(config_string=None, log_json=False, log_file=None):
         if hasattr(logger, 'setLevel'):
             # Guard against `logging.PlaceHolder` instances
             logger.setLevel(logging.NOTSET)
-            logger.propagate = True
+            if config_string == ":{}".format(DEFAULT_LOGLEVEL):
+                logger.propagate = True
+            else:
+                logger.propagate = True
 
     for name_levels in config_string.split(','):
         name, _, level = name_levels.partition(':')
         logger = getLogger(name)
         logger.setLevel(level.upper())
+        logger.propagate = True
+
 
 configure_logging = configure
 

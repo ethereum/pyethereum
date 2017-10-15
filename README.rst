@@ -6,6 +6,8 @@ https://github.com/ethereum/pyethapp
 Installation:
 -------------
 
+``sudo apt-get install libssl-dev build-essential automake pkg-config libtool libffi-dev libgmp-dev``
+
 ``git clone https://github.com/ethereum/pyethereum/``
 
 ``cd pyethereum``
@@ -363,7 +365,7 @@ To make your own state tests, use the tester module as follows:
 To make a test filler file instead, do
 ``post = t.mk_state_test_postfill(c, pre, True)``.
 
-Licence
+License
 -------
 
-See LICENCE
+See `LICENSE <LICENSE>`_

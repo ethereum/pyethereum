@@ -1,7 +1,8 @@
 from rlp.utils import decode_hex, ascii_chr
 from ethereum.utils import safe_ord, int_to_bytes
 
-NULLSHA3 = decode_hex('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
+NULLSHA3 = decode_hex(
+    'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
 
 
 def compress(data):
@@ -15,7 +16,8 @@ def compress(data):
             i += 31
         elif data[i:i + 2] == b'\x00\x00':
             p = 2
-            while p < 255 and i + p < len(data) and int_to_bytes(data[i + p]) == b'\x00':
+            while p < 255 and i + \
+                    p < len(data) and int_to_bytes(data[i + p]) == b'\x00':
                 p += 1
             o += b'\xfe' + ascii_chr(p)
             i += p - 1

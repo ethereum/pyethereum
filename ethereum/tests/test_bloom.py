@@ -23,7 +23,8 @@ def vm_tests_fixtures():
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
     filenames = os.listdir(os.path.join(testutils.fixture_path, 'VMTests'))
-    files = [os.path.join(testutils.fixture_path, 'VMTests', f) for f in filenames]
+    files = [os.path.join(testutils.fixture_path, 'VMTests', f)
+             for f in filenames]
     vm_fixtures = {}
     try:
         for f, fn in zip(files, filenames):
@@ -38,6 +39,7 @@ def vm_tests_fixtures():
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(testdata):
     return lambda: do_test_bloom(testdata)
+
 
 for filename, tests in list(vm_tests_fixtures().items()):
     for testname, testdata in list(tests.items()):

@@ -1,11 +1,15 @@
 try:
     from Crypto.Hash import keccak
-    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
-    sha3_512 = lambda x: keccak.new(digest_bits=512, data=x)
-except:
+
+    def sha3_256(x): return keccak.new(digest_bits=256, data=x).digest()
+
+    def sha3_512(x): return keccak.new(digest_bits=512, data=x)
+except BaseException:
     import sha3 as _sha3
-    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
-    sha3_512 = lambda x: _sha3.sha3_512(x).digest()
+
+    def sha3_256(x): return _sha3.sha3_256(x).digest()
+
+    def sha3_512(x): return _sha3.sha3_512(x).digest()
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
 import sys
@@ -49,7 +53,8 @@ def serialize_hash(h):
 
 
 def deserialize_hash(h):
-    return [decode_int(h[i:i+WORD_BYTES]) for i in range(0, len(h), WORD_BYTES)]
+    return [decode_int(h[i:i + WORD_BYTES])
+            for i in range(0, len(h), WORD_BYTES)]
 
 
 def hash_words(h, sz, x):
@@ -82,12 +87,14 @@ def xor(a, b):
 def serialize_cache(ds):
     return b''.join([serialize_hash(h) for h in ds])
 
+
 serialize_dataset = serialize_cache
 
 
 def deserialize_cache(ds):
-    return [deserialize_hash(ds[i:i+HASH_BYTES])
+    return [deserialize_hash(ds[i:i + HASH_BYTES])
             for i in range(0, len(ds), HASH_BYTES)]
+
 
 deserialize_dataset = deserialize_cache
 
@@ -103,7 +110,7 @@ class ListWrapper(list):
     def __getitem__(self, i):
         if i >= self.len:
             raise Exception("listwrap access out of range")
-        return deserialize_hash(self.data[i*HASH_BYTES:(i+1)*HASH_BYTES])
+        return deserialize_hash(self.data[i * HASH_BYTES:(i + 1) * HASH_BYTES])
 
     def __iter__(self):
         for i in range(self.len):
@@ -129,7 +136,8 @@ def get_cache_size(block_number):
 
 
 def get_full_size(block_number):
-    sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)
+    sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * \
+        (block_number // EPOCH_LENGTH)
     sz -= MIX_BYTES
     while not isprime(sz // MIX_BYTES):
         sz -= 2 * MIX_BYTES
