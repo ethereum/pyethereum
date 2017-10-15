@@ -1,4 +1,4 @@
-from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int, checksum_encode, int_to_big_endian, encode_hex
+from ethereum.utils import sha3, privtoaddr, int_to_addr, to_string, big_endian_to_int, checksum_encode, int_to_big_endian, encode_hex, normalize_address
 from ethereum.genesis_helpers import mk_basic_state
 from ethereum.transactions import Transaction
 from ethereum.consensus_strategy import get_consensus_strategy
@@ -197,6 +197,7 @@ class Chain(object):
     def call(self, sender=k0, to=b'\x00' * 20, value=0,
              data=b'', startgas=STARTGAS, gasprice=GASPRICE):
         self.head_state.commit()
+        to = utils.normalize_address(to)
         sender_addr = privtoaddr(sender)
         result = apply_message(
             self.head_state.ephemeral_clone(),
