@@ -18,12 +18,21 @@ logger = get_logger()
 
 def test_difficulty(filename, testname, testdata):
 
-    parent_timestamp=int(testdata["parentTimestamp"], 10 if testdata["parentTimestamp"].isdigit() else 16)
-    parent_difficulty=int(testdata["parentDifficulty"], 10 if testdata["parentDifficulty"].isdigit() else 16)
-    parent_blk_number=int(testdata["currentBlockNumber"], 10 if testdata["currentBlockNumber"].isdigit() else 16)-1
-    cur_blk_timestamp=int(testdata["currentTimestamp"], 10 if testdata["currentTimestamp"].isdigit() else 16)
-    reference_dif = int(testdata["currentDifficulty"], 10 if testdata["currentDifficulty"].isdigit() else 16)
-
+    parent_timestamp = int(
+        testdata["parentTimestamp"],
+        10 if testdata["parentTimestamp"].isdigit() else 16)
+    parent_difficulty = int(
+        testdata["parentDifficulty"],
+        10 if testdata["parentDifficulty"].isdigit() else 16)
+    parent_blk_number = int(
+        testdata["currentBlockNumber"],
+        10 if testdata["currentBlockNumber"].isdigit() else 16) - 1
+    cur_blk_timestamp = int(
+        testdata["currentTimestamp"],
+        10 if testdata["currentTimestamp"].isdigit() else 16)
+    reference_dif = int(
+        testdata["currentDifficulty"],
+        10 if testdata["currentDifficulty"].isdigit() else 16)
 
     env = config.Env()
     if 'Homestead' in filename:
@@ -42,11 +51,13 @@ def test_difficulty(filename, testname, testdata):
                                difficulty=parent_difficulty,
                                number=parent_blk_number))
 
-    calculated_dif = calc_difficulty(parent, cur_blk_timestamp, config=env.config)
+    calculated_dif = calc_difficulty(
+        parent, cur_blk_timestamp, config=env.config)
 
     print(calculated_dif)
     print(reference_dif)
-    assert calculated_dif == reference_dif, (parent.header.difficulty, reference_dif, calculated_dif, parent.header.number, cur_blk_timestamp - parent_timestamp)
+    assert calculated_dif == reference_dif, (parent.header.difficulty, reference_dif,
+                                             calculated_dif, parent.header.number, cur_blk_timestamp - parent_timestamp)
 
 
 def not_a_difficulty_test(filename, testname, testdata):
@@ -59,11 +70,15 @@ def not_a_difficulty_test(filename, testname, testdata):
 
 
 def pytest_generate_tests(metafunc):
-    testutils.generate_test_params('BasicTests', metafunc, exclude_func=not_a_difficulty_test)
+    testutils.generate_test_params(
+        'BasicTests',
+        metafunc,
+        exclude_func=not_a_difficulty_test)
 
 
 def main():
-    import pdb; pdb.set_trace()
+    import pdb
+    pdb.set_trace()
     if len(sys.argv) == 1:
         # read fixture from stdin
         fixtures = {'stdin': json.load(sys.stdin)}

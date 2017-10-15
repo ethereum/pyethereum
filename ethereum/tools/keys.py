@@ -1,6 +1,6 @@
 import os
 import sys
-from hashlib import pbkdf2_hmac
+import pbkdf2
 
 from rlp.utils import decode_hex
 from ethereum.utils import encode_hex
@@ -27,7 +27,11 @@ import binascii
 import struct
 from math import ceil
 from Crypto.Hash import keccak
-sha3_256 = lambda x: keccak.new(digest_bits=256, data=x)
+
+
+def sha3_256(x): return keccak.new(digest_bits=256, data=x)
+
+
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Util import Counter
@@ -43,14 +47,15 @@ SCRYPT_CONSTANTS = {
 }
 
 PBKDF2_CONSTANTS = {
+    "prf": "hmac-sha256",
     "dklen": 32,
-    "rounds": 262144
+    "c": 262144
 }
 
 
 def aes_ctr_encrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
+    ctr = Counter.new(128, initial_value=iv, allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.encrypt(text)
@@ -58,7 +63,7 @@ def aes_ctr_encrypt(text, key, params):
 
 def aes_ctr_decrypt(text, key, params):
     iv = big_endian_to_int(decode_hex(params["iv"]))
-    ctr = Counter.new(128, initial_value=iv,  allow_wraparound=True)
+    ctr = Counter.new(128, initial_value=iv, allow_wraparound=True)
     mode = AES.MODE_CTR
     encryptor = AES.new(key, mode, counter=ctr)
     return encryptor.decrypt(text)
@@ -95,8 +100,9 @@ def mk_pbkdf2_params():
 
 
 def pbkdf2_hash(val, params):
-    return pbkdf2_hmac('sha256', val, decode_hex(params["salt"]),
-                       params["rounds"], params["dklen"])
+    assert params["prf"] == "hmac-sha256"
+    return pbkdf2.PBKDF2(val, decode_hex(params["salt"]), params["c"],
+                         SHA256).read(params["dklen"])
 
 
 kdfs = {
@@ -133,6 +139,8 @@ def make_keystore_json(priv, pw, kdf="pbkdf2", cipher="aes-128-ctr"):
     mac = sha3(derivedkey[16:32] + c)
     # Make a UUID
     u = encode_hex(os.urandom(16))
+    if sys.version_info.major == 3:
+        u = bytes(u, 'utf-8')
     uuid = b'-'.join((u[:8], u[8:12], u[12:16], u[16:20], u[20:]))
     # Return the keystore json
     return {
@@ -214,8 +222,8 @@ def decode_keystore_json(jsondata, pw):
     return o
 
 
-# Utility functions (done separately from utils so as to make this a standalone file)
-
+# Utility functions (done separately from utils so as to make this a
+# standalone file)
 def sha3(seed):
     return sha3_256(seed).digest()
 

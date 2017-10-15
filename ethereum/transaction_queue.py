@@ -2,6 +2,7 @@ import heapq
 heapq.heaptop = lambda x: x[0]
 PRIO_INFINITY = -2**100
 
+
 class OrderableTx(object):
 
     def __init__(self, prio, counter, tx):
@@ -33,7 +34,8 @@ class TransactionQueue():
         heapq.heappush(self.txs, OrderableTx(prio, self.counter, tx))
         self.counter += 1
 
-    def pop_transaction(self, max_gas=9999999999, max_seek_depth=16, min_gasprice=0):
+    def pop_transaction(self, max_gas=9999999999,
+                        max_seek_depth=16, min_gasprice=0):
         while len(self.aside) and max_gas >= heapq.heaptop(self.aside).prio:
             item = heapq.heappop(self.aside)
             item.prio = -item.tx.gasprice

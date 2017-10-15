@@ -18,7 +18,8 @@ def bytecode_is_generated(cinfo, cname):
     return 'code' in cinfo[cname] and len(cinfo[cname]['code']) > 10
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_library_from_file():
     state = tester.state()
     state.env.config['HOMESTEAD_FORK_BLKNUM'] = 0  # enable CALLCODE opcode
@@ -44,7 +45,8 @@ def test_library_from_file():
     assert contract.test() == 7
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_library_from_code():
     with open(path.join(CONTRACTS_DIR, 'seven_library.sol')) as handler:
         library_code = handler.read()
@@ -97,9 +99,12 @@ def test_names():
 
 
 def test_symbols():
-    assert _solidity.solidity_library_symbol('a') == '__a_____________________________________'
-    assert _solidity.solidity_library_symbol('aaa') == '__aaa___________________________________'
-    assert _solidity.solidity_library_symbol('a' * 40) == '__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa__'
+    assert _solidity.solidity_library_symbol(
+        'a') == '__a_____________________________________'
+    assert _solidity.solidity_library_symbol(
+        'aaa') == '__aaa___________________________________'
+    assert _solidity.solidity_library_symbol(
+        'a' * 40) == '__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa__'
 
     # the address should be sanitized when it's given to the function
     with pytest.raises(Exception):
@@ -124,14 +129,15 @@ def test_symbols():
     ) == 'beef1111111111111111111111111111111111111111cafe'
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_interop():
     serpent_contract = """
     extern solidity: [sub2:[]:i]
-    
+
     def main(a):
         return(a.sub2() * 2)
-    
+
     def sub1():
         return(5)
     """
@@ -154,7 +160,9 @@ def test_interop():
 
     state = tester.state()
     serpent_abi = state.abi_contract(serpent_contract)
-    solidity_abi = state.abi_contract(solidity_contract, language='solidity')  # should be zoo
+    solidity_abi = state.abi_contract(
+        solidity_contract,
+        language='solidity')  # should be zoo
     solidity_address = utils.encode_hex(solidity_abi.address)
 
     # pylint: disable=no-member
@@ -162,11 +170,13 @@ def test_interop():
     assert serpent_abi.main(solidity_abi.address) == 14
 
     assert solidity_abi.sub2() == 7
-    assert solidity_abi.sub3(utils.encode_hex(solidity_abi.address)) == solidity_address
+    assert solidity_abi.sub3(utils.encode_hex(
+        solidity_abi.address)) == solidity_address
     assert solidity_abi.main(serpent_abi.address) == 10
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_constructor():
     constructor_contract = """
     contract testme {
@@ -191,7 +201,8 @@ def test_constructor():
     assert contract.getValue() == 2
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_solidity_compile_rich():
     compile_rich_contract = """
     contract contract_add {
@@ -228,7 +239,8 @@ def test_solidity_compile_rich():
     } == {'subtract7', 'subtract42'}
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_abi_contract():
     one_contract = """
     contract foo {
@@ -250,7 +262,8 @@ def test_abi_contract():
     assert contract.mul2(-2) == -4
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solc compiler not available')
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
+                    reason='solc compiler not available')
 def test_extra_args():
     src = """
     contract foo {
@@ -270,6 +283,7 @@ def test_extra_args():
         extra_args=["--optimize-runs", "100"]
     )
     assert bytecode_is_generated(contract_info, 'foo')
+
 
 def test_missing_solc(monkeypatch):
     monkeypatch.setattr(_solidity, 'get_compiler_path', lambda: None)

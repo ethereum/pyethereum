@@ -53,7 +53,9 @@ def calc_dataset(full_size, cache):
     percent = (full_size // HASH_BYTES) // 100
     for i in range(full_size // HASH_BYTES):
         if i % percent == 0:
-            sys.stderr.write("Completed %d items, %d percent\n" % (i, i // percent))
+            sys.stderr.write(
+                "Completed %d items, %d percent\n" %
+                (i, i // percent))
         o.append(calc_dataset_item(cache, i))
     return o
 
@@ -94,7 +96,8 @@ def hashimoto_full(dataset, header, nonce):
 def mine(full_size, dataset, header, difficulty):
     from random import randint
     nonce = randint(0, 2**64)
-    while decode_int(hashimoto_full(full_size, dataset, header, nonce)) < difficulty:
+    while decode_int(hashimoto_full(
+            full_size, dataset, header, nonce)) < difficulty:
         nonce += 1
         nonce %= 2**64
     return nonce

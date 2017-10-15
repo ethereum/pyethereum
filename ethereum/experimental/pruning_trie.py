@@ -98,6 +98,7 @@ class ProofConstructor():
     def get_mode(self):
         return self.mode[-1]
 
+
 proof = ProofConstructor()
 
 
@@ -187,6 +188,7 @@ def starts_with(full, part):
 def is_key_value_type(node_type):
     return node_type in [NODE_TYPE_LEAF,
                          NODE_TYPE_EXTENSION]
+
 
 BLANK_NODE = b''
 BLANK_ROOT = utils.sha3rlp(b'')
@@ -533,7 +535,9 @@ class Trie(object):
             if reverse:
                 scan_range.reverse()
             for i in scan_range:
-                o = self._getany(self._decode_to_node(node[i]), path=path + [i])
+                o = self._getany(
+                    self._decode_to_node(
+                        node[i]), path=path + [i])
                 if o:
                     return [i] + o
             return None
@@ -865,7 +869,11 @@ class Trie(object):
                 sub_dict = self._to_dict(self._decode_to_node(node[i]))
 
                 for sub_key, sub_value in sub_dict.items():
-                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
+                    full_key = (
+                        str_to_bytes(
+                            str(i)) +
+                        b'+' +
+                        sub_key).strip(b'+')
                     res[full_key] = sub_value
 
             if node[16]:
@@ -922,7 +930,11 @@ class Trie(object):
             for i in range(16):
                 sub_tree = self._iter_branch(self._decode_to_node(node[i]))
                 for sub_key, sub_value in sub_tree:
-                    full_key = (str_to_bytes(str(i)) + b'+' + sub_key).strip(b'+')
+                    full_key = (
+                        str_to_bytes(
+                            str(i)) +
+                        b'+' +
+                        sub_key).strip(b'+')
                     yield (full_key, sub_value)
             if node[16]:
                 yield (to_string(NIBBLE_TERMINATOR), node[-1])

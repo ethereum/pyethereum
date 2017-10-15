@@ -13,6 +13,7 @@ from ethereum.tests.utils import new_db
 from ethereum.state import State
 from ethereum.block import Block
 from ethereum.consensus_strategy import get_consensus_strategy
+from ethereum.genesis_helpers import mk_basic_state
 
 from ethereum.slogging import get_logger
 logger = get_logger()
@@ -27,6 +28,8 @@ _db = new_db()
 @pytest.fixture(scope='function')
 def db():
     return EphemDB()
+
+
 alt_db = db
 
 
@@ -39,7 +42,8 @@ def accounts():
     return k, v, k2, v2
 
 
-def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=None):
+def mine_on_chain(chain, parent=None, transactions=[],
+                  coinbase=None, timestamp=None):
     """Mine the next block on a chain.
 
     The newly mined block will be considered to be the head of the chain,
@@ -55,7 +59,7 @@ def mine_on_chain(chain, parent=None, transactions=[], coinbase=None, timestamp=
         txqueue.add_transaction(t)
     parent_timestamp = parent.timestamp if parent else chain.state.timestamp
     hc, _ = meta.make_head_candidate(chain, txqueue, parent,
-                             timestamp or parent_timestamp + 1, coinbase or b'\x00'*20)
+                                     timestamp or parent_timestamp + 1, coinbase or b'\x00' * 20)
     assert hc.difficulty == 1
     m = ethpow.Miner(hc)
     rounds = 100
@@ -125,10 +129,14 @@ def test_mine_block(db):
     blk3 = mine_next_block(chain, coinbase=v)
     blk4 = mine_next_block(chain, coinbase=v)
     blk5 = mine_next_block(chain, coinbase=v)
-    assert chain.state.get_balance(v) == chain.env.config['BLOCK_REWARD'] + chain.mk_poststate_of_blockhash(blk4.hash).get_balance(v)
-    assert chain.state.get_balance(v) == chain.env.config['BLOCK_REWARD'] * 2 + chain.mk_poststate_of_blockhash(blk3.hash).get_balance(v)
-    assert chain.state.get_balance(v) == chain.env.config['BLOCK_REWARD'] * 3 + chain.mk_poststate_of_blockhash(blk2.hash).get_balance(v)
-    assert chain.state.get_balance(v) == chain.env.config['BLOCK_REWARD'] * 4 + chain.mk_poststate_of_blockhash(genesis_hash).get_balance(v)
+    assert chain.state.get_balance(
+        v) == chain.env.config['BLOCK_REWARD'] + chain.mk_poststate_of_blockhash(blk4.hash).get_balance(v)
+    assert chain.state.get_balance(
+        v) == chain.env.config['BLOCK_REWARD'] * 2 + chain.mk_poststate_of_blockhash(blk3.hash).get_balance(v)
+    assert chain.state.get_balance(
+        v) == chain.env.config['BLOCK_REWARD'] * 3 + chain.mk_poststate_of_blockhash(blk2.hash).get_balance(v)
+    assert chain.state.get_balance(
+        v) == chain.env.config['BLOCK_REWARD'] * 4 + chain.mk_poststate_of_blockhash(genesis_hash).get_balance(v)
     assert blk2.prevhash == genesis_hash
 
 
@@ -209,9 +217,9 @@ def test_invalid_transaction(db):
 def test_prevhash(db):
     chain = Chain({}, difficulty=1)
     L1 = mine_on_chain(chain)
-    assert chain.state.get_block_hash(0) != b'\x00'*32
-    assert chain.state.get_block_hash(1) != b'\x00'*32
-    assert chain.state.get_block_hash(2) == b'\x00'*32
+    assert chain.state.get_block_hash(0) != b'\x00' * 32
+    assert chain.state.get_block_hash(1) != b'\x00' * 32
+    assert chain.state.get_block_hash(2) == b'\x00' * 32
 
 
 def test_genesis_chain(db):
@@ -329,19 +337,41 @@ def test_reward_uncles(db):
     uncle_coinbase = decode_hex('2' * 40)
     # Mine the uncle
     uncle = mine_on_chain(chain, blk0, coinbase=uncle_coinbase)
-    assert chain.state.get_balance(uncle_coinbase) == 1 * chain.env.config['BLOCK_REWARD']
+    assert chain.state.get_balance(
+        uncle_coinbase) == 1 * chain.env.config['BLOCK_REWARD']
     # Mine the first block in the "intended main chain"
     blk1 = mine_on_chain(chain, blk0, coinbase=local_coinbase)
     # next block should reward uncles
     blk2 = mine_on_chain(chain, blk1, coinbase=local_coinbase)
-    # print [x.hash for x in chain.get_chain()], [blk0.hash, uncle.hash, blk1.hash, blk2.hash]
+    # print [x.hash for x in chain.get_chain()], [blk0.hash, uncle.hash,
+    # blk1.hash, blk2.hash]
     assert blk1.hash in chain
     assert uncle.header.hash in [u.hash for u in blk2.uncles]
     assert chain.head == blk2
     assert chain.get_chain() == [blk0, blk1, blk2]
     assert chain.state.get_balance(local_coinbase) == \
-        2 * chain.env.config['BLOCK_REWARD'] + chain.env.config['NEPHEW_REWARD']
-    assert chain.state.get_balance(uncle_coinbase) == chain.env.config['BLOCK_REWARD'] * 7 // 8
+        2 * chain.env.config['BLOCK_REWARD'] + \
+        chain.env.config['NEPHEW_REWARD']
+    assert chain.state.get_balance(
+        uncle_coinbase) == chain.env.config['BLOCK_REWARD'] * 7 // 8
+
+
+def test_genesis_from_state_snapshot():
+    """
+    Test if Chain could be initilaized from State snapshot
+    """
+    # Customize a state
+    k, v, k2, v2 = accounts()
+    alloc = {v: {"balance": utils.denoms.ether * 1}}
+    state = mk_basic_state(alloc, None)
+    state.block_difficulty = 1
+
+    # Initialize another chain from state.to_snapshot()
+    genesis = state.to_snapshot()
+    new_chain = Chain(genesis=genesis)
+    assert new_chain.state.trie.root_hash == state.trie.root_hash
+    assert new_chain.state.block_difficulty == state.block_difficulty
+    assert new_chain.head.number == state.block_number
 
 
 # TODO ##########################################

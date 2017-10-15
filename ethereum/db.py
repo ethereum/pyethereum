@@ -123,15 +123,18 @@ class OverlayDB(BaseDB):
     def __hash__(self):
         return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
 
+
 @lru_cache(128)
 def add1(b):
     v = utils.big_endian_to_int(b)
     return utils.zpad(utils.encode_int(v + 1), 4)
 
+
 @lru_cache(128)
 def sub1(b):
     v = utils.big_endian_to_int(b)
     return utils.zpad(utils.encode_int(v - 1), 4)
+
 
 class RefcountDB(BaseDB):
 
@@ -181,4 +184,3 @@ class RefcountDB(BaseDB):
 
     def __hash__(self):
         return utils.big_endian_to_int(str_to_bytes(self.__repr__()))
-

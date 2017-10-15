@@ -12,6 +12,7 @@ __pycache__/
 /dist/
 /*.egg-info/
 /.tox/
+/build/
 /bin/
 /develop-eggs/
 /eggs/

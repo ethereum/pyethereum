@@ -42,8 +42,10 @@ CREATE_CONTRACT_ADDRESS = b''
 # DEV OPTIONS
 SKIP_MEDSTATES = False
 
+
 def rp(tx, what, actual, target):
     return '%r: %r actual:%r target:%r' % (tx, what, actual, target)
+
 
 class Log(rlp.Serializable):
 
@@ -88,7 +90,8 @@ class Receipt(rlp.Serializable):
     ]
 
     def __init__(self, state_root, gas_used, logs, bloom=None):
-        # does not call super.__init__ as bloom should not be an attribute but a property
+        # does not call super.__init__ as bloom should not be an attribute but
+        # a property
         self.state_root = state_root
         self.gas_used = gas_used
         self.logs = logs
@@ -102,11 +105,14 @@ class Receipt(rlp.Serializable):
         bloomables = [x.bloomables() for x in self.logs]
         return bloom.bloom_from_list(utils.flatten(bloomables))
 
+
 def mk_receipt(state, success, logs):
     if state.is_METROPOLIS():
-        return Receipt(ascii_chr(success), state.gas_used, logs)
+        o = Receipt(b'\x01' if success else b'', state.gas_used, logs)
+        return o
     else:
         return Receipt(state.trie.root_hash, state.gas_used, logs)
+
 
 def config_fork_specific_validation(config, blknum, tx):
     # (1) The transaction signature is valid;
@@ -126,13 +132,15 @@ def config_fork_specific_validation(config, blknum, tx):
             raise InvalidTransaction("Wrong network ID")
     return True
 
+
 def validate_transaction(state, tx):
 
     # (1) The transaction signature is valid;
     if not tx.sender:  # sender is set and validated on Transaction initialization
         raise UnsignedTransaction(tx)
 
-    assert config_fork_specific_validation(state.config, state.block_number, tx)
+    assert config_fork_specific_validation(
+        state.config, state.block_number, tx)
 
     # (2) the transaction nonce is valid (equivalent to the
     #     sender account's current nonce);
@@ -143,22 +151,26 @@ def validate_transaction(state, tx):
     # (3) the gas limit is no smaller than the intrinsic gas,
     # g0, used by the transaction;
     if tx.startgas < tx.intrinsic_gas_used:
-        raise InsufficientStartGas(rp(tx, 'startgas', tx.startgas, tx.intrinsic_gas_used))
+        raise InsufficientStartGas(
+            rp(tx, 'startgas', tx.startgas, tx.intrinsic_gas_used))
 
     # (4) the sender account balance contains at least the
     # cost, v0, required in up-front payment.
     total_cost = tx.value + tx.gasprice * tx.startgas
 
     if state.get_balance(tx.sender) < total_cost:
-        raise InsufficientBalance(rp(tx, 'balance', state.get_balance(tx.sender), total_cost))
+        raise InsufficientBalance(
+            rp(tx, 'balance', state.get_balance(tx.sender), total_cost))
 
     # check block gas limit
     if state.gas_used + tx.startgas > state.gas_limit:
-        raise BlockGasLimitReached(rp(tx, 'gaslimit', state.gas_used + tx.startgas, state.gas_limit))
+        raise BlockGasLimitReached(
+            rp(tx, 'gaslimit', state.gas_used + tx.startgas, state.gas_limit))
 
     # EIP86-specific restrictions
     if tx.sender == null_address and (tx.value != 0 or tx.gasprice != 0):
-        raise InvalidTransaction("EIP86 transactions must have 0 value and gasprice")
+        raise InvalidTransaction(
+            "EIP86 transactions must have 0 value and gasprice")
 
     return True
 
@@ -185,7 +197,8 @@ def apply_transaction(state, tx):
         if not tx.to or tx.to == CREATE_CONTRACT_ADDRESS:
             intrinsic_gas += opcodes.CREATE[3]
             if tx.startgas < intrinsic_gas:
-                raise InsufficientStartGas(rp(tx, 'startgas', tx.startgas, intrinsic_gas))
+                raise InsufficientStartGas(
+                    rp(tx, 'startgas', tx.startgas, intrinsic_gas))
 
     log_tx.debug('TX NEW', txdict=tx.to_dict())
 
@@ -198,7 +211,14 @@ def apply_transaction(state, tx):
     state.delta_balance(tx.sender, -tx.startgas * tx.gasprice)
 
     message_data = vm.CallData([safe_ord(x) for x in tx.data], 0, len(tx.data))
-    message = vm.Message(tx.sender, tx.to, tx.value, tx.startgas - intrinsic_gas, message_data, code_address=tx.to)
+    message = vm.Message(
+        tx.sender,
+        tx.to,
+        tx.value,
+        tx.startgas -
+        intrinsic_gas,
+        message_data,
+        code_address=tx.to)
 
     # MESSAGE
     ext = VMExt(state, tx)
@@ -219,7 +239,6 @@ def apply_transaction(state, tx):
     if not result:
         log_tx.debug('TX FAILED', reason='out of gas',
                      startgas=tx.startgas, gas_remained=gas_remained)
-        state.gas_used += tx.startgas
         state.delta_balance(tx.sender, tx.gasprice * gas_remained)
         state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
         output = b''
@@ -229,19 +248,24 @@ def apply_transaction(state, tx):
         log_tx.debug('TX SUCCESS', data=data)
         state.refunds += len(set(state.suicides)) * opcodes.GSUICIDEREFUND
         if state.refunds > 0:
-            log_tx.debug('Refunding', gas_refunded=min(state.refunds, gas_used // 2))
+            log_tx.debug(
+                'Refunding',
+                gas_refunded=min(
+                    state.refunds,
+                    gas_used // 2))
             gas_remained += min(state.refunds, gas_used // 2)
             gas_used -= min(state.refunds, gas_used // 2)
             state.refunds = 0
         # sell remaining gas
         state.delta_balance(tx.sender, tx.gasprice * gas_remained)
         state.delta_balance(state.block_coinbase, tx.gasprice * gas_used)
-        state.gas_used += gas_used
         if tx.to:
             output = bytearray_to_bytestr(data)
         else:
             output = data
         success = 1
+
+    state.gas_used += gas_used
 
     # Clear suicides
     suicides = state.suicides
@@ -249,7 +273,7 @@ def apply_transaction(state, tx):
     for s in suicides:
         state.set_balance(s, 0)
         state.del_account(s)
-    
+
     # Pre-Metropolis: commit state after every tx
     if not state.is_METROPOLIS() and not SKIP_MEDSTATES:
         state.commit()
@@ -265,13 +289,11 @@ def apply_transaction(state, tx):
     return success, output
 
 
-
-
 # VM interface
 class VMExt():
 
     def __init__(self, state, tx):
-        self.specials = {k:v for k, v in default_specials.items()}
+        self.specials = {k: v for k, v in default_specials.items()}
         for k, v in state.config['CUSTOM_SPECIALS']:
             self.specials[k] = v
         self._state = state
@@ -298,7 +320,8 @@ class VMExt():
         self.log = lambda addr, topics, data: \
             state.add_log(Log(addr, topics, data))
         self.create = lambda msg: create_contract(self, msg)
-        self.msg = lambda msg: _apply_msg(self, msg, self.get_code(msg.code_address))
+        self.msg = lambda msg: _apply_msg(
+            self, msg, self.get_code(msg.code_address))
         self.account_exists = state.account_exists
         self.post_homestead_hardfork = lambda: state.is_HOMESTEAD()
         self.post_metropolis_hardfork = lambda: state.is_METROPOLIS()
@@ -314,6 +337,7 @@ class VMExt():
         self.tx_origin = tx.sender if tx else '\x00' * 20
         self.tx_gasprice = tx.gasprice if tx else 0
 
+
 def apply_msg(ext, msg):
     return _apply_msg(ext, msg, ext.get_code(msg.code_address))
 
@@ -322,10 +346,13 @@ def _apply_msg(ext, msg, code):
     trace_msg = log_msg.is_active('trace')
     if trace_msg:
         log_msg.debug("MSG APPLY", sender=encode_hex(msg.sender), to=encode_hex(msg.to),
-                      gas=msg.gas, value=msg.value,
-                      data=encode_hex(msg.data.extract_all()) if msg.data.size < 2500 else ("data<%d>" % msg.data.size),
-                      pre_storage=ext.log_storage(msg.to),
-                      static=msg.static, depth=msg.depth)
+                      gas=msg.gas, value=msg.value, codelen=len(code),
+                      data=encode_hex(
+            msg.data.extract_all()) if msg.data.size < 2500 else (
+            "data<%d>" %
+            msg.data.size),
+            pre_storage=ext.log_storage(msg.to),
+            static=msg.static, depth=msg.depth)
 
     # Transfer value, instaquit if not enough
     snapshot = ext.snapshot()
@@ -340,7 +367,6 @@ def _apply_msg(ext, msg, code):
         res, gas, dat = ext.specials[msg.code_address](ext, msg)
     else:
         res, gas, dat = vm.vm_execute(ext, msg, code)
-
 
     if trace_msg:
         log_msg.debug('MSG APPLIED', gas_remained=gas,
@@ -363,17 +389,17 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext.increment_nonce(msg.sender)
 
-    if ext.post_metropolis_hardfork() and msg.sender == null_address:
+    if ext.post_constantinople_hardfork() and msg.sender == null_address:
         msg.to = utils.mk_contract_address(msg.sender, 0)
         # msg.to = sha3(msg.sender + code)[12:]
     else:
         nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = utils.mk_contract_address(msg.sender, nonce)
 
-    if ext.post_constantinople_hardfork() and (ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
+    if ext.post_metropolis_hardfork() and (
+            ext.get_nonce(msg.to) or len(ext.get_code(msg.to))):
         log_msg.debug('CREATING CONTRACT ON TOP OF EXISTING CONTRACT')
         return 0, 0, b''
-        
 
     b = ext.get_balance(msg.to)
     if b > 0:
@@ -390,18 +416,29 @@ def create_contract(ext, msg):
     ext.set_nonce(msg.to, 1 if ext.post_spurious_dragon_hardfork() else 0)
     res, gas, dat = _apply_msg(ext, msg, code)
 
-    log_msg.debug('CONTRACT CREATION FINISHED', res=res, gas=gas, dat=dat if len(dat) < 2500 else ("data<%d>" % len(dat)))
+    log_msg.debug(
+        'CONTRACT CREATION FINISHED',
+        res=res,
+        gas=gas,
+        dat=dat if len(dat) < 2500 else (
+            "data<%d>" %
+            len(dat)))
 
     if res:
         if not len(dat):
             # ext.set_code(msg.to, b'')
             return 1, gas, msg.to
         gcost = len(dat) * opcodes.GCONTRACTBYTE
-        if gas >= gcost and (len(dat) <= 24576 or not ext.post_spurious_dragon_hardfork()):
+        if gas >= gcost and (
+                len(dat) <= 24576 or not ext.post_spurious_dragon_hardfork()):
             gas -= gcost
         else:
             dat = []
-            log_msg.debug('CONTRACT CREATION FAILED', have=gas, want=gcost, block_number=ext.block_number)
+            log_msg.debug(
+                'CONTRACT CREATION FAILED',
+                have=gas,
+                want=gcost,
+                block_number=ext.block_number)
             if ext.post_homestead_hardfork():
                 ext.revert(snapshot)
                 return 0, 0, b''

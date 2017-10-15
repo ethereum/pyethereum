@@ -16,27 +16,42 @@ def foo(x: bytes <= %d) -> bytes <= %d:
     return o
 """
 
+
 def mk_modexp_data(b, e, m):
     benc = int_to_big_endian(b)
     eenc = int_to_big_endian(e)
     menc = int_to_big_endian(m)
-    return encode_int32(len(benc)) + encode_int32(len(eenc)) + encode_int32(len(menc)) + benc + eenc + menc
+    return encode_int32(len(benc)) + encode_int32(len(eenc)) + \
+        encode_int32(len(menc)) + benc + eenc + menc
+
 
 def intlen(o):
     return len(int_to_big_endian(o))
 
+
 def intrinsic_gas_of_data(d):
-    return opcodes.GTXDATAZERO * d.count(0) + opcodes.GTXDATANONZERO * (len(d) - d.count(0))
+    return opcodes.GTXDATAZERO * \
+        d.count(0) + opcodes.GTXDATANONZERO * (len(d) - d.count(0))
+
 
 def mk_test(b, e, m, execgas):
     encoded = mk_modexp_data(b, e, m)
     s = c.snapshot()
-    x = c.contract(kode % (len(encoded) + 36, max(intlen(m), 1), max(intlen(m), 1)), language='viper')
+    x = c.contract(kode % (len(encoded) + 36, max(intlen(m), 1),
+                           max(intlen(m), 1)), language='viper')
     pre = tester.mk_state_test_prefill(c)
     try:
-        o = x.foo(encoded, startgas=21000 + intrinsic_gas_of_data(x.translator.encode('foo', [encoded])) + execgas)
+        o = x.foo(
+            encoded,
+            startgas=21000 +
+            intrinsic_gas_of_data(
+                x.translator.encode(
+                    'foo',
+                    [encoded])) +
+            execgas)
         if big_endian_to_int(o[:intlen(m)]) != (pow(b, e, m) if m else 0):
-            raise Exception("Mismatch! %d %d %d expected %d computed %d" % (b, e, m, pow(b, e, m), big_endian_to_int(o[:intlen(m)])))
+            raise Exception("Mismatch! %d %d %d expected %d computed %d" % (
+                b, e, m, pow(b, e, m), big_endian_to_int(o[:intlen(m)])))
         print("Succeeded %d %d %d sg %d" % (b, e, m, execgas))
     except tester.TransactionFailed:
         print('OOG %d %d %d sg %d' % (b, e, m, execgas))
@@ -46,6 +61,7 @@ def mk_test(b, e, m, execgas):
     assert new_statetest_utils.verify_state_test(o)
     c.revert(s)
     return o, o2
+
 
 gaslimits = [20500, 22000, 25000, 35000, 155000, 1000000]
 
@@ -92,4 +108,9 @@ for test in tests:
     o2["explanation"] = "Puts the base %d, exponent %d and modulus %d into the MODEXP precompile, saves the hash of the result. Gives the execution %d gas" % test
     testout_filler["modexp_%d_%d_%d_%d" % test] = o2
 open('modexp_tests.json', 'w').write(json.dumps(testout, indent=4))
-open('modexp_tests_filler.json', 'w').write(json.dumps(testout_filler, indent=4))
+open(
+    'modexp_tests_filler.json',
+    'w').write(
+        json.dumps(
+            testout_filler,
+            indent=4))
