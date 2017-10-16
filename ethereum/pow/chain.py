@@ -76,11 +76,6 @@ class Chain(object):
 
         initialize(self.state)
         self.new_head_cb = new_head_cb
-        
-        if self.state.block_number == 0:
-            assert self.state.block_number == self.state.prev_headers[0].number
-        else:
-            assert self.state.block_number - 1 == self.state.prev_headers[0].number
 
         if reset_genesis:
             if isinstance(self.state.prev_headers[0], FakeHeader):
@@ -92,6 +87,9 @@ class Chain(object):
             initialize_genesis_keys(self.state, self.genesis)
         else:
             self.genesis = self.get_block_by_number(0)
+
+        assert self.state.block_number == self.state.prev_headers[0].number
+
         self.head_hash = self.state.prev_headers[0].hash
         self.time_queue = []
         self.parent_queue = {}
