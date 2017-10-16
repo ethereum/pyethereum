@@ -1,7 +1,14 @@
 from ethereum.state import State
 from ethereum.block import Block, BlockHeader, BLANK_UNCLES_HASH
-from ethereum.utils import decode_hex, big_endian_to_int, encode_hex, \
-    parse_as_bin, parse_as_int, normalize_address
+from ethereum.utils import (
+    decode_hex,
+    big_endian_to_int,
+    encode_hex,
+    parse_as_bin,
+    parse_as_int,
+    normalize_address,
+    to_string,
+)
 from ethereum.config import Env
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.db import OverlayDB, RefcountDB
@@ -67,14 +74,14 @@ def state_from_genesis_declaration(
 
 def initialize_genesis_keys(state, genesis):
     db = state.db
-    db.put('GENESIS_NUMBER', str(genesis.header.number))
-    db.put('GENESIS_HASH', str(genesis.header.hash))
-    db.put('GENESIS_STATE', json.dumps(state.to_snapshot()))
-    db.put('GENESIS_RLP', rlp.encode(genesis))
+    db.put(b'GENESIS_NUMBER', str(genesis.header.number))
+    db.put(b'GENESIS_HASH', to_string(genesis.header.hash))
+    db.put(b'GENESIS_STATE', json.dumps(state.to_snapshot()))
+    db.put(b'GENESIS_RLP', rlp.encode(genesis))
     db.put(b'block:0', genesis.header.hash)
     db.put(b'score:' + genesis.header.hash, "0")
     db.put(b'state:' + genesis.header.hash, state.trie.root_hash)
-    db.put(genesis.header.hash, 'GENESIS')
+    db.put(genesis.header.hash, b'GENESIS')
     db.commit()
 
 

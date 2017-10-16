@@ -36,7 +36,7 @@ STATE_DEFAULTS = {
     "gas_used": 0,
     "gas_limit": 3141592,
     "block_number": 0,
-    "block_coinbase": '\x00' * 20,
+    "block_coinbase": b'\x00' * 20,
     "block_difficulty": 1,
     "timestamp": 0,
     "logs": [],

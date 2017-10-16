@@ -1,7 +1,12 @@
 import sys
 import rlp
-from .utils import int_to_big_endian, big_endian_to_int, safe_ord
-from . import db
+from ethereum.utils import ( 
+    int_to_big_endian,
+    big_endian_to_int,
+    safe_ord,
+    to_string,
+)
+from ethereum import db
 
 
 def _encode_optimized(item):
@@ -110,7 +115,7 @@ def main():
         st = time.time()
         x = trie.Trie(db.EphemDB())
         for i in range(10000):
-            x.update(str(i), str(i**3))
+            x.update(to_string(i), to_string(i**3))
         print('elapsed', time.time() - st)
         return x.root_hash
 

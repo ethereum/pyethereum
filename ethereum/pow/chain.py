@@ -34,7 +34,7 @@ class Chain(object):
                  new_head_cb=None, reset_genesis=False, localtime=None, max_history=1000, **kwargs):
         self.env = env or Env()
         # Initialize the state
-        if 'head_hash' in self.db:  # new head tag
+        if b'head_hash' in self.db:  # new head tag
             self.state = self.mk_poststate_of_blockhash(
                 self.db.get('head_hash'))
             self.state.executing_on_head = True
@@ -81,7 +81,7 @@ class Chain(object):
             assert self.state.block_number == self.state.prev_headers[0].number
         else:
             assert self.state.block_number - 1 == self.state.prev_headers[0].number
-            
+
         if reset_genesis:
             if isinstance(self.state.prev_headers[0], FakeHeader):
                 header = self.state.prev_headers[0].to_block_header()
@@ -103,7 +103,7 @@ class Chain(object):
     def head(self):
         try:
             block_rlp = self.db.get(self.head_hash)
-            if block_rlp in ('GENESIS', b'GENESIS'):
+            if block_rlp == b'GENESIS':
                 return self.genesis
             else:
                 return rlp.decode(block_rlp, Block)
@@ -117,9 +117,9 @@ class Chain(object):
             raise Exception("Block hash %s not found" % encode_hex(blockhash))
 
         block_rlp = self.db.get(blockhash)
-        if block_rlp in ('GENESIS', b'GENESIS'):
+        if block_rlp == b'GENESIS':
             return State.from_snapshot(json.loads(
-                self.db.get('GENESIS_STATE')), self.env)
+                self.db.get(b'GENESIS_STATE')), self.env)
         block = rlp.decode(block_rlp, Block)
 
         state = State(env=self.env)
@@ -142,8 +142,8 @@ class Chain(object):
             except BaseException:
                 break
         if i < header_depth:
-            if state.db.get(b.header.prevhash) == 'GENESIS':
-                jsondata = json.loads(state.db.get('GENESIS_STATE'))
+            if state.db.get(b.header.prevhash) == b'GENESIS':
+                jsondata = json.loads(state.db.get(b'GENESIS_STATE'))
                 for h in jsondata["prev_headers"][:header_depth - i]:
                     state.prev_headers.append(dict_to_prev_header(h))
                 for blknum, uncles in jsondata["recent_uncles"].items():
@@ -158,7 +158,7 @@ class Chain(object):
 
     # Gets the parent block of a given block
     def get_parent(self, block):
-        if block.header.number == int(self.db.get('GENESIS_NUMBER')):
+        if block.header.number == int(self.db.get(b'GENESIS_NUMBER')):
             return None
         return self.get_block(block.header.prevhash)
 
@@ -166,10 +166,10 @@ class Chain(object):
     def get_block(self, blockhash):
         try:
             block_rlp = self.db.get(blockhash)
-            if block_rlp == 'GENESIS':
+            if block_rlp == b'GENESIS':
                 if not hasattr(self, 'genesis'):
                     self.genesis = rlp.decode(
-                        self.db.get('GENESIS_RLP'), sedes=Block)
+                        self.db.get(b'GENESIS_RLP'), sedes=Block)
                 return self.genesis
             else:
                 return rlp.decode(block_rlp, Block)
@@ -312,7 +312,7 @@ class Chain(object):
                 b = block
                 new_chain = {}
                 # Find common ancestor
-                while b.header.number >= int(self.db.get('GENESIS_NUMBER')):
+                while b.header.number >= int(self.db.get(b'GENESIS_NUMBER')):
                     new_chain[b.header.number] = b
                     key = b'block:%d' % b.header.number
                     orig_at_height = self.db.get(
@@ -320,7 +320,7 @@ class Chain(object):
                     if orig_at_height == b.header.hash:
                         break
                     if b.prevhash not in self.db or self.db.get(
-                            b.prevhash) == 'GENESIS':
+                            b.prevhash) == b'GENESIS':
                         break
                     b = self.get_parent(b)
                 replace_from = b.header.number
@@ -401,7 +401,9 @@ class Chain(object):
                      (block.number, encode_hex(block.hash[:4]), encode_hex(block.prevhash[:4])))
             return False
         self.add_child(block)
-        self.db.put('head_hash', self.head_hash)
+        
+        self.db.put(b'head_hash', self.head_hash)
+
         self.db.put(block.hash, rlp.encode(block))
         self.db.put(b'changed:' + block.hash,
                     b''.join([k.encode() if not is_string(k) else k for k in list(changed.keys())]))
@@ -463,7 +465,7 @@ class Chain(object):
 
     def get_chain(self, frm=None, to=2**63 - 1):
         if frm is None:
-            frm = int(self.db.get('GENESIS_NUMBER')) + 1
+            frm = int(self.db.get(b'GENESIS_NUMBER')) + 1
         chain = []
         for i in itertools.islice(itertools.count(), frm, to):
             h = self.get_blockhash_by_number(i)
