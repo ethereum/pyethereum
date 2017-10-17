@@ -235,10 +235,10 @@ def vm_trace(ext, msg, compustate, opcode, pushcache, tracer=log_vm_op):
     trace_data['steps'] = compustate.steps
     trace_data['depth'] = msg.depth
     if op[:4] == 'PUSH':
-	if sys.version_info.major == 2:
-        	print repr(pushcache)
-	else:
-		print(repr(pushcache))
+        if sys.version_info.major == 2:
+                print repr(pushcache)
+        else:
+            print(repr(pushcache))
 
         trace_data['pushvalue'] = pushcache[compustate.prev_pc]
     tracer.trace('vm', op=op, **trace_data)
