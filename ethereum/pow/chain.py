@@ -509,7 +509,7 @@ class Chain(object):
 
         header = block.header
         hashes = []
-        for i in xrange(max):
+        for i in range(max):
             hash = header.prevhash
             block = self.get_block(hash)
             if block is None:

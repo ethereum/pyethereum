@@ -35,9 +35,8 @@ TT255 = 2 ** 255
 SECP256K1P = 2**256 - 4294968273
 
 if sys.version_info.major == 2:
-    def is_numeric(x): return isinstance(x, (int, long))
-
-    def is_string(x): return isinstance(x, (str, unicode))
+    is_numeric = lambda x: isinstance(x, (int, long))  # NOQA
+    is_string = lambda x: isinstance(x, (str, unicode)) # NOQA
 
     def to_string(value):
         return str(value)
@@ -49,7 +48,7 @@ if sys.version_info.major == 2:
 
     def to_string_for_regexp(value):
         return str(value)
-    unicode = unicode
+    unicode = unicode # NOQA
 
     def bytearray_to_bytestr(value):
         return bytes(''.join(chr(c) for c in value))

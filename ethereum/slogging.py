@@ -1,5 +1,6 @@
 import logging
 import json
+import sys
 import textwrap
 from json.encoder import JSONEncoder
 from logging import StreamHandler, Formatter, FileHandler
@@ -262,11 +263,15 @@ SLogger.manager = SManager(SLogger.root)
 
 
 def _stringify_dict_keys(input_):
+    if sys.version_info.major == 2:
+        longType = long # NOQA
+    else:
+        longType = int
     if isinstance(input_, dict):
         res = {}
         for k, v in input_.items():
             v = _stringify_dict_keys(v)
-            if not isinstance(k, (int, long, bool, None.__class__)):
+            if not isinstance(k, (int, longType, bool, None.__class__)):
                 k = str(k)
             res[k] = v
     elif isinstance(input_, (list, tuple)):
