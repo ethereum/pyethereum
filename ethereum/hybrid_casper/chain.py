@@ -80,7 +80,7 @@ class Chain(object):
         self.db.put(b'cp_subtree_score' + b'\x00' * 32, 2/3.)
         self.commit_logs = []
         self.casper_address = self.config['CASPER_ADDRESS']
-        self.db.put(b'GENESIS_NUMBER', str(self.state.block_number))
+        self.db.put(b'GENESIS_NUMBER', to_string(self.state.block_number))
         assert self.state.block_number == self.state.prev_headers[0].number
         if reset_genesis:
             self.genesis = Block(self.state.prev_headers[0], [], [])
