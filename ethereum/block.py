@@ -129,7 +129,7 @@ class BlockHeader(rlp.Serializable):
                                  encode_hex(self.hash)[:8])
 
     def __eq__(self, other):
-        """Two blockheader are equal iff they have the same hash."""
+        """Two blockheader are equal if they have the same hash."""
         return isinstance(other, BlockHeader) and self.hash == other.hash
 
     def __hash__(self):
