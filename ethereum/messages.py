@@ -334,7 +334,7 @@ class VMExt():
         self.revert = state.revert
         self.transfer_value = state.transfer_value
         self.reset_storage = state.reset_storage
-        self.tx_origin = tx.sender if tx else '\x00' * 20
+        self.tx_origin = tx.sender if tx else b'\x00' * 20
         self.tx_gasprice = tx.gasprice if tx else 0
 
 

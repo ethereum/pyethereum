@@ -63,7 +63,7 @@ assert casper.get_consensus_messages__ancestry_hash_justified(_e, _a)
 assert casper.get_main_hash_justified()
 print("Prepare message processed")
 try:
-    casper.prepare(mk_prepare(0, 1, '\x35' * 32, '\x00' * 32, 0, '\x00' * 32, t.k0))
+    casper.prepare(mk_prepare(0, 1, b'\x35' * 32, b'\x00' * 32, 0, b'\x00' * 32, t.k0))
     success = True
 except:
     success = False

@@ -78,8 +78,8 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
     for i in range(0, len(mix), 4):
         cmix.append(fnv(fnv(fnv(mix[i], mix[i + 1]), mix[i + 2]), mix[i + 3]))
     return {
-        "mix digest": serialize_hash(cmix),
-        "result": serialize_hash(sha3_256(s + cmix))
+        b'mix digest': serialize_hash(cmix),
+        b'result': serialize_hash(sha3_256(s + cmix))
     }
 
 
