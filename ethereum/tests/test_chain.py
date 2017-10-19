@@ -14,7 +14,7 @@ from ethereum.state import State
 from ethereum.block import Block
 from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.genesis_helpers import mk_basic_state
-
+from ethereum.tools import tester
 from ethereum.slogging import get_logger
 logger = get_logger()
 
@@ -373,6 +373,23 @@ def test_genesis_from_state_snapshot():
     assert new_chain.state.block_difficulty == state.block_difficulty
     assert new_chain.head.number == state.block_number
 
+
+def test_get_blockhashes_from_hash():
+    test_chain = tester.Chain()
+    test_chain.mine(5)
+
+    blockhashes = test_chain.chain.get_blockhashes_from_hash(
+         test_chain.chain.get_block_by_number(5).hash,
+         2,
+    )
+    assert len(blockhashes) == 2
+
+
+def test_get_blockhash_by_number():
+    test_chain = tester.Chain()
+    test_chain.mine(2)
+
+    test_chain.chain.get_blockhash_by_number(2) == test_chain.chain.head.hash
 
 # TODO ##########################################
 #

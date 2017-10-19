@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import range
 import json
 import random
 import time
@@ -502,16 +503,15 @@ class Chain(object):
         return self.env.db
 
     # Get blockhashes starting from a hash and going backwards
-    def get_blockhashes_from_hash(self, hash, max):
-        block = self.get_block(hash)
+    def get_blockhashes_from_hash(self, blockhash, max_num):
+        block = self.get_block(blockhash)
         if block is None:
             return []
 
         header = block.header
         hashes = []
-        for i in xrange(max):
-            hash = header.prevhash
-            block = self.get_block(hash)
+        for i in range(max_num):
+            block = self.get_block(header.prevhash)
             if block is None:
                 break
             header = block.header
