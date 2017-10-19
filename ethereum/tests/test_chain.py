@@ -1,3 +1,4 @@
+import time
 import pytest
 import ethereum.messages as messages
 import ethereum.transactions as transactions
@@ -374,6 +375,39 @@ def test_genesis_from_state_snapshot():
     assert new_chain.head.number == state.block_number
 
 
+def test_process_time_queue():
+    """
+    Test Chain.process_time_queue
+    """
+    # Arrange testing data blk0
+    k, v, k2, v2 = accounts()
+    chain = Chain({}, difficulty=1)
+    blk0 = mine_on_chain(chain, coinbase=decode_hex('0' * 40))
+    hash0 = chain.head.hash
+    blk1 = mine_on_chain(chain, coinbase=decode_hex('0' * 40))
+    hash1 = chain.head.hash
+
+    # Act on chain2
+    chain2 = Chain({}, difficulty=1)
+    chain2.time_queue.insert(0, blk0)
+    assert len(chain2.time_queue) == 1
+
+    # Not reach time threshold, process_time_queue doesn't call add_block
+    chain2.process_time_queue(new_time=0)
+    assert len(chain2.time_queue) == 1
+    assert chain2.head.hash != chain.head.hash
+
+    # Reach time threshold, process_time_queue calls add_block
+    chain2.process_time_queue(new_time=time.time() + 10)
+    assert len(chain2.time_queue) == 0
+    assert chain2.head.hash == hash0
+
+    # If new_time is None, use time.time()
+    chain2.time_queue.insert(1, blk1)
+    chain2.process_time_queue()
+    assert len(chain2.time_queue) == 0
+    assert chain2.head.hash == hash1
+
 def test_get_blockhashes_from_hash():
     test_chain = tester.Chain()
     test_chain.mine(5)
@@ -390,6 +424,7 @@ def test_get_blockhash_by_number():
     test_chain.mine(2)
 
     test_chain.chain.get_blockhash_by_number(2) == test_chain.chain.head.hash
+
 
 # TODO ##########################################
 #

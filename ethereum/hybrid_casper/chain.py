@@ -212,7 +212,7 @@ class Chain(object):
     def process_time_queue(self, new_time=None):
         self.localtime = time.time() if new_time is None else new_time
         i = 0
-        while i < len(self.time_queue) and self.time_queue[i].timestamp <= new_time:
+        while i < len(self.time_queue) and self.time_queue[i].timestamp <= self.localtime:
             log.info('Adding scheduled block')
             pre_len = len(self.time_queue)
             self.add_block(self.time_queue.pop(i))
