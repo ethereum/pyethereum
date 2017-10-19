@@ -98,7 +98,7 @@ class Transaction(rlp.Serializable):
                 if self.r >= secpk1n or self.s >= secpk1n or self.r == 0 or self.s == 0:
                     raise InvalidTransaction("Invalid signature values!")
                 pub = ecrecover_to_pub(sighash, vee, self.r, self.s)
-                if pub == b"\x00" * 64:
+                if pub == b'\x00' * 64:
                     raise InvalidTransaction(
                         "Invalid signature (zero privkey cannot sign)")
                 self._sender = utils.sha3(pub)[-20:]

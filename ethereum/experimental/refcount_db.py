@@ -81,7 +81,7 @@ class RefcountDB(BaseDB):
     # deathrow record. Also delete old journals.
     def cleanup(self, epoch):
         try:
-            death_row_node = self.db.get('deathrow:' + str(epoch))
+            death_row_node = self.db.get(b'deathrow:' + utils.to_string(epoch))
         except BaseException:
             death_row_node = rlp.encode([])
         death_row_nodes = rlp.decode(death_row_node)
@@ -97,12 +97,12 @@ class RefcountDB(BaseDB):
         sys.stderr.write('%d nodes successfully pruned\n' % pruned)
         # Delete the deathrow after processing it
         try:
-            self.db.delete('deathrow:' + str(epoch))
+            self.db.delete(b'deathrow:' + utils.to_string(epoch))
         except BaseException:
             pass
         # Delete journals that are too old
         try:
-            self.db.delete('journal:' + str(epoch - self.ttl))
+            self.db.delete(b'journal:' + utils.to_string(epoch - self.ttl))
         except BaseException:
             pass
 
@@ -114,7 +114,7 @@ class RefcountDB(BaseDB):
             death_row_nodes = rlp.decode(
                 self.db.get(
                     'deathrow:' +
-                    str(timeout_epoch)))
+                    utils.to_string(timeout_epoch)))
         except BaseException:
             death_row_nodes = []
         for nodekey in self.death_row:
@@ -128,28 +128,28 @@ class RefcountDB(BaseDB):
                              (len(self.death_row), timeout_epoch))
         death_row_nodes.extend(self.death_row)
         self.death_row = []
-        self.db.put('deathrow:' + str(timeout_epoch),
+        self.db.put(b'deathrow:' + utils.to_string(timeout_epoch),
                     rlp.encode(death_row_nodes))
         # Save journal
         try:
-            journal = rlp.decode(self.db.get('journal:' + str(epoch)))
+            journal = rlp.decode(self.db.get(b'journal:' + utils.to_string(epoch)))
         except BaseException:
             journal = []
         journal.extend(self.journal)
         self.journal = []
-        self.db.put('journal:' + str(epoch), rlp.encode(journal))
+        self.db.put(b'journal:' + utils.to_string(epoch), rlp.encode(journal))
 
     # Revert changes made during an epoch
     def revert_refcount_changes(self, epoch):
         timeout_epoch = epoch + self.ttl
         # Delete death row additions
         try:
-            self.db.delete('deathrow:' + str(timeout_epoch))
+            self.db.delete(b'deathrow:' + utils.to_string(timeout_epoch))
         except BaseException:
             pass
         # Revert journal changes
         try:
-            journal = rlp.decode(self.db.get('journal:' + str(epoch)))
+            journal = rlp.decode(self.db.get(b'journal:' + utils.to_string(epoch)))
             for new_refcount, hashkey in journal[::-1]:
                 node_object = rlp.decode(self.db.get(b'r:' + hashkey))
                 self.db.put(b'r:' + hashkey,

@@ -74,7 +74,7 @@ def create_account_snapshot(env, rlpdata):
     storage_trie = SecureTrie(Trie(env.db, account.storage))
     storage = dict()
     for k, v in storage_trie.iter_branch():
-        storage[encode_hex(k.lstrip('\x00') or '\x00')] = encode_hex(v)
+        storage[encode_hex(k.lstrip(b'\x00') or b'\x00')] = encode_hex(v)
     return {
         'nonce': snapshot_form(account.nonce),
         'balance': snapshot_form(account.balance),
@@ -109,7 +109,7 @@ def load_snapshot(chain, snapshot):
     trie = load_state(chain.env, snapshot['alloc'])
     assert trie.root_hash == base_header.state_root
     chain.state.trie = trie
-    chain.env.db.put('score:' + base_header.hash, snapshot['chainDifficulty'])
+    chain.env.db.put(b'score:' + base_header.hash, snapshot['chainDifficulty'])
     chain.env.db.commit()
 
     print("Start loading recent blocks from snapshot")
