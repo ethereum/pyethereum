@@ -8,11 +8,8 @@ from ethereum.exceptions import InvalidTransaction
 from ethereum import bloom
 from ethereum import opcodes
 from ethereum import utils
-from ethereum.slogging import get_logger
 from ethereum.utils import TT256, mk_contract_address, zpad, int_to_32bytearray, big_endian_to_int, ecsign, ecrecover_to_pub, normalize_key
 
-
-log = get_logger('eth.chain.tx')
 
 # in the yellow paper it is specified that s should be smaller than
 # secpk1n (eq.205)
