@@ -330,7 +330,7 @@ def get_dunkle_candidates(chain, state, scan_limit=10):
         descendants = chain.get_descendants(anc)
     else:
         descendants = chain.get_descendants(
-            chain.get_block(chain.db.get('GENESIS_HASH')))
+            chain.get_block(chain.db.get(b'GENESIS_HASH')))
     potential_uncles = [
         x for x in descendants if x not in chain and isinstance(
             x, Block)]

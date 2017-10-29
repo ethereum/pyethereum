@@ -19,7 +19,10 @@ tests_require = set(x.strip() for x in open('dev_requirements.txt'))
 # dependency links
 dependency_links = []
 
-version = '2.1.10'
+# *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
+# see:
+# https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
+version = '2.1.1'
 
 setup(
     name="ethereum-augur-temp",

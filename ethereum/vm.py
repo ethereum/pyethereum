@@ -102,11 +102,25 @@ class Compustate():
     def __init__(self, **kwargs):
         self.memory = bytearray()
         self.stack = []
+        self.steps = 0
         self.pc = 0
         self.gas = 0
+
+        self.prev_memory = bytearray()
+        self.prev_stack = []
+        self.prev_pc = 0
+        self.prev_gas = 0
+        self.prev_prev_op = None
         self.last_returned = bytearray()
+
         for kw in kwargs:
             setattr(self, kw, kwargs[kw])
+
+    def reset_prev(self):
+        self.prev_memory = copy.copy(self.memory)
+        self.prev_stack = copy.copy(self.stack)
+        self.prev_pc = self.pc
+        self.prev_gas = self.gas
 
 
 # Preprocesses code, and determines which locations are in the middle
@@ -187,6 +201,49 @@ def revert(gas, data, **kargs):
     return 0, gas, data
 
 
+def vm_trace(ext, msg, compustate, opcode, pushcache, tracer=log_vm_op):
+    """
+    This diverges from normal logging, as we use the logging namespace
+    only to decide which features get logged in 'eth.vm.op'
+    i.e. tracing can not be activated by activating a sub
+    like 'eth.vm.op.stack'
+    """
+
+    op, in_args, out_args, fee = opcodes.opcodes[opcode]
+
+    trace_data = {}
+    trace_data['stack'] = list(map(to_string, list(compustate.prev_stack)))
+    if compustate.prev_prev_op in ('MLOAD', 'MSTORE', 'MSTORE8', 'SHA3', 'CALL',
+                   'CALLCODE', 'CREATE', 'CALLDATACOPY', 'CODECOPY',
+                   'EXTCODECOPY'):
+        if len(compustate.prev_memory) < 4096:
+            trace_data['memory'] = \
+                ''.join([encode_hex(ascii_chr(x)) for x
+                          in compustate.prev_memory])
+        else:
+            trace_data['sha3memory'] = \
+                encode_hex(utils.sha3(b''.join([ascii_chr(x) for
+                                      x in compustate.prev_memory])))
+    if compustate.prev_prev_op in ('SSTORE',) or compustate.steps == 0:
+        trace_data['storage'] = ext.log_storage(msg.to)
+    trace_data['gas'] = to_string(compustate.prev_gas)
+    trace_data['gas_cost'] = to_string(compustate.prev_gas - compustate.gas)
+    trace_data['fee'] = fee
+    trace_data['inst'] = opcode
+    trace_data['pc'] = to_string(compustate.prev_pc)
+    if compustate.steps == 0:
+        trace_data['depth'] = msg.depth
+        trace_data['address'] = msg.to
+    trace_data['steps'] = compustate.steps
+    trace_data['depth'] = msg.depth
+    if op[:4] == 'PUSH':
+        print(repr(pushcache))
+        trace_data['pushvalue'] = pushcache[compustate.prev_pc]
+    tracer.trace('vm', op=op, **trace_data)
+    compustate.steps += 1
+    compustate.prev_prev_op = op
+
+
 # Main function
 def vm_execute(ext, msg, code):
     # precompute trace flag
@@ -204,9 +261,8 @@ def vm_execute(ext, msg, code):
 
     # For tracing purposes
     op = None
+    _prevop = None
     steps = 0
-    _prevop = None  # for trace only
-
     while compustate.pc < codelen:
 
         opcode = safe_ord(code[compustate.pc])
@@ -221,6 +277,8 @@ def vm_execute(ext, msg, code):
         op, in_args, out_args, fee = opcodes.opcodes[opcode]
 
         # Apply operation
+        if trace_vm:
+            compustate.reset_prev()
         compustate.gas -= fee
         compustate.pc += 1
 
@@ -424,7 +482,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OOG COPY DATA')
                 if dstart + size > len(compustate.last_returned):
                     return vm_exception('RETURNDATACOPY out of range')
-                mem[mstart: mstart + size] = compustate.last_returned
+                mem[mstart: mstart + size] = compustate.last_returned[dstart: dstart + size]
             elif op == 'RETURNDATASIZE':
                 stk.append(len(compustate.last_returned))
             elif op == 'GASPRICE':
@@ -716,6 +774,12 @@ def vm_execute(ext, msg, code):
                 xferring=xfer)
             return peaceful_exit('SUICIDED', compustate.gas, [])
 
+        if trace_vm:
+            vm_trace(ext, msg, compustate, opcode, pushcache)
+
+    if trace_vm:
+        compustate.reset_prev()
+        vm_trace(ext, msg, compustate, 0, None)
     return peaceful_exit('CODE OUT OF RANGE', compustate.gas, [])
 
 

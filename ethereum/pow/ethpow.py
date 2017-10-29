@@ -36,7 +36,7 @@ else:
     raise Exception("invalid ethash library set")
 
 TT64M1 = 2**64 - 1
-cache_seeds = ['\x00' * 32]
+cache_seeds = [b'\x00' * 32]
 cache_by_seed = OrderedDict()
 cache_by_seed.max_items = 10
 
@@ -124,9 +124,9 @@ def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):
             utils.int_to_big_endian(
                 (nonce + i) & TT64M1), 8)
         o = hashimoto_light(block_number, cache, mining_hash, bin_nonce)
-        if o[b"result"] <= target:
-            log.debug("nonce found")
+        if o[b'result'] <= target:
+            log.debug('nonce found: {}'.format(bin_nonce))
             assert len(bin_nonce) == 8
-            assert len(o[b"mix digest"]) == 32
-            return bin_nonce, o[b"mix digest"]
+            assert len(o[b'mix digest']) == 32
+            return bin_nonce, o[b'mix digest']
     return None, None
