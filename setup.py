@@ -25,7 +25,7 @@ dependency_links = []
 version = '2.1.1'
 
 setup(
-    name="ethereum",
+    name="ethereum-augur-temp",
     packages=find_packages("."),
     description='Next generation cryptocurrency network',
     long_description=readme,
