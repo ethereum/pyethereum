@@ -45,15 +45,15 @@ Essentially, the next block will be the attacker's with probability `h` and othe
 
     V(D(h, m)) = h * (1-h) + m^2 * V(D(h, m)) + (1-m)^2 * V(D(h,m))
 
-    V(D(h, m)) = h * (1-h) + (2*m + m^2) * V(D(h, m))
+    V(D(h, m)) = h * (1-h) + 2*(m^2 - m) * V(D(h, m))
 
-    V(D(h, m)) = h * (1-h) / (2*m + m^2)
+    V(D(h, m)) = h * (1-h) / (1-2*(m^2-m))
 
 The standard deviation, as usual, can be computed by taking the square root of the variance. Now, we want to know: given two samples (the first corresponding to mining honestly and the second corresponding to skipping), what is the probability that the second sample will be more than one unit higher than the first sample? If it is, then it is worth the cost of losing a block reward to manipulate the randomness by not publishing. We can estimate this probability from the standard deviation by assuming that the distribution is normal, and then multiplying the standard deviation by sqrt(2) ~= 1.41 to get the standard deviation of two of these distributions subtracted from each other (if the difference is at least +1 then exploitation is profitable).
 
 Hence the final formula for the relevant statistic is this:
 
-    SDD(D(h, m)) = sqrt(2 * h * (1-h) / (2*m + m^2))
+    SDD(D(h, m)) = sqrt(2 * h * (1-h) / (1-2*(m^2-m)))
 
 The following table provides some examples:
 
