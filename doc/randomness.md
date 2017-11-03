@@ -53,7 +53,7 @@ The standard deviation, as usual, can be computed by taking the square root of t
 
 Hence the final formula for the relevant statistic is this:
 
-    SDD(D(h, m)) = sqrt(h * (1 - h) / (m * (m - 1))
+    SDD(D(h, m)) = sqrt(h * (1 - h) / (m * (1 - m))
 
 The following table provides some examples with a zscore of -0.997, which can be calculated e.g. [here](http://stattrek.com/online-calculator/normal.aspx):
 
