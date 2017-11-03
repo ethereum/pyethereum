@@ -123,7 +123,7 @@ The following table provides some examples with a zscore of -0.997, which can be
 
 Note that results for low standard deviations are slightly unreliable because in those cases there are too few samples for the central limit theorem to properly apply; fortunately, in our case, if we assume `m` is low (as validators don't make mistakes _that_ often), then we can see that there is enough data for the approximation to work (eg. even at `m = 0.2`, we get ~10 large samples of `R(h)`).
 
-To provide some results, consider that at `h = 0.2` and `m = 0.05`, we get `SDD = 1.76`, and at `h = 0.2` and `m = 0.01` we get `SDD = 3.99`. Hence, the incentives to skip are frequent and substantial.
+To provide some results, consider that at `h = 0.2` and `m = 0.945`, we get `SDD = 1.76`, and at `h = 0.2` and `m = 0.99` we get `SDD = 3.99`. Hence, the incentives to skip are frequent and substantial.
 
 One mitigating factor to keep in mind is that block skipping may in practice be kept low because it is in some ways self-defeating: skipping by both the validator themselves and by other validators employing the same strategy contribute to `m`, and higher values of `m` reduce the standard deviation and hence make skipping less attractive. However, even still, this means that equilibrium operation will be highly suboptimal.
 
