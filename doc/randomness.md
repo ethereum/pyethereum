@@ -125,7 +125,9 @@ Note that results for low standard deviations are slightly unreliable because in
 
 To provide some results, consider that at `h = 0.2` and `m = 0.945`, we get `SDD = 1.76`, and at `h = 0.2` and `m = 0.99` we get `SDD = 3.99`. Hence, the incentives to skip are frequent and substantial.
 
-One mitigating factor to keep in mind is that block skipping may in practice be kept low because it is in some ways self-defeating: skipping by both the validator themselves and by other validators employing the same strategy contribute to `m`, and higher values of `m` reduce the standard deviation and hence make skipping less attractive. However, even still, this means that equilibrium operation will be highly suboptimal.
+Note the following: SDD increases asymptotically to infinity as m approaches 1, i.e. SDD equals infinity for the limit of m equal to 1; for any value m, the SDD is highest when `h = 0.5`; and when `h = m = 1`, the `SDD = 1`. Equilibrium operation will also be highly suboptimal. So, SDD is infinite when the validator's stake power is 0.5 of the network, and skips every block. While the probability that a validator will be profitable with this strategy is highest when SDD is infinite, if a validator skips every block, they will not be able to make a profit.
+
+Also note that more validators using this strategy would increase `h` as well as `m`, thus if `h > 0.5` then SDD is reduced. However, the equilibrium optimization of the time between block's would be badly affected by using this strategy.
 
 There are several approaches to mitigating this problem at other layers of the protocol. One is to explicitly penalize not creating blocks over and above the opportunity cost of not getting the reward; a penalty of 2x the reward (ie. a validator must create blocks at least 67% of the time to be profitable) would increase the requirement to the point that the second sample must be three units higher than the first sample to make exploitation profitable. This changes the table above to the following:
 
