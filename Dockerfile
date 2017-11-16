@@ -8,6 +8,6 @@ RUN apt-get update && \
 
 # Download and install Pyethereum
 WORKDIR /code
-RUN https://github.com/ethereum/pyethereum.git
+RUN git clone https://github.com/ethereum/pyethereum.git
 WORKDIR /code/pyethereum
 RUN python setup.py install
