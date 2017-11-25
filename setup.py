@@ -5,7 +5,7 @@ with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 # requirements
-install_requires = set(x.strip() for x in open('requirements.txt'))
+install_requires = list(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master': 'pyethash',
 }
@@ -14,7 +14,7 @@ install_requires = [
         r, r) for r in install_requires]
 
 # dev requirements
-tests_require = set(x.strip() for x in open('dev_requirements.txt'))
+tests_require = list(x.strip() for x in open('dev_requirements.txt'))
 
 # dependency links
 dependency_links = []
