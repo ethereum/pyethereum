@@ -93,7 +93,7 @@ else:
 
 
 def ecrecover_to_pub(rawhash, v, r, s):
-    if coincurve and hasattr(coincurve, "PublicKey") and False:
+    if coincurve and hasattr(coincurve, "PublicKey"):
         try:
             pk = coincurve.PublicKey.from_signature_and_message(
                 zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) + zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32) +
@@ -116,7 +116,7 @@ def ecrecover_to_pub(rawhash, v, r, s):
 
 
 def ecsign(rawhash, key):
-    if coincurve and hasattr(coincurve, 'PrivateKey') and False:
+    if coincurve and hasattr(coincurve, 'PrivateKey'):
         pk = coincurve.PrivateKey(key)
         signature = pk.sign_recoverable(rawhash, hasher=None)
         v = safe_ord(signature[64]) + 27
