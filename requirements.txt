@@ -6,6 +6,6 @@ pbkdf2
 py_ecc
 rlp>=0.4.7
 https://github.com/ethereum/ethash/tarball/master
-pycryptodome==3.4.6
+pycryptodome>=3.4.7
 coincurve>=5.0.1
 future
