@@ -161,7 +161,7 @@ class Chain(object):
         if genesis:
             if type(genesis)!=dict and genesis.env.config['CONSENSUS_STRATEGY'] == 'hybrid_casper':
                 from ethereum.hybrid_casper import chain as hybrid_casper_chain
-                self.chain = hybrid_casper_chain.Chain(genesis, env=env, reset_genesis=True)
+                self.chain = hybrid_casper_chain.Chain(genesis, reset_genesis=True)
             else:
                 self.chain = pow_chain.Chain(genesis, env=env, reset_genesis=True)
         else:

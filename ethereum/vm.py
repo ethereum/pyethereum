@@ -78,8 +78,6 @@ class Message(object):
     def __init__(self, sender, to, value=0, gas=1000000, data='', depth=0,
                  code_address=None, is_create=False, transfers_value=True, static=False):
         self.sender = sender
-        if (to.startswith("0x")):
-            to = to[2:]
         self.to = to
         self.value = value
         self.gas = gas
