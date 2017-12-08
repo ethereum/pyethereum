@@ -21,6 +21,14 @@ except ImportError:
     warnings.warn('could not import coincurve', ImportWarning)
     coincurve = None
 
+class Memoize:
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+    def __call__(self, *args):
+        if args not in self.memo:
+	    self.memo[args] = self.fn(*args)
+        return self.memo[args]
 
 def big_endian_to_int(x): return big_endian_int.deserialize(
     str_to_bytes(x).lstrip(b'\x00'))
@@ -188,6 +196,7 @@ assert encode_hex(
     sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
+@Memoize
 def privtoaddr(k):
     k = normalize_key(k)
     x, y = privtopub(k)
