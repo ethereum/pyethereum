@@ -113,7 +113,7 @@ class BlockHeader(rlp.Serializable):
         d = {}
         for field in ('prevhash', 'uncles_hash', 'extra_data', 'nonce',
                       'mixhash'):
-            d[field] = b'0x' + encode_hex(getattr(self, field))
+            d[field] = '0x' + encode_hex(getattr(self, field))
         for field in ('state_root', 'tx_list_root', 'receipts_root',
                       'coinbase'):
             d[field] = encode_hex(getattr(self, field))
