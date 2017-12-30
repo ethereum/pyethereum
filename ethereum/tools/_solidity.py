@@ -98,7 +98,7 @@ def solc_parse_output(compiler_output):
             # decoding can fail if the compiled contract has unresolved symbols
             try:
                 value['bin'] = decode_hex(value['bin_hex'])
-            except TypeError:
+            except (TypeError, ValueError):
                 pass
 
     for json_data in ('abi', 'devdoc', 'userdoc'):
