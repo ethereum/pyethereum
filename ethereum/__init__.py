@@ -17,11 +17,11 @@ GIT_DESCRIBE_RE = re.compile(
 
 __version__ = None
 try:
-    _dist = get_distribution('pyethapp')
+    _dist = get_distribution('ethereum')
     # Normalize case for Windows systems
     dist_loc = os.path.normcase(_dist.location)
     here = os.path.normcase(__file__)
-    if not here.startswith(os.path.join(dist_loc, 'pyethapp')):
+    if not here.startswith(os.path.join(dist_loc, 'ethereum')):
         # not installed, but there is another version that *is*
         raise DistributionNotFound
     __version__ = _dist.version
