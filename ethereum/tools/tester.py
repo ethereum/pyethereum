@@ -49,6 +49,12 @@ try:
 except (ImportError, TypeError):
     pass
 
+try:
+    from vyper import compiler
+    languages['vyper'] = compiler
+except (ImportError, TypeError):
+    pass
+
 
 class TransactionFailed(Exception):
     pass
