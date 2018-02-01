@@ -7,4 +7,5 @@ py_ecc
 rlp>=0.4.7
 https://github.com/ethereum/ethash/tarball/master
 pycryptodome>=3.4.7
+coincurve>=7.0.0
 future
