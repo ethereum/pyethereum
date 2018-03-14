@@ -56,7 +56,6 @@ def solc_arguments(libraries=None, combined='bin,abi',
     """ Build the arguments to call the solc binary. """
     args = [
         '--combined-json', combined,
-        '--add-std'
     ]
 
     if optimize:
