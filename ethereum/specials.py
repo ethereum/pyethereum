@@ -220,6 +220,50 @@ def proc_ecpairing(ext, msg):
     return 1, msg.gas - gascost, [0] * 31 + [1 if result else 0]
 
 
+def proc_ed25519verify(ext, msg):
+    print('proc_ed25519verify proc', msg.gas)
+
+    # https://pynacl.readthedocs.io/
+    import nacl
+
+    if not ext.post_metropolis_hardfork():
+        return 1, msg.gas, []
+
+    if msg.data.size != 128:
+        return 0, 0, []
+
+    if msg.gas < opcodes.GED25519VERIFY:
+        return 0, 0, []
+
+    # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-665.md#specification
+    message_bytes = msg.data.extract32(0)
+    verify_key_bytes = msg.data.extract32(32)
+    sig_bytes = msg.data.extract64(64)
+    result = None
+
+    try:
+        # try to use PyNaCl first ..
+        import nacl
+    except ImportError:
+        # use pure Python, built-in implementation
+        from ethereum import ed25519
+        try:
+            result = ed25519.verify(verify_key_bytes, sig_bytes,message_bytes)
+        except ValueError:
+            result = False
+    else:
+        # https://pynacl.readthedocs.io/en/stable/signing/#nacl.signing.VerifyKey
+        verify_key = nacl.signing.VerifyKey(verify_key_bytes)
+        try:
+            # https://pynacl.readthedocs.io/en/stable/signing/#nacl.signing.VerifyKey.verify
+            verify_key.verify(message_bytes + sig_bytes)
+            result = True
+        except nacl.exceptions.BadSignatureError:
+            result = False
+
+    return 1, msg.gas - opcodes.GED25519VERIFY, [0] * 31 + [1 if result else 0]
+
+
 specials = {
     decode_hex(k): v for k, v in
     {
@@ -231,6 +275,7 @@ specials = {
         b'0000000000000000000000000000000000000006': proc_ecadd,
         b'0000000000000000000000000000000000000007': proc_ecmul,
         b'0000000000000000000000000000000000000008': proc_ecpairing,
+        b'0000000000000000000000000000000000000009': proc_ed25519verify,
     }.items()
 }
 
