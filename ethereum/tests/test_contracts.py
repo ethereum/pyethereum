@@ -1232,6 +1232,24 @@ def test_ecrecover():
     assert result == addr
 
 
+ed25519verify_code = """
+def main(msg:bytes32, vk:bytes32, sig1:bytes32, sig2:bytes32):
+    return(ed25519verify(msg + vk + sig1 + sig2))
+"""
+
+def test_ed25519verify():
+    c = tester.Chain()
+    x = c.contract(ed25519verify_code, language='serpent')
+    msg = b'\0' * 32
+    vk = b'\0' * 32
+    sig1 = b'\0' * 32
+    sig2 = b'\0' * 32
+    res = x.main(msg, vk, sig1, sig2)
+
+    # invalid sig should fail
+    assert x.main() != 0
+
+
 sha256_code = """
 def main():
     return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
