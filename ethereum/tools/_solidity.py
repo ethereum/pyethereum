@@ -58,6 +58,14 @@ def solc_arguments(libraries=None, combined='bin,abi',
         '--combined-json', combined,
     ]
 
+    def str_of(address):
+        """cast address to string. py2/3 compatability. """
+        try:
+            return address.decode('utf8')
+        except AttributeError:
+            return address
+
+
     if optimize:
         args.append('--optimize')
 
@@ -70,7 +78,7 @@ def solc_arguments(libraries=None, combined='bin,abi',
     if libraries is not None and len(libraries):
         addresses = [
             '{name}:{address}'.format(
-                name=name, address=address.decode('utf8'))
+                name=name, address=str_of(address))
             for name, address in libraries.items()
         ]
         args.extend([

@@ -5,48 +5,24 @@ import pytest
 
 from ethereum.utils import encode_hex
 
-from ethereum import tester
+from ethereum.tools import tester
 from ethereum import utils
-from ethereum import _solidity
-from ethereum._solidity import get_solidity
+import ethereum.config as config
+from ethereum.tools import _solidity
+from ethereum.tools._solidity import get_solidity
 
 SOLIDITY_AVAILABLE = get_solidity() is not None
 CONTRACTS_DIR = path.join(path.dirname(__file__), 'contracts')
 
+skip_if_no_solidity = pytest.mark.skipif(
+    not SOLIDITY_AVAILABLE,
+    reason='solc compiler not available')
 
 def bytecode_is_generated(cinfo, cname):
     return 'code' in cinfo[cname] and len(cinfo[cname]['code']) > 10
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
-def test_library_from_file():
-    state = tester.state()
-    state.env.config['HOMESTEAD_FORK_BLKNUM'] = 0  # enable CALLCODE opcode
-
-    library = state.abi_contract(
-        None,
-        path=path.join(CONTRACTS_DIR, 'seven_library.sol'),
-        language='solidity',
-    )
-
-    libraries = {
-        'SevenLibrary': encode_hex(library.address),
-    }
-    contract = state.abi_contract(
-        None,
-        path=path.join(CONTRACTS_DIR, 'seven_contract.sol'),
-        libraries=libraries,
-        language='solidity',
-    )
-
-    # pylint: disable=no-member
-    assert library.seven() == 7
-    assert contract.test() == 7
-
-
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_library_from_code():
     with open(path.join(CONTRACTS_DIR, 'seven_library.sol')) as handler:
         library_code = handler.read()
@@ -54,27 +30,25 @@ def test_library_from_code():
     with open(path.join(CONTRACTS_DIR, 'seven_contract_without_import.sol')) as handler:
         contract_code = handler.read()
 
-    state = tester.state()
-    state.env.config['HOMESTEAD_FORK_BLKNUM'] = 0  # enable CALLCODE opcode
+    state = tester.Chain()
+    env = config.Env()
+    env.config['HOMESTEAD_FORK_BLKNUM'] = 0 # enable CALLCODE opcode
 
-    library = state.abi_contract(
-        library_code,
-        path=None,
+    library = state.contract(
+        sourcecode=library_code,
         language='solidity',
     )
 
     libraries = {
         'SevenLibrary': encode_hex(library.address),
     }
-    contract = state.abi_contract(
-        contract_code,
-        path=None,
+    contract = state.contract(
+        sourcecode=contract_code,
         libraries=libraries,
         language='solidity',
     )
 
     # pylint: disable=no-member
-    assert library.seven() == 7
     assert contract.test() == 7
 
 
@@ -129,17 +103,16 @@ def test_symbols():
     ) == 'beef1111111111111111111111111111111111111111cafe'
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_interop():
     serpent_contract = """
-    extern solidity: [sub2:[]:i]
+extern solidity: [sub2:[]:i]
 
-    def main(a):
-        return(a.sub2() * 2)
+def main(a):
+    return(a.sub2() * 2)
 
-    def sub1():
-        return(5)
+def sub1():
+    return(5)
     """
 
     solidity_contract = """
@@ -158,9 +131,13 @@ def test_interop():
     }
     """
 
-    state = tester.state()
-    serpent_abi = state.abi_contract(serpent_contract)
-    solidity_abi = state.abi_contract(
+    state = tester.Chain()
+
+    serpent_abi = state.contract(
+        serpent_contract,
+        language='serpent')
+
+    solidity_abi = state.contract(
         solidity_contract,
         language='solidity')  # should be zoo
     solidity_address = utils.encode_hex(solidity_abi.address)
@@ -171,12 +148,11 @@ def test_interop():
 
     assert solidity_abi.sub2() == 7
     assert solidity_abi.sub3(utils.encode_hex(
-        solidity_abi.address)) == solidity_address
+        solidity_abi.address)) == '0x' + solidity_address
     assert solidity_abi.main(serpent_abi.address) == 10
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_constructor():
     constructor_contract = """
     contract testme {
@@ -190,19 +166,19 @@ def test_constructor():
     }
     """
 
-    state = tester.state()
-    contract = state.abi_contract(
+    state = tester.Chain()
+
+    contract = state.contract(
         constructor_contract,
         language='solidity',
-        constructor_parameters=(2, ),
+        args=(2, ),
     )
 
     # pylint: disable=no-member
     assert contract.getValue() == 2
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_solidity_compile_rich():
     compile_rich_contract = """
     contract contract_add {
@@ -239,8 +215,7 @@ def test_solidity_compile_rich():
     } == {'subtract7', 'subtract42'}
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_abi_contract():
     one_contract = """
     contract foo {
@@ -253,8 +228,8 @@ def test_abi_contract():
     }
     """
 
-    state = tester.state()
-    contract = state.abi_contract(one_contract, language='solidity')
+    state = tester.Chain()
+    contract = state.contract(one_contract, language='solidity')
 
     # pylint: disable=no-member
     assert contract.seven() == 7
@@ -262,8 +237,7 @@ def test_abi_contract():
     assert contract.mul2(-2) == -4
 
 
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE,
-                    reason='solc compiler not available')
+@skip_if_no_solidity
 def test_extra_args():
     src = """
     contract foo {
