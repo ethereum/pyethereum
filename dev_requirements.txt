@@ -1,6 +1,7 @@
-tox
+bitcoin
 coveralls
-pytest>=2.9.0
-pytest-catchlog==1.2.2
-pytest-timeout==1.0.0
+ethereum-serpent
 py-ecc
+pytest-timeout==1.0.0
+pytest>=2.9.0
+tox
