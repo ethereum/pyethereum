@@ -2,7 +2,6 @@ bitcoin
 coveralls
 ethereum-serpent
 py-ecc
-pytest-catchlog==1.2.2
 pytest-timeout==1.0.0
 pytest>=2.9.0
 tox
