@@ -225,7 +225,7 @@ class Chain(object):
                 self.head_state.receipts[-2].gas_used
         return diff - (not with_tx) * self.last_tx.intrinsic_gas_used
 
-    def contract(self, sourcecode, args=[], sender=k0, value=0,
+    def contract(self, sourcecode, args=[], sender=k0, value=0, libraries=None,
                  language=None, l=None, startgas=STARTGAS, gasprice=GASPRICE):
         assert not (l and language)
         language = l or language
@@ -238,7 +238,8 @@ class Chain(object):
             interface = compiler.mk_full_signature(sourcecode)
             ct = ContractTranslator(interface)
             code = compiler.compile(
-                sourcecode) + (ct.encode_constructor_arguments(args) if args else b'')
+                sourcecode, libraries=libraries
+            ) + (ct.encode_constructor_arguments(args) if args else b'')
             addr = self.tx(
                 sender=sender,
                 to=b'',
