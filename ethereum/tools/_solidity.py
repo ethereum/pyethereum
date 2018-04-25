@@ -389,8 +389,6 @@ class Solc(object):
     @staticmethod
     def _code_or_path(sourcecode, path, contract_name,
                       libraries, combined, extra_args):
-        warnings.warn(
-            'solc_wrapper is deprecated, please use the functions compile_file or compile_code')
 
         if sourcecode and path:
             raise ValueError('sourcecode and path are mutually exclusive.')
