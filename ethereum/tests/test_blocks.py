@@ -7,7 +7,7 @@ from ethereum.block import Block
 from ethereum.config import Env
 from ethereum.genesis_helpers import state_from_genesis_declaration, initialize_genesis_keys
 import rlp
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from ethereum.utils import decode_hex, encode_hex, str_to_bytes
 from rlp import DecodingError, DeserializationError
 import os
 import sys

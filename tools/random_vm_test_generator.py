@@ -5,7 +5,7 @@ pb = pyethereum.processblock
 u = pyethereum.utils
 import sys
 import random
-from rlp.utils import encode_hex, ascii_chr
+from ethereum.utils import encode_hex, ascii_chr
 
 
 def mkrndgen(seed):

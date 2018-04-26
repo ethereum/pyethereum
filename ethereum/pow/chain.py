@@ -10,7 +10,7 @@ from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.messages import apply_transaction
 import rlp
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 from ethereum.exceptions import InvalidNonce, InsufficientStartGas, UnsignedTransaction, \
     BlockGasLimitReached, InsufficientBalance, InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger, configure_logging

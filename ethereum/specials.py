@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 from py_ecc.secp256k1 import privtopub, ecdsa_raw_recover, N as secp256k1n
 import hashlib
-from rlp.utils import ascii_chr
+from ethereum.utils import ascii_chr
 
 from ethereum import utils, opcodes
 from ethereum.utils import safe_ord, decode_hex, encode_int32

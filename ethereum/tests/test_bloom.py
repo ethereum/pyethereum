@@ -5,7 +5,7 @@ import ethereum.utils as utils
 import ethereum.tools.testutils as testutils
 import ethereum.bloom as bloom
 import os
-from rlp.utils import decode_hex, str_to_bytes
+from ethereum.utils import decode_hex, str_to_bytes
 from ethereum.utils import encode_hex
 
 

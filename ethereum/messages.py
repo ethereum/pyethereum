@@ -6,7 +6,7 @@ from ethereum.utils import normalize_address, hash32, trie_root, \
     safe_ord, int_to_addr, sha3, big_endian_to_int, \
     ascii_chr, bytearray_to_bytestr
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
-from rlp.utils import decode_hex, encode_hex, ascii_chr
+from ethereum.utils import decode_hex, encode_hex, ascii_chr
 from ethereum import utils
 from ethereum import trie
 from ethereum import bloom

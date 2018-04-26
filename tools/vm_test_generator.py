@@ -4,7 +4,7 @@ t = pyethereum.tester
 pb = pyethereum.processblock
 import serpent
 import sys
-from rlp.utils import encode_hex, ascii_chr
+from ethereum.utils import encode_hex, ascii_chr
 
 
 # Code: serpent code

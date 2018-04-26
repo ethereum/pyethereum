@@ -5,7 +5,7 @@ import ethereum.transactions as transactions
 import ethereum.meta as meta
 from ethereum.transaction_queue import TransactionQueue
 import rlp
-from rlp.utils import decode_hex, encode_hex
+from ethereum.utils import decode_hex, encode_hex
 import ethereum.pow.ethpow as ethpow
 import ethereum.utils as utils
 from ethereum.pow.chain import Chain

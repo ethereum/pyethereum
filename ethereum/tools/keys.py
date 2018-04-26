@@ -2,7 +2,7 @@ import os
 import sys
 import pbkdf2
 
-from rlp.utils import decode_hex
+from ethereum.utils import decode_hex
 from ethereum.utils import encode_hex
 
 try:

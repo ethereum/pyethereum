@@ -2,7 +2,7 @@ import itertools
 import random
 import pytest
 from ethereum.db import _EphemDB
-from rlp.utils import ascii_chr
+from ethereum.utils import ascii_chr
 
 random.seed(0)
 
