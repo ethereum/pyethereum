@@ -14,7 +14,7 @@ from ethereum.meta import apply_block
 from ethereum.common import update_block_env_variables
 from ethereum.tools import tester
 import rlp
-from rlp.utils import encode_hex
+from ethereum.utils import encode_hex
 from ethereum.exceptions import InvalidTransaction, VerificationFailed
 from ethereum.slogging import get_logger
 from ethereum.config import Env

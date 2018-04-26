@@ -1,6 +1,6 @@
 from ethereum import utils
 from ethereum.slogging import get_logger
-from rlp.utils import str_to_bytes
+from ethereum.utils import str_to_bytes
 import sys
 if sys.version_info.major == 2:
     from repoze.lru import lru_cache

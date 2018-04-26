@@ -1,4 +1,4 @@
-from rlp.utils import decode_hex, ascii_chr
+from ethereum.utils import decode_hex, ascii_chr
 from ethereum.utils import safe_ord, int_to_bytes
 
 NULLSHA3 = decode_hex(

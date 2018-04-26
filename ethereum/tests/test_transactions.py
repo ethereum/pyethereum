@@ -1,7 +1,7 @@
 import ethereum.transactions as transactions
 import ethereum.utils as utils
 import rlp
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from ethereum.utils import decode_hex, encode_hex, str_to_bytes
 from ethereum.tools import testutils
 from ethereum.messages import config_fork_specific_validation, null_address
 import ethereum.config as config

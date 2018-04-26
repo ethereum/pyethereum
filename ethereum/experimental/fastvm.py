@@ -12,7 +12,7 @@ import copy
 from ethereum import opcodes
 import time
 from ethereum.slogging import get_logger
-from rlp.utils import ascii_chr
+from ethereum.utils import ascii_chr
 from ethereum.utils import encode_hex
 from ethereum.utils import to_string
 

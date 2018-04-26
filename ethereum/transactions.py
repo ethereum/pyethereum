@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import rlp
 from rlp.sedes import big_endian_int, binary
-from rlp.utils import str_to_bytes, ascii_chr
-from ethereum.utils import encode_hex
+from ethereum.utils import str_to_bytes
+from ethereum.utils import encode_hex, ascii_chr
 
 from ethereum.exceptions import InvalidTransaction
 from ethereum import bloom

@@ -8,7 +8,7 @@ sys.setrecursionlimit(10000)
 
 import copy
 
-from rlp.utils import encode_hex, ascii_chr
+from ethereum.utils import encode_hex, ascii_chr
 from ethereum import utils
 from ethereum.abi import is_numeric
 from ethereum import opcodes

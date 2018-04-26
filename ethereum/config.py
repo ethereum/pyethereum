@@ -1,4 +1,4 @@
-from rlp.utils import decode_hex
+from ethereum.utils import decode_hex
 
 from ethereum import utils
 from ethereum.db import BaseDB, EphemDB

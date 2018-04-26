@@ -10,9 +10,10 @@ from py_ecc.secp256k1 import privtopub, ecdsa_raw_sign, ecdsa_raw_recover
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from eth_utils import encode_hex as encode_hex_0x
+from eth_utils import decode_hex, int_to_big_endian, big_endian_to_int
+from rlp.utils import ALL_BYTES
 import random
-
 
 try:
     import coincurve
@@ -29,13 +30,6 @@ class Memoize:
         if args not in self.memo:
             self.memo[args] = self.fn(*args)
         return self.memo[args]
-
-def big_endian_to_int(x): return big_endian_int.deserialize(
-    str_to_bytes(x).lstrip(b'\x00'))
-
-
-def int_to_big_endian(x): return big_endian_int.serialize(x)
-
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
@@ -68,6 +62,13 @@ if sys.version_info.major == 2:
     def bytes_to_int(value):
         return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
 
+    def str_to_bytes(value):
+        if isinstance(value, (bytes, bytearray)):
+            return bytes(value)
+        elif isinstance(value, unicode):
+            return codecs.encode(value, 'utf8')
+        else:
+            raise TypeError("Value must be text, bytes, or bytearray")
 else:
     def is_numeric(x): return isinstance(x, int)
 
@@ -99,6 +100,18 @@ else:
     def bytes_to_int(value):
         return int.from_bytes(value, byteorder='big')
 
+    def str_to_bytes(value):
+        if isinstance(value, bytearray):
+            value = bytes(value)
+        if isinstance(value, bytes):
+            return value
+        return bytes(value, 'utf-8')
+
+def ascii_chr(n):
+    return ALL_BYTES[n]
+
+def encode_hex(n):
+    return encode_hex_0x(n)[2:]
 
 def ecrecover_to_pub(rawhash, v, r, s):
     if coincurve and hasattr(coincurve, "PublicKey"):

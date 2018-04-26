@@ -7,7 +7,7 @@ import warnings
 
 # use yaml instead of json to get non unicode (works with ascii only data)
 import yaml
-from rlp.utils import decode_hex
+from ethereum.utils import decode_hex
 from ethereum.utils import encode_hex
 
 from ethereum import utils

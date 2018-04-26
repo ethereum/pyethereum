@@ -4,7 +4,7 @@ import os
 import bitcoin
 import pytest
 import serpent
-from rlp.utils import decode_hex
+from ethereum.utils import decode_hex
 
 from ethereum import utils, abi
 from ethereum.tools import tester
