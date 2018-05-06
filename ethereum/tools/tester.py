@@ -186,7 +186,9 @@ class Chain(object):
                 self.last_sender) != transaction.sender:
             self.last_sender = None
         success, output = apply_transaction(self.head_state, transaction)
-        self.block.transactions.append(transaction)
+        self.block = self.block.copy(
+            transactions=self.block.transactions + (transaction,)
+        )
         if not success:
             raise TransactionFailed()
         return output
@@ -251,14 +253,22 @@ class Chain(object):
 
     def mine(self, number_of_blocks=1, timestamp=14, coinbase=a0):
         self.cs.finalize(self.head_state, self.block)
-        set_execution_results(self.head_state, self.block)
-        self.block = Miner(self.block).mine(rounds=100, start_nonce=0)
+        self.block = set_execution_results(self.head_state, self.block)
+        bin_nonce, mixhash = Miner(self.block).mine(rounds=100, start_nonce=0)
+        self.block = self.block.copy(header=self.block.header.copy(
+            nonce=bin_nonce,
+            mixhash=mixhash
+        ))
         assert self.chain.add_block(self.block)
         b = self.block
         for i in range(1, number_of_blocks):
             b, _ = make_head_candidate(
                 self.chain, parent=b, timestamp=self.chain.state.timestamp + timestamp, coinbase=coinbase)
-            b = Miner(b).mine(rounds=100, start_nonce=0)
+            min_nonce, mixhash = Miner(b).mine(rounds=100, start_nonce=0)
+            b = b.copy(header=b.header.copy(
+                nonce=bin_nonce,
+                mixhash=mixhash
+            ))
             assert self.chain.add_block(b)
         self.change_head(b.header.hash, coinbase)
         return b

@@ -1,5 +1,6 @@
 bitcoin
 coveralls
+https://github.com/ethereum/vyper/tarball/master
 ethereum-serpent
 py-ecc
 pytest-timeout==1.0.0

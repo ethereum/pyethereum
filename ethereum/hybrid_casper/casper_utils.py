@@ -7,7 +7,7 @@ from ethereum.hybrid_casper.casper_initiating_transactions import mk_initializer
 from ethereum.hybrid_casper import consensus
 from ethereum.messages import apply_transaction
 from ethereum.tools.tester import a0
-from viper import compiler
+from vyper import compiler
 import serpent
 import rlp
 

@@ -53,7 +53,7 @@ class Transaction(rlp.Serializable):
 
     def __init__(self, nonce, gasprice, startgas,
                  to, value, data, v=0, r=0, s=0):
-        self.data = None
+        # self.data = None
 
         to = utils.normalize_address(to, allow_blank=True)
 
@@ -83,7 +83,8 @@ class Transaction(rlp.Serializable):
             else:
                 if self.v in (27, 28):
                     vee = self.v
-                    sighash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+                    sighash = utils.sha3(rlp.encode(unsigned_tx_from_tx(self), UnsignedTransaction))
+
                 elif self.v >= 37:
                     vee = self.v - self.network_id * 2 - 8
                     assert vee in (27, 28)
@@ -120,7 +121,7 @@ class Transaction(rlp.Serializable):
         A potentially already existing signature would be overridden.
         """
         if network_id is None:
-            rawhash = utils.sha3(rlp.encode(self, UnsignedTransaction))
+            rawhash = utils.sha3(rlp.encode(unsigned_tx_from_tx(self), UnsignedTransaction))
         else:
             assert 1 <= network_id < 2**63 - 18
             rlpdata = rlp.encode(rlp.infer_sedes(self).serialize(self)[
@@ -129,12 +130,15 @@ class Transaction(rlp.Serializable):
 
         key = normalize_key(key)
 
-        self.v, self.r, self.s = ecsign(rawhash, key)
+        v, r, s = ecsign(rawhash, key)
         if network_id is not None:
             self.v += 8 + network_id * 2
 
-        self._sender = utils.privtoaddr(key)
-        return self
+        ret = self.copy(
+            v=v,r=r,s=s
+        )
+        ret._sender = utils.privtoaddr(key)
+        return ret
 
     @property
     def hash(self):
@@ -142,7 +146,7 @@ class Transaction(rlp.Serializable):
 
     def to_dict(self):
         d = {}
-        for name, _ in self.__class__.fields:
+        for name, _ in self.__class__._meta.fields:
             d[name] = getattr(self, name)
             if name in ('to', 'data'):
                 d[name] = '0x' + encode_hex(d[name])
@@ -195,4 +199,18 @@ class Transaction(rlp.Serializable):
             raise InvalidTransaction("Invalid signature S value!")
 
 
-UnsignedTransaction = Transaction.exclude(['v', 'r', 's'])
+class UnsignedTransaction(rlp.Serializable):
+    fields = [
+        (field, sedes) for field, sedes in Transaction._meta.fields
+        if field not in "vrs"
+    ]
+
+def unsigned_tx_from_tx(tx):
+    return UnsignedTransaction(
+        nonce=tx.nonce,
+        gasprice=tx.gasprice,
+        startgas=tx.startgas,
+        to=tx.to,
+        value=tx.value,
+        data=tx.data,
+    )

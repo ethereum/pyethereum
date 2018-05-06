@@ -266,7 +266,7 @@ def _stringify_dict_keys(input_):
         res = {}
         for k, v in input_.items():
             v = _stringify_dict_keys(v)
-            if not isinstance(k, (int, long, bool, None.__class__)):
+            if not isinstance(k, (int, bool, None.__class__)):
                 k = str(k)
             res[k] = v
     elif isinstance(input_, (list, tuple)):

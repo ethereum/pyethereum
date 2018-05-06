@@ -67,20 +67,23 @@ def calc_difficulty(parent, timestamp, config=default_config):
 
 # Given a parent state, initialize a block with the given arguments
 def mk_block_from_prevstate(chain, state=None, timestamp=None,
-                            coinbase=b'\x35' * 20, extra_data='moo ha ha says the laughing cow.'):
+                            coinbase=b'\x35' * 20, extra_data=b'moo ha ha says the laughing cow.'):
     state = state or chain.state
-    blk = Block(BlockHeader())
     now = timestamp or chain.time()
-    blk.header.number = state.prev_headers[0].number + 1
-    blk.header.difficulty = calc_difficulty(
-        state.prev_headers[0], now, chain.config)
-    blk.header.gas_limit = calc_gaslimit(state.prev_headers[0], chain.config)
-    blk.header.timestamp = max(now, state.prev_headers[0].timestamp + 1)
-    blk.header.prevhash = state.prev_headers[0].hash
-    blk.header.coinbase = coinbase
-    blk.header.extra_data = extra_data
-    blk.header.bloom = 0
-    blk.transactions = []
+
+    blk = Block(
+        header=BlockHeader(
+            number = state.prev_headers[0].number + 1,
+            difficulty = calc_difficulty(state.prev_headers[0], now, chain.config),
+            gas_limit = calc_gaslimit(state.prev_headers[0], chain.config),
+            timestamp = max(now, state.prev_headers[0].timestamp + 1),
+            prevhash = state.prev_headers[0].hash,
+            coinbase = coinbase,
+            extra_data = extra_data,
+            bloom = 0
+        ),
+        transactions=[]
+    )
     return blk
 
 
@@ -122,7 +125,7 @@ def validate_header(state, header):
 # Add transactions
 def add_transactions(state, block, txqueue, min_gasprice=0):
     if not txqueue:
-        return
+        return block
     pre_txs = len(block.transactions)
     log.info('Adding transactions, %d in txqueue, %d dunkles' %
              (len(txqueue.txs), pre_txs))
@@ -133,12 +136,15 @@ def add_transactions(state, block, txqueue, min_gasprice=0):
             break
         try:
             apply_transaction(state, tx)
-            block.transactions.append(tx)
+            block = block.copy(
+                transactions=block.transactions + (tx,)
+            )
         except (InsufficientBalance, BlockGasLimitReached, InsufficientStartGas,
                 InvalidNonce, UnsignedTransaction) as e:
             log.error(e)
     log.info('Added %d transactions' % (len(block.transactions) - pre_txs))
 
+    return block
 
 # Validate that the transaction list root is correct
 def validate_transaction_tree(state, block):
@@ -151,13 +157,19 @@ def validate_transaction_tree(state, block):
 
 # Set state root, receipt root, etc
 def set_execution_results(state, block):
-    block.header.receipts_root = mk_receipt_sha(state.receipts)
-    block.header.tx_list_root = mk_transaction_sha(block.transactions)
     state.commit()
-    block.header.state_root = state.trie.root_hash
-    block.header.gas_used = state.gas_used
-    block.header.bloom = state.bloom
+
+    block = block.copy(
+        header = block.header.copy(
+            receipts_root = mk_receipt_sha(state.receipts),
+            tx_list_root = mk_transaction_sha(block.transactions),
+            state_root = state.trie.root_hash,
+            gas_used = state.gas_used,
+            bloom = state.bloom
+        )
+    )
     log.info('Block pre-sealed, %d gas used' % state.gas_used)
+    return block
 
 
 # Verify state root, receipt root, etc
