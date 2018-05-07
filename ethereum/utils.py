@@ -36,81 +36,49 @@ TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
 SECP256K1P = 2**256 - 4294968273
 
-if sys.version_info.major == 2:
-    def is_numeric(x): return isinstance(x, (int, long))
+def is_numeric(x): return isinstance(x, int)
 
-    def is_string(x): return isinstance(x, (str, unicode))
+def is_string(x): return isinstance(x, bytes)
 
-    def to_string(value):
-        return str(value)
-
-    def int_to_bytes(value):
-        if isinstance(value, str):
-            return value
-        return int_to_big_endian(value)
-
-    def to_string_for_regexp(value):
-        return str(value)
-    unicode = unicode
-
-    def bytearray_to_bytestr(value):
-        return bytes(''.join(chr(c) for c in value))
-
-    def encode_int32(v):
-        return zpad(int_to_big_endian(v), 32)
-
-    def bytes_to_int(value):
-        return big_endian_to_int(bytes(''.join(chr(c) for c in value)))
-
-    def str_to_bytes(value):
-        if isinstance(value, (bytes, bytearray)):
-            return bytes(value)
-        elif isinstance(value, unicode):
-            return codecs.encode(value, 'utf8')
-        else:
-            raise TypeError("Value must be text, bytes, or bytearray")
-else:
-    def is_numeric(x): return isinstance(x, int)
-
-    def is_string(x): return isinstance(x, bytes)
-
-    def to_string(value):
-        if isinstance(value, bytes):
-            return value
-        if isinstance(value, str):
-            return bytes(value, 'utf-8')
-        if isinstance(value, int):
-            return bytes(str(value), 'utf-8')
-
-    def int_to_bytes(value):
-        if isinstance(value, bytes):
-            return value
-        return int_to_big_endian(value)
-
-    def to_string_for_regexp(value):
-        return str(to_string(value), 'utf-8')
-    unicode = str
-
-    def bytearray_to_bytestr(value):
-        return bytes(value)
-
-    def encode_int32(v):
-        return v.to_bytes(32, byteorder='big')
-
-    def bytes_to_int(value):
-        return int.from_bytes(value, byteorder='big')
-
-    def str_to_bytes(value):
-        if isinstance(value, bytearray):
-            value = bytes(value)
-        if isinstance(value, bytes):
-            return value
+def to_string(value):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
         return bytes(value, 'utf-8')
+    if isinstance(value, int):
+        return bytes(str(value), 'utf-8')
+
+def int_to_bytes(value):
+    if isinstance(value, bytes):
+        return value
+    return int_to_big_endian(value)
+
+def to_string_for_regexp(value):
+    return str(to_string(value), 'utf-8')
+unicode = str
+
+def bytearray_to_bytestr(value):
+    return bytes(value)
+
+def encode_int32(v):
+    return v.to_bytes(32, byteorder='big')
+
+def bytes_to_int(value):
+    return int.from_bytes(value, byteorder='big')
+
+def str_to_bytes(value):
+    if isinstance(value, bytearray):
+        value = bytes(value)
+    if isinstance(value, bytes):
+        return value
+    return bytes(value, 'utf-8')
 
 def ascii_chr(n):
     return ALL_BYTES[n]
 
 def encode_hex(n):
+    if isinstance(n, str):
+        return encode_hex(n.encode('ascii'))
     return encode_hex_0x(n)[2:]
 
 def ecrecover_to_pub(rawhash, v, r, s):

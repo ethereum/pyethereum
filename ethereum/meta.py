@@ -45,7 +45,7 @@ def make_head_candidate(chain, txqueue=None,
                         parent=None,
                         timestamp=None,
                         coinbase=b'\x35' * 20,
-                        extra_data='moo ha ha says the laughing cow.',
+                        extra_data=b'moo ha ha says the laughing cow.',
                         min_gasprice=0):
     log.debug('Creating head candidate')
     if parent is None:
@@ -64,15 +64,19 @@ def make_head_candidate(chain, txqueue=None,
         coinbase,
         extra_data)
     # Find and set the uncles
-    blk.uncles = cs.get_uncles(chain, temp_state)
-    blk.header.uncles_hash = sha3(rlp.encode(blk.uncles))
+    blk = blk.copy(
+        uncles = cs.get_uncles(chain, temp_state)
+    )
+    blk = blk.copy(header = blk.header.copy(
+        uncles_hash = sha3(rlp.encode(blk.uncles))
+    ))
     # Call the initialize state transition function
     cs.initialize(temp_state, blk)
     # Add transactions
-    add_transactions(temp_state, blk, txqueue, min_gasprice)
+    blk = add_transactions(temp_state, blk, txqueue, min_gasprice)
     # Call the finalize state transition function
     cs.finalize(temp_state, blk)
     # Set state root, receipt root, etc
-    set_execution_results(temp_state, blk)
+    blk = set_execution_results(temp_state, blk)
     log.debug('Created head candidate successfully')
     return blk, temp_state

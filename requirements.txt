@@ -1,11 +1,11 @@
 coincurve>=7.0.0
 future
-https://github.com/ethereum/ethash/tarball/master
 pbkdf2
 py_ecc
+pyethash>=0.1.27,<1.0.0
 pycryptodome>=3.4.7
 pysha3>=1.0.1
 PyYAML
 repoze.lru
-rlp>=0.4.7
+rlp>=1.0.0,<2.0.0
 scrypt

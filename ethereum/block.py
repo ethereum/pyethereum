@@ -1,6 +1,8 @@
 import rlp
-from ethereum.utils import normalize_address, hash32, trie_root, \
-    big_endian_int, address, int256, encode_hex, decode_hex, encode_int, sha3
+from ethereum.utils import (
+    normalize_address, hash32, trie_root,  big_endian_int, address, int256,
+    encode_hex, decode_hex, encode_int, sha3
+)
 from rlp.sedes import big_endian_int, Binary, binary, CountableList
 from ethereum import utils
 from ethereum import trie
@@ -78,11 +80,11 @@ class BlockHeader(rlp.Serializable):
                  gas_limit=default_config['GENESIS_GAS_LIMIT'],
                  gas_used=0,
                  timestamp=0,
-                 extra_data='',
+                 extra_data=b'',
                  mixhash=default_config['GENESIS_MIXHASH'],
-                 nonce=''):
+                 nonce=b''):
         # at the beginning of a method, locals() is a dict of all arguments
-        fields = {k: v for k, v in locals().items() if k != 'self'}
+        fields = {k: v for k, v in locals().items() if k not in ['self', '__class__']}
         if len(fields['coinbase']) == 40:
             fields['coinbase'] = decode_hex(fields['coinbase'])
         assert len(fields['coinbase']) == 20
@@ -100,13 +102,37 @@ class BlockHeader(rlp.Serializable):
 
     @property
     def mining_hash(self):
+
+        # exclude mixhash and nonce
+        fields2 = [
+            (field, sedes) for field, sedes in BlockHeader._meta.fields
+            if field not in ["mixhash", "nonce"]
+        ]
+
+        class BlockHeader2(rlp.Serializable):
+            fields = fields2
+
+        _self = BlockHeader2(**{f:getattr(self, f) for (f, sedes) in fields2})
+
         return utils.sha3(rlp.encode(
-            self, BlockHeader.exclude(['mixhash', 'nonce'])))
+            _self, BlockHeader2))
 
     @property
     def signing_hash(self):
+
+        # exclude extra_data
+        fields3 = [
+            (field, sedes) for field, sedes in BlockHeader._meta.fields
+            if field not in ["extra_data"]
+        ]
+
+        class BlockHeader3(rlp.Serializable):
+            fields = fields3
+
+        _self = BlockHeader3(**{f:getattr(self, f) for (f, sedes) in fields3})
+
         return utils.sha3(rlp.encode(
-            self, BlockHeader.exclude(['extra_data'])))
+            _self, BlockHeader3))
 
     def to_dict(self):
         """Serialize the header to a readable dictionary."""
@@ -169,10 +195,11 @@ class Block(rlp.Serializable):
         # assert isinstance(db, BaseDB), "No database object given"
         # self.db = db
 
-        self.header = header
-        self.transactions = transactions or []
-        self.uncles = uncles or []
-        self.uncles = list(self.uncles)
+        super(Block, self).__init__(
+            header=header,
+            transactions=(transactions or []),
+            uncles=list(uncles or []),
+        )
 
     def __getattribute__(self, name):
         try:

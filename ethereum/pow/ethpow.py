@@ -106,11 +106,11 @@ class Miner():
         blk = self.block
         bin_nonce, mixhash = mine(blk.number, blk.difficulty, blk.mining_hash,
                                   start_nonce=start_nonce, rounds=rounds)
-        if bin_nonce:
-            blk.header.mixhash = mixhash
-            blk.header.nonce = bin_nonce
-            # assert blk.check_pow()
-            return blk
+        if bin_nonce is not None:
+            return bin_nonce, mixhash
+
+        return None, None
+
 
 
 def mine(block_number, difficulty, mining_hash, start_nonce=0, rounds=1000):

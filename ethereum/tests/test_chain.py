@@ -66,12 +66,18 @@ def mine_on_chain(chain, parent=None, transactions=[],
     rounds = 100
     nonce = 0
     while True:
-        b = m.mine(rounds=rounds, start_nonce=nonce)
-        if b:
+        bin_nonce, mix_hash = m.mine(rounds=rounds, start_nonce=nonce)
+        if bin_nonce:
             break
         nonce += rounds
-    assert chain.add_block(b)
-    return b
+
+    hc = hc.copy(header=hc.header.copy(
+        mixhash=mix_hash,
+        nonce=bin_nonce,
+    ))
+
+    assert chain.add_block(hc)
+    return hc
 
 
 def mine_next_block(chain, coinbase=None, transactions=[]):
@@ -93,7 +99,7 @@ def get_transaction(gasprice=0, nonce=0):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
         nonce, gasprice, startgas=100000,
-        to=v2, value=utils.denoms.finney * 10, data='').sign(k)
+        to=v2, value=utils.denoms.finney * 10, data=b'').sign(k)
     return tx
 
 

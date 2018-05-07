@@ -50,9 +50,7 @@ STATE_DEFAULTS = {
     "refunds": 0,
 }
 
-
-class Account(rlp.Serializable):
-
+class _Account(rlp.Serializable):
     fields = [
         ('nonce', big_endian_int),
         ('balance', big_endian_int),
@@ -60,11 +58,19 @@ class Account(rlp.Serializable):
         ('code_hash', hash32)
     ]
 
+class Account():
+
     def __init__(self, nonce, balance, storage, code_hash, env, address):
         assert isinstance(env.db, BaseDB)
         self.env = env
         self.address = address
-        super(Account, self).__init__(nonce, balance, storage, code_hash)
+
+        acc = _Account(nonce, balance, storage, code_hash)
+        self.nonce = acc.nonce
+        self.balance = acc.balance
+        self.storage = acc.storage
+        self.code_hash = acc.code_hash
+
         self.storage_cache = {}
         self.storage_trie = SecureTrie(Trie(RefcountDB(self.env.db)))
         self.storage_trie.root_hash = self.storage
@@ -174,7 +180,15 @@ class State():
         else:
             rlpdata = self.trie.get(address)
         if rlpdata != trie.BLANK_NODE:
-            o = rlp.decode(rlpdata, Account, env=self.env, address=address)
+            o = rlp.decode(rlpdata, _Account)
+            o = Account(
+                nonce=o.nonce,
+                balance=o.balance,
+                storage=o.storage,
+                code_hash=o.code_hash,
+                env=self.env,
+                address=address
+            )
         else:
             o = Account.blank_account(
                 self.env, address, self.config['ACCOUNT_INITIAL_NONCE'])
@@ -364,9 +378,11 @@ class State():
                 self.deletes.extend(acct.storage_trie.deletes)
                 self.changed[addr] = True
                 if self.account_exists(addr) or allow_empties:
-                    self.trie.update(addr, rlp.encode(acct))
+                    _acct = _Account(acct.nonce, acct.balance, acct.storage, acct.code_hash)
+                    self.trie.update(addr, rlp.encode(_acct))
+
                     if self.executing_on_head:
-                        self.db.put(b'address:' + addr, rlp.encode(acct))
+                        self.db.put(b'address:' + addr, rlp.encode(_acct))
                 else:
                     self.trie.delete(addr)
                     if self.executing_on_head:
