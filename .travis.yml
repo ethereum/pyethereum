@@ -29,7 +29,10 @@ install:
   - travis_retry pip install flake8
   - travis_retry python setup.py install
   - travis_retry pip install -r dev_requirements.txt
+  # hack to override rlp=0.6.0 pulled in from vyper and eth-tester
+  - pip install rlp==1.0.1
 script:
+  - pip freeze
   # XXX: For now we're only performing minimal CI checks as most tests are
   # broken. Tests will be individually added here as they're fixed.
   - make lint-minimal
