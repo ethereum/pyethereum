@@ -291,6 +291,9 @@ class Chain(object):
     def revert(self, snapshot):
         state_snapshot, txcount, blknum = snapshot
         assert blknum == self.block.number, "Cannot revert beyond block boundaries!"
+        self.block = self.block.copy(
+            transactions=self.block.transactions[:txcount]
+        )
         self.block.transactions = self.block.transactions[:txcount]
         self.head_state.revert(state_snapshot)
 
