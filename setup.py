@@ -22,7 +22,7 @@ dependency_links = []
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see:
 # https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '2.3.1'
+version = '2.3.2'
 
 setup(
     name="ethereum",
