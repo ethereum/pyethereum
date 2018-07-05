@@ -7,5 +7,5 @@ pycryptodome>=3.4.7
 pysha3>=1.0.1
 PyYAML
 repoze.lru
-rlp>=1.0.0,<2.0.0
+rlp>=1.0.1,<2.0.0
 scrypt
