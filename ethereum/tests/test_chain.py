@@ -95,11 +95,11 @@ def test_mining(db):
 
 
 @pytest.fixture(scope="module")
-def get_transaction(gasprice=0, nonce=0):
+def get_transaction(gasprice=0, nonce=0, network_id=None):
     k, v, k2, v2 = accounts()
     tx = transactions.Transaction(
         nonce, gasprice, startgas=100000,
-        to=v2, value=utils.denoms.finney * 10, data=b'').sign(k)
+        to=v2, value=utils.denoms.finney * 10, data=b'').sign(k, network_id=network_id)
     return tx
 
 
@@ -430,6 +430,10 @@ def test_get_blockhash_by_number():
     test_chain.mine(2)
 
     test_chain.chain.get_blockhash_by_number(2) == test_chain.chain.head.hash
+
+def test_sign_with_network_id():
+    tx = get_transaction(network_id=66)
+    assert tx.network_id == 66
 
 
 # TODO ##########################################
