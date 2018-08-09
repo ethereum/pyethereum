@@ -132,10 +132,10 @@ class Transaction(rlp.Serializable):
 
         v, r, s = ecsign(rawhash, key)
         if network_id is not None:
-            self.v += 8 + network_id * 2
+            v += 8 + network_id * 2
 
         ret = self.copy(
-            v=v,r=r,s=s
+            v=v, r=r, s=s
         )
         ret._sender = utils.privtoaddr(key)
         return ret
