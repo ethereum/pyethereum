@@ -164,7 +164,7 @@ class RefcountDB(BaseDB):
     def delete(self, key):
         existing = self.db.get(key)
         if existing[:4] == b'\x00\x00\x00\x01':
-            # print('deletung')
+            # print('deleting')
             self.db.delete(key)
         else:
             # print(repr(existing[:4]))
