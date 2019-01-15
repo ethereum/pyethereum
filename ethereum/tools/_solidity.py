@@ -364,6 +364,7 @@ def compile_code(sourcecode, libraries=None, combined='bin,abi',
     if compiler is None:
         raise SolcMissing("solc not found")
     args.insert(0, compiler)
+    args.append('-')
 
     process = subprocess.Popen(
         args,
