@@ -1,11 +1,12 @@
 import pytest
 import json
-import ethereum.processblock as pb
+from ethereum.messages import Log
 import ethereum.utils as utils
-import ethereum.testutils as testutils
+import ethereum.tools.testutils as testutils
 import ethereum.bloom as bloom
 import os
-from rlp.utils import decode_hex, encode_hex, str_to_bytes
+from ethereum.utils import decode_hex, str_to_bytes
+from ethereum.utils import encode_hex
 
 
 def check_testdata(data_keys, expected_keys):
@@ -22,7 +23,8 @@ def vm_tests_fixtures():
     # FIXME: assert that repo is uptodate
     # cd fixtures; git pull origin develop; cd ..;  git commit fixtures
     filenames = os.listdir(os.path.join(testutils.fixture_path, 'VMTests'))
-    files = [os.path.join(testutils.fixture_path, 'VMTests', f) for f in filenames]
+    files = [os.path.join(testutils.fixture_path, 'VMTests', f)
+             for f in filenames]
     vm_fixtures = {}
     try:
         for f, fn in zip(files, filenames):
@@ -37,6 +39,7 @@ def vm_tests_fixtures():
 # SETUP TESTS IN GLOBAL NAME SPACE
 def gen_func(testdata):
     return lambda: do_test_bloom(testdata)
+
 
 for filename, tests in list(vm_tests_fixtures().items()):
     for testname, testdata in list(tests.items()):
@@ -71,7 +74,7 @@ def do_test_bloom(test_logs):
             b = bloom.bloom_insert(b, decode_hex(t))
         # Test via Log
         topics = [decode_int_from_hex(x) for x in data['topics']]
-        log = pb.Log(decode_hex(address), topics, '')
+        log = Log(decode_hex(address), topics, '')
         log_bloom = bloom.b64(bloom.bloom_from_list(log.bloomables()))
         assert encode_hex(log_bloom) == encode_hex_from_int(b)
-        assert str_to_bytes(data['bloom']) == encode_hex(log_bloom)
+        assert data['bloom'] == encode_hex(log_bloom)

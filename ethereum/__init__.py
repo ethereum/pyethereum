@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
 # ############# version ##################
-from pkg_resources import get_distribution, DistributionNotFound
+try:
+    from pkg_resources import get_distribution, DistributionNotFound
+except BaseException:
+    DistributionNotFound = Exception
 import os.path
 import subprocess
 import re
+# Import slogging to patch logging as soon as possible
+from . import slogging  # noqa
 
 
-GIT_DESCRIBE_RE = re.compile('^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')
+GIT_DESCRIBE_RE = re.compile(
+    '^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')
 
 
 __version__ = None
 try:
-    _dist = get_distribution('pyethapp')
+    _dist = get_distribution('ethereum')
     # Normalize case for Windows systems
     dist_loc = os.path.normcase(_dist.location)
     here = os.path.normcase(__file__)
-    if not here.startswith(os.path.join(dist_loc, 'pyethapp')):
+    if not here.startswith(os.path.join(dist_loc, 'ethereum')):
         # not installed, but there is another version that *is*
         raise DistributionNotFound
     __version__ = _dist.version
@@ -28,8 +34,9 @@ if not __version__:
                                       stderr=subprocess.STDOUT)
         match = GIT_DESCRIBE_RE.match(rev)
         if match:
-            __version__ = "{}+git-{}".format(match.group("version"), match.group("git"))
-    except:
+            __version__ = "{}+git-{}".format(
+                match.group("version"), match.group("git"))
+    except BaseException:  # FIXME!
         pass
 
 if not __version__:
@@ -37,7 +44,7 @@ if not __version__:
 
 # ########### endversion ##################
 
-'''from ethereum import utils
+"""from ethereum import utils
 from ethereum import trie
 from ethereum import securetrie
 from ethereum import blocks
@@ -46,4 +53,4 @@ from ethereum import processblock
 from ethereum import tester
 from ethereum import abi
 from ethereum import keys
-from ethereum import ethash'''
+from ethereum import ethash"""

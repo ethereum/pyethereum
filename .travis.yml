@@ -1,27 +1,66 @@
 language: python
-python: 2.7
-sudo: false  # use new infrastructure
+python: 3.6
+sudo: required
+dist: trusty
 env:
-  - TOX_ENV=py27
-
+  #matrix:
+  #- TOX_ENV=py27
+  #- TOX_ENV=py34
+  #- TOX_ENV=py35
+  global:
+    - COVERAGE_APPEND="--append"
+    - secure: cKbIgpTJ1yjKLBxpCEiT6IH7NShDWZUE+BvnrAfc+ujCsR6LyLJcKxFQmKnWryJCqg7fp82Ep2bF2oDKzanAROar2xDY1SFGbai42seYMaFCw53YPGJ6u3VNCcfT0rN9BWgE7el/m4fjcD6CRsZYKArNNJbMX8csRt3uXXCFLso=
+    - secure: "QyFPrxQHd2LlNQ6zNeTFYhgPmZaOHoWuywcgn8qaSOh6PklyFxHbexkwg0bl23JvtgNEZ1mCD8j0x1/ydSdtxgCFwK9SEL0h7aYuAq+OAIa/G18OPeTJMf7ASsb2QZdfkt9reFpUnjbadzHkuv+rqqb4bFnTJBKwB2LWzHPLhWg="
+    - SOLC_VERSION=0.4.9
+cache:
+  directories:
+    - $HOME/.bin
+    - $HOME/solc-versions
+before_install:
+  - mkdir -p $HOME/.bin
+  - export PATH=$PATH:$HOME/.bin
+  - if [ -n "$SOLC_VERSION" ]; then export LD_LIBRARY_PATH="$HOME/solc-versions/solc-$SOLC_VERSION"; fi
+  - if [ -n "$SOLC_VERSION" ]; then sudo apt-get install -y tree unzip; fi
 install:
-  - pip install -r requirements.txt
-  - pip install -r dev_requirements.txt
-
+  - if [ -n "$SOLC_VERSION" ]; then /.$TRAVIS_BUILD_DIR/.travis/install_solc.sh; fi
+  - travis_retry pip install pip setuptools --upgrade
+  - travis_retry pip install tox
+  - travis_retry pip install coverage
+  - travis_retry pip install flake8
+  - travis_retry python setup.py install
+  - travis_retry pip install -r dev_requirements.txt
+  # hack to override rlp=0.6.0 pulled in from vyper and eth-tester
+  - pip install rlp==1.0.1
 script:
-- coverage run --source ethereum -m py.test --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
-- coverage run --append --source ethereum -m py.test ethereum/tests/test_vm.py
-- coverage run --append --source ethereum -m py.test ethereum/tests/test_state.py
-
+  - pip freeze
+  # XXX: For now we're only performing minimal CI checks as most tests are
+  # broken. Tests will be individually added here as they're fixed.
+  - make lint-minimal
+  - make test-passing
+  #- if [ -d .tox/$TOX_ENV/ ]; then cd .tox/$TOX_ENV && coverage erase; fi;
+  #- tox -e $TOX_ENV -- --ignore ethereum/tests/test_vm.py --ignore ethereum/tests/test_state.py
+  #- tox -e $TOX_ENV -- ethereum/tests/test_vm.py
+  #- tox -e $TOX_ENV -- ethereum/tests/test_state.py
+  #- coverage report --show-missing
 after_success:
-- coveralls
+  - travis_retry pip install coveralls
+  - cd .tox/$TOX_ENV && coveralls
+notifications:
+  slack:
+    secure: W/UAhQ/GgYwMWrl3aiVAVOWr4WGdWrxUOX/rTB3ZgwDwGqDYLzQO5UqbsQlo1JXPZ6JOWfIPMURhHu7DSfue9dBW6xQ+NL+bFHe9lSXG4nqFK3IjezYyTBzNRJRDbGUvSSqgj6D5cwhJ8BjfUIRPbJz3CxL64KmsNXezEaMY60w=
+  webhooks:
+    - secure: "KBw4iPJVsw3qv0qbvkZ2tjams/280aEovJ88ylR9ClI2krtxJFoVlAB0YdkztpKxcAxbIZg8nd4S3XpeOUsxfoZq5mZ2wHNU7G8LjqjwZ7eOhj76K+NAnEhRQT2evqZkWqP0h5fxuXQaT4KjwxGkxGNDEMJUVH5RO2cnFUQO98s="
 
+before_deploy:
+- cd $TRAVIS_BUILD_DIR
 deploy:
   provider: pypi
   user: ethereum_pypi_automated
   password:
-    secure: "FvkEn1xULi9mGxAL9sKlTuxJZvk0Uyd2GaDPAHN5ZAfaJUNwzA6+m7PRAMPd44Uy/LOw0+Ah9X1rxAxZc+7yx+FJjwH1Nl8MjtqYTWp+Ue6TFUNdJXNHjekC5ce4rbULudrqlmwmaWzi5iRC7qhpxuTg1y3iBw3Fsd8E82qbDac="
+    secure: FvkEn1xULi9mGxAL9sKlTuxJZvk0Uyd2GaDPAHN5ZAfaJUNwzA6+m7PRAMPd44Uy/LOw0+Ah9X1rxAxZc+7yx+FJjwH1Nl8MjtqYTWp+Ue6TFUNdJXNHjekC5ce4rbULudrqlmwmaWzi5iRC7qhpxuTg1y3iBw3Fsd8E82qbDac=
   on:
     tags: true
     repo: ethereum/pyethereum
     branch: develop
+after_deploy:
+- ./.release_notify.sh

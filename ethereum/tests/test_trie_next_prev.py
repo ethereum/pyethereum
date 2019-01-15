@@ -2,14 +2,13 @@ import os
 import json
 import ethereum.trie as trie
 from ethereum.utils import to_string
-from ethereum.tests.utils import new_db
-import ethereum.testutils as testutils
-from ethereum.slogging import get_logger, configure_logging
+from ethereum.db import EphemDB
+import ethereum.tools.testutils as testutils
+from ethereum.slogging import get_logger
 logger = get_logger()
 
 # customize VM log output to your needs
 # hint: use 'py.test' with the '-s' option to dump logs to the console
-# configure_logging(':trace')
 
 
 def check_testdata(data_keys, expected_keys):
@@ -19,7 +18,10 @@ def check_testdata(data_keys, expected_keys):
 
 def load_tests():
     try:
-        fn = os.path.join(testutils.fixture_path, 'TrieTests', 'trietestnextprev.json')
+        fn = os.path.join(
+            testutils.fixture_path,
+            'TrieTests',
+            'trietestnextprev.json')
         fixture = json.load(open(fn, 'r'))
     except IOError:
         raise IOError("Could not read trietests.json from fixtures",
@@ -30,7 +32,7 @@ def load_tests():
 def run_test(name):
 
     logger.debug('testing %s' % name)
-    t = trie.Trie(new_db())
+    t = trie.Trie(EphemDB())
     data = load_tests()[name]
 
     for k in data['in']:

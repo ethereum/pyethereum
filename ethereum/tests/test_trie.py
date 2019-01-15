@@ -1,13 +1,12 @@
 import os
-import ethereum.testutils as testutils
 import json
 import ethereum.trie as trie
 import ethereum.db as db
 import itertools
-from ethereum.slogging import get_logger, configure_logging
-from rlp.utils import decode_hex, encode_hex
+from ethereum.slogging import get_logger
+from ethereum.utils import decode_hex
+from ethereum.utils import encode_hex, to_string
 from ethereum.abi import is_string
-from ethereum.testutils import fixture_to_bytes
 logger = get_logger()
 
 # customize VM log output to your needs
@@ -19,26 +18,25 @@ def check_testdata(data_keys, expected_keys):
     assert set(data_keys) == set(expected_keys), \
         "test data changed, please adjust tests"
 
+
 fixture_path = os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures')
 
 
 def load_tests():
     fixture = {}
     testdir = os.path.join(fixture_path, 'TrieTests')
-    print testdir
     for f in os.listdir(testdir):
         if f != 'trietest.json':
             continue
         sub_fixture = json.load(open(os.path.join(testdir, f)))
         for k, v in sub_fixture.items():
             fixture[f + "_" + k] = v
-    return fixture_to_bytes(fixture)
+    return fixture
 
 
 def run_test(name, pairs):
 
     logger.debug('testing %s' % name)
-    print name
 
     def _dec(x):
         if is_string(x) and x.startswith(b'0x'):
@@ -56,15 +54,15 @@ def run_test(name, pairs):
         for k, v in permut:
             #logger.debug('updating with (%s, %s)' %(k, v))
             if v is not None:
-                t.update(k, v)
+                t.update(to_string(k), to_string(v))
             else:
-                t.delete(k)
+                t.delete(to_string(k))
         # make sure we have deletes at the end
         for k, v in deletes:
-            t.delete(k)
-        if pairs['root'] != b'0x' + encode_hex(t.root_hash):
+            t.delete(to_string(k))
+        if pairs['root'] != '0x' + encode_hex(t.root_hash):
             raise Exception("Mismatch: %r %r %r %r" % (
-                name, pairs['root'], b'0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
+                name, pairs['root'], '0x' + encode_hex(t.root_hash), (i, list(permut) + deletes)))
 
 
 if __name__ == '__main__':

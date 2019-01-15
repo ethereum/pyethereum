@@ -1,7 +1,12 @@
 import sys
 import rlp
-from utils import int_to_big_endian, big_endian_to_int, safe_ord
-import db
+from ethereum.utils import ( 
+    int_to_big_endian,
+    big_endian_to_int,
+    safe_ord,
+    to_string,
+)
+from ethereum import db
 
 
 def _encode_optimized(item):
@@ -29,6 +34,7 @@ def length_prefix(length, offset):
         length_string = int_to_big_endian(length)
         return chr(offset + 56 - 1 + len(length_string)) + length_string
 
+
 def _decode_optimized(rlp):
     o = []
     pos = 0
@@ -40,6 +46,7 @@ def _decode_optimized(rlp):
         o.append(_decode_optimized(rlp[pos: _l + _p]))
         pos = _l + _p
     return o
+
 
 def consume_length_prefix(rlp, start):
     """Read a length prefix from an RLP string.
@@ -67,13 +74,37 @@ def consume_length_prefix(rlp, start):
         l = big_endian_to_int(rlp[start + 1:start + 1 + ll])
         return (list, l, start + 1 + ll)
 
+
+def optimized_decode_single(x, pos):
+    z = safe_ord(x[pos])
+    if z < 128:
+        return x[pos: pos + 1], 1
+    elif z < 184:
+        return x[pos + 1: pos + z - 127], z - 127
+    else:
+        ll = big_endian_to_int(x[pos + 1: pos + z - 182])
+        return x[pos + z - 182: pos + z - 182 + ll], z - 182 + ll
+
+
+def optimized_decode_list(rlp):
+    o, pos = [], 0
+    _typ, _len, pos = consume_length_prefix(rlp, pos)
+    while pos < len(rlp):
+        x, inc = optimized_decode_single(rlp, pos)
+        pos += inc
+        o.append(x)
+    return o
+
+
 #
 if sys.version_info.major == 2:
     encode_optimized = _encode_optimized
     decode_optimized = _decode_optimized
 else:
     encode_optimized = rlp.codec.encode_raw
-    decode_optimized = rlp.codec.decode_raw
+    # rlp does not implement a decode_raw function.
+    # decode_optimized = rlp.codec.decode_raw
+    decode_optimized = _decode_optimized
 
 
 def main():
@@ -84,23 +115,24 @@ def main():
         st = time.time()
         x = trie.Trie(db.EphemDB())
         for i in range(10000):
-            x.update(str(i), str(i**3))
-        print 'elapsed', time.time() - st
+            x.update(to_string(i), to_string(i**3))
+        print('elapsed', time.time() - st)
         return x.root_hash
 
     trie.rlp_encode = _encode_optimized
-    print 'trie.rlp_encode = encode_optimized'
+    print('trie.rlp_encode = encode_optimized')
     r3 = run()
 
     trie.rlp_encode = rlp.codec.encode_raw
-    print 'trie.rlp_encode = rlp.codec.encode_raw'
+    print('trie.rlp_encode = rlp.codec.encode_raw')
     r2 = run()
     assert r2 == r3
 
     trie.rlp_encode = rlp.encode
-    print 'trie.rlp_encode = rlp.encode'
+    print('trie.rlp_encode = rlp.encode')
     r = run()
     assert r == r2
+
 
 if __name__ == '__main__':
     main()

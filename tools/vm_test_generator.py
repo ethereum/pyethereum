@@ -4,13 +4,13 @@ t = pyethereum.tester
 pb = pyethereum.processblock
 import serpent
 import sys
-from rlp.utils import encode_hex, ascii_chr
+from ethereum.utils import encode_hex, ascii_chr
 
 
 # Code: serpent code
 # Tx:[ val, data ]
 def gen_test(code, val, data):
-    while 1:
+    while True:
         s = t.state(1)
         c = s.contract(code)
         pre = s.block.to_dict()['state']
@@ -62,9 +62,10 @@ def gen_test(code, val, data):
         "post": post,
         "exec": exek,
         "gas": str(gas),
-        "out": '0x'+encode_hex(''.join(map(ascii_chr, o)))
+        "out": '0x' + encode_hex(''.join(map(ascii_chr, o)))
     }
+
 
 if __name__ == "__main__":
     o = gen_test(sys.argv[2], int(sys.argv[3]), sys.argv[4:])
-    print json.dumps({sys.argv[1]: o}, indent=4)
+    print(json.dumps({sys.argv[1]: o}, indent=4))

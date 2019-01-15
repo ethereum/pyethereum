@@ -1,9 +1,11 @@
-bitcoin
-pysha3
+coincurve>=7.0.0
+future
+pbkdf2
+py_ecc
+pyethash>=0.1.27,<1.0.0
+pycryptodome>=3.4.7
+pysha3>=1.0.1
 PyYAML
 repoze.lru
-pbkdf2
-pycryptodome>=3.3.1
+rlp>=1.0.1,<2.0.0
 scrypt
-rlp==0.4.4
-https://github.com/ethereum/ethash/tarball/master

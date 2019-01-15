@@ -1,13 +1,15 @@
 #!/usr/bin/python2.7
 
-import sys, json, os
+import sys
+import json
+import os
 import getpass
 try:
     import keys
-except:
+except BaseException:
     try:
         import ethereum.keys as keys
-    except:
+    except BaseException:
         raise Exception("keys module not found")
 
 
@@ -25,8 +27,8 @@ elif sys.argv[1] == 'create':
     assert pw == pw2, "Password mismatch"
     print("Applying hard key derivation function. Wait a little")
     j = keys.make_keystore_json(key, pw)
-    print j
-    open(j["id"]+'.json', 'w').write(json.dumps(j, indent=4))
+    print(j)
+    open(j["id"] + '.json', 'w').write(json.dumps(j, indent=4))
     print("Wallet creation successful, file saved at: " + j["id"] + ".json")
 # Decode a json
 elif sys.argv[1] in ('getprivkey', 'getaddress'):

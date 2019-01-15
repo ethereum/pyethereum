@@ -2,7 +2,7 @@
 
 
 def fixture_to_tables(fixture):
-    ''' convert fixture into *behave* examples
+    """ convert fixture into *behave* examples
     :param fixture: a dictionary in the following form::
 
         {
@@ -22,15 +22,14 @@ def fixture_to_tables(fixture):
 
     :return: a list, with each item represent a table: `(caption, rows)`,
     each item in `rows` is `(col1, col2,...)`
-    '''
+    """
 
     tables = []
     for (title, content) in fixture.iteritems():
         rows = []
 
         # header(keyword) row
-        keys = content.keys()
-        keys.sort()
+        keys = sorted(content.keys())
         rows.append(tuple(keys))
 
         # item(value) row
@@ -44,9 +43,9 @@ def fixture_to_tables(fixture):
 
 
 def format_item(item, py=True):
-    '''
+    """
     :param py: python format or not
-    '''
+    """
     # for non python format, just output itself.
     # so the result is `something` instead of `"something"`
     if not py:
@@ -62,10 +61,10 @@ def format_item(item, py=True):
 
 
 def format_to_example(table, tabspace=2, indent=2):
-    ''' format table to *behave* example
+    """ format table to *behave* example
     :param table: `(caption, rows)`, each item in `rows` is `(col1, col2,...)`
     :return
-    '''
+    """
     from io import StringIO
     output = StringIO()
 

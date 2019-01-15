@@ -1,66 +1,127 @@
 try:
     from Crypto.Hash import keccak
-    sha3_256 = lambda x: keccak.new(digest_bits=256, data=x).digest()
-except:
+
+    def sha3_256(x): return keccak.new(digest_bits=256, data=x).digest()
+except ImportError:
     import sha3 as _sha3
-    sha3_256 = lambda x: _sha3.sha3_256(x).digest()
-from bitcoin import privtopub
+
+    def sha3_256(x): return _sha3.keccak_256(x).digest()
+from py_ecc.secp256k1 import privtopub, ecdsa_raw_sign, ecdsa_raw_recover
 import sys
 import rlp
 from rlp.sedes import big_endian_int, BigEndianInt, Binary
-from rlp.utils import decode_hex, encode_hex, ascii_chr, str_to_bytes
+from eth_utils import encode_hex as encode_hex_0x
+from eth_utils import decode_hex, int_to_big_endian, big_endian_to_int
+from rlp.utils import ALL_BYTES
 import random
 
-big_endian_to_int = lambda x: big_endian_int.deserialize(str_to_bytes(x).lstrip(b'\x00'))
-int_to_big_endian = lambda x: big_endian_int.serialize(x)
+try:
+    import coincurve
+except ImportError:
+    import warnings
+    warnings.warn('could not import coincurve', ImportWarning)
+    coincurve = None
 
+class Memoize:
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+    def __call__(self, *args):
+        if args not in self.memo:
+            self.memo[args] = self.fn(*args)
+        return self.memo[args]
 
 TT256 = 2 ** 256
 TT256M1 = 2 ** 256 - 1
 TT255 = 2 ** 255
+SECP256K1P = 2**256 - 4294968273
 
-if sys.version_info.major == 2:
-    is_numeric = lambda x: isinstance(x, (int, long))
-    is_string = lambda x: isinstance(x, (str, unicode))
+def is_numeric(x): return isinstance(x, int)
 
-    def to_string(value):
-        return str(value)
+def is_string(x): return isinstance(x, bytes)
 
-    def int_to_bytes(value):
-        if isinstance(value, str):
-            return value
-        return int_to_big_endian(value)
+def to_string(value):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return bytes(value, 'utf-8')
+    if isinstance(value, int):
+        return bytes(str(value), 'utf-8')
 
-    def to_string_for_regexp(value):
-        return str(value)
-    unicode = unicode
+def int_to_bytes(value):
+    if isinstance(value, bytes):
+        return value
+    return int_to_big_endian(value)
 
-else:
-    is_numeric = lambda x: isinstance(x, int)
-    is_string = lambda x: isinstance(x, bytes)
+def to_string_for_regexp(value):
+    return str(to_string(value), 'utf-8')
+unicode = str
 
-    def to_string(value):
-        if isinstance(value, bytes):
-            return value
-        if isinstance(value, str):
-            return bytes(value, 'utf-8')
-        if isinstance(value, int):
-            return bytes(str(value), 'utf-8')
+def bytearray_to_bytestr(value):
+    return bytes(value)
 
-    def int_to_bytes(value):
-        if isinstance(value, bytes):
-            return value
-        return int_to_big_endian(value)
+def encode_int32(v):
+    return v.to_bytes(32, byteorder='big')
 
-    def to_string_for_regexp(value):
-        return str(to_string(value), 'utf-8')
-    unicode = str
+def bytes_to_int(value):
+    return int.from_bytes(value, byteorder='big')
 
-isnumeric = is_numeric
+def str_to_bytes(value):
+    if isinstance(value, bytearray):
+        value = bytes(value)
+    if isinstance(value, bytes):
+        return value
+    return bytes(value, 'utf-8')
+
+def ascii_chr(n):
+    return ALL_BYTES[n]
+
+def encode_hex(n):
+    if isinstance(n, str):
+        return encode_hex(n.encode('ascii'))
+    return encode_hex_0x(n)[2:]
+
+def ecrecover_to_pub(rawhash, v, r, s):
+    if coincurve and hasattr(coincurve, "PublicKey"):
+        try:
+            pk = coincurve.PublicKey.from_signature_and_message(
+                zpad(bytearray_to_bytestr(int_to_32bytearray(r)), 32) + zpad(bytearray_to_bytestr(int_to_32bytearray(s)), 32) +
+                ascii_chr(v - 27),
+                rawhash,
+                hasher=None,
+            )
+            pub = pk.format(compressed=False)[1:]
+        except BaseException:
+            pub = b"\x00" * 64
+    else:
+        result = ecdsa_raw_recover(rawhash, (v, r, s))
+        if result:
+            x, y = result
+            pub = encode_int32(x) + encode_int32(y)
+        else:
+            raise ValueError('Invalid VRS')
+    assert len(pub) == 64
+    return pub
+
+
+def ecsign(rawhash, key):
+    if coincurve and hasattr(coincurve, 'PrivateKey'):
+        pk = coincurve.PrivateKey(key)
+        signature = pk.sign_recoverable(rawhash, hasher=None)
+        v = safe_ord(signature[64]) + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+    else:
+        v, r, s = ecdsa_raw_sign(rawhash, key)
+    return v, r, s
 
 
 def mk_contract_address(sender, nonce):
     return sha3(rlp.encode([normalize_address(sender), nonce]))[12:]
+
+
+def mk_metropolis_contract_address(sender, initcode):
+    return sha3(normalize_address(sender) + initcode)[12:]
 
 
 def safe_ord(value):
@@ -105,38 +166,46 @@ def int_to_32bytearray(i):
         i >>= 8
     return o
 
+# sha3_count = [0]
+
 
 def sha3(seed):
     return sha3_256(to_string(seed))
-assert sha3('').encode('hex') == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def privtoaddr(x, extended=False):
-    if len(x) > 32:
-        x = decode_hex(x)
-    o = sha3(privtopub(x)[1:])[12:]
-    return add_checksum(o) if extended else o
+assert encode_hex(
+    sha3(b'')) == 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'
 
 
-def add_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    if len(x) == 24:
-        return x
-    return x + sha3(x)[:4]
+@Memoize
+def privtoaddr(k):
+    k = normalize_key(k)
+    x, y = privtopub(k)
+    return sha3(encode_int32(x) + encode_int32(y))[12:]
 
 
-def check_and_strip_checksum(x):
-    if len(x) in (40, 48):
-        x = decode_hex(x)
-    assert len(x) == 24 and sha3(x[:20])[:4] == x[-4:]
-    return x[:20]
+def checksum_encode(addr):  # Takes a 20-byte binary address as input
+    addr = normalize_address(addr)
+    o = ''
+    v = big_endian_to_int(sha3(encode_hex(addr)))
+    for i, c in enumerate(encode_hex(addr)):
+        if c in '0123456789':
+            o += c
+        else:
+            o += c.upper() if (v & (2**(255 - 4 * i))) else c.lower()
+    return '0x' + o
+
+
+def check_checksum(addr):
+    return checksum_encode(normalize_address(addr)) == addr
 
 
 def normalize_address(x, allow_blank=False):
-    if allow_blank and x == '':
-        return ''
-    if len(x) in (42, 50) and x[:2] == '0x':
+    if is_numeric(x):
+        return int_to_addr(x)
+    if allow_blank and x in {'', b''}:
+        return b''
+    if len(x) in (42, 50) and x[:2] in {'0x', b'0x'}:
         x = x[2:]
     if len(x) in (40, 48):
         x = decode_hex(x)
@@ -148,19 +217,54 @@ def normalize_address(x, allow_blank=False):
     return x
 
 
+def normalize_key(key):
+    if is_numeric(key):
+        o = encode_int32(key)
+    elif len(key) == 32:
+        o = key
+    elif len(key) == 64:
+        o = decode_hex(key)
+    elif len(key) == 66 and key[:2] == '0x':
+        o = decode_hex(key[2:])
+    else:
+        raise Exception("Invalid key format: %r" % key)
+    if o == b'\x00' * 32:
+        raise Exception("Zero privkey invalid")
+    return o
+
+
 def zpad(x, l):
+    """ Left zero pad value `x` at least to length `l`.
+
+    >>> zpad('', 1)
+    '\x00'
+    >>> zpad('\xca\xfe', 4)
+    '\x00\x00\xca\xfe'
+    >>> zpad('\xff', 1)
+    '\xff'
+    >>> zpad('\xca\xfe', 2)
+    '\xca\xfe'
+    """
     return b'\x00' * max(0, l - len(x)) + x
 
 
-def zunpad(x):
-    i = 0
-    while i < len(x) and (x[i] == 0 or x[i] == '\x00'):
-        i += 1
-    return x[i:]
+def rzpad(value, total_length):
+    """ Right zero pad value `x` at least to length `l`.
+
+    >>> zpad('', 1)
+    '\x00'
+    >>> zpad('\xca\xfe', 4)
+    '\xca\xfe\x00\x00'
+    >>> zpad('\xff', 1)
+    '\xff'
+    >>> zpad('\xca\xfe', 2)
+    '\xca\xfe'
+    """
+    return value + b'\x00' * max(0, total_length - len(value))
 
 
 def int_to_addr(x):
-    o = [''] * 20
+    o = [b''] * 20
     for i in range(20):
         o[19 - i] = ascii_chr(x & 0xff)
         x >>= 8
@@ -230,22 +334,22 @@ def sha3rlp(x):
 
 
 def decode_bin(v):
-    '''decodes a bytearray from serialization'''
+    """decodes a bytearray from serialization"""
     if not is_string(v):
         raise Exception("Value must be binary, not RLP array")
     return v
 
 
 def decode_addr(v):
-    '''decodes an address from serialization'''
+    """decodes an address from serialization"""
     if len(v) not in [0, 20]:
         raise Exception("Serialized addresses must be empty or 20 bytes long!")
     return encode_hex(v)
 
 
 def decode_int(v):
-    '''decodes and integer from serialization'''
-    if len(v) > 0 and (v[0] == '\x00' or v[0] == 0):
+    """decodes and integer from serialization"""
+    if len(v) > 0 and (v[0] == b'\x00' or v[0] == 0):
         raise Exception("No leading zero bytes allowed for integers")
     return big_endian_to_int(v)
 
@@ -255,17 +359,17 @@ def decode_int256(v):
 
 
 def encode_bin(v):
-    '''encodes a bytearray into serialization'''
+    """encodes a bytearray into serialization"""
     return v
 
 
 def encode_root(v):
-    '''encodes a trie root into serialization'''
+    """encodes a trie root into serialization"""
     return v
 
 
 def encode_int(v):
-    '''encodes an integer into serialization'''
+    """encodes an integer into serialization"""
     if not is_numeric(v) or v < 0 or v >= TT256:
         raise Exception("Integer invalid or out of range: %r" % v)
     return int_to_big_endian(v)
@@ -307,7 +411,7 @@ encoders = {
 
 # Encoding to printable format
 printers = {
-    "bin": lambda v: b'0x' + encode_hex(v),
+    "bin": lambda v: '0x' + encode_hex(v),
     "addr": lambda v: v,
     "int": lambda v: to_string(v),
     "trie_root": lambda v: encode_hex(v),
@@ -317,7 +421,7 @@ printers = {
 # Decoding from printable format
 scanners = {
     "bin": scan_bin,
-    "addr": lambda x: x[2:] if x[:2] == b'0x' else x,
+    "addr": lambda x: x[2:] if x[:2] in (b'0x', '0x') else x,
     "int": scan_int,
     "trie_root": lambda x: scan_bin,
     "int256b": lambda x: big_endian_to_int(decode_hex(x))
@@ -326,15 +430,24 @@ scanners = {
 
 def int_to_hex(x):
     o = encode_hex(encode_int(x))
-    return '0x' + (o[1:] if (len(o) > 0 and o[0] == '0') else o)
+    return '0x' + (o[1:] if (len(o) > 0 and o[0] == b'0') else o)
 
 
 def remove_0x_head(s):
-    return s[2:] if s[:2] == b'0x' else s
+    return s[2:] if s[:2] in (b'0x', '0x') else s
+
+
+def parse_as_bin(s):
+    return decode_hex(s[2:] if s[:2] == '0x' else s)
+
+
+def parse_as_int(s):
+    return s if is_numeric(s) else int(
+        '0' + s[2:], 16) if s[:2] == '0x' else int(s)
 
 
 def print_func_call(ignore_first_arg=False, max_call_number=100):
-    ''' utility function to facilitate debug, it will print input args before
+    """ utility function to facilitate debug, it will print input args before
     function call, and print return value after function call
 
     usage:
@@ -345,14 +458,14 @@ def print_func_call(ignore_first_arg=False, max_call_number=100):
 
     :param ignore_first_arg: whether print the first arg or not.
     useful when ignore the `self` parameter of an object method call
-    '''
+    """
     from functools import wraps
 
     def display(x):
         x = to_string(x)
         try:
             x.decode('ascii')
-        except:
+        except BaseException:
             return 'NON_PRINTABLE'
         return x
 
@@ -397,12 +510,18 @@ class Denoms():
     def __init__(self):
         self.wei = 1
         self.babbage = 10 ** 3
+        self.ada = 10 ** 3
+        self.kwei = 10 ** 6
         self.lovelace = 10 ** 6
+        self.mwei = 10 ** 6
         self.shannon = 10 ** 9
+        self.gwei = 10 ** 9
         self.szabo = 10 ** 12
         self.finney = 10 ** 15
+        self.mether = 10 ** 15
         self.ether = 10 ** 18
-        self.turing = 2 ** 256
+        self.turing = 2 ** 256 - 1
+
 
 denoms = Denoms()
 

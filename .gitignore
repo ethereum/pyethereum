@@ -12,6 +12,7 @@ __pycache__/
 /dist/
 /*.egg-info/
 /.tox/
+/build/
 /bin/
 /develop-eggs/
 /eggs/
@@ -25,3 +26,4 @@ pyethereum/todo.txt
 pyethereum/monkeypatch.py
 .eggs
 .cache
+.env
