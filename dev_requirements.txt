@@ -1,8 +1,0 @@
-bitcoin
-coveralls
-https://github.com/ethereum/vyper/tarball/master
-ethereum-serpent
-py-ecc
-pytest-timeout==1.0.0
-pytest>=2.9.0
-tox
